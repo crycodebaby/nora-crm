@@ -1,0 +1,103 @@
+import { format } from "date-fns";
+
+import { defaultCurrency } from "../root/defaultConfiguration";
+import type { DealStage } from "../types";
+
+/** Visible German labels for legacy Atomic CRM stage values stored in the database. */
+export const LEGACY_ATOMIC_DEAL_STAGE_LABELS: Record<string, string> = {
+  opportunity: "Neue Anfrage",
+  "proposal-sent": "Angebot gesendet",
+  "in-negotiation": "In Klärung",
+  "in-negociation": "In Klärung",
+  won: "Angenommen",
+  lost: "Abgelehnt",
+  delayed: "Verzögert",
+};
+
+/** Fallback when legacy English labels are still stored in app configuration. */
+const LEGACY_ENGLISH_DEAL_STAGE_LABELS: Record<string, string> = {
+  Opportunity: "Neue Anfrage",
+  "Proposal Sent": "Angebot gesendet",
+  "In Negotiation": "In Klärung",
+  "In Negociation": "In Klärung",
+  Won: "Angenommen",
+  Lost: "Abgelehnt",
+  Delayed: "Verzögert",
+};
+
+export const NORA_MONEY_LOCALE = "de-DE";
+
+export const findDealLabel = (
+  dealStages: DealStage[],
+  dealValue: string,
+): string | undefined => {
+  if (LEGACY_ATOMIC_DEAL_STAGE_LABELS[dealValue]) {
+    return LEGACY_ATOMIC_DEAL_STAGE_LABELS[dealValue];
+  }
+
+  const dealStage = dealStages.find((stage) => stage.value === dealValue);
+  if (!dealStage?.label) {
+    return undefined;
+  }
+
+  return LEGACY_ENGLISH_DEAL_STAGE_LABELS[dealStage.label] ?? dealStage.label;
+};
+
+export function formatDealAmount(
+  amount: number,
+  currency: string = defaultCurrency,
+  options?: Intl.NumberFormatOptions,
+): string {
+  return amount.toLocaleString(NORA_MONEY_LOCALE, {
+    style: "currency",
+    currency,
+    ...options,
+  });
+}
+
+export function getRelativeTimeString(
+  dateString: string,
+  locale = "de",
+): string {
+  const date = new Date(dateString);
+  date.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diff = date.getTime() - today.getTime();
+  const unitDiff = Math.round(diff / (1000 * 60 * 60 * 24));
+
+  if (Math.abs(unitDiff) > 7) {
+    return new Intl.DateTimeFormat(locale, {
+      day: "numeric",
+      month: "long",
+    }).format(date);
+  }
+
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  return ucFirst(rtf.format(unitDiff, "day"));
+}
+
+function ucFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+const isoDateStringRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+export function formatISODateString(dateString: string) {
+  if (!isoDateStringRegex.test(dateString)) {
+    throw new Error("Invalid date format. Expected YYYY-MM-DD.");
+  }
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return format(date, "PP");
+}
+
+/** Apply German labels to legacy Atomic stages still present in stored configuration. */
+export const localizeDealStages = (dealStages: DealStage[]): DealStage[] =>
+  dealStages.map((stage) => ({
+    ...stage,
+    label: findDealLabel(dealStages, stage.value) ?? stage.label,
+  }));

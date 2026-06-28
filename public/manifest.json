@@ -1,0 +1,27 @@
+{
+  "name": "Nora CRM",
+  "short_name": "Nora",
+  "description": "Kunden- und Vorgangsverwaltung für die Ergart Gruppe",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "48x48 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "android-icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "favicon-256x256.png",
+      "type": "image/png",
+      "sizes": "256x256"
+    }
+  ]
+}
