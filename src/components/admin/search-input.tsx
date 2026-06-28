@@ -58,11 +58,14 @@ export const SearchInput = (inProps: SearchInputProps) => {
         label={false}
         helperText={false}
         placeholder={translate("ra.action.search")}
-        className={cn("flex-grow", className)}
-        inputClassName={cn("pr-8", showClearButton ? "pr-16" : "pr-8")}
+        className={cn("flex-grow peer", className)}
+        inputClassName={cn(
+          "pr-8 nora-search-input",
+          showClearButton ? "pr-16" : "pr-8",
+        )}
         {...rest}
       />
-      <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none peer-focus-visible:text-[var(--nora-brand)]" />
       {showClearButton && (
         <Button
           type="button"

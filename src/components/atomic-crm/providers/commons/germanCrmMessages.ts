@@ -1,0 +1,567 @@
+import type { CrmMessages } from "./englishCrmMessages";
+
+export const germanCrmMessages = {
+  resources: {
+    companies: {
+      name: "Kunde |||| Kunden",
+      forcedCaseName: "Kunde",
+      fields: {
+        name: "Kundenname",
+        website: "Webseite",
+        linkedin_url: "LinkedIn-Adresse",
+        phone_number: "Telefonnummer",
+        created_at: "Erstellt am",
+        nb_contacts: "Anzahl Kontakte",
+        revenue: "Umsatz",
+        sector: "Kundentyp",
+        size: "Größe",
+        tax_identifier: "Steuernummer",
+        address: "Adresse",
+        city: "Ort",
+        zipcode: "Postleitzahl",
+        state_abbr: "Bundesland",
+        country: "Land",
+        description: "Beschreibung",
+        context_links: "Kontextlinks",
+        sales_id: "Zuständige Person",
+      },
+      empty: {
+        description: "Ihre Kundenliste ist noch leer.",
+        title: "Keine Kunden gefunden",
+      },
+      field_categories: {
+        contact: "Kontakt",
+        additional_info: "Zusätzliche Informationen",
+        address: "Adresse",
+        context: "Kontext",
+      },
+      action: {
+        create: "Kunden anlegen",
+        edit: "Kunde bearbeiten",
+        new: "Kunde anlegen",
+        show: "Kunde anzeigen",
+      },
+      filters: {
+        customer_type: "Kundentyp",
+        only_mine: "Nur von mir betreute Kunden",
+      },
+      added_on: "Hinzugefügt am %{date}",
+      followed_by: "Betreut von %{name}",
+      followed_by_you: "Von Ihnen betreut",
+      no_contacts: "Kein Kontakt",
+      nb_contacts: "%{smart_count} Kontakt |||| %{smart_count} Kontakte",
+      nb_deals: "%{smart_count} Vorgang |||| %{smart_count} Vorgänge",
+      sizes: {
+        one_employee: "1 Mitarbeiter",
+        two_to_nine_employees: "2–9 Mitarbeiter",
+        ten_to_forty_nine_employees: "10–49 Mitarbeiter",
+        fifty_to_two_hundred_forty_nine_employees: "50–249 Mitarbeiter",
+        two_hundred_fifty_or_more_employees: "250 oder mehr Mitarbeiter",
+      },
+      autocomplete: {
+        create_error: "Beim Anlegen des Kunden ist ein Fehler aufgetreten",
+        create_item: "%{item} anlegen",
+        create_label: "Tippen Sie, um einen neuen Kunden anzulegen",
+      },
+    },
+    contacts: {
+      name: "Kontakt |||| Kontakte",
+      forcedCaseName: "Kontakt",
+      field_categories: {
+        background_info: "Hintergrundinformationen",
+        identity: "Identität",
+        misc: "Sonstiges",
+        personal_info: "Persönliche Angaben",
+        position: "Position",
+      },
+      fields: {
+        first_name: "Vorname",
+        last_name: "Nachname",
+        last_seen: "Zuletzt gesehen",
+        title: "Position",
+        company_id: "Kunde",
+        email_jsonb: "E-Mail-Adressen",
+        email: "E-Mail",
+        phone_jsonb: "Telefonnummern",
+        phone_number: "Telefonnummer",
+        linkedin_url: "LinkedIn-Adresse",
+        background: "Hintergrund (Biografie, Kennenlernen usw.)",
+        has_newsletter: "Newsletter abonniert",
+        sales_id: "Zuständige Person",
+      },
+      action: {
+        add: "Kontakt hinzufügen",
+        add_first: "Ersten Kontakt hinzufügen",
+        create: "Kontakt anlegen",
+        edit: "Kontakt bearbeiten",
+        export_vcard: "Als vCard exportieren",
+        new: "Neuer Kontakt",
+        show: "Kontakt anzeigen",
+      },
+      background: {
+        last_activity_on: "Letzte Aktivität am %{date}",
+        added_on: "Hinzugefügt am %{date}",
+        followed_by: "Betreut von %{name}",
+        followed_by_you: "Von Ihnen betreut",
+        status_none: "Keiner",
+      },
+      position_at: "%{title} bei",
+      position_at_company: "%{title} bei %{company}",
+      empty: {
+        description: "Ihre Kontaktliste ist noch leer.",
+        title: "Keine Kontakte gefunden",
+      },
+      import: {
+        title: "Kontakte importieren",
+        button: "Daten aus Datei importieren",
+        complete:
+          "Kontaktimport abgeschlossen. %{importCount} Kontakte importiert, %{errorCount} Fehler",
+        progress:
+          "%{importCount} von %{rowCount} Kontakten importiert, %{errorCount} Fehler.",
+        error:
+          "Die Datei konnte nicht importiert werden. Bitte prüfen Sie, ob es sich um eine gültige CSV-Datei handelt.",
+        imported: "Importiert",
+        remaining_time: "Voraussichtliche Restzeit:",
+        running: "Der Import läuft. Bitte schließen Sie diesen Tab nicht.",
+        sample_download: "Beispiel-CSV herunterladen",
+        sample_hint: "Hier finden Sie eine Beispiel-CSV als Vorlage",
+        stop: "Import abbrechen",
+        csv_file: "CSV-Datei",
+        contacts_label: "Kontakt |||| Kontakte",
+      },
+      inputs: {
+        genders: {
+          male: "Er/Ihm",
+          female: "Sie/Ihr",
+          nonbinary: "Divers",
+        },
+        personal_info_types: {
+          work: "Geschäftlich",
+          home: "Privat",
+          other: "Sonstiges",
+        },
+      },
+      list: {
+        error_loading: "Fehler beim Laden der Kontakte",
+      },
+      bulk_tag: {
+        action: "Markieren",
+        back: "Zurück zu Markierungen",
+        create_description:
+          "Neue Markierung anlegen und auf die ausgewählten Kontakte anwenden.",
+        description:
+          "Wählen Sie eine vorhandene Markierung oder legen Sie eine neue für die ausgewählten Kontakte an.",
+        empty:
+          "Noch keine Markierungen. Legen Sie eine an, um die ausgewählten Kontakte zu markieren.",
+        error: "Markierung konnte den Kontakten nicht hinzugefügt werden",
+        noop: "Die ausgewählten Kontakte haben diese Markierung bereits",
+        success:
+          "Markierung zu %{smart_count} Kontakt hinzugefügt |||| Markierung zu %{smart_count} Kontakten hinzugefügt",
+        title: "Markierung zu Kontakten hinzufügen",
+      },
+      merge: {
+        action: "Mit anderem Kontakt zusammenführen",
+        confirm: "Kontakte zusammenführen",
+        current_contact: "Aktueller Kontakt (wird gelöscht)",
+        description: "Diesen Kontakt mit einem anderen zusammenführen.",
+        error: "Kontakte konnten nicht zusammengeführt werden",
+        merging: "Wird zusammengeführt…",
+        no_additional_data: "Keine zusätzlichen Daten zum Zusammenführen",
+        select_target: "Bitte wählen Sie einen Kontakt zum Zusammenführen",
+        success: "Kontakte erfolgreich zusammengeführt",
+        target_contact: "Zielkontakt (wird beibehalten)",
+        title: "Kontakt zusammenführen",
+        warning_description:
+          "Alle Daten werden auf den zweiten Kontakt übertragen. Diese Aktion kann nicht rückgängig gemacht werden.",
+        warning_title: "Warnung: Unwiderrufliche Aktion",
+        what_will_be_merged: "Was wird zusammengeführt:",
+      },
+      filters: {
+        before_last_month: "Vor dem letzten Monat",
+        before_this_month: "Vor diesem Monat",
+        before_this_week: "Vor dieser Woche",
+        managed_by_me: "Von mir betreut",
+        search: "Name, Kunde suchen…",
+        this_week: "Diese Woche",
+        today: "Heute",
+        tags: "Markierungen",
+        tasks: "Aufgaben",
+      },
+      hot: {
+        empty_change_status:
+          'Ändern Sie den Status eines Kontakts, indem Sie eine Notiz hinzufügen und auf „Optionen anzeigen" klicken.',
+        empty_hint: 'Kontakte mit dem Status „Heiß" erscheinen hier.',
+        title: "Wichtige Kontakte",
+      },
+    },
+    deals: {
+      name: "Vorgang |||| Vorgänge",
+      fields: {
+        name: "Titel",
+        description: "Beschreibung",
+        company_id: "Kunde",
+        contact_ids: "Ansprechpartner",
+        category: "Dienstleistung",
+        amount: "Geschätzter Auftragswert",
+        expected_closing_date: "Nächstes Nachfassdatum",
+        stage: "Vorgangsstatus",
+      },
+      action: {
+        back_to_deal: "Zurück zum Vorgang",
+        create: "Vorgang anlegen",
+        new: "Vorgang anlegen",
+      },
+      filters: {
+        only_mine: "Nur meine Vorgänge",
+      },
+      field_categories: {
+        misc: "Status & Details",
+      },
+      archived: {
+        action: "Archivieren",
+        error: "Fehler: Vorgang nicht archiviert",
+        list_title: "Archivierte Vorgänge",
+        success: "Vorgang archiviert",
+        title: "Archivierter Vorgang",
+        view: "Archivierte Vorgänge anzeigen",
+      },
+      inputs: {
+        linked_to: "Kunde & Ansprechpartner",
+      },
+      unarchived: {
+        action: "Zurück zur Übersicht",
+        error: "Fehler: Vorgang nicht wiederhergestellt",
+        success: "Vorgang wiederhergestellt",
+      },
+      updated: "Vorgang aktualisiert",
+      empty: {
+        before_create: "bevor Sie einen Vorgang anlegen.",
+        description: "Ihre Vorgangsliste ist noch leer.",
+        title: "Keine Vorgänge gefunden",
+      },
+      invalid_date: "Ungültiges Datum",
+    },
+    notes: {
+      name: "Notiz |||| Notizen",
+      forcedCaseName: "Notiz",
+      fields: {
+        status: "Status",
+        date: "Datum",
+        attachments: "Anhänge",
+        contact_id: "Kontakt",
+        deal_id: "Vorgang",
+      },
+      action: {
+        add: "Notiz hinzufügen",
+        add_first: "Erste Notiz hinzufügen",
+        delete: "Notiz löschen",
+        edit: "Notiz bearbeiten",
+        update: "Notiz aktualisieren",
+        add_this: "Diese Notiz hinzufügen",
+      },
+      sheet: {
+        create: "Notiz anlegen",
+        create_for: "Notiz für %{name} anlegen",
+        edit: "Notiz bearbeiten",
+        edit_for: "Notiz für %{name} bearbeiten",
+      },
+      deleted: "Notiz gelöscht",
+      empty: "Noch keine Notizen",
+      author_added: "%{name} hat eine Notiz hinzugefügt",
+      you_added: "Sie haben eine Notiz hinzugefügt",
+      me: "Ich",
+      list: {
+        error_loading: "Fehler beim Laden der Notizen",
+      },
+      note_for_contact: "Notiz für %{name}",
+      stepper: {
+        hint: "Öffnen Sie einen Kontakt und fügen Sie eine Notiz hinzu",
+      },
+      added: "Notiz hinzugefügt",
+      inputs: {
+        add_note: "Notiz hinzufügen",
+        options_hint: "(Dateien anhängen oder Details ändern)",
+        show_options: "Optionen anzeigen",
+      },
+      actions: {
+        attach_document: "Dokument anhängen",
+      },
+      validation: {
+        note_or_attachment_required:
+          "Eine Notiz oder ein Anhang ist erforderlich",
+      },
+    },
+    sales: {
+      name: "Benutzer |||| Benutzer",
+      fields: {
+        first_name: "Vorname",
+        last_name: "Nachname",
+        email: "E-Mail",
+        administrator: "Administrator",
+        disabled: "Deaktiviert",
+      },
+      create: {
+        error: "Beim Anlegen des Benutzers ist ein Fehler aufgetreten.",
+        success:
+          "Benutzer angelegt. In Kürze erhält er eine E-Mail zum Festlegen des Passworts.",
+        title: "Neuen Benutzer anlegen",
+      },
+      edit: {
+        error: "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+        record_not_found: "Datensatz nicht gefunden",
+        success: "Benutzer erfolgreich aktualisiert",
+        title: "%{name} bearbeiten",
+      },
+      action: {
+        new: "Neuer Benutzer",
+      },
+    },
+    tasks: {
+      name: "Aufgabe |||| Aufgaben",
+      forcedCaseName: "Aufgabe",
+      fields: {
+        text: "Beschreibung",
+        due_date: "Fällig am",
+        type: "Art",
+        contact_id: "Kontakt",
+        due_short: "fällig",
+      },
+      action: {
+        add: "Aufgabe hinzufügen",
+        create: "Aufgabe anlegen",
+        edit: "Aufgabe bearbeiten",
+      },
+      actions: {
+        postpone_next_week: "Auf nächste Woche verschieben",
+        postpone_tomorrow: "Auf morgen verschieben",
+        title: "Aufgabenaktionen",
+      },
+      added: "Aufgabe hinzugefügt",
+      deleted: "Aufgabe erfolgreich gelöscht",
+      dialog: {
+        create: "Aufgabe anlegen",
+        create_for: "Aufgabe für %{name} anlegen",
+      },
+      sheet: {
+        edit: "Aufgabe bearbeiten",
+        edit_for: "Aufgabe für %{name} bearbeiten",
+      },
+      empty: "Noch keine Aufgaben",
+      empty_list_hint:
+        "Aufgaben, die Sie zu Kontakten hinzufügen, erscheinen hier.",
+      filters: {
+        later: "Später",
+        overdue: "Überfällig",
+        this_week: "Diese Woche",
+        today: "Heute",
+        tomorrow: "Morgen",
+        with_pending: "Mit offenen Aufgaben",
+      },
+      regarding_contact: "(zu %{name})",
+      updated: "Aufgabe aktualisiert",
+    },
+    tags: {
+      name: "Markierung |||| Markierungen",
+      action: {
+        add: "Markierung hinzufügen",
+        create: "Neue Markierung anlegen",
+      },
+      dialog: {
+        color: "Farbe",
+        create_title: "Neue Markierung anlegen",
+        edit_title: "Markierung bearbeiten",
+        name_label: "Name der Markierung",
+        name_placeholder: "Name eingeben",
+      },
+    },
+  },
+  crm: {
+    action: {
+      reset_password: "Passwort zurücksetzen",
+    },
+    auth: {
+      first_name: "Vorname",
+      last_name: "Nachname",
+      confirm_password: "Passwort bestätigen",
+      confirmation_required:
+        "Bitte folgen Sie dem Link in der E-Mail, um Ihr Konto zu bestätigen.",
+      recovery_email_sent:
+        "Wenn Sie registriert sind, erhalten Sie in Kürze eine E-Mail zum Zurücksetzen des Passworts.",
+      sign_in_failed: "Anmeldung fehlgeschlagen.",
+      sign_in_google_workspace: "Mit Google Workspace anmelden",
+      signup: {
+        create_account: "Konto anlegen",
+        create_first_user:
+          "Legen Sie das erste Benutzerkonto an, um die Einrichtung abzuschließen.",
+        creating: "Wird angelegt…",
+        initial_user_created: "Erster Benutzer erfolgreich angelegt",
+      },
+      welcome_title: "Willkommen bei Nora CRM",
+    },
+    common: {
+      activity: "Aktivität",
+      added: "hinzugefügt",
+      details: "Details",
+      last_activity_with_date: "letzte Aktivität %{date}",
+      load_more: "Mehr laden",
+      misc: "Sonstiges",
+      past: "Vergangen",
+      read_more: "Mehr lesen",
+      retry: "Erneut versuchen",
+      show_less: "Weniger anzeigen",
+      copied: "Kopiert!",
+      copy: "Kopieren",
+      loading: "Wird geladen…",
+      me: "Ich",
+      task_count: "%{smart_count} Aufgabe |||| %{smart_count} Aufgaben",
+    },
+    changelog: {
+      title: "Änderungsprotokoll",
+    },
+    activity: {
+      added_company: "%{name} hat Kunden angelegt",
+      you_added_company: "Sie haben einen Kunden angelegt",
+      added_contact: "%{name} hat hinzugefügt",
+      you_added_contact: "Sie haben hinzugefügt",
+      added_note: "%{name} hat eine Notiz hinzugefügt zu",
+      you_added_note: "Sie haben eine Notiz hinzugefügt zu",
+      added_note_about_deal: "%{name} hat eine Notiz zum Vorgang hinzugefügt",
+      you_added_note_about_deal:
+        "Sie haben eine Notiz zum Vorgang hinzugefügt",
+      added_deal: "%{name} hat einen Vorgang angelegt",
+      you_added_deal: "Sie haben einen Vorgang angelegt",
+      at_company: "bei",
+      to: "an",
+      load_more: "Mehr Aktivität laden",
+    },
+    dashboard: {
+      deals_chart: "Erwarteter Umsatz aus Vorgängen",
+      deals_pipeline: "Vorgangsübersicht",
+      latest_activity: "Letzte Aktivität",
+      latest_activity_error: "Fehler beim Laden der letzten Aktivität",
+      latest_notes: "Meine letzten Notizen",
+      latest_notes_added_ago: "hinzugefügt %{timeAgo}",
+      stepper: {
+        install: "Nora CRM installieren",
+        progress: "%{step}/3 erledigt",
+        whats_next: "Wie geht es weiter?",
+      },
+      upcoming_tasks: "Anstehende Aufgaben",
+    },
+    header: {
+      import_data: "Daten importieren",
+    },
+    image_editor: {
+      change: "Ändern",
+      drop_hint:
+        "Datei zum Hochladen ablegen oder klicken, um eine Datei auszuwählen.",
+      editable_content: "Bearbeitbarer Inhalt",
+      title: "Bild hochladen und zuschneiden",
+      update_image: "Bild aktualisieren",
+    },
+    import: {
+      action: {
+        download_error_report: "Fehlerbericht herunterladen",
+        import: "Importieren",
+        import_another: "Weitere Datei importieren",
+      },
+      error: {
+        unable: "Diese Datei konnte nicht importiert werden.",
+      },
+      idle: {
+        description_1:
+          "Sie können Benutzer, Kunden, Kontakte, Notizen und Aufgaben importieren.",
+        description_2:
+          "Die Daten müssen in einer JSON-Datei im folgenden Format vorliegen:",
+      },
+      status: {
+        all_success: "Alle Datensätze wurden erfolgreich importiert.",
+        complete: "Import abgeschlossen.",
+        failed: "Fehlgeschlagen",
+        imported: "Importiert",
+        in_progress:
+          "Import läuft. Bitte verlassen Sie diese Seite nicht.",
+        some_failed: "Einige Datensätze wurden nicht importiert.",
+        table_caption: "Importstatus",
+      },
+      title: "Daten importieren",
+    },
+    settings: {
+      about: "Über",
+      companies: {
+        sectors: "Branchen",
+      },
+      dark_mode_logo: "Logo im Dunkelmodus",
+      deals: {
+        categories: "Kategorien",
+        currency: "Währung",
+        pipeline_help:
+          "Wählen Sie, welche Vorgangsphasen in der Vorgangsübersicht gezählt werden.",
+        pipeline_statuses: "Status in der Vorgangsübersicht",
+        stages: "Phasen",
+      },
+      light_mode_logo: "Logo im Hellmodus",
+      notes: {
+        statuses: "Status",
+      },
+      reset_defaults: "Auf Standard zurücksetzen",
+      save_error: "Konfiguration konnte nicht gespeichert werden",
+      saved: "Konfiguration erfolgreich gespeichert",
+      saving: "Wird gespeichert…",
+      tasks: {
+        types: "Arten",
+      },
+      preferences: "Einstellungen",
+      title: "Einstellungen",
+      app_title: "Anwendungsname",
+      sections: {
+        branding: "Erscheinungsbild",
+      },
+      validation: {
+        duplicate: "Doppelte %{display_name}: %{items}",
+        in_use:
+          "%{display_name}, die noch von Vorgängen verwendet werden, können nicht entfernt werden: %{items}",
+        validating: "Wird geprüft…",
+        entities: {
+          categories: "Kategorien",
+          stages: "Phasen",
+        },
+      },
+    },
+    theme: {
+      dark: "Dunkel",
+      label: "Farbschema",
+      light: "Hell",
+      system: "System",
+    },
+    language: "Sprache",
+    navigation: {
+      label: "CRM-Navigation",
+    },
+    profile: {
+      inbound: {
+        description:
+          "Sie können E-Mails an die Eingangsadresse Ihres Servers senden, z. B. indem Sie sie in das Feld %{field} setzen. Nora CRM verarbeitet die E-Mails und fügt Notizen zu den passenden Kontakten hinzu.",
+        title: "Eingehende E-Mail",
+      },
+      mcp: {
+        title: "MCP-Server",
+        description:
+          "Verwenden Sie diese URL, um Ihren KI-Assistenten per Model Context Protocol (MCP) mit Ihren CRM-Daten zu verbinden.",
+      },
+      password: {
+        change: "Passwort ändern",
+      },
+      password_reset_sent:
+        "Eine E-Mail zum Zurücksetzen des Passworts wurde an Ihre Adresse gesendet",
+      record_not_found: "Datensatz nicht gefunden",
+      title: "Profil",
+      updated: "Ihr Profil wurde aktualisiert",
+      update_error: "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut",
+    },
+    validation: {
+      invalid_url: "Muss eine gültige Adresse sein",
+      invalid_linkedin_url: "Die Adresse muss von linkedin.com stammen",
+    },
+  },
+} satisfies CrmMessages;

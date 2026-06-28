@@ -3,6 +3,7 @@ import { useStore } from "ra-core";
 
 import type { DealStage, LabeledValue, NoteStatus } from "../types";
 import { defaultConfiguration } from "./defaultConfiguration";
+import { localizeDealStages } from "../deals/dealUtils";
 
 export const CONFIGURATION_STORE_KEY = "app.configuration";
 
@@ -26,9 +27,17 @@ export const useConfigurationContext = () => {
     CONFIGURATION_STORE_KEY,
     defaultConfiguration,
   );
-  // Merge with defaults so that missing fields in stored config
-  // fall back to default values (e.g. when new settings are added)
-  return useMemo(() => ({ ...defaultConfiguration, ...config }), [config]);
+  return useMemo(() => {
+    const merged = { ...defaultConfiguration, ...config };
+
+    if (merged.currency === "USD") {
+      merged.currency = defaultConfiguration.currency;
+    }
+
+    merged.dealStages = localizeDealStages(merged.dealStages);
+
+    return merged;
+  }, [config]);
 };
 
 export const useConfigurationUpdater = () => {

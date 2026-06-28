@@ -58,6 +58,7 @@ export const englishCrmMessages = {
         create_label: "Start typing to create a new company",
       },
       filters: {
+        customer_type: "Customer type",
         only_mine: "Only companies I manage",
       },
     },
@@ -206,6 +207,9 @@ export const englishCrmMessages = {
         back_to_deal: "Back to deal",
         create: "Create deal",
         new: "New Deal",
+      },
+      filters: {
+        only_mine: "Only my deals",
       },
       field_categories: {
         misc: "Misc",
@@ -387,7 +391,7 @@ export const englishCrmMessages = {
         creating: "Creating...",
         initial_user_created: "Initial user successfully created",
       },
-      welcome_title: "Welcome to Atomic CRM",
+      welcome_title: "Welcome to Nora CRM",
     },
     common: {
       activity: "Activity",
@@ -432,7 +436,7 @@ export const englishCrmMessages = {
       latest_notes: "My Latest Notes",
       latest_notes_added_ago: "added %{timeAgo}",
       stepper: {
-        install: "Install Atomic CRM",
+        install: "Install Nora CRM",
         progress: "%{step}/3 done",
         whats_next: "What's next?",
       },
@@ -530,7 +534,7 @@ export const englishCrmMessages = {
     profile: {
       inbound: {
         description:
-          "You can start sending emails to your server's inbound email address, e.g. by adding it to the %{field} field. Atomic CRM will process the emails and add notes to the corresponding contacts.",
+          "You can start sending emails to your server's inbound email address, e.g. by adding it to the %{field} field. Nora CRM will process the emails and add notes to the corresponding contacts.",
         title: "Inbound email",
       },
       mcp: {

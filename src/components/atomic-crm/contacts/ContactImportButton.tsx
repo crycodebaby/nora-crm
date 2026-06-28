@@ -5,6 +5,7 @@ import { Form, useRefresh, useTranslate } from "ra-core";
 import { Link } from "react-router";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -35,9 +36,10 @@ export const ContactImportButton = () => {
   return (
     <>
       <Button
-        variant="outline"
+        variant="ghost"
+        size="sm"
         onClick={handleOpenModal}
-        className="flex items-center gap-2 cursor-pointer"
+        className={cn("nora-secondary-action flex items-center gap-2")}
       >
         <Upload /> {translate("resources.contacts.import.button")}
       </Button>

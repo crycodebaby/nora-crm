@@ -1,8 +1,9 @@
 import React from "react";
-import { buttonVariants } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { Translate, useCreatePath, useResourceContext } from "ra-core";
+import { Translate, useResourceContext } from "ra-core";
 import { Link } from "react-router";
+import { cn } from "@/lib/utils";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 
 export type CreateButtonProps = {
   label?: string;
@@ -10,43 +11,29 @@ export type CreateButtonProps = {
 };
 
 /**
- * A button that navigates to the create page for a resource.
- *
- * Automatically uses the current resource unless overridden.
- *
- * @see {@link https://marmelab.com/shadcn-admin-kit/docs/createbutton/ CreateButton documentation}
- *
- * @example
- * import { CreateButton, List, ExportButton } from '@/components/admin';
- *
- * const PostList = () => (
- *   <List
- *     actions={<>
- *       <CreateButton />
- *       <ExportButton />
- *     </>}
- *   >
- *     ...
- *   </List>
- * );
+ * Primary list action — navigates to the create page using German URL paths.
  */
 export const CreateButton = ({
   label,
   resource: targetResource,
 }: CreateButtonProps) => {
   const resource = useResourceContext();
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const link = createPath({
-    resource: targetResource ?? resource,
+    resource: targetResource ?? resource ?? "",
     type: "create",
   });
+
   return (
     <Link
-      className={buttonVariants({ variant: "outline" })}
+      className={cn(
+        "inline-flex items-center justify-center gap-2 rounded-md whitespace-nowrap transition-colors",
+        "nora-primary-action",
+      )}
       to={link}
       onClick={stopPropagation}
     >
-      <Plus />
+      <Plus className="h-4 w-4" />
       <Translate i18nKey={label ?? "ra.action.create"}>
         {label ?? "Create"}
       </Translate>
@@ -54,5 +41,4 @@ export const CreateButton = ({
   );
 };
 
-// useful to prevent click bubbling in a datagrid with rowClick
 const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();

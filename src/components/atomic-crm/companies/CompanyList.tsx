@@ -46,9 +46,13 @@ const CompanyListLayout = () => {
 const CompanyListActions = () => {
   const translate = useTranslate();
   return (
-    <TopToolbar>
-      <SortButton fields={["name", "created_at", "nb_contacts"]} />
-      <ExportButton />
+    <TopToolbar className="w-full">
+      <div className="flex items-center gap-1 mr-auto">
+        <SortButton fields={["name", "created_at", "nb_contacts"]} />
+      </div>
+      <div className="flex items-center gap-1 border-r border-border pr-3 mr-3">
+        <ExportButton />
+      </div>
       <CreateButton
         label={translate("resources.companies.action.new", {
           _: "New Company",

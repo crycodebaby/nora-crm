@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { InputProps } from "ra-core";
 import { useGetIdentity, useListContext, useTranslate } from "ra-core";
 import { matchPath, useLocation } from "react-router";
+import { matchesNoraSubPath } from "../routing/noraRoutes";
 import { AutocompleteInput } from "@/components/admin/autocomplete-input";
 import { CreateButton } from "@/components/admin/create-button";
 import { ExportButton } from "@/components/admin/export-button";
@@ -46,7 +47,11 @@ const DealList = () => {
         optionValue="value"
       />
     </WrapperField>,
-    <OnlyMineInput source="sales_id" alwaysOn />,
+    <OnlyMineInput
+      source="sales_id"
+      alwaysOn
+      labelKey="resources.deals.filters.only_mine"
+    />,
   ];
 
   return (
@@ -66,9 +71,12 @@ const DealList = () => {
 
 const DealLayout = () => {
   const location = useLocation();
-  const matchCreate = matchPath("/deals/create", location.pathname);
-  const matchShow = matchPath("/deals/:id/show", location.pathname);
-  const matchEdit = matchPath("/deals/:id", location.pathname);
+  const matchCreate = matchesNoraSubPath("deals", "create", location.pathname);
+  const matchShow = matchPath("/deals/:id/show", location.pathname)
+    ?? matchPath("/vorgaenge/:id/show", location.pathname);
+  const matchEditRaw = matchPath("/deals/:id", location.pathname)
+    ?? matchPath("/vorgaenge/:id", location.pathname);
+  const matchEdit = matchEditRaw && !matchShow ? matchEditRaw : null;
 
   const { data, isPending, filterValues } = useListContext();
   const hasFilters = filterValues && Object.keys(filterValues).length > 0;
@@ -96,10 +104,14 @@ const DealLayout = () => {
 };
 
 const DealActions = () => (
-  <TopToolbar>
-    <FilterButton />
-    <ExportButton />
-    <CreateButton label="resources.deals.action.new" />
+  <TopToolbar className="w-full">
+    <div className="flex items-center gap-1 mr-auto">
+      <FilterButton />
+    </div>
+    <div className="flex items-center gap-1 border-r border-border pr-3 mr-3">
+      <ExportButton />
+    </div>
+    <CreateButton label="resources.deals.action.create" />
   </TopToolbar>
 );
 

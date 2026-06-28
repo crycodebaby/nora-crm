@@ -1,5 +1,5 @@
-import * as React from "react";
 import { useCallback } from "react";
+import type React from "react";
 import { Download } from "lucide-react";
 import type { Exporter } from "ra-core";
 import {
@@ -10,6 +10,7 @@ import {
   Translate,
 } from "ra-core";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * A button that exports list data to a file.
@@ -44,7 +45,7 @@ export const ExportButton = (props: ExportButtonProps) => {
     icon = defaultIcon,
     exporter: customExporter,
     meta,
-    className = "cursor-pointer",
+    className,
   } = props;
   const {
     getData,
@@ -96,10 +97,11 @@ export const ExportButton = (props: ExportButtonProps) => {
 
   return (
     <Button
-      variant="outline"
+      variant="ghost"
+      size="sm"
       onClick={handleClick}
       disabled={total === 0}
-      className={className}
+      className={cn("nora-secondary-action cursor-pointer", className)}
     >
       {icon}
       <Translate i18nKey={label}>Export</Translate>

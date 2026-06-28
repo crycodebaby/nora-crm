@@ -3,11 +3,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import type { RaRecord } from "ra-core";
 import {
-  useCreatePath,
   useRecordContext,
   useResourceContext,
   Translate,
 } from "ra-core";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import { Link } from "react-router";
 
 export type EditButtonProps = {
@@ -40,7 +40,7 @@ export type EditButtonProps = {
 export const EditButton = (props: EditButtonProps) => {
   const resource = useResourceContext(props);
   const record = useRecordContext(props);
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const link = createPath({
     resource,
     type: "edit",

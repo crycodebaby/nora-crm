@@ -85,10 +85,14 @@ const ContactBulkActionButtons = () => (
 );
 
 const ContactListActions = () => (
-  <TopToolbar>
-    <SortButton fields={["first_name", "last_name", "last_seen"]} />
-    <ContactImportButton />
-    <ExportButton exporter={exporter} />
+  <TopToolbar className="w-full">
+    <div className="flex items-center gap-1 mr-auto">
+      <SortButton fields={["first_name", "last_name", "last_seen"]} />
+    </div>
+    <div className="flex items-center gap-1 border-r border-border pr-3 mr-3">
+      <ContactImportButton />
+      <ExportButton exporter={exporter} />
+    </div>
     <CreateButton />
   </TopToolbar>
 );

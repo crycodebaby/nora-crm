@@ -1,43 +1,39 @@
 import type { ConfigurationContextValue } from "./ConfigurationContext";
 
-export const defaultDarkModeLogo = "./logos/logo_atomic_crm_dark.svg";
-export const defaultLightModeLogo = "./logos/logo_atomic_crm_light.svg";
+export const defaultDarkModeLogo = "./logos/nora-monogram-dark.png";
+export const defaultLightModeLogo = "./logos/nora-monogram-light.png";
 
-export const defaultCurrency = "USD";
+export const defaultCurrency = "EUR";
 
-export const defaultTitle = "Atomic CRM";
+export const defaultTitle = "Nora CRM";
 
 export const defaultCompanySectors = [
-  { value: "communication-services", label: "Communication Services" },
-  { value: "consumer-discretionary", label: "Consumer Discretionary" },
-  { value: "consumer-staples", label: "Consumer Staples" },
-  { value: "energy", label: "Energy" },
-  { value: "financials", label: "Financials" },
-  { value: "health-care", label: "Health Care" },
-  { value: "industrials", label: "Industrials" },
-  { value: "information-technology", label: "Information Technology" },
-  { value: "materials", label: "Materials" },
-  { value: "real-estate", label: "Real Estate" },
-  { value: "utilities", label: "Utilities" },
+  { value: "privatkunde", label: "Privatkunde" },
+  { value: "hausverwaltung", label: "Hausverwaltung" },
+  { value: "gewerbekunde", label: "Gewerbekunde" },
+  { value: "bestandskunde", label: "Bestandskunde" },
+  { value: "neukunde", label: "Neukunde" },
+  { value: "lieferant-hersteller", label: "Lieferant / Hersteller" },
+  { value: "sonstiges", label: "Sonstiges" },
 ];
 
 export const defaultDealStages = [
-  { value: "opportunity", label: "Opportunity" },
-  { value: "proposal-sent", label: "Proposal Sent" },
-  { value: "in-negociation", label: "In Negotiation" },
-  { value: "won", label: "Won" },
-  { value: "lost", label: "Lost" },
-  { value: "delayed", label: "Delayed" },
+  { value: "anfrage", label: "Anfrage" },
+  { value: "angebot", label: "Angebot" },
+  { value: "beauftragt", label: "Beauftragt" },
+  { value: "in-arbeit", label: "In Arbeit" },
+  { value: "abgeschlossen", label: "Abgeschlossen" },
+  { value: "abgelehnt", label: "Abgelehnt" },
 ];
 
-export const defaultDealPipelineStatuses = ["won"];
+export const defaultDealPipelineStatuses = ["abgeschlossen"];
 
 export const defaultDealCategories = [
-  { value: "other", label: "Other" },
-  { value: "copywriting", label: "Copywriting" },
-  { value: "print-project", label: "Print project" },
-  { value: "ui-design", label: "UI Design" },
-  { value: "website-design", label: "Website design" },
+  { value: "hausmeisterdienst", label: "Hausmeisterdienst" },
+  { value: "fensterservice", label: "Fensterservice" },
+  { value: "reparatur", label: "Reparatur" },
+  { value: "wartung", label: "Wartung" },
+  { value: "sonstiges", label: "Sonstiges" },
 ];
 
 export const defaultNoteStatuses = [

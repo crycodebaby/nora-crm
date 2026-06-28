@@ -9,6 +9,10 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
+import {
+  getActiveNoraResource,
+  noraCreatePath,
+} from "../routing/noraRoutes";
 
 const Header = () => {
   const { darkModeLogo, lightModeLogo, title } = useConfigurationContext();
@@ -16,14 +20,15 @@ const Header = () => {
   const translate = useTranslate();
 
   let currentPath: string | boolean = "/";
+  const activeResource = getActiveNoraResource(location.pathname);
   if (matchPath("/", location.pathname)) {
     currentPath = "/";
-  } else if (matchPath("/contacts/*", location.pathname)) {
-    currentPath = "/contacts";
-  } else if (matchPath("/companies/*", location.pathname)) {
-    currentPath = "/companies";
-  } else if (matchPath("/deals/*", location.pathname)) {
-    currentPath = "/deals";
+  } else if (activeResource === "contacts") {
+    currentPath = "contacts";
+  } else if (activeResource === "companies") {
+    currentPath = "companies";
+  } else if (activeResource === "deals") {
+    currentPath = "deals";
   } else {
     currentPath = false;
   }
@@ -61,22 +66,22 @@ const Header = () => {
                     label={translate("resources.contacts.name", {
                       smart_count: 2,
                     })}
-                    to="/contacts"
-                    isActive={currentPath === "/contacts"}
+                    to={noraCreatePath({ resource: "contacts", type: "list" })}
+                    isActive={currentPath === "contacts"}
                   />
                   <NavigationTab
                     label={translate("resources.companies.name", {
                       smart_count: 2,
                     })}
-                    to="/companies"
-                    isActive={currentPath === "/companies"}
+                    to={noraCreatePath({ resource: "companies", type: "list" })}
+                    isActive={currentPath === "companies"}
                   />
                   <NavigationTab
                     label={translate("resources.deals.name", {
                       smart_count: 2,
                     })}
-                    to="/deals"
-                    isActive={currentPath === "/deals"}
+                    to={noraCreatePath({ resource: "deals", type: "list" })}
+                    isActive={currentPath === "deals"}
                   />
                 </nav>
               </div>
@@ -116,7 +121,7 @@ const NavigationTab = ({
     to={to}
     className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
       isActive
-        ? "text-secondary-foreground border-secondary-foreground"
+        ? "text-secondary-foreground border-[var(--nora-brand)]"
         : "text-secondary-foreground/70 border-transparent hover:text-secondary-foreground/80"
     }`}
   >

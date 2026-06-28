@@ -59,6 +59,7 @@ import { ContactListMobile } from "../contacts/ContactList.tsx";
 import { ContactShow } from "../contacts/ContactShow.tsx";
 import { CompanyShow } from "../companies/CompanyShow.tsx";
 import { NoteShowPage } from "../notes/NoteShowPage.tsx";
+import { useNoraResourceAliasRoutes } from "../routing/NoraResourceAliasRoutes";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -239,6 +240,12 @@ const DesktopAdmin = (
     layout?: LayoutComponent;
   },
 ) => {
+  const noraAliasRoutes = useNoraResourceAliasRoutes({
+    contacts,
+    companies,
+    deals,
+  });
+
   return (
     <Admin
       layout={props.layout ?? Layout}
@@ -264,6 +271,7 @@ const DesktopAdmin = (
         <Route path={SettingsPage.path} element={<SettingsPage />} />
         <Route path={ImportPage.path} element={<ImportPage />} />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+        {noraAliasRoutes}
       </CustomRoutes>
       <Resource name="deals" {...deals} />
       <Resource name="contacts" {...contacts} />
@@ -297,6 +305,17 @@ const MobileAdmin = (
   const asyncStoragePersister = createAsyncStoragePersister({
     storage: localStorage,
   });
+  const noraAliasRoutes = useNoraResourceAliasRoutes({
+    contacts: {
+      list: ContactListMobile,
+      show: ContactShow,
+      children: (
+        <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
+      ),
+    },
+    companies: { show: CompanyShow },
+    deals: {},
+  });
 
   return (
     <PersistQueryClientProvider
@@ -328,6 +347,7 @@ const MobileAdmin = (
             element={<SettingsPageMobile />}
           />
           <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+          {noraAliasRoutes}
         </CustomRoutes>
         <Resource
           name="contacts"

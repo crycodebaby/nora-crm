@@ -1,5 +1,7 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { useRedirect, RecordContextProvider } from "ra-core";
+import { noraCreatePath } from "../routing/noraRoutes";
+import { NORA_MONEY_LOCALE } from "./dealUtils";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { NumberField } from "@/components/admin/number-field";
 import { SelectField } from "@/components/admin/select-field";
@@ -33,9 +35,15 @@ export const DealCardContent = ({
   const { dealCategories, currency } = useConfigurationContext();
   const redirect = useRedirect();
   const handleClick = () => {
-    redirect(`/deals/${deal.id}/show`, undefined, undefined, undefined, {
-      _scrollToTop: false,
-    });
+    redirect(
+      noraCreatePath({ resource: "deals", type: "show", id: deal.id }),
+      undefined,
+      undefined,
+      undefined,
+      {
+        _scrollToTop: false,
+      },
+    );
   };
 
   return (
@@ -76,11 +84,11 @@ export const DealCardContent = ({
             <p className="text-xs text-muted-foreground">
               <NumberField
                 source="amount"
+                locales={NORA_MONEY_LOCALE}
                 options={{
                   notation: "compact",
                   style: "currency",
                   currency,
-                  currencyDisplay: "narrowSymbol",
                   minimumSignificantDigits: 3,
                 }}
               />

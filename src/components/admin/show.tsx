@@ -7,7 +7,6 @@ import type { ShowBaseProps } from "ra-core";
 import {
   ShowBase,
   Translate,
-  useCreatePath,
   useHasDashboard,
   useShowContext,
   useGetRecordRepresentation,
@@ -15,6 +14,7 @@ import {
   useResourceContext,
   useResourceDefinition,
 } from "ra-core";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
@@ -127,7 +127,7 @@ export const ShowView = ({
   }
   const getResourceLabel = useGetResourceLabel();
   const listLabel = getResourceLabel(resource, 2);
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const listLink = createPath({
     resource,
     type: "list",

@@ -10,6 +10,7 @@ import {
 } from "ra-core";
 import { type MouseEvent, useCallback, useRef } from "react";
 import { Link } from "react-router";
+import { noraCreatePath } from "../routing/noraRoutes";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { TextField } from "@/components/admin/text-field";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -112,7 +113,7 @@ const ContactItemContent = ({
     : null;
 
   return (
-    <div className="flex flex-row items-center pl-2 pr-4 py-2 hover:bg-muted transition-colors first:rounded-t-xl last:rounded-b-xl">
+    <div className="flex flex-row items-center pl-2 pr-4 nora-list-row hover:bg-muted transition-colors first:rounded-t-xl last:rounded-b-xl">
       <div
         className="px-4 py-3 flex items-center cursor-pointer"
         onClick={(e) => handleToggleItem(contact.id, e)}
@@ -123,7 +124,11 @@ const ContactItemContent = ({
         />
       </div>
       <Link
-        to={`/contacts/${contact.id}/show`}
+        to={noraCreatePath({
+          resource: "contacts",
+          type: "show",
+          id: contact.id,
+        })}
         className="flex-1 flex flex-row gap-4 items-center"
       >
         <Avatar />
@@ -251,8 +256,12 @@ const ContactItemContentMobile = ({ contact }: { contact: Contact }) => {
   const translate = useTranslate();
   return (
     <Link
-      to={`/contacts/${contact.id}/show`}
-      className="flex flex-row gap-4 items-center py-2 hover:bg-muted transition-colors"
+      to={noraCreatePath({
+        resource: "contacts",
+        type: "show",
+        id: contact.id,
+      })}
+      className="flex flex-row gap-4 items-center nora-list-row hover:bg-muted transition-colors"
     >
       <Avatar />
       <div className="flex flex-col grow justify-between">

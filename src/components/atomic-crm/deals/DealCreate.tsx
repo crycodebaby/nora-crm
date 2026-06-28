@@ -12,6 +12,7 @@ import { SaveButton } from "@/components/admin/form";
 import { FormToolbar } from "@/components/admin/simple-form";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 
+import { noraCreatePath } from "../routing/noraRoutes";
 import type { Deal } from "../types";
 import { DealInputs } from "./DealInputs";
 
@@ -21,14 +22,14 @@ export const DealCreate = ({ open }: { open: boolean }) => {
   const { data: allDeals } = useListContext<Deal>();
 
   const handleClose = () => {
-    redirect("/deals");
+    redirect(noraCreatePath({ resource: "deals", type: "list" }));
   };
 
   const queryClient = useQueryClient();
 
   const onSuccess = async (deal: Deal) => {
     if (!allDeals) {
-      redirect("/deals");
+      redirect(noraCreatePath({ resource: "deals", type: "list" }));
       return;
     }
     // increase the index of all deals in the same stage as the new deal
@@ -67,7 +68,7 @@ export const DealCreate = ({ open }: { open: boolean }) => {
       },
       { updatedAt: now },
     );
-    redirect("/deals");
+    redirect(noraCreatePath({ resource: "deals", type: "list" }));
   };
 
   const { identity } = useGetIdentity();

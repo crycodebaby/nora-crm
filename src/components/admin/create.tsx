@@ -8,11 +8,11 @@ import {
   CreateBase,
   Translate,
   useCreateContext,
-  useCreatePath,
   useGetResourceLabel,
   useHasDashboard,
   useResourceContext,
 } from "ra-core";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
@@ -89,7 +89,7 @@ export const CreateView = ({
   }
   const getResourceLabel = useGetResourceLabel();
   const listLabel = getResourceLabel(resource, 2);
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const listLink = createPath({
     resource,
     type: "list",

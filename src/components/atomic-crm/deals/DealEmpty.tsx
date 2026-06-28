@@ -1,5 +1,6 @@
 import { useGetList, useTranslate } from "ra-core";
-import { matchPath, useLocation, Link } from "react-router";
+import { useLocation, Link } from "react-router";
+import { matchesNoraSubPath, noraCreatePath } from "../routing/noraRoutes";
 import type { ReactNode } from "react";
 import { CreateButton } from "@/components/admin/create-button";
 import { Progress } from "@/components/ui/progress";
@@ -11,7 +12,7 @@ import { DealCreate } from "./DealCreate";
 export const DealEmpty = ({ children }: { children?: ReactNode }) => {
   const translate = useTranslate();
   const location = useLocation();
-  const matchCreate = matchPath("/deals/create", location.pathname);
+  const matchCreate = matchesNoraSubPath("deals", "create", location.pathname);
   const appbarHeight = useAppBarHeight();
 
   // get Contact data
@@ -59,7 +60,10 @@ export const DealEmpty = ({ children }: { children?: ReactNode }) => {
           <p className="text-sm text-center text-muted-foreground mb-4">
             {translate("resources.contacts.empty.description")}
             <br />
-            <Link to="/contacts/create" className="hover:underline">
+            <Link
+              to={noraCreatePath({ resource: "contacts", type: "create" })}
+              className="hover:underline"
+            >
               {translate("resources.contacts.action.add_first")}
             </Link>{" "}
             {translate("resources.deals.empty.before_create")}

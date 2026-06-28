@@ -2,7 +2,6 @@ import type { EditBaseProps } from "ra-core";
 import {
   EditBase,
   Translate,
-  useCreatePath,
   useEditContext,
   useGetRecordRepresentation,
   useGetResourceLabel,
@@ -10,6 +9,7 @@ import {
   useResourceContext,
   useResourceDefinition,
 } from "ra-core";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import {
@@ -97,7 +97,7 @@ export const EditView = ({
   }
   const getResourceLabel = useGetResourceLabel();
   const listLabel = getResourceLabel(resource, 2);
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const listLink = createPath({
     resource,
     type: "list",

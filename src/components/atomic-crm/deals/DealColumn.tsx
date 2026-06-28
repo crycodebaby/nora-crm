@@ -2,7 +2,7 @@ import { Droppable } from "@hello-pangea/dnd";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
-import { findDealLabel } from "./dealUtils";
+import { findDealLabel, formatDealAmount } from "./dealUtils";
 import { DealCard } from "./DealCard";
 
 export const DealColumn = ({
@@ -21,11 +21,8 @@ export const DealColumn = ({
           {findDealLabel(dealStages, stage)}
         </h3>
         <p className="text-sm text-muted-foreground">
-          {totalAmount.toLocaleString("en-US", {
+          {formatDealAmount(totalAmount, currency, {
             notation: "compact",
-            style: "currency",
-            currency,
-            currencyDisplay: "narrowSymbol",
             minimumSignificantDigits: 3,
           })}
         </p>

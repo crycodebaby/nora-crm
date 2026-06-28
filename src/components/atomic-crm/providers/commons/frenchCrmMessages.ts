@@ -61,6 +61,7 @@ export const frenchCrmMessages = {
         create_label: "Commencez à taper pour créer une nouvelle entreprise",
       },
       filters: {
+        customer_type: "Type de client",
         only_mine: "Seulement les entreprises que je gère",
       },
     },
@@ -211,6 +212,9 @@ export const frenchCrmMessages = {
         back_to_deal: "Retour à l'affaire",
         create: "Créer une affaire",
         new: "Nouvelle affaire",
+      },
+      filters: {
+        only_mine: "Seulement mes affaires",
       },
       field_categories: {
         misc: "Divers",
@@ -393,7 +397,7 @@ export const frenchCrmMessages = {
         creating: "Création...",
         initial_user_created: "Utilisateur initial créé avec succès",
       },
-      welcome_title: "Bienvenue sur Atomic CRM",
+      welcome_title: "Bienvenue sur Nora CRM",
     },
     common: {
       activity: "Activité",
@@ -439,7 +443,7 @@ export const frenchCrmMessages = {
       latest_notes: "Mes dernières notes",
       latest_notes_added_ago: "ajouté %{timeAgo}",
       stepper: {
-        install: "Installer Atomic CRM",
+        install: "Installer Nora CRM",
         progress: "%{step}/3 terminé",
         whats_next: "Et ensuite ?",
       },
@@ -537,7 +541,7 @@ export const frenchCrmMessages = {
     profile: {
       inbound: {
         description:
-          "Vous pouvez commencer à envoyer des e-mails vers l'adresse de réception de votre serveur, par exemple en l'ajoutant au champ %{field}. Atomic CRM traitera les e-mails et ajoutera des notes aux contacts correspondants.",
+          "Vous pouvez commencer à envoyer des e-mails vers l'adresse de réception de votre serveur, par exemple en l'ajoutant au champ %{field}. Nora CRM traitera les e-mails et ajoutera des notes aux contacts correspondants.",
         title: "E-mail entrant",
       },
       mcp: {

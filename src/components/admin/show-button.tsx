@@ -4,10 +4,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { Eye } from "lucide-react";
 import {
   Translate,
-  useCreatePath,
   useRecordContext,
   useResourceContext,
 } from "ra-core";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 
 export type ShowButtonProps = {
   label?: string;
@@ -31,7 +31,7 @@ export type ShowButtonProps = {
 export const ShowButton = (props: ShowButtonProps) => {
   const resource = useResourceContext();
   const record = useRecordContext();
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const link = createPath({
     resource,
     type: "show",

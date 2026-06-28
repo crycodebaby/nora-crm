@@ -3,38 +3,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export const Welcome = () => (
   <Card>
     <CardHeader className="px-4">
-      <CardTitle>Your CRM Starter Kit</CardTitle>
+      <CardTitle>Willkommen bei Nora CRM</CardTitle>
     </CardHeader>
     <CardContent className="px-4">
       <p className="text-sm mb-4">
-        <a
-          href="https://marmelab.com/atomic-crm"
-          className="underline hover:no-underline"
-        >
-          Atomic CRM
-        </a>{" "}
-        is a template designed to help you quickly build your own CRM.
+        Nora CRM ist Ihr internes System für Kunden, Kontakte, Aufgaben und
+        Vorgänge der Ergart Gruppe.
       </p>
       <p className="text-sm mb-4">
-        This demo runs on a mock API, so you can explore and modify the data. It
-        resets on reload. The full version uses Supabase for the backend.
+        In dieser Demo laufen die Daten im Browser und werden beim Neuladen
+        zurückgesetzt. In der Produktivumgebung wird Supabase als Backend
+        verwendet.
       </p>
       <p className="text-sm">
-        Powered by{" "}
+        Technische Basis:{" "}
         <a
           href="https://marmelab.com/shadcn-admin-kit"
           className="underline hover:no-underline"
         >
           shadcn-admin-kit
-        </a>
-        , Atomic CRM is fully open-source. You can find the code at{" "}
+        </a>{" "}
+        und{" "}
         <a
           href="https://github.com/marmelab/atomic-crm"
           className="underline hover:no-underline"
         >
-          marmelab/atomic-crm
-        </a>
-        .
+          Atomic CRM
+        </a>{" "}
+        (Open Source).
       </p>
     </CardContent>
   </Card>

@@ -8,6 +8,7 @@ import {
   useTranslate,
 } from "ra-core";
 import { Link } from "react-router";
+import { noraCreatePath } from "../routing/noraRoutes";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,7 @@ export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
   const notify = useNotify();
 
   const handleClose = () => {
-    redirect("/deals", undefined, undefined, undefined, {
+    redirect(noraCreatePath({ resource: "deals", type: "list" }), undefined, undefined, undefined, {
       _scrollToTop: false,
     });
   };
@@ -38,9 +39,19 @@ export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
             mutationOptions={{
               onSuccess: () => {
                 notify("resources.deals.updated", {});
-                redirect(`/deals/${id}/show`, undefined, undefined, undefined, {
-                  _scrollToTop: false,
-                });
+                redirect(
+                  noraCreatePath({
+                    resource: "deals",
+                    type: "show",
+                    id,
+                  }),
+                  undefined,
+                  undefined,
+                  undefined,
+                  {
+                    _scrollToTop: false,
+                  },
+                );
               },
             }}
           >
@@ -76,7 +87,13 @@ function EditHeader() {
         <div className="flex gap-2 pr-12">
           <DeleteButton />
           <Button asChild variant="outline" className="h-9">
-            <Link to={`/deals/${deal.id}/show`}>
+            <Link
+              to={noraCreatePath({
+                resource: "deals",
+                type: "show",
+                id: deal.id,
+              })}
+            >
               {translate("resources.deals.action.back_to_deal")}
             </Link>
           </Button>

@@ -11,7 +11,7 @@ export const TopToolbar = (inProps: TopToolbarProps) => {
   return (
     <div
       className={cn(
-        "flex flex-auto justify-end items-end gap-2 whitespace-nowrap",
+        "flex flex-auto justify-end items-end gap-3 whitespace-nowrap flex-wrap",
         className,
       )}
       {...props}

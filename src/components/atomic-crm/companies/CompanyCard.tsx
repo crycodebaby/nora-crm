@@ -1,11 +1,11 @@
 import { Handshake } from "lucide-react";
 import { Link } from "react-router";
 import {
-  useCreatePath,
   useListContext,
   useRecordContext,
   useTranslate,
 } from "ra-core";
+import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import { ReferenceManyField } from "@/components/admin/reference-many-field";
 import { Card } from "@/components/ui/card";
 
@@ -15,7 +15,7 @@ import type { Company } from "../types";
 import { CompanyAvatar } from "./CompanyAvatar";
 
 export const CompanyCard = (props: { record?: Company }) => {
-  const createPath = useCreatePath();
+  const createPath = useNoraAwareCreatePath();
   const record = useRecordContext<Company>(props);
   const translate = useTranslate();
   const { companySectors } = useConfigurationContext();
@@ -33,7 +33,7 @@ export const CompanyCard = (props: { record?: Company }) => {
       })}
       className="no-underline"
     >
-      <Card className="h-[200px] flex flex-col justify-between p-4 hover:bg-muted">
+      <Card className="h-[200px] flex flex-col justify-between p-5 hover:bg-muted transition-colors">
         <div className="flex flex-col items-center gap-1">
           <CompanyAvatar />
           <div className="text-center mt-1">

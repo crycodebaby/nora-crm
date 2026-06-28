@@ -1,6 +1,31 @@
 import { commands } from "vitest/browser";
 
-import { formatISODateString } from "./dealUtils";
+import { formatISODateString, findDealLabel } from "./dealUtils";
+
+describe("findDealLabel", () => {
+  const noraStages = [
+    { value: "anfrage", label: "Anfrage" },
+    { value: "abgeschlossen", label: "Abgeschlossen" },
+  ];
+
+  it("maps legacy Atomic stage values to German labels", () => {
+    expect(findDealLabel(noraStages, "opportunity")).toBe("Neue Anfrage");
+    expect(findDealLabel(noraStages, "proposal-sent")).toBe("Angebot gesendet");
+    expect(findDealLabel(noraStages, "won")).toBe("Angenommen");
+    expect(findDealLabel(noraStages, "lost")).toBe("Abgelehnt");
+    expect(findDealLabel(noraStages, "delayed")).toBe("Verzögert");
+  });
+
+  it("keeps Nora-specific stage labels", () => {
+    expect(findDealLabel(noraStages, "anfrage")).toBe("Anfrage");
+    expect(findDealLabel(noraStages, "abgeschlossen")).toBe("Abgeschlossen");
+  });
+
+  it("translates legacy English labels still stored in configuration", () => {
+    const legacyStages = [{ value: "opportunity", label: "Opportunity" }];
+    expect(findDealLabel(legacyStages, "opportunity")).toBe("Neue Anfrage");
+  });
+});
 
 describe("formatISODateString", () => {
   let originalTimezone: string;
