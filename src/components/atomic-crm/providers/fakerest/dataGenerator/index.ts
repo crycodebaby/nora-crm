@@ -1,9 +1,10 @@
+import { defaultConfiguration } from "../../../root/defaultConfiguration";
 import { generateCompanies } from "./companies";
 import { generateContactNotes } from "./contactNotes";
 import { generateContacts } from "./contacts";
 import { generateDealNotes } from "./dealNotes";
 import { generateDeals } from "./deals";
-import { finalize } from "./finalize";
+import { finalizeNoraCounts } from "./noraDemoSeed";
 import { generateSales } from "./sales";
 import { generateTags } from "./tags";
 import { generateTasks } from "./tasks";
@@ -22,10 +23,10 @@ export default (): Db => {
   db.configuration = [
     {
       id: 1,
-      config: {} as Db["configuration"][number]["config"],
+      config: defaultConfiguration,
     },
   ];
-  finalize(db);
+  finalizeNoraCounts(db);
 
   return db;
 };

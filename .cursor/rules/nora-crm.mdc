@@ -1,0 +1,24 @@
+---
+description: Nora CRM project rules for AI agents
+alwaysApply: true
+---
+
+# Nora CRM Agent Rule
+
+Before making changes, read:
+
+- `AGENTS.md`
+- `docs/nora/00-project-context.md`
+- `docs/nora/01-domain-model.md`
+- `docs/nora/02-design-system.md`
+- `docs/nora/03-data-model-guardrails.md`
+- `docs/nora/04-routing-i18n.md`
+- `docs/nora/06-decision-log.md`
+
+Never blindly rename internal resources (`contacts`, `companies`, `deals`, `tasks`, `tags`). Use visible German labels and routes instead.
+
+Do not edit `dist/` directly.
+
+Do not create Supabase migrations or DB changes without an explicit documented decision.
+
+Run `npm run typecheck` and `npm run build` after meaningful changes.

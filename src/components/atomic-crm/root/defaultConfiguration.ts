@@ -17,16 +17,27 @@ export const defaultCompanySectors = [
   { value: "sonstiges", label: "Sonstiges" },
 ];
 
+/** Nora Vorgangsstatus – technische IDs bleiben stabil, Labels sind deutsch. */
 export const defaultDealStages = [
-  { value: "anfrage", label: "Anfrage" },
-  { value: "angebot", label: "Angebot" },
-  { value: "beauftragt", label: "Beauftragt" },
-  { value: "in-arbeit", label: "In Arbeit" },
-  { value: "abgeschlossen", label: "Abgeschlossen" },
+  { value: "neue-anfrage", label: "Neue Anfrage" },
+  { value: "kontaktiert", label: "Kontaktiert" },
+  { value: "termin-vereinbart", label: "Termin vereinbart" },
+  { value: "aufmass-geplant", label: "Aufmaß geplant" },
+  { value: "aufmass-erledigt", label: "Aufmaß erledigt" },
+  { value: "in-kalkulation", label: "In Kalkulation" },
+  { value: "wartet-auf-hersteller", label: "Wartet auf Hersteller" },
+  { value: "angebot-gesendet", label: "Angebot gesendet" },
+  { value: "nachfassen", label: "Nachfassen" },
+  { value: "angenommen", label: "Angenommen" },
   { value: "abgelehnt", label: "Abgelehnt" },
+  { value: "abgeschlossen", label: "Abgeschlossen" },
 ];
 
-export const defaultDealPipelineStatuses = ["abgeschlossen"];
+export const defaultDealPipelineStatuses = [
+  "angenommen",
+  "abgelehnt",
+  "abgeschlossen",
+];
 
 export const defaultDealCategories = [
   { value: "hausmeisterdienst", label: "Hausmeisterdienst" },
@@ -37,22 +48,21 @@ export const defaultDealCategories = [
 ];
 
 export const defaultNoteStatuses = [
-  { value: "cold", label: "Cold", color: "#7dbde8" },
+  { value: "cold", label: "Kalt", color: "#7dbde8" },
   { value: "warm", label: "Warm", color: "#e8cb7d" },
-  { value: "hot", label: "Hot", color: "#e88b7d" },
-  { value: "in-contract", label: "In Contract", color: "#a4e87d" },
+  { value: "hot", label: "Heiß", color: "#e88b7d" },
+  { value: "in-contract", label: "Im Auftrag", color: "#a4e87d" },
 ];
 
 export const defaultTaskTypes = [
-  { value: "none", label: "None" },
-  { value: "email", label: "Email" },
-  { value: "demo", label: "Demo" },
-  { value: "lunch", label: "Lunch" },
-  { value: "meeting", label: "Meeting" },
-  { value: "follow-up", label: "Follow-up" },
-  { value: "thank-you", label: "Thank you" },
-  { value: "ship", label: "Ship" },
-  { value: "call", label: "Call" },
+  { value: "rueckruf", label: "Rückruf" },
+  { value: "besichtigung", label: "Besichtigung" },
+  { value: "aufmass", label: "Aufmaß" },
+  { value: "herstelleranfrage", label: "Herstelleranfrage" },
+  { value: "angebot-erstellen", label: "Angebot erstellen" },
+  { value: "angebot-nachfassen", label: "Angebot nachfassen" },
+  { value: "termin-vereinbaren", label: "Termin vereinbaren" },
+  { value: "dokumentation", label: "Dokumentation" },
 ];
 
 export const defaultConfiguration: ConfigurationContextValue = {

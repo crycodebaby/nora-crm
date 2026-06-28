@@ -8,11 +8,27 @@ import { findDealLabel, formatDealAmount } from "../deals/dealUtils";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 
-const multiplier = {
+const WON_STAGES = ["won", "angenommen", "abgeschlossen"];
+const LOST_STAGES = ["lost", "abgelehnt"];
+
+const multiplier: Record<string, number> = {
   opportunity: 0.2,
   "proposal-sent": 0.5,
   "in-negociation": 0.8,
   delayed: 0.3,
+  "neue-anfrage": 0.15,
+  kontaktiert: 0.25,
+  "termin-vereinbart": 0.35,
+  "aufmass-geplant": 0.45,
+  "aufmass-erledigt": 0.55,
+  "in-kalkulation": 0.65,
+  "wartet-auf-hersteller": 0.5,
+  "angebot-gesendet": 0.7,
+  nachfassen: 0.6,
+  anfrage: 0.2,
+  angebot: 0.5,
+  beauftragt: 0.75,
+  "in-arbeit": 0.8,
 };
 
 const threeMonthsAgo = new Date(
@@ -22,8 +38,8 @@ const threeMonthsAgo = new Date(
 export const DealsChart = memo(() => {
   const translate = useTranslate();
   const { dealStages, currency } = useConfigurationContext();
-  const wonLabel = findDealLabel(dealStages, "won") ?? "Angenommen";
-  const lostLabel = findDealLabel(dealStages, "lost") ?? "Abgelehnt";
+  const wonLabel = findDealLabel(dealStages, "angenommen") ?? "Angenommen";
+  const lostLabel = findDealLabel(dealStages, "abgelehnt") ?? "Abgelehnt";
 
   const { data, isPending } = useGetList<Deal>("deals", {
     pagination: { perPage: 100, page: 1 },
@@ -50,20 +66,23 @@ export const DealsChart = memo(() => {
       return {
         date: format(month, "MMM"),
         won: dealsByMonth[month]
-          .filter((deal: Deal) => deal.stage === "won")
+          .filter((deal: Deal) => WON_STAGES.includes(deal.stage))
           .reduce((acc: number, deal: Deal) => {
             acc += deal.amount;
             return acc;
           }, 0),
         pending: dealsByMonth[month]
-          .filter((deal: Deal) => !["won", "lost"].includes(deal.stage))
+          .filter(
+            (deal: Deal) =>
+              !WON_STAGES.includes(deal.stage) &&
+              !LOST_STAGES.includes(deal.stage),
+          )
           .reduce((acc: number, deal: Deal) => {
-            // @ts-expect-error - multiplier type issue
-            acc += deal.amount * multiplier[deal.stage];
+            acc += deal.amount * (multiplier[deal.stage] ?? 0.4);
             return acc;
           }, 0),
         lost: dealsByMonth[month]
-          .filter((deal: Deal) => deal.stage === "lost")
+          .filter((deal: Deal) => LOST_STAGES.includes(deal.stage))
           .reduce((acc: number, deal: Deal) => {
             acc -= deal.amount;
             return acc;

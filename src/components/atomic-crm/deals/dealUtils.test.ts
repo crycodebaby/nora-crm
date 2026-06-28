@@ -4,6 +4,7 @@ import { formatISODateString, findDealLabel } from "./dealUtils";
 
 describe("findDealLabel", () => {
   const noraStages = [
+    { value: "neue-anfrage", label: "Neue Anfrage" },
     { value: "anfrage", label: "Anfrage" },
     { value: "abgeschlossen", label: "Abgeschlossen" },
   ];
@@ -17,7 +18,8 @@ describe("findDealLabel", () => {
   });
 
   it("keeps Nora-specific stage labels", () => {
-    expect(findDealLabel(noraStages, "anfrage")).toBe("Anfrage");
+    expect(findDealLabel(noraStages, "neue-anfrage")).toBe("Neue Anfrage");
+    expect(findDealLabel(noraStages, "anfrage")).toBe("Neue Anfrage");
     expect(findDealLabel(noraStages, "abgeschlossen")).toBe("Abgeschlossen");
   });
 

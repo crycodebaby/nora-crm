@@ -1,0 +1,672 @@
+{
+  "meta": {
+    "name": "Nora CRM Demo-Daten Düsseldorf-Neuss",
+    "created": "2026-06-28",
+    "synthetic": true,
+    "note": "Alle Daten sind synthetisch und für Demo-/Testzwecke erstellt. Keine echten personenbezogenen Kundendaten."
+  },
+  "companies": [
+    {
+      "id": 1001,
+      "name": "Rheinbogen Immobilienservice GmbH",
+      "sector": "Hausverwaltung",
+      "city": "Düsseldorf",
+      "street": "Bilker Allee 124",
+      "zip": "40217",
+      "phone": "+49 211 000 41 01",
+      "email": "verwaltung@rheinbogen-demo.local",
+      "notes": "Hausverwaltung mit mehreren Mehrfamilienhäusern in Bilk und Unterbilk."
+    },
+    {
+      "id": 1002,
+      "name": "Familie Krüger",
+      "sector": "Privatkunde",
+      "city": "Neuss",
+      "street": "Further Straße 88",
+      "zip": "41462",
+      "phone": "+49 2131 000 11 08",
+      "email": "familie.krueger@nora-demo.local",
+      "notes": "Privater Eigentümer, wiederkehrende kleinere Fensterreparaturen."
+    },
+    {
+      "id": 1003,
+      "name": "Praxis Dr. Lenz & Partner",
+      "sector": "Gewerbekunde",
+      "city": "Düsseldorf",
+      "street": "Aachener Straße 42",
+      "zip": "40223",
+      "phone": "+49 211 000 76 30",
+      "email": "empfang@praxis-lenz-demo.local",
+      "notes": "Arztpraxis, Arbeiten nur außerhalb der Sprechzeiten möglich."
+    },
+    {
+      "id": 1004,
+      "name": "Wohnen am Stadtwald KG",
+      "sector": "Hausverwaltung",
+      "city": "Kaarst",
+      "street": "Girmes-Kreuz-Straße 17",
+      "zip": "41564",
+      "phone": "+49 2131 000 48 22",
+      "email": "objekte@stadtwald-demo.local",
+      "notes": "Betreut Wohnanlagen in Kaarst und Büttgen."
+    },
+    {
+      "id": 1005,
+      "name": "Bäckerei Steinofen Neuss",
+      "sector": "Gewerbekunde",
+      "city": "Neuss",
+      "street": "Oberstraße 51",
+      "zip": "41460",
+      "phone": "+49 2131 000 30 19",
+      "email": "buero@steinofen-demo.local",
+      "notes": "Filiale mit Schaufensterfront und Lieferanteneingang."
+    },
+    {
+      "id": 1006,
+      "name": "Autohaus Rheinpark GmbH",
+      "sector": "Bestandskunde",
+      "city": "Düsseldorf",
+      "street": "Rather Broich 92",
+      "zip": "40472",
+      "phone": "+49 211 000 88 40",
+      "email": "service@rheinpark-auto-demo.local",
+      "notes": "Bestandskunde; Showroom-Fenster und Nebengebäude."
+    },
+    {
+      "id": 1007,
+      "name": "Hausgemeinschaft Hafenblick",
+      "sector": "Privatkunde",
+      "city": "Düsseldorf",
+      "street": "Speditionstraße 23",
+      "zip": "40221",
+      "phone": "+49 211 000 56 18",
+      "email": "hafenblick@nora-demo.local",
+      "notes": "Eigentümergemeinschaft, Abstimmung über Beirat."
+    },
+    {
+      "id": 1008,
+      "name": "Hotel Rheinperle",
+      "sector": "Gewerbekunde",
+      "city": "Meerbusch",
+      "street": "Dorfstraße 9",
+      "zip": "40667",
+      "phone": "+49 2132 000 92 10",
+      "email": "technik@rheinperle-demo.local",
+      "notes": "Hotelbetrieb; Zimmerzugang vorher abstimmen."
+    },
+    {
+      "id": 1009,
+      "name": "Roto Ersatzteilservice West",
+      "sector": "Lieferant / Hersteller",
+      "city": "Ratingen",
+      "street": "Industrieweg 14",
+      "zip": "40878",
+      "phone": "+49 2102 000 64 44",
+      "email": "ersatzteile@roto-west-demo.local",
+      "notes": "Demo-Herstellerkontakt für Fensterbeschläge und Ersatzteile."
+    },
+    {
+      "id": 1010,
+      "name": "Kita Sonnenwinkel",
+      "sector": "Sonstiges",
+      "city": "Neuss",
+      "street": "Weberstraße 31",
+      "zip": "41464",
+      "phone": "+49 2131 000 71 12",
+      "email": "leitung@sonnenwinkel-demo.local",
+      "notes": "Sicherheitsrelevante Arbeiten nur nach Absprache mit Leitung."
+    },
+    {
+      "id": 1011,
+      "name": "Malerbetrieb Hoffmann",
+      "sector": "Neukunde",
+      "city": "Dormagen",
+      "street": "Kölner Straße 183",
+      "zip": "41539",
+      "phone": "+49 2133 000 19 77",
+      "email": "info@maler-hoffmann-demo.local",
+      "notes": "Neukunde über Empfehlung; Gewerberäume und Lager."
+    },
+    {
+      "id": 1012,
+      "name": "Objektservice Niederberg",
+      "sector": "Hausverwaltung",
+      "city": "Erkrath",
+      "street": "Bahnstraße 66",
+      "zip": "40699",
+      "phone": "+49 211 000 37 29",
+      "email": "dispo@niederberg-demo.local",
+      "notes": "Verwaltet mehrere kleinere Wohnobjekte im Kreis Mettmann."
+    }
+  ],
+  "contacts": [
+    {
+      "id": 2001,
+      "first_name": "Katharina",
+      "last_name": "Becker",
+      "gender": "female",
+      "title": "Objektbetreuung",
+      "background": "Zuständig für Bilk und Unterbilk. Bevorzugt E-Mail mit Fotos und kurzer Zusammenfassung.",
+      "status": "hot",
+      "tags": "hausverwaltung, duesseldorf, fensterservice",
+      "company_id": 1001,
+      "company_name": "Rheinbogen Immobilienservice GmbH",
+      "email_work": "k.becker@rheinbogen-demo.local",
+      "phone_work": "+49 211 000 41 02"
+    },
+    {
+      "id": 2002,
+      "first_name": "Jens",
+      "last_name": "Krüger",
+      "gender": "male",
+      "title": "Eigentümer",
+      "background": "Hat einen defekten Fenstergriff im Wohnzimmer gemeldet. Erreichbar ab 17 Uhr.",
+      "status": "warm",
+      "tags": "privatkunde, neuss, rueckruf",
+      "company_id": 1002,
+      "company_name": "Familie Krüger",
+      "email_home": "jens.krueger@nora-demo.local",
+      "phone_home": "+49 2131 000 11 09"
+    },
+    {
+      "id": 2003,
+      "first_name": "Mara",
+      "last_name": "Lenz",
+      "gender": "female",
+      "title": "Ärztin / Inhaberin",
+      "background": "Entscheidet über Reparaturfreigaben in der Praxis.",
+      "status": "warm",
+      "tags": "gewerbe, duesseldorf, praxis",
+      "company_id": 1003,
+      "company_name": "Praxis Dr. Lenz & Partner",
+      "email_work": "m.lenz@praxis-lenz-demo.local",
+      "phone_work": "+49 211 000 76 31"
+    },
+    {
+      "id": 2004,
+      "first_name": "Nadine",
+      "last_name": "Schulz",
+      "gender": "female",
+      "title": "Praxismanagerin",
+      "background": "Koordiniert Termine außerhalb der Sprechzeiten.",
+      "status": "hot",
+      "tags": "termin, praxis, ansprechpartner",
+      "company_id": 1003,
+      "company_name": "Praxis Dr. Lenz & Partner",
+      "email_work": "n.schulz@praxis-lenz-demo.local",
+      "phone_work": "+49 211 000 76 32"
+    },
+    {
+      "id": 2005,
+      "first_name": "Thomas",
+      "last_name": "Wegner",
+      "gender": "male",
+      "title": "Technischer Verwalter",
+      "background": "Benötigt Angebote mit Positionsbeschreibung je Objekt.",
+      "status": "hot",
+      "tags": "hausverwaltung, kaarst, aufmass",
+      "company_id": 1004,
+      "company_name": "Wohnen am Stadtwald KG",
+      "email_work": "t.wegner@stadtwald-demo.local",
+      "phone_work": "+49 2131 000 48 23"
+    },
+    {
+      "id": 2006,
+      "first_name": "Selin",
+      "last_name": "Arslan",
+      "gender": "female",
+      "title": "Filialleitung",
+      "background": "Schaufenstergriff klemmt; Reparatur möglichst vor Ladenöffnung.",
+      "status": "warm",
+      "tags": "gewerbe, neuss, schaufenster",
+      "company_id": 1005,
+      "company_name": "Bäckerei Steinofen Neuss",
+      "email_work": "s.arslan@steinofen-demo.local",
+      "phone_work": "+49 2131 000 30 20"
+    },
+    {
+      "id": 2007,
+      "first_name": "Markus",
+      "last_name": "Seidel",
+      "gender": "male",
+      "title": "Serviceleiter",
+      "background": "Kennt die Objektzugänge und kann Werkstattbereich freigeben.",
+      "status": "in-contract",
+      "tags": "bestandskunde, autohaus, wartung",
+      "company_id": 1006,
+      "company_name": "Autohaus Rheinpark GmbH",
+      "email_work": "m.seidel@rheinpark-auto-demo.local",
+      "phone_work": "+49 211 000 88 41"
+    },
+    {
+      "id": 2008,
+      "first_name": "Claudia",
+      "last_name": "Reuter",
+      "gender": "female",
+      "title": "Beirätin",
+      "background": "Stimmt Termine für die Hausgemeinschaft ab.",
+      "status": "warm",
+      "tags": "eigentuemer, duesseldorf, abstimmung",
+      "company_id": 1007,
+      "company_name": "Hausgemeinschaft Hafenblick",
+      "email_home": "c.reuter@nora-demo.local",
+      "phone_home": "+49 211 000 56 19"
+    },
+    {
+      "id": 2009,
+      "first_name": "Okan",
+      "last_name": "Demir",
+      "gender": "male",
+      "title": "Haustechnik",
+      "background": "Begleitet Arbeiten vor Ort; bevorzugt WhatsApp-ähnliche Kurzinfos per Telefonnotiz.",
+      "status": "hot",
+      "tags": "hotel, meerbusch, haustechnik",
+      "company_id": 1008,
+      "company_name": "Hotel Rheinperle",
+      "email_work": "o.demir@rheinperle-demo.local",
+      "phone_work": "+49 2132 000 92 11"
+    },
+    {
+      "id": 2010,
+      "first_name": "Petra",
+      "last_name": "Klein",
+      "gender": "female",
+      "title": "Ersatzteilservice",
+      "background": "Demo-Lieferantenkontakt. Gibt Lieferzeiten für Beschläge durch.",
+      "status": "warm",
+      "tags": "lieferant, beschlag, hersteller",
+      "company_id": 1009,
+      "company_name": "Roto Ersatzteilservice West",
+      "email_work": "p.klein@roto-west-demo.local",
+      "phone_work": "+49 2102 000 64 45"
+    },
+    {
+      "id": 2011,
+      "first_name": "Anne",
+      "last_name": "Vogel",
+      "gender": "female",
+      "title": "Kita-Leitung",
+      "background": "Sicherheitsrelevante Mängel priorisieren; Termine nach 15 Uhr.",
+      "status": "warm",
+      "tags": "kita, neuss, sicherheit",
+      "company_id": 1010,
+      "company_name": "Kita Sonnenwinkel",
+      "email_work": "a.vogel@sonnenwinkel-demo.local",
+      "phone_work": "+49 2131 000 71 13"
+    },
+    {
+      "id": 2012,
+      "first_name": "Ralf",
+      "last_name": "Hoffmann",
+      "gender": "male",
+      "title": "Inhaber",
+      "background": "Neukunde über Empfehlung. Ersttermin für Lagerfenster gewünscht.",
+      "status": "cold",
+      "tags": "neukunde, dormagen, empfehlung",
+      "company_id": 1011,
+      "company_name": "Malerbetrieb Hoffmann",
+      "email_work": "ralf.hoffmann@maler-hoffmann-demo.local",
+      "phone_work": "+49 2133 000 19 78"
+    },
+    {
+      "id": 2013,
+      "first_name": "Bettina",
+      "last_name": "Krause",
+      "gender": "female",
+      "title": "Disposition",
+      "background": "Sammelt Mängelmeldungen für mehrere kleinere Objekte.",
+      "status": "warm",
+      "tags": "hausverwaltung, erkrath, dispo",
+      "company_id": 1012,
+      "company_name": "Objektservice Niederberg",
+      "email_work": "b.krause@niederberg-demo.local",
+      "phone_work": "+49 211 000 37 30"
+    },
+    {
+      "id": 2014,
+      "first_name": "Paul",
+      "last_name": "Mertens",
+      "gender": "male",
+      "title": "Mieter",
+      "background": "Mieter im Objekt Bilk, meldet klemmendes Schlafzimmerfenster.",
+      "status": "warm",
+      "tags": "mieter, fenster, bilk",
+      "company_id": 1001,
+      "company_name": "Rheinbogen Immobilienservice GmbH",
+      "email_home": "p.mertens@nora-demo.local",
+      "phone_home": "+49 211 000 41 09"
+    },
+    {
+      "id": 2015,
+      "first_name": "Svenja",
+      "last_name": "Roth",
+      "gender": "female",
+      "title": "Empfang",
+      "background": "Nimmt Termine für das Autohaus entgegen.",
+      "status": "warm",
+      "tags": "autohaus, empfang, termin",
+      "company_id": 1006,
+      "company_name": "Autohaus Rheinpark GmbH",
+      "email_work": "s.roth@rheinpark-auto-demo.local",
+      "phone_work": "+49 211 000 88 42"
+    },
+    {
+      "id": 2016,
+      "first_name": "Moritz",
+      "last_name": "Hansen",
+      "gender": "male",
+      "title": "Hausmeister",
+      "background": "Kennt Schlüssel und Technikraum im Objekt Hafenblick.",
+      "status": "hot",
+      "tags": "hausmeister, hafen, zugang",
+      "company_id": 1007,
+      "company_name": "Hausgemeinschaft Hafenblick",
+      "email_work": "m.hansen@hafenblick-demo.local",
+      "phone_work": "+49 211 000 56 20"
+    },
+    {
+      "id": 2017,
+      "first_name": "Leonie",
+      "last_name": "Brandt",
+      "gender": "female",
+      "title": "Assistenz Verwaltung",
+      "background": "Bittet um kurze Fotodokumentation nach Abschluss.",
+      "status": "warm",
+      "tags": "dokumentation, verwaltung, neuss",
+      "company_id": 1004,
+      "company_name": "Wohnen am Stadtwald KG",
+      "email_work": "l.brandt@stadtwald-demo.local",
+      "phone_work": "+49 2131 000 48 24"
+    },
+    {
+      "id": 2018,
+      "first_name": "Mehmet",
+      "last_name": "Yilmaz",
+      "gender": "male",
+      "title": "Betriebsleiter",
+      "background": "Benötigt Angebot für regelmäßige Hausmeisterkontrolle im Lager.",
+      "status": "cold",
+      "tags": "gewerbe, hausmeisterservice, dormagen",
+      "company_id": 1011,
+      "company_name": "Malerbetrieb Hoffmann",
+      "email_work": "m.yilmaz@maler-hoffmann-demo.local",
+      "phone_work": "+49 2133 000 19 79"
+    }
+  ],
+  "deals": [
+    {
+      "id": 3001,
+      "title": "Fenstergriff Wohnzimmer defekt",
+      "company_id": 1002,
+      "contact_id": 2002,
+      "status": "neue-anfrage",
+      "service_type": "Fensterservice",
+      "amount_eur": 280,
+      "city": "Neuss",
+      "description": "Fenstergriff im Wohnzimmer dreht durch. Kunde bittet um Rückruf und kurzfristige Besichtigung."
+    },
+    {
+      "id": 3002,
+      "title": "Haustür Mehrfamilienhaus schließt nicht richtig",
+      "company_id": 1001,
+      "contact_id": 2001,
+      "status": "kontaktiert",
+      "service_type": "Haustür",
+      "amount_eur": 1450,
+      "city": "Düsseldorf-Bilk",
+      "description": "Haustür fällt nicht zuverlässig ins Schloss. Mieter melden Zugluft und lautes Zuschlagen."
+    },
+    {
+      "id": 3003,
+      "title": "Fenster Praxisraum klemmt",
+      "company_id": 1003,
+      "contact_id": 2004,
+      "status": "termin-vereinbart",
+      "service_type": "Fensterbeschlag",
+      "amount_eur": 420,
+      "city": "Düsseldorf-Bilk",
+      "description": "Fenster im Behandlungsraum lässt sich nur schwer kippen. Termin außerhalb der Sprechzeiten."
+    },
+    {
+      "id": 3004,
+      "title": "Aufmaß für neues Fensterelement",
+      "company_id": 1004,
+      "contact_id": 2005,
+      "status": "aufmass-geplant",
+      "service_type": "Aufmaß",
+      "amount_eur": 2200,
+      "city": "Kaarst",
+      "description": "Altes Kellerfenster soll ersetzt werden. Aufmaß und Fotos vor Angebot erforderlich."
+    },
+    {
+      "id": 3005,
+      "title": "Schaufenstergriff klemmt",
+      "company_id": 1005,
+      "contact_id": 2006,
+      "status": "angebot-gesendet",
+      "service_type": "Fensterbeschlag",
+      "amount_eur": 390,
+      "city": "Neuss",
+      "description": "Schaufenstergriff klemmt beim Abschließen. Angebot wurde gesendet, Nachfassung offen."
+    },
+    {
+      "id": 3006,
+      "title": "Fensterbeschläge Showroom warten",
+      "company_id": 1006,
+      "contact_id": 2007,
+      "status": "aufmass-erledigt",
+      "service_type": "Wartung",
+      "amount_eur": 980,
+      "city": "Düsseldorf-Rath",
+      "description": "Mehrere Showroom-Fenster prüfen, Beschläge schmieren und lose Griffe befestigen."
+    },
+    {
+      "id": 3007,
+      "title": "Balkontür Hafenblick zieht",
+      "company_id": 1007,
+      "contact_id": 2008,
+      "status": "in-kalkulation",
+      "service_type": "Balkontür",
+      "amount_eur": 760,
+      "city": "Düsseldorf-Hafen",
+      "description": "Balkontür in Eigentumswohnung zieht. Dichtungen und Beschlag prüfen, Kosten vor Beirat klären."
+    },
+    {
+      "id": 3008,
+      "title": "Ersatzteil Fensterbeschlag anfragen",
+      "company_id": 1009,
+      "contact_id": 2010,
+      "status": "wartet-auf-hersteller",
+      "service_type": "Herstelleranfrage",
+      "amount_eur": 0,
+      "city": "Ratingen",
+      "description": "Beschlagtyp laut Foto unklar. Herstellerkontakt soll Verfügbarkeit und Lieferzeit prüfen."
+    },
+    {
+      "id": 3009,
+      "title": "Hotelzimmer-Fenster lässt sich nicht kippen",
+      "company_id": 1008,
+      "contact_id": 2009,
+      "status": "nachfassen",
+      "service_type": "Fensterservice",
+      "amount_eur": 640,
+      "city": "Meerbusch",
+      "description": "Angebot telefonisch besprochen. Rückmeldung der Hotelleitung steht aus."
+    },
+    {
+      "id": 3010,
+      "title": "Kita-Türschließer prüfen",
+      "company_id": 1010,
+      "contact_id": 2011,
+      "status": "angenommen",
+      "service_type": "Hausmeisterservice",
+      "amount_eur": 310,
+      "city": "Neuss",
+      "description": "Türschließer am Nebeneingang prüfen und einstellen. Auftrag angenommen."
+    },
+    {
+      "id": 3011,
+      "title": "Lagerfenster Malerbetrieb ersetzen",
+      "company_id": 1011,
+      "contact_id": 2012,
+      "status": "abgelehnt",
+      "service_type": "Fenster",
+      "amount_eur": 1850,
+      "city": "Dormagen",
+      "description": "Angebot wegen Budget verschoben. Wiedervorlage in drei Monaten sinnvoll."
+    },
+    {
+      "id": 3012,
+      "title": "Treppenhausfenster Objekt Erkrath",
+      "company_id": 1012,
+      "contact_id": 2013,
+      "status": "abgeschlossen",
+      "service_type": "Fensterservice",
+      "amount_eur": 540,
+      "city": "Erkrath",
+      "description": "Treppenhausfenster eingestellt, Griff befestigt, kurze Fotodokumentation erledigt."
+    },
+    {
+      "id": 3013,
+      "title": "Klemmendes Schlafzimmerfenster im Objekt Bilk",
+      "company_id": 1001,
+      "contact_id": 2014,
+      "status": "neue-anfrage",
+      "service_type": "Fensterservice",
+      "amount_eur": 260,
+      "city": "Düsseldorf-Bilk",
+      "description": "Mieter meldet klemmendes Fenster. Verwaltung muss Freigabe geben."
+    },
+    {
+      "id": 3014,
+      "title": "Regelmäßige Hausmeisterkontrolle Lager",
+      "company_id": 1011,
+      "contact_id": 2018,
+      "status": "kontaktiert",
+      "service_type": "Hausmeisterservice",
+      "amount_eur": 1200,
+      "city": "Dormagen",
+      "description": "Monatliche Sichtkontrolle und kleinere Instandsetzungen im Lager besprechen."
+    }
+  ],
+  "tasks": [
+    {
+      "id": 4001,
+      "deal_id": 3001,
+      "contact_id": 2002,
+      "type": "Rückruf",
+      "title": "Rückruf bei Herrn Krüger wegen Fenstergriff",
+      "due_date": "2026-07-01"
+    },
+    {
+      "id": 4002,
+      "deal_id": 3002,
+      "contact_id": 2001,
+      "type": "Besichtigung",
+      "title": "Besichtigung MFH Bilk – Haustür prüfen",
+      "due_date": "2026-07-02"
+    },
+    {
+      "id": 4003,
+      "deal_id": 3003,
+      "contact_id": 2004,
+      "type": "Termin vereinbaren",
+      "title": "Termin nach Sprechzeit bestätigen",
+      "due_date": "2026-07-03"
+    },
+    {
+      "id": 4004,
+      "deal_id": 3004,
+      "contact_id": 2005,
+      "type": "Aufmaß",
+      "title": "Kellerfenster Kaarst aufmessen und Fotos machen",
+      "due_date": "2026-07-04"
+    },
+    {
+      "id": 4005,
+      "deal_id": 3005,
+      "contact_id": 2006,
+      "type": "Angebot nachfassen",
+      "title": "Angebot Schaufenstergriff nachfassen",
+      "due_date": "2026-07-05"
+    },
+    {
+      "id": 4006,
+      "deal_id": 3006,
+      "contact_id": 2007,
+      "type": "Dokumentation",
+      "title": "Wartung Showroom-Fenster dokumentieren",
+      "due_date": "2026-07-06"
+    },
+    {
+      "id": 4007,
+      "deal_id": 3007,
+      "contact_id": 2008,
+      "type": "Angebot erstellen",
+      "title": "Kalkulation Balkontür Hafenblick vorbereiten",
+      "due_date": "2026-07-07"
+    },
+    {
+      "id": 4008,
+      "deal_id": 3008,
+      "contact_id": 2010,
+      "type": "Herstelleranfrage",
+      "title": "Beschlagtyp und Lieferzeit bei Roto anfragen",
+      "due_date": "2026-07-01"
+    },
+    {
+      "id": 4009,
+      "deal_id": 3009,
+      "contact_id": 2009,
+      "type": "Angebot nachfassen",
+      "title": "Hotel Rheinperle – Rückmeldung zur Reparatur einholen",
+      "due_date": "2026-07-08"
+    },
+    {
+      "id": 4010,
+      "deal_id": 3010,
+      "contact_id": 2011,
+      "type": "Termin vereinbaren",
+      "title": "Kita-Türschließer Termin nach 15 Uhr abstimmen",
+      "due_date": "2026-07-02"
+    },
+    {
+      "id": 4011,
+      "deal_id": 3013,
+      "contact_id": 2014,
+      "type": "Rückruf",
+      "title": "Mieter Mertens wegen Zeitfenster kontaktieren",
+      "due_date": "2026-07-01"
+    },
+    {
+      "id": 4012,
+      "deal_id": 3014,
+      "contact_id": 2018,
+      "type": "Besichtigung",
+      "title": "Lager Dormagen ansehen und Leistungsumfang klären",
+      "due_date": "2026-07-09"
+    }
+  ],
+  "notes": [
+    {
+      "entity": "contact",
+      "contact_id": 2002,
+      "note": "Herr Krüger möchte nach Möglichkeit einen Termin am frühen Abend."
+    },
+    {
+      "entity": "deal",
+      "deal_id": 3002,
+      "note": "Fotos der Haustür liegen vor. Schließblech wirkt ausgeschlagen."
+    },
+    {
+      "entity": "deal",
+      "deal_id": 3008,
+      "note": "Hersteller benötigt Foto vom Beschlagstempel und ungefähres Baujahr."
+    },
+    {
+      "entity": "company",
+      "company_id": 1006,
+      "note": "Bestandskunde. Rechnungsadresse vor Angebot prüfen."
+    }
+  ]
+}

@@ -11,7 +11,13 @@ export const LEGACY_ATOMIC_DEAL_STAGE_LABELS: Record<string, string> = {
   "in-negociation": "In Klärung",
   won: "Angenommen",
   lost: "Abgelehnt",
-  delayed: "Verzögert",
+  // Kurzformen aus früherer Nora-Konfiguration
+  anfrage: "Neue Anfrage",
+  angebot: "Angebot gesendet",
+  beauftragt: "Angenommen",
+  "in-arbeit": "In Kalkulation",
+  abgeschlossen: "Abgeschlossen",
+  abgelehnt: "Abgelehnt",
 };
 
 /** Fallback when legacy English labels are still stored in app configuration. */

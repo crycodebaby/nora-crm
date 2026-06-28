@@ -41,7 +41,7 @@ export const DealInputs = () => {
         choices={dealStages}
         optionText="label"
         optionValue="value"
-        defaultValue="anfrage"
+        defaultValue="neue-anfrage"
         helperText={false}
         validate={required()}
       />

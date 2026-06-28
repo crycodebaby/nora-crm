@@ -1,0 +1,13 @@
+﻿id,name,sector,street,zip,city,phone,email,notes
+1001,Rheinbogen Immobilienservice GmbH,Hausverwaltung,Bilker Allee 124,40217,Düsseldorf,+49 211 000 41 01,verwaltung@rheinbogen-demo.local,Hausverwaltung mit mehreren Mehrfamilienhäusern in Bilk und Unterbilk.
+1002,Familie Krüger,Privatkunde,Further Straße 88,41462,Neuss,+49 2131 000 11 08,familie.krueger@nora-demo.local,"Privater Eigentümer, wiederkehrende kleinere Fensterreparaturen."
+1003,Praxis Dr. Lenz & Partner,Gewerbekunde,Aachener Straße 42,40223,Düsseldorf,+49 211 000 76 30,empfang@praxis-lenz-demo.local,"Arztpraxis, Arbeiten nur außerhalb der Sprechzeiten möglich."
+1004,Wohnen am Stadtwald KG,Hausverwaltung,Girmes-Kreuz-Straße 17,41564,Kaarst,+49 2131 000 48 22,objekte@stadtwald-demo.local,Betreut Wohnanlagen in Kaarst und Büttgen.
+1005,Bäckerei Steinofen Neuss,Gewerbekunde,Oberstraße 51,41460,Neuss,+49 2131 000 30 19,buero@steinofen-demo.local,Filiale mit Schaufensterfront und Lieferanteneingang.
+1006,Autohaus Rheinpark GmbH,Bestandskunde,Rather Broich 92,40472,Düsseldorf,+49 211 000 88 40,service@rheinpark-auto-demo.local,Bestandskunde; Showroom-Fenster und Nebengebäude.
+1007,Hausgemeinschaft Hafenblick,Privatkunde,Speditionstraße 23,40221,Düsseldorf,+49 211 000 56 18,hafenblick@nora-demo.local,"Eigentümergemeinschaft, Abstimmung über Beirat."
+1008,Hotel Rheinperle,Gewerbekunde,Dorfstraße 9,40667,Meerbusch,+49 2132 000 92 10,technik@rheinperle-demo.local,Hotelbetrieb; Zimmerzugang vorher abstimmen.
+1009,Roto Ersatzteilservice West,Lieferant / Hersteller,Industrieweg 14,40878,Ratingen,+49 2102 000 64 44,ersatzteile@roto-west-demo.local,Demo-Herstellerkontakt für Fensterbeschläge und Ersatzteile.
+1010,Kita Sonnenwinkel,Sonstiges,Weberstraße 31,41464,Neuss,+49 2131 000 71 12,leitung@sonnenwinkel-demo.local,Sicherheitsrelevante Arbeiten nur nach Absprache mit Leitung.
+1011,Malerbetrieb Hoffmann,Neukunde,Kölner Straße 183,41539,Dormagen,+49 2133 000 19 77,info@maler-hoffmann-demo.local,Neukunde über Empfehlung; Gewerberäume und Lager.
+1012,Objektservice Niederberg,Hausverwaltung,Bahnstraße 66,40699,Erkrath,+49 211 000 37 29,dispo@niederberg-demo.local,Verwaltet mehrere kleinere Wohnobjekte im Kreis Mettmann.

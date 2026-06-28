@@ -1,19 +1,4 @@
-import { datatype, lorem, random } from "faker/locale/en_US";
-
 import type { Db } from "./types";
-import { randomDate } from "./utils";
+import { generateNoraDealNotes } from "./noraDemoSeed";
 
-export const generateDealNotes = (db: Db) => {
-  return Array.from(Array(300).keys()).map((id) => {
-    const deal = random.arrayElement(db.deals);
-    return {
-      id,
-      deal_id: deal.id,
-      text: lorem.paragraphs(datatype.number({ min: 1, max: 4 })),
-      date: randomDate(
-        new Date(db.deals[deal.id as number].created_at),
-      ).toISOString(),
-      sales_id: deal.sales_id,
-    };
-  });
-};
+export const generateDealNotes = (db: Db) => generateNoraDealNotes(db.deals);
