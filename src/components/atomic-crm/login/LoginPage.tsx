@@ -7,6 +7,7 @@ import { TextInput } from "@/components/admin/text-input";
 import { Notification } from "@/components/admin/notification";
 import { useConfigurationContext } from "@/components/atomic-crm/root/ConfigurationContext.tsx";
 import { SSOAuthButton } from "./SSOAuthButton";
+import { AuthPageNav } from "./AuthPageNav";
 
 /**
  * Login page displayed when authentication is enabled and the user is not authenticated.
@@ -24,7 +25,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
     googleWorkplaceDomain,
     disableEmailPasswordAuthentication,
   } = useConfigurationContext();
-  const { redirectTo } = props;
+  const { redirectTo: redirectToProp } = props;
   const [loading, setLoading] = useState(false);
   const hasDisplayedRecoveryNotification = useRef(false);
   const location = useLocation();
@@ -32,6 +33,11 @@ export const LoginPage = (props: { redirectTo?: string }) => {
   const login = useLogin();
   const notify = useNotify();
   const translate = useTranslate();
+
+  const redirectTo =
+    redirectToProp ??
+    new URLSearchParams(location.search).get("redirect") ??
+    undefined;
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -99,9 +105,17 @@ export const LoginPage = (props: { redirectTo?: string }) => {
             {title}
           </div>
         </div>
-        <div className="flex flex-col justify-center w-full p-4 lg:p-8">
-          <div className="w-full space-y-6 lg:mx-auto lg:w-[350px]">
-            <div className="text-center">
+        <div className="flex flex-col justify-center w-full p-4 lg:p-8 nora-page">
+          <div className="w-full space-y-6 lg:mx-auto lg:w-[min(100%,24rem)]">
+            <div className="text-center space-y-3">
+              <Button
+                asChild
+                variant="ghost"
+                size="lg"
+                className="nora-secondary-action nora-touch-target text-muted-foreground"
+              >
+                <Link to="/">{translate("crm.auth.nav.back_to_start")}</Link>
+              </Button>
               <h1 className="text-2xl font-semibold tracking-tight">
                 {translate("ra.auth.sign_in")}
               </h1>
@@ -123,7 +137,8 @@ export const LoginPage = (props: { redirectTo?: string }) => {
                 <div className="flex flex-col gap-4">
                   <Button
                     type="submit"
-                    className="cursor-pointer"
+                    size="lg"
+                    className="nora-primary-action nora-touch-target w-full cursor-pointer"
                     disabled={loading}
                   >
                     {translate("ra.auth.sign_in")}
@@ -141,13 +156,18 @@ export const LoginPage = (props: { redirectTo?: string }) => {
             {disableEmailPasswordAuthentication ? null : (
               <Link
                 to={"/forgot-password"}
-                className="block text-sm text-center hover:underline"
+                className="block text-sm text-center hover:underline nora-touch-target min-h-11 leading-[2.75rem]"
               >
                 {translate("ra-supabase.auth.forgot_password", {
                   _: "Forgot password?",
                 })}
               </Link>
             )}
+            <AuthPageNav
+              variant="login"
+              showSignUp={!disableEmailPasswordAuthentication}
+              showBackToStart={false}
+            />
           </div>
         </div>
       </div>
@@ -155,3 +175,8 @@ export const LoginPage = (props: { redirectTo?: string }) => {
     </div>
   );
 };
+
+LoginPage.path = "/login";
+
+/** Used by StartPage when `?mode=anmelden` is set on `/login`. */
+export const LOGIN_FORM_SEARCH = "mode=anmelden";

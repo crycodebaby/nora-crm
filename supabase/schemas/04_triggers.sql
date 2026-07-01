@@ -78,3 +78,20 @@ create or replace trigger on_auth_user_created
 create or replace trigger on_auth_user_updated
     after update on auth.users
     for each row execute function public.handle_update_user();
+
+-- Nora CRM: business numbers
+create or replace trigger assign_customer_number_trigger
+    before insert on public.companies
+    for each row execute function public.assign_customer_number();
+
+create or replace trigger prevent_customer_number_change_trigger
+    before update on public.companies
+    for each row execute function public.prevent_customer_number_change();
+
+create or replace trigger assign_case_number_trigger
+    before insert on public.deals
+    for each row execute function public.assign_case_number();
+
+create or replace trigger prevent_case_number_change_trigger
+    before update on public.deals
+    for each row execute function public.prevent_case_number_change();

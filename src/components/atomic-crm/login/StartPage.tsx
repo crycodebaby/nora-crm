@@ -1,30 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
-import { useDataProvider } from "ra-core";
-import { Navigate } from "react-router-dom";
+import { useLocation } from "react-router";
 
-import { useConfigurationContext } from "../root/ConfigurationContext";
-import type { CrmDataProvider } from "../providers/types";
-import { LoginSkeleton } from "./LoginSkeleton";
 import { LoginPage } from "./LoginPage";
+import { NoraLandingPage } from "./NoraLandingPage";
 
-export const StartPage = () => {
-  const dataProvider = useDataProvider<CrmDataProvider>();
-  const { disableEmailPasswordAuthentication } = useConfigurationContext();
-  const {
-    data: isInitialized,
-    error,
-    isPending,
-  } = useQuery({
-    queryKey: ["init"],
-    queryFn: async () => {
-      return dataProvider.isInitialized();
-    },
-  });
+/**
+ * React-admin renders `loginPage` exclusively at `/login`.
+ * Default: public landing. `?mode=anmelden` (or location state) shows the login form.
+ */
+export const StartPage = ({ redirectTo }: { redirectTo?: string }) => {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const showLogin =
+    params.get("mode") === "anmelden" ||
+    (location.state as { showLogin?: boolean } | null)?.showLogin === true;
 
-  if (isPending) return <LoginSkeleton />;
-  if (error) return <LoginPage />;
-  if (isInitialized) return <LoginPage />;
-  if (disableEmailPasswordAuthentication) return <LoginPage />;
+  if (showLogin) {
+    return <LoginPage redirectTo={redirectTo} />;
+  }
 
-  return <Navigate to="/sign-up" />;
+  return <NoraLandingPage redirectTo={redirectTo} />;
 };

@@ -1,6 +1,7 @@
 import { useListContext, useTranslate } from "ra-core";
 import { Link as RouterLink } from "react-router";
 
+import { noraCreatePath } from "../routing/noraRoutes";
 import { Avatar } from "../contacts/Avatar";
 
 export const ContactList = () => {
@@ -14,8 +15,12 @@ export const ContactList = () => {
           <Avatar record={contact} />
           <div className="flex flex-col">
             <RouterLink
-              to={`/contacts/${contact.id}/show`}
-              className="text-sm hover:underline"
+              to={noraCreatePath({
+                resource: "contacts",
+                type: "show",
+                id: contact.id,
+              })}
+              className="text-sm font-medium hover:underline"
             >
               {contact.first_name} {contact.last_name}
             </RouterLink>

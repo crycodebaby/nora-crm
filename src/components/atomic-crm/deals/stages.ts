@@ -30,3 +30,14 @@ export const getDealsByStage = (
   });
   return dealsByStage;
 };
+
+/** Kanban columns to render — empty stages hidden unless showAllStages is true. */
+export const getVisibleDealStages = (
+  dealStages: ConfigurationContextValue["dealStages"],
+  dealsByStage: DealsByStage,
+  showAllStages: boolean,
+) => {
+  if (!dealStages) return [];
+  if (showAllStages) return dealStages;
+  return dealStages.filter((stage) => dealsByStage[stage.value]?.length > 0);
+};

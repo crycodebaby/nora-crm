@@ -33,6 +33,7 @@ import { formatRelativeDate } from "../misc/RelativeDate";
 import { Status } from "../misc/Status";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Contact, Deal } from "../types";
+import { BusinessNumber } from "../misc/BusinessNumber";
 import {
   AdditionalInfo,
   AddressInfo,
@@ -76,6 +77,7 @@ const CompanyShowContentMobile = () => {
             <CompanyAvatar />
             <div className="mx-3 flex-1">
               <h2 className="text-2xl font-bold">{record.name}</h2>
+              <BusinessNumber value={record.customer_number} />
             </div>
           </div>
         </div>
@@ -115,7 +117,10 @@ const CompanyShowContent = () => {
           <CardContent>
             <div className="flex mb-3">
               <CompanyAvatar />
-              <h5 className="text-xl ml-2 flex-1">{record.name}</h5>
+              <div className="ml-2 flex-1">
+                <h5 className="text-xl">{record.name}</h5>
+                <BusinessNumber value={record.customer_number} />
+              </div>
             </div>
             <Tabs defaultValue={currentTab} onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-3">

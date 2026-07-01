@@ -14,6 +14,7 @@ import { LoginSkeleton } from "./LoginSkeleton";
 import { Notification } from "@/components/admin/notification";
 import { ConfirmationRequired } from "./ConfirmationRequired";
 import { SSOAuthButton } from "./SSOAuthButton";
+import { AuthPageNav } from "./AuthPageNav";
 
 export const SignupPage = () => {
   const queryClient = useQueryClient();
@@ -99,8 +100,8 @@ export const SignupPage = () => {
   };
 
   return (
-    <div className="h-screen p-8">
-      <div className="flex items-center gap-4">
+    <div className="min-h-svh flex flex-col p-6 md:p-8 nora-page">
+      <div className="flex items-center gap-4 max-w-sm mx-auto w-full">
         <img
           src={logo}
           alt={title}
@@ -109,14 +110,14 @@ export const SignupPage = () => {
         />
         <h1 className="text-xl font-semibold">{title}</h1>
       </div>
-      <div className="h-full">
-        <div className="max-w-sm mx-auto h-full flex flex-col justify-center gap-4">
-          <h1 className="text-2xl font-bold mb-4">
+      <div className="flex-1 flex flex-col justify-center">
+        <div className="max-w-sm mx-auto w-full flex flex-col gap-4">
+          <h2 className="text-2xl font-bold">
             {translate("crm.auth.welcome_title", {
               _: "Willkommen bei Nora CRM",
             })}
-          </h1>
-          <p className="text-base mb-4">
+          </h2>
+          <p className="text-base text-muted-foreground">
             {translate("crm.auth.signup.create_first_user", {
               _: "Create the first user account to complete the setup.",
             })}
@@ -165,8 +166,9 @@ export const SignupPage = () => {
             <div className="flex flex-col gap-4 justify-between items-center mt-8">
               <Button
                 type="submit"
+                size="lg"
                 disabled={!isValid || isSignUpPending}
-                className="w-full"
+                className="nora-primary-action nora-touch-target w-full"
               >
                 {isSignUpPending ? (
                   <>
@@ -193,6 +195,7 @@ export const SignupPage = () => {
               ) : null}
             </div>
           </form>
+          <AuthPageNav variant="signup" />
         </div>
       </div>
       <Notification />

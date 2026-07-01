@@ -27,6 +27,15 @@ Nach der Änderung:
 - [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung
 - [ ] Commit-Nachricht klar formuliert
 
+Bei Nummern-/DB-Änderungen zusätzlich:
+
+- [ ] `npx supabase db reset --local` (Migration reproduzierbar?)
+- [ ] NULL/Duplikat/Format-Check für `customer_number` / `case_number`
+- [ ] Immutability lokal getestet (`UPDATE` muss fehlschlagen)
+- [ ] INSERT mit Fake-Nummer erzeugt **keine** Client-Nummer (Hardening)
+- [ ] `next_*` nicht per RPC für `anon`/`authenticated` ausführbar
+- [ ] Keine zweite Nummernlogik in Demo/CSV/UI-Formularen
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

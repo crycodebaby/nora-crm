@@ -1,18 +1,22 @@
 import { DragDropContext, type OnDragEndResponder } from "@hello-pangea/dnd";
 import isEqual from "lodash/isEqual";
-import { useDataProvider, useListContext, type DataProvider } from "ra-core";
+import { useDataProvider, useListContext, useTranslate, type DataProvider } from "ra-core";
 import { useEffect, useState } from "react";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 import { DealColumn } from "./DealColumn";
+import { DealKanbanToolbar } from "./DealKanbanToolbar";
 import type { DealsByStage } from "./stages";
-import { getDealsByStage } from "./stages";
+import { getDealsByStage, getVisibleDealStages } from "./stages";
+import { useShowAllDealStages } from "./useShowAllDealStages";
 
 export const DealListContent = () => {
   const { dealStages } = useConfigurationContext();
   const { data: unorderedDeals, isPending, refetch } = useListContext<Deal>();
   const dataProvider = useDataProvider();
+  const translate = useTranslate();
+  const { showAllStages, toggleShowAllStages } = useShowAllDealStages();
 
   const [dealsByStage, setDealsByStage] = useState<DealsByStage>(
     getDealsByStage([], dealStages),
@@ -29,6 +33,15 @@ export const DealListContent = () => {
   }, [unorderedDeals]);
 
   if (isPending) return null;
+
+  const visibleStages = getVisibleDealStages(
+    dealStages,
+    dealsByStage,
+    showAllStages,
+  );
+  const hiddenEmptyStageCount = showAllStages
+    ? 0
+    : dealStages.length - visibleStages.length;
 
   const onDragEnd: OnDragEndResponder = (result) => {
     const { destination, source } = result;
@@ -72,14 +85,27 @@ export const DealListContent = () => {
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex gap-5">
-        {dealStages.map((stage) => (
-          <DealColumn
-            stage={stage.value}
-            deals={dealsByStage[stage.value]}
-            key={stage.value}
-          />
-        ))}
+      <div className="flex flex-col gap-2 w-full">
+        <DealKanbanToolbar
+          showAllStages={showAllStages}
+          onToggleShowAllStages={toggleShowAllStages}
+          hiddenEmptyStageCount={hiddenEmptyStageCount}
+        />
+        {visibleStages.length === 0 ? (
+          <p className="text-center text-muted-foreground py-16 text-base nora-readable mx-auto">
+            {translate("resources.deals.kanban.no_deals")}
+          </p>
+        ) : (
+          <div className="flex gap-5 overflow-x-auto pb-4 -mx-1 px-1">
+            {visibleStages.map((stage) => (
+              <DealColumn
+                stage={stage.value}
+                deals={dealsByStage[stage.value]}
+                key={stage.value}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </DragDropContext>
   );

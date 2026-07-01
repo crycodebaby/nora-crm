@@ -1,6 +1,7 @@
 import { commands } from "vitest/browser";
 
-import { formatISODateString, findDealLabel } from "./dealUtils";
+import { formatISODateString, findDealLabel, sumDealAmounts } from "./dealUtils";
+import { getVisibleDealStages, type DealsByStage } from "./stages";
 
 describe("findDealLabel", () => {
   const noraStages = [
@@ -26,6 +27,47 @@ describe("findDealLabel", () => {
   it("translates legacy English labels still stored in configuration", () => {
     const legacyStages = [{ value: "opportunity", label: "Opportunity" }];
     expect(findDealLabel(legacyStages, "opportunity")).toBe("Neue Anfrage");
+  });
+});
+
+describe("sumDealAmounts", () => {
+  it("sums only positive amounts", () => {
+    expect(
+      sumDealAmounts([
+        { amount: 1000 },
+        { amount: 0 },
+        { amount: null },
+        { amount: 250 },
+      ]),
+    ).toBe(1250);
+  });
+});
+
+describe("getVisibleDealStages", () => {
+  const stages = [
+    { value: "a", label: "A" },
+    { value: "b", label: "B" },
+    { value: "c", label: "C" },
+  ];
+
+  it("hides empty stages by default", () => {
+    const byStage = {
+      a: [{ id: 1 }],
+      b: [],
+      c: [{ id: 2 }],
+    } as unknown as DealsByStage;
+    expect(getVisibleDealStages(stages, byStage, false).map((s) => s.value)).toEqual(
+      ["a", "c"],
+    );
+  });
+
+  it("shows all stages when requested", () => {
+    const byStage = {
+      a: [{ id: 1 }],
+      b: [],
+      c: [],
+    } as unknown as DealsByStage;
+    expect(getVisibleDealStages(stages, byStage, true)).toHaveLength(3);
   });
 });
 

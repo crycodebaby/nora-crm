@@ -25,7 +25,7 @@ const LoadedGridList = () => {
 
   return (
     <div
-      className="w-full gap-3 grid"
+      className="w-full gap-4 grid"
       style={{
         gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
       }}

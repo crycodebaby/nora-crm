@@ -24,6 +24,7 @@ export const frenchCrmMessages = {
         description: "Description",
         context_links: "URLs de contexte",
         sales_id: "Responsable de compte",
+        customer_number: "Numéro client",
       },
       empty: {
         description: "Il semble que la liste de vos entreprises soit vide.",
@@ -207,6 +208,8 @@ export const frenchCrmMessages = {
         amount: "Budget",
         expected_closing_date: "Date de clôture prévue",
         stage: "Étape",
+        sales_id: "Responsable",
+        case_number: "Numéro de dossier",
       },
       action: {
         back_to_deal: "Retour à l'affaire",
@@ -229,6 +232,16 @@ export const frenchCrmMessages = {
       },
       inputs: {
         linked_to: "Lié à",
+        details: "Détails de l'affaire",
+      },
+      follow_up: {
+        overdue: "Relance en retard",
+        today: "Relancer aujourd'hui",
+      },
+      tasks: {
+        title: "Tâches de l'affaire",
+        empty: "Aucune tâche ouverte pour les contacts liés.",
+        no_contact: "Ajoutez d'abord un contact à l'affaire.",
       },
       unarchived: {
         action: "Renvoyer au tableau",
@@ -242,6 +255,12 @@ export const frenchCrmMessages = {
         title: "Aucune affaire trouvée",
       },
       invalid_date: "Date invalide",
+      kanban: {
+        show_all_stages: "Afficher tous les statuts",
+        hide_empty_stages: "Masquer les statuts vides",
+        no_deals: "Aucune affaire disponible",
+        order_value: "Valeur de commande : %{amount}",
+      },
     },
     notes: {
       name: "Note |||| Notes",
@@ -343,6 +362,7 @@ export const frenchCrmMessages = {
       dialog: {
         create: "Créer une tâche",
         create_for: "Créer une tâche pour %{name}",
+        create_type: "Tâche : %{type}",
       },
       sheet: {
         edit: "Modifier la tâche",
@@ -398,6 +418,20 @@ export const frenchCrmMessages = {
         initial_user_created: "Utilisateur initial créé avec succès",
       },
       welcome_title: "Bienvenue sur Nora CRM",
+      nav: {
+        aria_label: "Authentification",
+        sign_in: "Se connecter",
+        sign_up: "S'inscrire",
+        back_to_start: "Retour à l'accueil",
+        no_account_yet: "Pas encore de compte ?",
+        already_have_account: "Vous avez déjà un compte ?",
+      },
+    },
+    landing: {
+      subline: "Gestion clients et affaires pour Ergart Gruppe",
+      sign_in: "Se connecter",
+      sign_up: "S'inscrire",
+      back: "Retour à l'accueil",
     },
     common: {
       activity: "Activité",
@@ -448,9 +482,35 @@ export const frenchCrmMessages = {
         whats_next: "Et ensuite ?",
       },
       upcoming_tasks: "Tâches à venir",
+      open_tasks: "Tâches ouvertes",
+      follow_up_today: "Relancer aujourd'hui",
+      waiting_manufacturer: "En attente du fabricant",
+      hotboard: {
+        title: "Tableau opérationnel",
+        follow_up_today: "Relancer aujourd'hui",
+        new_inquiries: "Nouvelles demandes",
+        waiting_manufacturer: "En attente du fabricant",
+        open_tasks: "Tâches ouvertes",
+        offer_follow_up: "Relancer les offres",
+        empty_section: "Aucune entrée",
+        open_directly: "Ouvrir directement",
+        no_appointments_hint:
+          "Les vrais rendez-vous (métré, pose) nécessitent le modèle de rendez-vous — pas la date de relance.",
+      },
     },
     header: {
       import_data: "Importer des données",
+    },
+    search: {
+      placeholder: "Rechercher…",
+      hint: "Rechercher numéro client, dossier, nom, téléphone ou e-mail",
+      title: "Rechercher",
+      group_companies: "Clients",
+      group_contacts: "Contacts",
+      group_deals: "Affaires",
+      no_results: "Aucun résultat trouvé",
+      min_chars: "Saisissez au moins 2 caractères",
+      direct_open: "Ouvrir directement",
     },
     image_editor: {
       change: "Changer",

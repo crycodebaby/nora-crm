@@ -14,8 +14,8 @@ export const TasksList = () => {
           <CheckSquare className="text-muted-foreground w-6 h-6" />
         </div>
         <h2 className="text-xl font-semibold text-muted-foreground flex-1">
-          {translate("crm.dashboard.upcoming_tasks", {
-            _: "Upcoming Tasks",
+          {translate("crm.dashboard.open_tasks", {
+            _: "Offene Aufgaben",
           })}
         </h2>
         <AddTask display="icon" selectContact />

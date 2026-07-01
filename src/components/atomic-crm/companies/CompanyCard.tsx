@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Avatar as ContactAvatar } from "../contacts/Avatar";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company } from "../types";
+import { BusinessNumber } from "../misc/BusinessNumber";
 import { CompanyAvatar } from "./CompanyAvatar";
 
 export const CompanyCard = (props: { record?: Company }) => {
@@ -33,12 +34,15 @@ export const CompanyCard = (props: { record?: Company }) => {
       })}
       className="no-underline"
     >
-      <Card className="h-[200px] flex flex-col justify-between p-5 hover:bg-muted transition-colors">
-        <div className="flex flex-col items-center gap-1">
+      <Card className="nora-card h-[208px] flex flex-col justify-between p-5 hover:bg-muted/80 transition-colors">
+        <div className="flex flex-col items-center gap-1.5">
           <CompanyAvatar />
           <div className="text-center mt-1">
-            <h6 className="text-sm font-medium">{record.name}</h6>
-            <p className="text-xs text-muted-foreground">{sectorLabel}</p>
+            <h6 className="nora-list-title text-center">{record.name}</h6>
+            <BusinessNumber value={record.customer_number} />
+            {sectorLabel ? (
+              <p className="nora-muted text-xs mt-0.5">{sectorLabel}</p>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-row w-full justify-between gap-2">
@@ -53,7 +57,7 @@ export const CompanyCard = (props: { record?: Company }) => {
             <div className="flex items-center ml-2 gap-0.5">
               <Handshake className="w-4 h-4 text-muted-foreground" />
               <span className="text-sm font-medium">{record.nb_deals}</span>
-              <span className="text-xs text-muted-foreground">
+              <span className="nora-muted text-xs">
                 {translate("resources.deals.name", {
                   smart_count: record.nb_deals ?? 0,
                   _: "Deal |||| Deals",

@@ -9,6 +9,7 @@ import {
   useRecordContext,
   useTranslate,
   useUpdate,
+  type Identifier,
 } from "ra-core";
 import { useState } from "react";
 import { SaveButton } from "@/components/admin/form";
@@ -32,9 +33,15 @@ import { TaskFormContent } from "./TaskFormContent";
 export const AddTask = ({
   selectContact,
   display = "chip",
+  contactId,
+  defaultTaskType,
+  defaultTaskText,
 }: {
   selectContact?: boolean;
   display?: "chip" | "icon";
+  contactId?: Identifier;
+  defaultTaskType?: string;
+  defaultTaskText?: string;
 }) => {
   const { identity } = useGetIdentity();
   const dataProvider = useDataProvider();
@@ -42,6 +49,7 @@ export const AddTask = ({
   const notify = useNotify();
   const translate = useTranslate();
   const contact = useRecordContext();
+  const resolvedContactId = contactId ?? contact?.id;
   const [open, setOpen] = useState(false);
   const handleOpen = () => {
     setOpen(true);
@@ -90,12 +98,12 @@ export const AddTask = ({
         <div className="my-2">
           <Button
             variant="outline"
-            className="h-6 cursor-pointer"
+            className="h-9 px-3 cursor-pointer text-sm"
             onClick={handleOpen}
             size="sm"
           >
             <Plus className="w-4 h-4" />
-            {translate("resources.tasks.action.add")}
+            {defaultTaskText ?? translate("resources.tasks.action.add")}
           </Button>
         </div>
       )}
@@ -103,8 +111,9 @@ export const AddTask = ({
       <CreateBase
         resource="tasks"
         record={{
-          type: "none",
-          contact_id: contact?.id,
+          type: defaultTaskType ?? "rueckruf",
+          text: defaultTaskText ?? "",
+          contact_id: resolvedContactId,
           due_date: new Date().toISOString(),
           sales_id: identity.id,
         }}
@@ -115,14 +124,21 @@ export const AddTask = ({
             <Form className="flex flex-col gap-4">
               <DialogHeader>
                 <DialogTitle>
-                  {!selectContact
-                    ? translate("resources.tasks.dialog.create_for", {
-                        name: getContactRepresentation(contact!),
+                  {defaultTaskText
+                    ? translate("resources.tasks.dialog.create_type", {
+                        type: defaultTaskText,
                       })
-                    : translate("resources.tasks.dialog.create")}
+                    : contact && !selectContact
+                      ? translate("resources.tasks.dialog.create_for", {
+                          name: getContactRepresentation(contact),
+                        })
+                      : translate("resources.tasks.dialog.create")}
                 </DialogTitle>
               </DialogHeader>
-              <TaskFormContent selectContact={selectContact} />
+              <TaskFormContent
+                selectContact={selectContact && !resolvedContactId}
+                defaultTaskType={defaultTaskType}
+              />
               <DialogFooter className="w-full justify-end">
                 <SaveButton />
               </DialogFooter>

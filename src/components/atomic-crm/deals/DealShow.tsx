@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { isValid } from "date-fns";
 import { Archive, ArchiveRestore } from "lucide-react";
@@ -16,7 +17,6 @@ import { DeleteButton } from "@/components/admin/delete-button";
 import { EditButton } from "@/components/admin/edit-button";
 import { ReferenceArrayField } from "@/components/admin/reference-array-field";
 import { ReferenceField } from "@/components/admin/reference-field";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
@@ -24,10 +24,19 @@ import { Separator } from "@/components/ui/separator";
 import { CompanyAvatar } from "../companies/CompanyAvatar";
 import { NoteCreate } from "../notes/NoteCreate";
 import { NotesIterator } from "../notes/NotesIterator";
+import { useGetSalesName } from "../sales/useGetSalesName";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
+import { BusinessNumber } from "../misc/BusinessNumber";
 import { ContactList } from "./ContactList";
-import { findDealLabel, formatDealAmount, formatISODateString } from "./dealUtils";
+import { DealFollowUpBadge } from "./DealFollowUpBadge";
+import { DealTasksSection } from "./DealTasksSection";
+import {
+  findDealLabel,
+  formatDealAmount,
+  formatISODateString,
+  isDealTerminalStage,
+} from "./dealUtils";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
@@ -54,134 +63,168 @@ const DealShowContent = () => {
   const record = useRecordContext<Deal>();
   if (!record) return null;
 
+  const categoryLabel =
+    dealCategories.find((c) => c.value === record.category)?.label ??
+    record.category;
+  const stageLabel = findDealLabel(dealStages, record.stage);
+  const showFollowUp = !isDealTerminalStage(record.stage);
+  const salesName = useGetSalesName(record.sales_id);
+
   return (
     <>
-      <div className="space-y-2">
+      <div className="space-y-6">
         {record.archived_at ? <ArchivedTitle /> : null}
-        <div className="flex-1">
-          <div className="flex justify-between items-start mb-8">
-            <div className="flex items-center gap-4">
-              <ReferenceField
-                source="company_id"
-                reference="companies"
-                link="show"
-              >
-                <CompanyAvatar />
-              </ReferenceField>
-              <h2 className="text-2xl font-semibold">{record.name}</h2>
-            </div>
-            <div className={`flex gap-2 ${record.archived_at ? "" : "pr-12"}`}>
-              {record.archived_at ? (
-                <>
-                  <UnarchiveButton record={record} />
-                  <DeleteButton />
-                </>
-              ) : (
-                <>
-                  <ArchiveButton record={record} />
-                  <EditButton />
-                </>
-              )}
-            </div>
-          </div>
 
-          <div className="flex gap-8 m-4">
-            <div className="flex flex-col mr-10">
-              <span className="text-xs text-muted-foreground tracking-wide">
-                {translate("resources.deals.fields.expected_closing_date")}
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-sm">
-                  {isValid(new Date(record.expected_closing_date))
-                    ? formatISODateString(record.expected_closing_date)
-                    : translate("resources.deals.invalid_date")}
-                </span>
-                {new Date(record.expected_closing_date) < new Date() ? (
-                  <Badge variant="destructive">
-                    {translate("crm.common.past")}
-                  </Badge>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex flex-col mr-10">
-              <span className="text-xs text-muted-foreground tracking-wide">
-                {translate("resources.deals.fields.amount")}
-              </span>
-              <span className="text-sm">
-                {formatDealAmount(record.amount, currency, {
-                  notation: "compact",
-                  minimumSignificantDigits: 3,
-                })}
-              </span>
-            </div>
-
-            {record.category && (
-              <div className="flex flex-col mr-10">
-                <span className="text-xs text-muted-foreground tracking-wide">
-                  {translate("resources.deals.fields.category")}
-                </span>
-                <span className="text-sm">
-                  {dealCategories.find((c) => c.value === record.category)
-                    ?.label ?? record.category}
-                </span>
-              </div>
-            )}
-
-            <div className="flex flex-col mr-10">
-              <span className="text-xs text-muted-foreground tracking-wide">
-                {translate("resources.deals.fields.stage")}
-              </span>
-              <span className="text-sm">
-                {findDealLabel(dealStages, record.stage)}
-              </span>
-            </div>
-          </div>
-
-          {!!record.contact_ids?.length && (
-            <div className="m-4">
-              <div className="flex flex-col min-h-12 mr-10">
-                <span className="text-xs text-muted-foreground tracking-wide">
-                  {translate("resources.deals.fields.contact_ids")}
-                </span>
-                <ReferenceArrayField
-                  source="contact_ids"
-                  reference="contacts_summary"
-                >
-                  <ContactList />
-                </ReferenceArrayField>
-              </div>
-            </div>
-          )}
-
-          {record.description && (
-            <div className="m-4 whitespace-pre-line">
-              <span className="text-xs text-muted-foreground tracking-wide">
-                {translate("resources.deals.fields.description")}
-              </span>
-              <p className="text-sm leading-6">{record.description}</p>
-            </div>
-          )}
-
-          <div className="m-4">
-            <Separator className="mb-4" />
-            <InfiniteListBase
-              resource="deal_notes"
-              filter={{ deal_id: record.id }}
-              sort={{ field: "date", order: "DESC" }}
-              perPage={25}
-              disableSyncWithLocation
-              storeKey={false}
-              empty={<NoteCreate reference={"deals"} />}
+        <div className="flex justify-between items-start gap-4">
+          <div className="flex items-start gap-4 min-w-0">
+            <ReferenceField
+              source="company_id"
+              reference="companies"
+              link="show"
             >
-              <NotesIterator reference="deals" />
-            </InfiniteListBase>
+              <CompanyAvatar />
+            </ReferenceField>
+            <div className="min-w-0">
+              <BusinessNumber value={record.case_number} />
+              <h2 className="text-2xl font-semibold tracking-tight">
+                {record.name}
+              </h2>
+              <span className="nora-muted text-sm mt-1 block">
+                <ReferenceField
+                  source="company_id"
+                  reference="companies"
+                  link="show"
+                />
+              </span>
+            </div>
+          </div>
+          <div className={`flex gap-2 shrink-0 ${record.archived_at ? "" : "pr-12"}`}>
+            {record.archived_at ? (
+              <>
+                <UnarchiveButton record={record} />
+                <DeleteButton />
+              </>
+            ) : (
+              <>
+                <ArchiveButton record={record} />
+                <EditButton />
+              </>
+            )}
           </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 nora-card p-4">
+          <DealFact
+            label={translate("resources.deals.fields.stage")}
+            value={stageLabel}
+          />
+          {record.category ? (
+            <DealFact
+              label={translate("resources.deals.fields.category")}
+              value={categoryLabel}
+            />
+          ) : null}
+          <DealFact
+            label={translate("resources.deals.fields.expected_closing_date")}
+            value={
+              isValid(new Date(record.expected_closing_date))
+                ? formatISODateString(record.expected_closing_date)
+                : translate("resources.deals.invalid_date")
+            }
+            extra={
+              showFollowUp ? (
+                <DealFollowUpBadge dateString={record.expected_closing_date} />
+              ) : null
+            }
+          />
+          <DealFact
+            label={translate("resources.deals.fields.amount")}
+            value={formatDealAmount(record.amount, currency, {
+              notation: "compact",
+              minimumSignificantDigits: 3,
+            })}
+          />
+          <DealFact
+            label={translate("resources.deals.fields.sales_id")}
+            value={salesName ?? "—"}
+          />
+        </div>
+
+        {!!record.contact_ids?.length && (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold tracking-tight">
+              {translate("resources.deals.fields.contact_ids")}
+            </h3>
+            <ReferenceArrayField
+              source="contact_ids"
+              reference="contacts_summary"
+            >
+              <ContactList />
+            </ReferenceArrayField>
+          </section>
+        )}
+
+        {record.description ? (
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold tracking-tight">
+              {translate("resources.deals.fields.description")}
+            </h3>
+            <p className="nora-readable text-sm whitespace-pre-line">
+              {record.description}
+            </p>
+          </section>
+        ) : null}
+
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold tracking-tight">
+            {translate("resources.deals.tasks.title")}
+          </h3>
+          <DealTasksSection />
+        </section>
+
+        <section className="space-y-3">
+          <Separator />
+          <h3 className="text-sm font-semibold tracking-tight">
+            {translate("resources.notes.name", { smart_count: 2 })}
+          </h3>
+          <InfiniteListBase
+            resource="deal_notes"
+            filter={{ deal_id: record.id }}
+            sort={{ field: "date", order: "DESC" }}
+            perPage={25}
+            disableSyncWithLocation
+            storeKey={false}
+            empty={<NoteCreate reference={"deals"} />}
+          >
+            <NotesIterator reference="deals" />
+          </InfiniteListBase>
+        </section>
       </div>
     </>
   );
 };
+
+const DealFact = ({
+  label,
+  value,
+  extra,
+  children,
+}: {
+  label: string;
+  value?: string | null;
+  extra?: React.ReactNode;
+  children?: ReactNode;
+}) => (
+  <div className="flex flex-col gap-1">
+    <span className="text-xs text-muted-foreground tracking-wide uppercase">
+      {label}
+    </span>
+    <div className="text-sm font-medium flex flex-wrap items-center gap-2">
+      {children ?? value}
+      {extra}
+    </div>
+  </div>
+);
 
 const ArchivedTitle = () => {
   const translate = useTranslate();

@@ -3,6 +3,11 @@ import type { ConfigurationContextValue } from "./ConfigurationContext";
 export const defaultDarkModeLogo = "./logos/nora-monogram-dark.png";
 export const defaultLightModeLogo = "./logos/nora-monogram-light.png";
 
+/** Betreiber-Marke (Ergart Gruppe) – Grafik aus public/logos */
+export const defaultOperatorDarkLogo = "./logos/logo_atomic_crm_dark.svg";
+export const defaultOperatorLightLogo = "./logos/logo_atomic_crm_light.svg";
+export const defaultOperatorName = "Ergart Gruppe";
+
 export const defaultCurrency = "EUR";
 
 export const defaultTitle = "Nora CRM";

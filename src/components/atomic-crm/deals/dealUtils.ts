@@ -61,6 +61,14 @@ export function formatDealAmount(
   });
 }
 
+/** Sum estimated order values; ignores missing or non-positive amounts. */
+export function sumDealAmounts(deals: { amount?: number | null }[]): number {
+  return deals.reduce((sum, deal) => {
+    const amount = deal.amount ?? 0;
+    return amount > 0 ? sum + amount : sum;
+  }, 0);
+}
+
 export function getRelativeTimeString(
   dateString: string,
   locale = "de",
@@ -107,3 +115,59 @@ export const localizeDealStages = (dealStages: DealStage[]): DealStage[] =>
     ...stage,
     label: findDealLabel(dealStages, stage.value) ?? stage.label,
   }));
+
+const TERMINAL_DEAL_STAGES = new Set([
+  "angenommen",
+  "abgelehnt",
+  "abgeschlossen",
+  "won",
+  "lost",
+]);
+
+export function isDealTerminalStage(stage: string): boolean {
+  return TERMINAL_DEAL_STAGES.has(stage);
+}
+
+export function parseISODateOnly(dateString: string): Date {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+export function isFollowUpOverdue(dateString: string): boolean {
+  if (!isoDateStringRegex.test(dateString)) {
+    return false;
+  }
+  const date = parseISODateOnly(dateString);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date < today;
+}
+
+export function isFollowUpDueToday(dateString: string): boolean {
+  if (!isoDateStringRegex.test(dateString)) {
+    return false;
+  }
+  const date = parseISODateOnly(dateString);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date.getTime() === today.getTime();
+}
+
+export type FollowUpStatus = "overdue" | "today" | "upcoming";
+
+export function getFollowUpStatus(
+  dateString: string,
+): FollowUpStatus | null {
+  if (!isoDateStringRegex.test(dateString)) {
+    return null;
+  }
+  if (isFollowUpOverdue(dateString)) {
+    return "overdue";
+  }
+  if (isFollowUpDueToday(dateString)) {
+    return "today";
+  }
+  return "upcoming";
+}

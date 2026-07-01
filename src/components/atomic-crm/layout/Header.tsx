@@ -6,6 +6,7 @@ import { ThemeModeToggle } from "@/components/admin/theme-mode-toggle";
 import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
+import { GlobalSearch } from "./GlobalSearch";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
@@ -38,10 +39,10 @@ const Header = () => {
       <nav className="grow">
         <header className="bg-secondary">
           <div className="px-4">
-            <div className="flex justify-between items-center flex-1">
+            <div className="flex justify-between items-center gap-3 flex-1 min-w-0">
               <Link
                 to="/"
-                className="flex items-center gap-2 text-secondary-foreground no-underline"
+                className="flex items-center gap-2 text-secondary-foreground no-underline shrink-0"
               >
                 <img
                   className="[.light_&]:hidden h-6"
@@ -55,37 +56,36 @@ const Header = () => {
                 />
                 <h1 className="text-xl font-semibold">{title}</h1>
               </Link>
-              <div>
-                <nav className="flex">
-                  <NavigationTab
-                    label={translate("ra.page.dashboard")}
-                    to="/"
-                    isActive={currentPath === "/"}
-                  />
-                  <NavigationTab
-                    label={translate("resources.contacts.name", {
-                      smart_count: 2,
-                    })}
-                    to={noraCreatePath({ resource: "contacts", type: "list" })}
-                    isActive={currentPath === "contacts"}
-                  />
-                  <NavigationTab
-                    label={translate("resources.companies.name", {
-                      smart_count: 2,
-                    })}
-                    to={noraCreatePath({ resource: "companies", type: "list" })}
-                    isActive={currentPath === "companies"}
-                  />
-                  <NavigationTab
-                    label={translate("resources.deals.name", {
-                      smart_count: 2,
-                    })}
-                    to={noraCreatePath({ resource: "deals", type: "list" })}
-                    isActive={currentPath === "deals"}
-                  />
-                </nav>
-              </div>
-              <div className="flex items-center">
+              <nav className="hidden md:flex shrink-0">
+                <NavigationTab
+                  label={translate("ra.page.dashboard")}
+                  to="/"
+                  isActive={currentPath === "/"}
+                />
+                <NavigationTab
+                  label={translate("resources.contacts.name", {
+                    smart_count: 2,
+                  })}
+                  to={noraCreatePath({ resource: "contacts", type: "list" })}
+                  isActive={currentPath === "contacts"}
+                />
+                <NavigationTab
+                  label={translate("resources.companies.name", {
+                    smart_count: 2,
+                  })}
+                  to={noraCreatePath({ resource: "companies", type: "list" })}
+                  isActive={currentPath === "companies"}
+                />
+                <NavigationTab
+                  label={translate("resources.deals.name", {
+                    smart_count: 2,
+                  })}
+                  to={noraCreatePath({ resource: "deals", type: "list" })}
+                  isActive={currentPath === "deals"}
+                />
+              </nav>
+              <GlobalSearch className="hidden md:flex flex-1 max-w-sm min-w-[12rem]" />
+              <div className="flex items-center shrink-0">
                 <ThemeModeToggle />
                 <RefreshButton />
                 <UserMenu>
@@ -119,7 +119,7 @@ const NavigationTab = ({
 }) => (
   <Link
     to={to}
-    className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 ${
+    className={`px-5 py-3.5 md:py-3 text-sm font-medium transition-colors border-b-2 nora-touch-target ${
       isActive
         ? "text-secondary-foreground border-[var(--nora-brand)]"
         : "text-secondary-foreground/70 border-transparent hover:text-secondary-foreground/80"

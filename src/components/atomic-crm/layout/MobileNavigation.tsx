@@ -17,6 +17,7 @@ import {
   getActiveNoraResource,
   noraCreatePath,
 } from "../routing/noraRoutes";
+import { GlobalSearch } from "./GlobalSearch";
 
 export const MobileNavigation = () => {
   const location = useLocation();
@@ -40,15 +41,16 @@ export const MobileNavigation = () => {
   return (
     <nav
       aria-label={translate("crm.navigation.label")}
-      className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-14"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-16"
       style={{
         paddingBottom: isPwa && isWebiOS ? 15 : undefined,
         height:
           "calc(var(--spacing)) * 6" + (isPwa && isWebiOS ? " + 15px" : ""),
       }}
     >
-      <div className="flex justify-center">
+      <div className="flex justify-center items-center gap-1 px-2">
         <>
+          <GlobalSearch variant="mobile" />
           <NavigationButton
             href="/"
             Icon={Home}
@@ -95,13 +97,13 @@ const NavigationButton = ({
     asChild
     variant="ghost"
     className={cn(
-      "flex-col gap-1 h-auto py-2 px-1 rounded-md w-16",
+      "nora-touch-target flex-col gap-1 h-auto py-2 px-2 rounded-md w-[4.5rem]",
       isActive ? "text-[var(--nora-brand)]" : "text-muted-foreground",
     )}
   >
     <Link to={href}>
       <Icon className="size-6" />
-      <span className="text-[0.6rem] font-medium">{label}</span>
+      <span className="text-[0.65rem] font-medium leading-tight">{label}</span>
     </Link>
   </Button>
 );

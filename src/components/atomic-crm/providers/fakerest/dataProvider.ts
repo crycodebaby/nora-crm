@@ -24,6 +24,11 @@ import { getActivityLog } from "../commons/activity";
 import { getCompanyAvatar } from "../commons/getCompanyAvatar";
 import { getContactAvatar } from "../commons/getContactAvatar";
 import { mergeContacts } from "../commons/mergeContacts";
+import {
+  nextCaseNumberForFakeRest,
+  nextCustomerNumberForFakeRest,
+} from "../../misc/numbering";
+import { performGlobalSearch } from "../../misc/globalSearch";
 import type { CrmDataProvider } from "../types";
 import {
   authProvider as defaultAuthProvider,
@@ -169,6 +174,9 @@ export const createDataProvider = ({
 
   const dataProviderWithCustomMethod: CrmDataProvider = {
     ...baseDataProvider,
+    async globalSearch(query: string) {
+      return performGlobalSearch(dataProvider, query);
+    },
     async getList(resource: string, params: any) {
       if (resource === "activity_log") {
         const { filter = {}, pagination } = params;
@@ -538,6 +546,9 @@ export const createDataProvider = ({
             data: {
               ...createParams.data,
               created_at: new Date().toISOString(),
+              customer_number:
+                createParams.data.customer_number ??
+                nextCustomerNumberForFakeRest(),
             },
           };
         },
@@ -564,12 +575,16 @@ export const createDataProvider = ({
       {
         resource: "deals",
         beforeCreate: async (params) => {
+          const created_at = new Date().toISOString();
           return {
             ...params,
             data: {
               ...params.data,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
+              created_at,
+              updated_at: created_at,
+              case_number:
+                params.data.case_number ??
+                nextCaseNumberForFakeRest(created_at),
             },
           };
         },

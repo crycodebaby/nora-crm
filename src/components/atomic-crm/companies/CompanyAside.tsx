@@ -14,6 +14,7 @@ import { SelectField } from "@/components/admin/select-field";
 
 import { formatLocalizedDate } from "../misc/RelativeDate";
 import { AsideSection } from "../misc/AsideSection";
+import { BusinessNumber } from "../misc/BusinessNumber";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company } from "../types";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
@@ -185,6 +186,7 @@ export const AdditionalInfo = ({ record }: { record: Company }) => {
     enabled: !isCurrentUser,
   });
   if (
+    !record.customer_number &&
     !record.created_at &&
     !record.sales_id &&
     !record.description &&
@@ -201,6 +203,12 @@ export const AdditionalInfo = ({ record }: { record: Company }) => {
     <AsideSection
       title={translate("resources.companies.field_categories.additional_info")}
     >
+      {record.customer_number ? (
+        <span className="flex items-center gap-2 text-sm mb-1">
+          {translate("resources.companies.fields.customer_number")}:{" "}
+          <BusinessNumber value={record.customer_number} />
+        </span>
+      ) : null}
       {record.description && (
         <p className="text-sm  mb-1">{record.description}</p>
       )}

@@ -16,6 +16,7 @@ import type {
   SignUpData,
 } from "../../types";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
+import { performGlobalSearch } from "../../misc/globalSearch";
 import { ATTACHMENTS_BUCKET } from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
@@ -47,8 +48,11 @@ const processCompanyLogo = async (params: any) => {
 const getDataProviderWithCustomMethods = () => {
   const baseDataProvider = getBaseDataProvider();
 
-  return {
+  const provider = {
     ...baseDataProvider,
+    async globalSearch(query: string) {
+      return performGlobalSearch(provider, query);
+    },
     async getList(resource: string, params: GetListParams) {
       if (resource === "companies") {
         return baseDataProvider.getList("companies_summary", params);
@@ -242,6 +246,8 @@ const getDataProviderWithCustomMethods = () => {
       return data.config as ConfigurationContextValue;
     },
   } satisfies DataProvider;
+
+  return provider;
 };
 
 export type CrmDataProvider = ReturnType<
@@ -319,6 +325,7 @@ const lifeCycleCallbacks: ResourceCallbacks[] = [
     beforeGetList: async (params) => {
       return applyFullTextSearch([
         "name",
+        "customer_number",
         "phone_number",
         "website",
         "zipcode",
@@ -350,7 +357,13 @@ const lifeCycleCallbacks: ResourceCallbacks[] = [
   {
     resource: "deals",
     beforeGetList: async (params) => {
-      return applyFullTextSearch(["name", "category", "description"])(params);
+      return applyFullTextSearch([
+        "name",
+        "category",
+        "description",
+        "case_number",
+        "stage",
+      ])(params);
     },
   },
 ];

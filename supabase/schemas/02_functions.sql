@@ -453,3 +453,104 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION "public"."format_customer_number"(seq bigint) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET "search_path" TO 'public'
+    AS $$
+    select 'KD-' || lpad(seq::text, 6, '0');
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."format_case_number"(p_year integer, seq bigint) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET "search_path" TO 'public'
+    AS $$
+    select 'VG-' || p_year::text || '-' || lpad(seq::text, 6, '0');
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."next_customer_number"() RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+    v_seq bigint;
+begin
+    insert into public.number_counters (counter_key, year, last_value)
+    values ('customer', 0, 1)
+    on conflict (counter_key, year)
+    do update set last_value = public.number_counters.last_value + 1
+    returning last_value into v_seq;
+
+    return public.format_customer_number(v_seq);
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."next_case_number"(p_at timestamp with time zone DEFAULT now()) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+    v_year integer;
+    v_seq bigint;
+begin
+    v_year := extract(year from coalesce(p_at, now()))::integer;
+
+    insert into public.number_counters (counter_key, year, last_value)
+    values ('deal_case', v_year, 1)
+    on conflict (counter_key, year)
+    do update set last_value = public.number_counters.last_value + 1
+    returning last_value into v_seq;
+
+    return public.format_case_number(v_year, v_seq);
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."assign_customer_number"() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    new.customer_number := public.next_customer_number();
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."assign_case_number"() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    new.case_number := public.next_case_number(coalesce(new.created_at, now()));
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."prevent_customer_number_change"() RETURNS trigger
+    LANGUAGE plpgsql
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    if tg_op = 'UPDATE' then
+        if old.customer_number is not null
+            and new.customer_number is distinct from old.customer_number then
+            raise exception 'customer_number is immutable';
+        end if;
+    end if;
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."prevent_case_number_change"() RETURNS trigger
+    LANGUAGE plpgsql
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    if tg_op = 'UPDATE' then
+        if old.case_number is not null
+            and new.case_number is distinct from old.case_number then
+            raise exception 'case_number is immutable';
+        end if;
+    end if;
+    return new;
+end;
+$$;

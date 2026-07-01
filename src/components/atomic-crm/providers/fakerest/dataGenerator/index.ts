@@ -8,6 +8,7 @@ import { finalizeNoraCounts } from "./noraDemoSeed";
 import { generateSales } from "./sales";
 import { generateTags } from "./tags";
 import { generateTasks } from "./tasks";
+import { initNumberCountersFromRecords } from "../../../misc/numbering";
 import type { Db } from "./types";
 
 export default (): Db => {
@@ -27,6 +28,7 @@ export default (): Db => {
     },
   ];
   finalizeNoraCounts(db);
+  initNumberCountersFromRecords(db.companies, db.deals);
 
   return db;
 };

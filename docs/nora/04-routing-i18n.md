@@ -22,6 +22,38 @@ Alte Pfade sollen nicht hart brechen:
 
 Interne alte Links dürfen über Redirects weiter funktionieren, sollten aber schrittweise auf Nora-Pfade umgestellt werden.
 
+## Öffentliche Auth-Routen (Welle 6a)
+
+| Route | Zweck | Auth |
+|---|---|---|
+| `/` | Startseite für Gäste; Dashboard für eingeloggte Nutzer | Gäste: Startseite |
+| `/login` | Startseite für Gäste; mit `?mode=anmelden` das Anmeldeformular | Öffentlich |
+| `/login?mode=anmelden` | Anmeldung (bestehende `LoginPage` innerhalb von `StartPage`) | Öffentlich |
+| `/sign-up` | Erstbenutzer-Registrierung (bestehende `SignupPage`) | Öffentlich, nur wenn noch nicht initialisiert |
+
+Geschützte App-Routen (`/kontakte`, `/kunden`, `/vorgaenge`, …) leiten nicht eingeloggte Nutzer auf die Startseite um; von dort führt „Einloggen“ nach `/login` (optional mit `?redirect=`).
+
+### Auth-Querverweise (Welle 6a-Polish)
+
+Übersetzungen unter `crm.auth.nav` in allen drei Message-Katalogen:
+
+| Schlüssel | Deutsch |
+|-----------|---------|
+| `sign_in` | Einloggen |
+| `sign_up` | Registrieren |
+| `back_to_start` | Zur Startseite |
+| `no_account_yet` | Noch kein Konto? |
+| `already_have_account` | Schon ein Konto? |
+
+| Von | Aktion | Ziel |
+|-----|--------|------|
+| Login | Zur Startseite (oben) | `/` |
+| Login | Registrieren (unter Formular) | `/sign-up` |
+| Sign-up | Einloggen | `/login` |
+| Sign-up | Zur Startseite | `/` |
+
+Implementierung: gemeinsame Komponente `AuthPageNav` in `src/components/atomic-crm/login/`.
+
 ## i18n-Regeln
 
 Deutsch ist Standard.

@@ -11,6 +11,7 @@ import ImageEditorField from "../misc/ImageEditorField";
 import { isLinkedinUrl } from "../misc/isLinkedInUrl";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Sale } from "../types";
+import { BusinessNumber } from "../misc/BusinessNumber";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
 import { sizes } from "./sizes";
 
@@ -31,10 +32,10 @@ export const CompanyInputs = () => {
   const isMobile = useIsMobile();
 
   return (
-    <div className="flex flex-col gap-4 p-1">
+    <div className="flex flex-col gap-5 p-1">
       <CompanyDisplayInputs />
-      <div className={`flex gap-6 ${isMobile ? "flex-col" : "flex-row"}`}>
-        <div className="flex flex-col gap-10 flex-1">
+      <div className={`flex gap-8 ${isMobile ? "flex-col" : "flex-row"}`}>
+        <div className="flex flex-col gap-8 flex-1">
           <CompanyContactInputs />
           <CompanyContextInputs />
         </div>
@@ -52,24 +53,32 @@ const CompanyDisplayInputs = () => {
   const translate = useTranslate();
   const record = useRecordContext<Company>();
   return (
-    <div className="flex gap-4 flex-1 flex-row">
-      <ImageEditorField
-        source="logo"
-        type="avatar"
-        width={60}
-        height={60}
-        emptyText={record?.name.charAt(0)}
-        linkPosition="bottom"
-      />
-      <TextInput
-        source="name"
-        className="w-full h-fit"
-        validate={required()}
-        helperText={false}
-        placeholder={translate("resources.companies.fields.name", {
-          _: "Company name",
-        })}
-      />
+    <div className="flex flex-col gap-2 flex-1">
+      <div className="flex gap-4 flex-1 flex-row">
+        <ImageEditorField
+          source="logo"
+          type="avatar"
+          width={60}
+          height={60}
+          emptyText={record?.name.charAt(0)}
+          linkPosition="bottom"
+        />
+        <TextInput
+          source="name"
+          className="w-full h-fit"
+          validate={required()}
+          helperText={false}
+          placeholder={translate("resources.companies.fields.name", {
+            _: "Company name",
+          })}
+        />
+      </div>
+      {record?.customer_number ? (
+        <p className="text-sm text-muted-foreground">
+          {translate("resources.companies.fields.customer_number")}:{" "}
+          <BusinessNumber value={record.customer_number} />
+        </p>
+      ) : null}
     </div>
   );
 };
@@ -77,8 +86,8 @@ const CompanyDisplayInputs = () => {
 const CompanyContactInputs = () => {
   const translate = useTranslate();
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.companies.field_categories.contact", {
           _: "Company info",
         })}
@@ -102,8 +111,8 @@ const CompanyContextInputs = () => {
     name: getTranslatedCompanySizeLabel(size, translate),
   }));
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.companies.field_categories.context", {
           _: "Context",
         })}
@@ -125,8 +134,8 @@ const CompanyContextInputs = () => {
 const CompanyAddressInputs = () => {
   const translate = useTranslate();
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.companies.field_categories.address", {
           _: "Address",
         })}
@@ -143,8 +152,8 @@ const CompanyAddressInputs = () => {
 const CompanyAdditionalInformationInputs = () => {
   const translate = useTranslate();
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.companies.field_categories.additional_info", {
           _: "Additional information",
         })}

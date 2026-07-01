@@ -69,6 +69,7 @@ export type Company = {
   context_links?: string[];
   nb_contacts?: number;
   nb_deals?: number;
+  customer_number: string;
 } & Pick<RaRecord, "id">;
 
 export type EmailAndType = {
@@ -125,6 +126,7 @@ export type Deal = {
   expected_closing_date: string;
   sales_id: Identifier;
   index: number;
+  case_number: string;
 } & Pick<RaRecord, "id">;
 
 export type DealNote = {

@@ -77,7 +77,7 @@ export const ContactListContent = () => {
   }
 
   return (
-    <div className="md:divide-y">
+    <div>
       {contacts.map((contact) => (
         <RecordContextProvider key={contact.id} value={contact}>
           <ContactItemContent
@@ -113,9 +113,9 @@ const ContactItemContent = ({
     : null;
 
   return (
-    <div className="flex flex-row items-center pl-2 pr-4 nora-list-row hover:bg-muted transition-colors first:rounded-t-xl last:rounded-b-xl">
+    <div className="flex flex-row items-center pl-2 pr-4 nora-list-row hover:bg-muted/80 transition-colors first:rounded-t-xl last:rounded-b-xl">
       <div
-        className="px-4 py-3 flex items-center cursor-pointer"
+        className="nora-touch-target px-3 cursor-pointer"
         onClick={(e) => handleToggleItem(contact.id, e)}
       >
         <Checkbox
@@ -129,15 +129,15 @@ const ContactItemContent = ({
           type: "show",
           id: contact.id,
         })}
-        className="flex-1 flex flex-row gap-4 items-center"
+        className="flex-1 flex flex-row gap-4 items-center min-h-14 py-1"
       >
         <Avatar />
         <div className="flex-1 min-w-0">
-          <div className="font-medium">
+          <div className="nora-list-title">
             {`${contact.first_name} ${contact.last_name ?? ""}`}
           </div>
           {contact.title || contact.company_id != null || contact.nb_tasks ? (
-            <div className="text-sm text-muted-foreground">
+            <div className="nora-muted mt-0.5">
               {contact.title && contact.company_id != null
                 ? `${translate("resources.contacts.position_at", {
                     title: contact.title,
@@ -163,11 +163,8 @@ const ContactItemContent = ({
           ) : null}
         </div>
         {contact.last_seen && (
-          <div className="text-right ml-4">
-            <div
-              className="text-sm text-muted-foreground"
-              title={contact.last_seen}
-            >
+          <div className="text-right ml-4 shrink-0">
+            <div className="nora-muted" title={contact.last_seen}>
               {translate("crm.common.last_activity_with_date", {
                 date: lastActivity,
               })}{" "}
@@ -235,7 +232,7 @@ export const ContactListContentMobile = () => {
   }
 
   return (
-    <div className="md:divide-y">
+    <div>
       {contacts.map((contact) => (
         <RecordContextProvider key={contact.id} value={contact}>
           <ContactItemContentMobile contact={contact} />
@@ -261,18 +258,18 @@ const ContactItemContentMobile = ({ contact }: { contact: Contact }) => {
         type: "show",
         id: contact.id,
       })}
-      className="flex flex-row gap-4 items-center nora-list-row hover:bg-muted transition-colors"
+      className="flex flex-row gap-4 items-center nora-list-row hover:bg-muted/80 transition-colors min-h-14"
     >
       <Avatar />
-      <div className="flex flex-col grow justify-between">
+      <div className="flex flex-col grow justify-between py-1">
         <div className="flex-1 min-w-0">
-          <div className="flex justify-between">
-            <div className="font-medium">
+          <div className="flex justify-between gap-2">
+            <div className="nora-list-title">
               <RecordRepresentation />
             </div>
             <Status status={contact.status} />
           </div>
-          <div className="text-sm text-muted-foreground">
+          <div className="nora-muted mt-0.5">
             <div className="flex flex-col gap-1">
               <span>
                 {contact.title && contact.company_id != null

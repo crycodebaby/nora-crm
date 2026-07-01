@@ -11,6 +11,7 @@ import type {
   Task,
 } from "../../../types";
 import type { Db } from "./types";
+import { assignCustomerNumbers, assignCaseNumbers } from "../../../misc/numbering";
 
 /** Demo-Benutzerin (sales_id 0) – siehe authProvider / generateSales */
 export const NORA_DEMO_SALES_ID = 0;
@@ -25,7 +26,7 @@ const placeholderLogo = (title: string): RAFile => ({
 
 export const generateNoraCompanies = (): Required<Company>[] => {
   const created = subDays(new Date(), 120);
-  return [
+  const companies = [
     {
       id: 0,
       name: "Familie Müller",
@@ -217,6 +218,7 @@ export const generateNoraCompanies = (): Required<Company>[] => {
       context_links: [],
     },
   ];
+  return assignCustomerNumbers(companies) as Required<Company>[];
 };
 
 export const generateNoraContacts = (
@@ -482,7 +484,7 @@ export const generateNoraContacts = (
   ];
 };
 
-type DealSeed = Omit<Deal, "id" | "index">;
+type DealSeed = Omit<Deal, "id" | "index" | "case_number">;
 
 const dealSeeds: DealSeed[] = [
   {
@@ -662,15 +664,17 @@ export const generateNoraDeals = (): Deal[] => {
     index: 0,
   }));
 
+  const withCaseNumbers = assignCaseNumbers(deals);
+
   defaultDealStages.forEach((stage) => {
-    deals
+    withCaseNumbers
       .filter((deal) => deal.stage === stage.value)
       .forEach((deal, index) => {
-        deals[deal.id].index = index;
+        withCaseNumbers[deal.id].index = index;
       });
   });
 
-  return deals;
+  return withCaseNumbers;
 };
 
 export const generateNoraTasks = (contacts: Contact[]): Task[] => {

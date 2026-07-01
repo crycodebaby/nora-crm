@@ -22,6 +22,7 @@ export const englishCrmMessages = {
         description: "Description",
         context_links: "Context links",
         sales_id: "Account manager",
+        customer_number: "Customer number",
       },
       empty: {
         description: "It seems your company list is empty.",
@@ -202,6 +203,8 @@ export const englishCrmMessages = {
         amount: "Budget",
         expected_closing_date: "Expected closing date",
         stage: "Stage",
+        sales_id: "Assigned to",
+        case_number: "Case number",
       },
       action: {
         back_to_deal: "Back to deal",
@@ -224,6 +227,16 @@ export const englishCrmMessages = {
       },
       inputs: {
         linked_to: "Linked to",
+        details: "Deal details",
+      },
+      follow_up: {
+        overdue: "Follow-up overdue",
+        today: "Follow up today",
+      },
+      tasks: {
+        title: "Tasks for this deal",
+        empty: "No open tasks for linked contacts.",
+        no_contact: "Add a contact to this deal before creating tasks.",
       },
       unarchived: {
         action: "Send back to the board",
@@ -237,6 +250,12 @@ export const englishCrmMessages = {
         title: "No deals found",
       },
       invalid_date: "Invalid date",
+      kanban: {
+        show_all_stages: "Show all stages",
+        hide_empty_stages: "Hide empty stages",
+        no_deals: "No deals available",
+        order_value: "Order value: %{amount}",
+      },
     },
     notes: {
       name: "Note |||| Notes",
@@ -337,6 +356,7 @@ export const englishCrmMessages = {
       dialog: {
         create: "Create task",
         create_for: "Create task for %{name}",
+        create_type: "Task: %{type}",
       },
       sheet: {
         edit: "Edit task",
@@ -392,6 +412,20 @@ export const englishCrmMessages = {
         initial_user_created: "Initial user successfully created",
       },
       welcome_title: "Welcome to Nora CRM",
+      nav: {
+        aria_label: "Authentication",
+        sign_in: "Sign in",
+        sign_up: "Register",
+        back_to_start: "Back to start page",
+        no_account_yet: "Don't have an account yet?",
+        already_have_account: "Already have an account?",
+      },
+    },
+    landing: {
+      subline: "Customer and deal management for Ergart Gruppe",
+      sign_in: "Sign in",
+      sign_up: "Register",
+      back: "Back to start page",
     },
     common: {
       activity: "Activity",
@@ -441,9 +475,35 @@ export const englishCrmMessages = {
         whats_next: "What's next?",
       },
       upcoming_tasks: "Upcoming Tasks",
+      open_tasks: "Open tasks",
+      follow_up_today: "Follow up today",
+      waiting_manufacturer: "Waiting for manufacturer",
+      hotboard: {
+        title: "Hotboard",
+        follow_up_today: "Follow up today",
+        new_inquiries: "New inquiries",
+        waiting_manufacturer: "Waiting for manufacturer",
+        open_tasks: "Open tasks",
+        offer_follow_up: "Offers to follow up",
+        empty_section: "No entries",
+        open_directly: "Open directly",
+        no_appointments_hint:
+          "Real appointments (survey, installation) require the appointment model — not the follow-up date.",
+      },
     },
     header: {
       import_data: "Import data",
+    },
+    search: {
+      placeholder: "Search…",
+      hint: "Search customer number, case number, name, phone or email",
+      title: "Search",
+      group_companies: "Customers",
+      group_contacts: "Contacts",
+      group_deals: "Deals",
+      no_results: "No results found",
+      min_chars: "Enter at least 2 characters",
+      direct_open: "Open directly",
     },
     image_editor: {
       change: "Change",

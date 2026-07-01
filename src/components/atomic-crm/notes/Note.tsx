@@ -129,7 +129,7 @@ export const Note = ({
                   variant="ghost"
                   size="sm"
                   onClick={handleEnterEditMode}
-                  className="p-1 h-auto cursor-pointer"
+                  className="nora-touch-target p-2 h-auto cursor-pointer"
                 >
                   <Edit className="w-4 h-4" />
                 </Button>
@@ -146,7 +146,7 @@ export const Note = ({
                   variant="ghost"
                   size="sm"
                   onClick={handleDelete}
-                  className="p-1 h-auto cursor-pointer"
+                  className="nora-touch-target p-2 h-auto cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
@@ -186,12 +186,12 @@ export const Note = ({
           </div>
         </Form>
       ) : (
-        <div className="pt-2 text-sm max-w-150">
+        <div className="pt-2 nora-readable max-w-prose">
           {note.text && (
             <div
               ref={contentRef}
               className={cn(
-                "overflow-hidden transition-[max-height] duration-300 ease-in-out",
+                "nora-readable overflow-hidden transition-[max-height] duration-300 ease-in-out",
                 isExpanded ? "max-h-[5000px]" : "max-h-46",
               )}
             >

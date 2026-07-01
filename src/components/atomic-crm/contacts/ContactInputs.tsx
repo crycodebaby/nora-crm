@@ -33,19 +33,19 @@ export const ContactInputs = () => {
   const isMobile = useIsMobile();
 
   return (
-    <div className="flex flex-col gap-2 p-1 relative md:static">
+    <div className="flex flex-col gap-3 p-1 relative md:static">
       <div className="absolute top-0 right-1 md:static">
         <Avatar />
       </div>
-      <div className="flex gap-10 md:gap-6 flex-col md:flex-row">
-        <div className="flex flex-col gap-10 flex-1">
+      <div className="flex gap-8 md:gap-10 flex-col md:flex-row">
+        <div className="flex flex-col gap-8 flex-1">
           <ContactIdentityInputs />
           <ContactPositionInputs />
         </div>
         {isMobile ? null : (
           <Separator orientation="vertical" className="flex-shrink-0" />
         )}
-        <div className="flex flex-col gap-10 flex-1">
+        <div className="flex flex-col gap-8 flex-1">
           <ContactPersonalInformationInputs />
           <ContactMiscInputs />
         </div>
@@ -57,8 +57,8 @@ export const ContactInputs = () => {
 const ContactIdentityInputs = () => {
   const translate = useTranslate();
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.contacts.field_categories.identity")}
       </h6>
       <RadioButtonGroupInput
@@ -81,8 +81,8 @@ const ContactIdentityInputs = () => {
 const ContactPositionInputs = () => {
   const translate = useTranslate();
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.contacts.field_categories.position")}
       </h6>
       <TextInput source="title" helperText={false} />
@@ -138,8 +138,8 @@ const ContactPersonalInformationInputs = () => {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.contacts.field_categories.personal_info")}
       </h6>
       <ArrayInput source="email_jsonb" helperText={false}>
@@ -207,8 +207,8 @@ const ContactPersonalInformationInputs = () => {
 const ContactMiscInputs = () => {
   const translate = useTranslate();
   return (
-    <div className="flex flex-col gap-4">
-      <h6 className="text-lg font-semibold">
+    <div className="nora-form-section">
+      <h6>
         {translate("resources.contacts.field_categories.misc")}
       </h6>
       <TextInput source="background" multiline helperText={false} />

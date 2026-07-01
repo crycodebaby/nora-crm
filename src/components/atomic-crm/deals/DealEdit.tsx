@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FormToolbar } from "../layout/FormToolbar";
 import { CompanyAvatar } from "../companies/CompanyAvatar";
 import type { Deal } from "../types";
+import { BusinessNumber } from "../misc/BusinessNumber";
 import { DealInputs } from "./DealInputs";
 
 export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
@@ -83,6 +84,7 @@ function EditHeader() {
             <CompanyAvatar />
           </ReferenceField>
           <h2 className="text-2xl font-semibold">{defaultTitle}</h2>
+          <BusinessNumber value={deal.case_number} />
         </div>
         <div className="flex gap-2 pr-12">
           <DeleteButton />

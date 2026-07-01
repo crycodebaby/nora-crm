@@ -51,7 +51,7 @@ export function Markdown({ children, className }: MarkdownProps) {
     <div
       className={cn(
         // Paragraphs
-        "[&_p]:leading-5 [&_p]:my-4 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
+        "[&_p]:leading-relaxed [&_p]:my-3 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
         // Headings
         "[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-4 [&_h1:first-child]:mt-0",
         "[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:mt-5 [&_h2]:mb-3 [&_h2:first-child]:mt-0",

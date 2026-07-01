@@ -160,6 +160,43 @@ grant all on sequence public.tasks_id_seq to anon;
 grant all on sequence public.tasks_id_seq to authenticated;
 grant all on sequence public.tasks_id_seq to service_role;
 
+-- Numbering: internal counter/format functions — service_role only (triggers use SECURITY DEFINER assign_*)
+revoke all on function public.format_customer_number(bigint) from public;
+revoke all on function public.format_customer_number(bigint) from anon;
+revoke all on function public.format_customer_number(bigint) from authenticated;
+grant execute on function public.format_customer_number(bigint) to service_role;
+
+revoke all on function public.format_case_number(integer, bigint) from public;
+revoke all on function public.format_case_number(integer, bigint) from anon;
+revoke all on function public.format_case_number(integer, bigint) from authenticated;
+grant execute on function public.format_case_number(integer, bigint) to service_role;
+
+revoke all on function public.next_customer_number() from public;
+revoke all on function public.next_customer_number() from anon;
+revoke all on function public.next_customer_number() from authenticated;
+grant execute on function public.next_customer_number() to service_role;
+
+revoke all on function public.next_case_number(timestamp with time zone) from public;
+revoke all on function public.next_case_number(timestamp with time zone) from anon;
+revoke all on function public.next_case_number(timestamp with time zone) from authenticated;
+grant execute on function public.next_case_number(timestamp with time zone) to service_role;
+
+grant all on function public.assign_customer_number() to anon;
+grant all on function public.assign_customer_number() to authenticated;
+grant all on function public.assign_customer_number() to service_role;
+
+grant all on function public.assign_case_number() to anon;
+grant all on function public.assign_case_number() to authenticated;
+grant all on function public.assign_case_number() to service_role;
+
+grant all on function public.prevent_customer_number_change() to anon;
+grant all on function public.prevent_customer_number_change() to authenticated;
+grant all on function public.prevent_customer_number_change() to service_role;
+
+grant all on function public.prevent_case_number_change() to anon;
+grant all on function public.prevent_case_number_change() to authenticated;
+grant all on function public.prevent_case_number_change() to service_role;
+
 -- Default privileges
 alter default privileges for role postgres in schema public grant all on sequences to postgres;
 alter default privileges for role postgres in schema public grant all on sequences to anon;

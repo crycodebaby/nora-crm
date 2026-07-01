@@ -29,7 +29,8 @@ create table public.companies (
     description text,
     revenue text,
     tax_identifier text,
-    logo jsonb
+    logo jsonb,
+    customer_number text not null
 );
 
 create table public.contacts (
@@ -76,7 +77,8 @@ create table public.deals (
     archived_at timestamp with time zone,
     expected_closing_date date,
     sales_id bigint,
-    index smallint
+    index smallint,
+    case_number text not null
 );
 
 create table public.deal_notes (
@@ -173,6 +175,17 @@ alter table only public.contact_notes
 alter table only public.deal_notes
     add constraint "dealNotes_pkey" primary key (id);
 
+create table public.number_counters (
+    counter_key text not null,
+    year smallint not null default 0,
+    last_value bigint not null default 0,
+    primary key (counter_key, year)
+);
+
+revoke all on table public.number_counters from anon;
+revoke all on table public.number_counters from authenticated;
+revoke all on table public.number_counters from public;
+
 --
 -- Indexes on foreign keys
 --
@@ -181,3 +194,9 @@ create index contact_notes_contact_id_idx on public.contact_notes using btree (c
 create index contacts_company_id_idx on public.contacts using btree (company_id);
 create index deal_notes_deal_id_idx on public.deal_notes using btree (deal_id);
 create index deals_company_id_idx on public.deals using btree (company_id);
+
+alter table only public.companies
+    add constraint companies_customer_number_key unique (customer_number);
+
+alter table only public.deals
+    add constraint deals_case_number_key unique (case_number);

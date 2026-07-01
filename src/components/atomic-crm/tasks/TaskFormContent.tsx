@@ -10,12 +10,23 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 
 export const TaskFormContent = ({
   selectContact,
+  defaultTaskType,
 }: {
   selectContact?: boolean;
+  defaultTaskType?: string;
 }) => {
   const { taskTypes } = useConfigurationContext();
   return (
     <div className="flex flex-col gap-4">
+      <SelectInput
+        source="type"
+        validate={required()}
+        choices={taskTypes}
+        optionText="label"
+        optionValue="value"
+        defaultValue={defaultTaskType ?? "rueckruf"}
+        helperText={false}
+      />
       <TextInput
         autoFocus
         source="text"
@@ -41,15 +52,6 @@ export const TaskFormContent = ({
           source="due_date"
           helperText={false}
           validate={required()}
-        />
-        <SelectInput
-          source="type"
-          validate={required()}
-          choices={taskTypes}
-          optionText="label"
-          optionValue="value"
-          defaultValue="none"
-          helperText={false}
         />
       </div>
     </div>

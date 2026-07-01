@@ -94,6 +94,9 @@
   --avatar-7: oklch(0.88 0.09 10);
   --avatar-8: oklch(0.92 0.08 80);
   --avatar-9: oklch(0.86 0.09 270);
+  --nora-line-body: 1.55;
+  --nora-line-readable: 1.65;
+  --nora-touch-min: 2.75rem;
 }
 
 .dark {
@@ -186,20 +189,85 @@ input[type="time"] {
   right: 0.75rem;
 }
 
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    line-height: var(--nora-line-body);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-semibold tracking-tight;
+    line-height: 1.3;
   }
 }
 
-body {
-  font-family: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-}
-
 @layer utilities {
+  .nora-page {
+    @apply text-[15px] md:text-base;
+  }
+
+  .nora-readable {
+    max-width: 65ch;
+    line-height: var(--nora-line-readable);
+    @apply leading-relaxed;
+  }
+
+  .nora-list-row {
+    @apply py-4 md:py-[1.125rem] min-h-[3.25rem] md:min-h-14;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 75%, transparent);
+  }
+
+  .nora-list-row:last-child {
+    border-bottom-width: 0;
+  }
+
+  .nora-list-title {
+    @apply font-semibold text-[15px] md:text-base leading-snug text-foreground;
+  }
+
+  .nora-card {
+    @apply rounded-xl border bg-card shadow-sm transition-colors;
+  }
+
+  .nora-form-section {
+    @apply flex flex-col gap-5;
+  }
+
+  .nora-form-section > h6 {
+    @apply text-base font-semibold tracking-tight text-foreground;
+  }
+
+  .nora-muted {
+    @apply text-sm font-normal leading-snug text-muted-foreground;
+  }
+
+  .nora-touch-target {
+    @apply inline-flex min-h-11 min-w-11 items-center justify-center;
+  }
+
+  .nora-page [data-slot="form-item"] {
+    @apply gap-2.5;
+  }
+
+  .nora-page [data-slot="form-label"] {
+    @apply text-sm font-medium text-foreground/90;
+  }
+
+  .nora-page [data-slot="input"]:not([type="checkbox"]):not([type="radio"]),
+  .nora-page textarea[data-slot="textarea"] {
+    min-height: var(--nora-touch-min);
+  }
+
   .nora-primary-action {
     @apply min-h-10 px-5 text-sm font-semibold shadow-sm;
     background-color: var(--nora-brand);
@@ -212,7 +280,7 @@ body {
   }
 
   .nora-secondary-action {
-    @apply h-8 px-2.5 text-xs text-muted-foreground;
+    @apply min-h-10 px-3 text-sm text-muted-foreground;
   }
 
   .nora-search-input:focus-visible {
@@ -225,7 +293,33 @@ body {
     background-color: var(--nora-brand-soft);
   }
 
-  .nora-list-row {
-    @apply py-3.5 md:py-4;
+  .nora-follow-up-overdue {
+    background-color: var(--nora-brand-soft);
+    color: var(--nora-brand);
+    border: 1px solid color-mix(in oklab, var(--nora-brand) 22%, transparent);
+  }
+
+  .nora-follow-up-today {
+    background-color: color-mix(in oklab, var(--muted) 90%, transparent);
+    color: var(--foreground);
+    border: 1px solid var(--border);
+  }
+
+  .nora-deal-card-overdue {
+    border-color: color-mix(in oklab, var(--nora-brand) 30%, var(--border));
+  }
+
+  .nora-landing {
+    @apply text-[15px] md:text-base;
+  }
+
+  .nora-operator-brand {
+    @apply inline-flex items-center gap-3 rounded-xl border px-4 py-2.5;
+    border-color: color-mix(in oklab, #2563eb 35%, var(--border));
+    background-color: color-mix(in oklab, #2563eb 6%, var(--background));
+  }
+
+  .nora-product-brand img {
+    @apply object-contain;
   }
 }

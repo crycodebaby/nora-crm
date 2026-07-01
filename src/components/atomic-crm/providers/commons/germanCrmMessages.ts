@@ -24,6 +24,7 @@ export const germanCrmMessages = {
         description: "Beschreibung",
         context_links: "Kontextlinks",
         sales_id: "Zuständige Person",
+        customer_number: "Kundennummer",
       },
       empty: {
         description: "Ihre Kundenliste ist noch leer.",
@@ -205,6 +206,8 @@ export const germanCrmMessages = {
         amount: "Geschätzter Auftragswert",
         expected_closing_date: "Nächstes Nachfassdatum",
         stage: "Vorgangsstatus",
+        sales_id: "Zuständig",
+        case_number: "Vorgangsnummer",
       },
       action: {
         back_to_deal: "Zurück zum Vorgang",
@@ -227,6 +230,17 @@ export const germanCrmMessages = {
       },
       inputs: {
         linked_to: "Kunde & Ansprechpartner",
+        details: "Vorgangsdetails",
+      },
+      follow_up: {
+        overdue: "Nachfassen überfällig",
+        today: "Heute nachfassen",
+      },
+      tasks: {
+        title: "Aufgaben zum Vorgang",
+        empty: "Keine offenen Aufgaben zu den Ansprechpartnern.",
+        no_contact:
+          "Bitte zuerst einen Ansprechpartner am Vorgang hinterlegen.",
       },
       unarchived: {
         action: "Zurück zur Übersicht",
@@ -240,6 +254,12 @@ export const germanCrmMessages = {
         title: "Keine Vorgänge gefunden",
       },
       invalid_date: "Ungültiges Datum",
+      kanban: {
+        show_all_stages: "Alle Status anzeigen",
+        hide_empty_stages: "Leere Status ausblenden",
+        no_deals: "Keine Vorgänge vorhanden",
+        order_value: "Auftragswert: %{amount}",
+      },
     },
     notes: {
       name: "Notiz |||| Notizen",
@@ -341,6 +361,7 @@ export const germanCrmMessages = {
       dialog: {
         create: "Aufgabe anlegen",
         create_for: "Aufgabe für %{name} anlegen",
+        create_type: "Aufgabe: %{type}",
       },
       sheet: {
         edit: "Aufgabe bearbeiten",
@@ -397,6 +418,20 @@ export const germanCrmMessages = {
         initial_user_created: "Erster Benutzer erfolgreich angelegt",
       },
       welcome_title: "Willkommen bei Nora CRM",
+      nav: {
+        aria_label: "Authentifizierung",
+        sign_in: "Einloggen",
+        sign_up: "Registrieren",
+        back_to_start: "Zur Startseite",
+        no_account_yet: "Noch kein Konto?",
+        already_have_account: "Schon ein Konto?",
+      },
+    },
+    landing: {
+      subline: "Kunden- und Vorgangsverwaltung für die Ergart Gruppe",
+      sign_in: "Einloggen",
+      sign_up: "Registrieren",
+      back: "Zurück zur Startseite",
     },
     common: {
       activity: "Aktivität",
@@ -447,9 +482,35 @@ export const germanCrmMessages = {
         whats_next: "Wie geht es weiter?",
       },
       upcoming_tasks: "Anstehende Aufgaben",
+      open_tasks: "Offene Aufgaben",
+      follow_up_today: "Heute nachfassen",
+      waiting_manufacturer: "Wartet auf Hersteller",
+      hotboard: {
+        title: "Hotboard",
+        follow_up_today: "Heute nachfassen",
+        new_inquiries: "Neue Anfragen",
+        waiting_manufacturer: "Wartet auf Hersteller",
+        open_tasks: "Offene Aufgaben",
+        offer_follow_up: "Angebote nachfassen",
+        empty_section: "Keine Einträge",
+        open_directly: "Direkt öffnen",
+        no_appointments_hint:
+          "Echte Termine (Aufmaß, Montage) folgen mit dem Terminmodell — nicht über das Nachfassdatum.",
+      },
     },
     header: {
       import_data: "Daten importieren",
+    },
+    search: {
+      placeholder: "Suchen …",
+      hint: "Kundennummer, Vorgangsnummer, Name, Telefon oder E-Mail suchen",
+      title: "Suchen",
+      group_companies: "Kunden",
+      group_contacts: "Ansprechpartner",
+      group_deals: "Vorgänge",
+      no_results: "Kein Treffer gefunden",
+      min_chars: "Mindestens 2 Zeichen eingeben",
+      direct_open: "Direkt öffnen",
     },
     image_editor: {
       change: "Ändern",

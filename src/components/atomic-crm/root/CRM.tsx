@@ -52,7 +52,7 @@ import {
   defaultTitle,
 } from "./defaultConfiguration";
 import { i18nProvider as defaulti18nProvider } from "../providers/commons/i18nProvider";
-import { StartPage } from "../login/StartPage.tsx";
+import { StartPage } from "../login/StartPage";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
 import { MobileTasksList } from "../tasks/MobileTasksList.tsx";
 import { ContactListMobile } from "../contacts/ContactList.tsx";
