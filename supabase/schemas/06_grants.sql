@@ -267,6 +267,11 @@ grant all on function public.audit_saved_text_snippet_changes() to anon;
 grant all on function public.audit_saved_text_snippet_changes() to authenticated;
 grant all on function public.audit_saved_text_snippet_changes() to service_role;
 
+revoke all on function public.start_checklist_run_from_template(text, bigint, bigint) from public;
+revoke all on function public.start_checklist_run_from_template(text, bigint, bigint) from anon;
+grant execute on function public.start_checklist_run_from_template(text, bigint, bigint) to authenticated;
+grant execute on function public.start_checklist_run_from_template(text, bigint, bigint) to service_role;
+
 -- Default privileges
 alter default privileges for role postgres in schema public grant all on sequences to postgres;
 alter default privileges for role postgres in schema public grant all on sequences to anon;

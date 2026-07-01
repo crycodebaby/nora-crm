@@ -401,4 +401,77 @@ Spezifikation aus Welle 7b (`10-checklists-snippets-audit.md`) soll persistent w
 
 ### Nächste Welle
 
-**v0.3d3** — Trigger-/RLS-Tests erweitern; **v0.3d4** — UI im Vorgangsdetail (freigegeben).
+**v0.3d4** — UI im Vorgangsdetail (freigegeben).
+
+## 2026-06-28 – v0.3d3: Checklisten-Run-Start absichern
+
+### Kontext
+
+v0.3d2 legte Tabellen an, kopierte Run-Items aber nicht automatisch — UI-Risiko für inkonsistente Zustände.
+
+### Entscheidung
+
+- **RPC** `start_checklist_run_from_template(text, bigint, bigint)` — SECURITY DEFINER, nur `authenticated`
+- Atomar: Run + alle aktiven Template-Items mit `label_snapshot`
+- **Idempotent** bei offenem Run; advisory lock + unique_violation-Fallback
+- **Audit** weiterhin nur via INSERT-Trigger (kein doppeltes Event bei Idempotenz)
+- TypeScript-Konstanten für v0.3d4 UI
+- SQL-Tests in `checklists_audit_verification.sql`
+
+### Verifikation
+
+- `npx supabase db reset --local` ✅
+- SQL-Verifikation inkl. RPC-Tests ✅
+- `npm run typecheck` / `npm run build` ✅
+
+### Nächste Welle
+
+**v0.3d5** — Hotboard-Kachel „Produktionsfreigaben offen“.
+
+## 2026-06-28 – v0.3d4: Checklisten-UI im Vorgangsdetail
+
+### Kontext
+
+v0.3d3 lieferte atomaren Run-Start per RPC; Nutzer brauchen digitale Produktionsfreigabe im Fenstervorgang.
+
+### Entscheidung
+
+- **UI** `DealProductionChecklistSection` in `DealShow` — nur Fensterservice oder bestehende Runs
+- **Start** ausschließlich via `dataProvider.startChecklistRunFromTemplate` (RPC) — keine Client-Kopie von Template-Items
+- **Updates** auf `checklist_run_items` per Standard-DataProvider; Audit via DB-Trigger
+- **Demo** (`VITE_IS_DEMO`): Abschnitt mit deaktiviertem Hinweis, kein RPC
+- **Nicht** in dieser Welle: Snippet-Plus/Minus, Rollenlogik, automatischer Statuswechsel, Hotboard-Kachel
+
+### Verifikation
+
+- `npm run typecheck` / `npm run build` ✅
+- Unit-Tests `checklistUtils.test.ts` ✅
+- Keine DB-Migration in v0.3d4
+
+### Nächste Welle
+
+**v0.3d6** — Audit-Ansicht in Kunden-/Vorgangsdetail (lesend).
+
+## 2026-06-28 – v0.3d5: Hotboard „Produktionsfreigaben offen“
+
+### Kontext
+
+Büro/Leitung braucht operative Sicht auf Fenster-Vorgänge mit offener Produktionscheckliste vor Herstellerfreigabe.
+
+### Entscheidung
+
+- **Kachel** `HotboardOpenProductionReleases` im bestehenden Hotboard-Grid
+- **Daten:** `checklist_templates` + `checklist_runs` + `checklist_run_items` + `deals` + `companies` — keine neue DB-Struktur
+- **Filter:** `FENS_PRODUCTION_RELEASE`, Run `open`, fehlende Pflichtpunkte (optional-only nach hinten)
+- **Sortierung:** ältestes `started_at` zuerst (Tie-Break: `expected_closing_date`)
+- **Demo:** Bereich ausgeblendet
+- **Nicht:** Rollenlogik, Auto-Status, E-Mail, Migration
+
+### Verifikation
+
+- `productionReleaseHotboardUtils.test.ts` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+### Nächste Welle
+
+**v0.3d6** — Audit-Ansicht lesend im Kunden-/Vorgangsdetail.

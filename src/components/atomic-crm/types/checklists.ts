@@ -94,3 +94,16 @@ export type AuditEvent = {
 /** Seed-Vorlage Produktionsfreigabe Fenster */
 export const FENS_PRODUCTION_RELEASE_TEMPLATE_CODE =
   "FENS_PRODUCTION_RELEASE" as const;
+
+/** PostgREST RPC — Checkliste atomar aus Vorlage starten (v0.3d3). */
+export const START_CHECKLIST_RUN_FROM_TEMPLATE_RPC =
+  "start_checklist_run_from_template" as const;
+
+export type StartChecklistRunFromTemplateArgs = {
+  p_template_code: string;
+  p_deal_id: number;
+  p_contact_id?: number | null;
+};
+
+/** Returns `checklist_runs.id` (uuid string). */
+export type StartChecklistRunFromTemplateResult = string;

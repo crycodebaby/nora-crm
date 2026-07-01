@@ -2,7 +2,10 @@
 
 **Welle 7b** — Spezifikation  
 **Welle v0.3d2** — Datenbankmigration umgesetzt  
-**Status:** Tabellen, RLS, Audit-Trigger und Seed-Vorlage **implementiert** — **keine** UI in v0.3d2
+**Welle v0.3d3** — RPC `start_checklist_run_from_template` umgesetzt  
+**Welle v0.3d4** — Checklisten-UI im Vorgangsdetail umgesetzt  
+**Welle v0.3d5** — Hotboard-Kachel „Produktionsfreigaben offen“ umgesetzt  
+**Status:** Tabellen, RLS, Audit, Run-Start, Vorgangs-UI und **Hotboard-Kachel** implementiert
 
 Dieses Dokument definiert das fachliche und technische Fundament für modulare Checklisten, wiederverwendbare Textbausteine und zentrale Audit-Logs. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `09-window-order-workflow.md` und den Decision Log.
 
@@ -10,7 +13,140 @@ Dieses Dokument definiert das fachliche und technische Fundament für modulare C
 
 ---
 
-## Implementierungsstand (v0.3d2)
+## Implementierungsstand (v0.3d5)
+
+| Element | Status |
+|---------|--------|
+| Komponente | `HotboardOpenProductionReleases` in `Hotboard.tsx` |
+| Utils/Tests | `productionReleaseHotboardUtils.ts`, `.test.ts` |
+| DB | keine Migration — liest `checklist_*` + `deals` + `companies` |
+| Demo | Bereich ausgeblendet (`VITE_IS_DEMO`) |
+
+### Filterlogik
+
+| Kriterium | Regel |
+|-----------|--------|
+| Vorlage | `FENS_PRODUCTION_RELEASE` (`checklist_templates.code`) |
+| Run | `status = 'open'` |
+| Sichtbar | mind. 1 offener **Pflichtpunkt** → Priorität `required_missing` |
+| Optional | nur optionale Punkte offen → `optional_only`, nach hinten sortiert |
+| Ausgeschlossen | `completed`/`cancelled`, archivierte Vorgänge, alle Punkte erledigt |
+
+### Sortierung (max. 5)
+
+1. `required_missing` vor `optional_only`
+2. ältestes `checklist_runs.started_at` zuerst (längste Wartezeit auf Freigabe)
+3. Tie-Break: `deals.expected_closing_date` aufsteigend
+
+**Begründung:** `started_at` misst direkt, wie lange die Produktionsfreigabe offen ist; Nachfassdatum nur als Sekundärsignal.
+
+### Navigation
+
+Klick → `noraCreatePath({ resource: 'deals', type: 'show', id })` → `/vorgaenge/:id/show`
+
+### Bewusst nicht
+
+- Keine Rollenlogik, kein Auto-Statuswechsel, keine E-Mail, keine Hotboard-Automation
+
+---
+
+## Implementierungsstand (v0.3d4)
+
+| Element | Status |
+|---------|--------|
+| UI-Komponente | `DealProductionChecklistSection` in `DealShow` |
+| Utils/Tests | `checklistUtils.ts`, `checklistUtils.test.ts` |
+| DataProvider | `startChecklistRunFromTemplate` (Supabase RPC) |
+| Demo | Abschnitt sichtbar, deaktiviert mit Hinweis (`VITE_IS_DEMO`) |
+| Snippet-Plus/Minus | ❌ Folge-Welle |
+| Rollenlogik / Statuswechsel | ❌ bewusst nicht |
+
+### UI-Platzierung
+
+- **Datei:** `src/components/atomic-crm/deals/DealShow.tsx` — zwischen Aufgaben und Notizen
+- **Sichtbarkeit:** `category = fensterservice` **oder** bestehende `checklist_runs` für den Vorgang
+- **Titel:** „Produktionsfreigabe Fenster“ (`resources.deals.checklist.title`)
+
+### Ablauf
+
+1. **Start:** Button ruft `dataProvider.startChecklistRunFromTemplate` → Supabase-RPC `start_checklist_run_from_template` — **keine** manuellen INSERTs in `checklist_runs` / `checklist_run_items`
+2. **Laden:** `useGetList('checklist_runs', { deal_id })` + `useGetList('checklist_run_items', { checklist_run_id })`, sortiert nach `sort_index`
+3. **Abhaken:** `useUpdate('checklist_run_items')` mit `is_checked`, `checked_at`, `checked_by` (aus `useGetIdentity`)
+4. **Notiz:** optionales Textfeld per „Notiz“-Button; Speichern via `update` auf `note`
+5. **Audit:** DB-Trigger `audit_checklist_run_item_changes` — kein Client-Schreiben auf `audit_events`
+6. **Fortschritt:** „X von Y erledigt“; Hinweis „Pflichtpunkte erledigt“ wenn alle `is_required` erfüllt — **kein** automatischer Vorgangsstatus
+
+### FakeRest / Demo
+
+- `import.meta.env.VITE_IS_DEMO === "true"` → Abschnitt mit `resources.deals.checklist.demo_disabled`, kein RPC-Aufruf
+- FakeRest `startChecklistRunFromTemplate` wirft `CHECKLISTS_NOT_AVAILABLE_IN_DEMO` (Fallback, falls UI-Guard umgangen wird)
+- Vollständige Demo-Semantik (In-Memory-RPC) optional in Folge-Welle
+
+### Grenzen v0.3d4
+
+- Nur Vorlage `FENS_PRODUCTION_RELEASE`
+- Keine Textbaustein-Plus/Minus-UI
+- Keine Hotboard-Kachel (v0.3d5)
+- Kein automatisches Setzen von `wartet-auf-hersteller` o. ä.
+
+---
+
+## Implementierungsstand (v0.3d3)
+
+| Element | Status |
+|---------|--------|
+| Migration Tabellen | `20260628150000_checklists_snippets_audit.sql` |
+| Migration Run-Start | `20260628160000_start_checklist_run_from_template.sql` |
+| RPC | `start_checklist_run_from_template(p_template_code, p_deal_id, p_contact_id?)` → `uuid` |
+| TypeScript | `START_CHECKLIST_RUN_FROM_TEMPLATE_RPC`, `StartChecklistRunFromTemplateArgs` |
+| SQL-Verifikation | `supabase/tests/checklists_audit_verification.sql` (d2 + d3) |
+| UI | ❌ v0.3d4 |
+
+### RPC `start_checklist_run_from_template`
+
+```sql
+start_checklist_run_from_template(
+  p_template_code text,
+  p_deal_id bigint,
+  p_contact_id bigint default null
+) returns uuid
+```
+
+**Verhalten:**
+
+- Nur `authenticated` (nicht `anon`); prüft `auth.uid()`
+- Lädt aktive Vorlage per `code`, Vorgang per `p_deal_id`
+- Übernimmt `company_id` vom Vorgang, `service_area_code` von der Vorlage
+- **Idempotent:** existiert offener Run (`status = 'open'`) für `deal_id + template_id` → gleiche `id` zurück, keine neuen Items, kein Audit
+- Sonst: INSERT Run + COPY aller aktiven Template-Items mit `label_snapshot`, `is_required`, `sort_index`
+- **Audit:** ein `checklist.run_started` via bestehender INSERT-Trigger auf `checklist_runs` (nicht doppelt manuell)
+- **Race:** `pg_advisory_xact_lock` + `unique_violation`-Fallback auf partial unique index
+
+**Fehler:** Vorlage fehlt/inaktiv, Vorgang fehlt, keine aktiven Items, Kontakt fehlt/nicht verknüpft, nicht authentifiziert.
+
+**Frontend-Aufruf (v0.3d4):**
+
+```typescript
+const { data: runId } = await supabase.rpc(START_CHECKLIST_RUN_FROM_TEMPLATE_RPC, {
+  p_template_code: FENS_PRODUCTION_RELEASE_TEMPLATE_CODE,
+  p_deal_id: dealId,
+  p_contact_id: contactId ?? null,
+});
+```
+
+### FakeRest / Demo
+
+- **v0.3d4 Checklisten-UI** benötigt **Supabase** (RPC) oder minimale FakeRest-Erweiterung
+- Empfehlung Demo: `supabase.rpc` spiegeln in `dataProvider` mit gleicher Idempotenz-Logik in Memory — **nicht** in v0.3d3 umgesetzt
+- `npm run dev:demo` zeigt Checklisten-UI erst nach FakeRest-Stub
+
+### Freigabe v0.3d4 UI
+
+**Ja** — Run-Start ist serverseitig atomar und getestet; UI muss nur RPC aufrufen und Run-Items anzeigen/aktualisieren.
+
+---
+
+## Implementierungsstand (v0.3d2, historisch)
 
 | Element | Status |
 |---------|--------|
@@ -49,7 +185,7 @@ Dieses Dokument definiert das fachliche und technische Fundament für modulare C
 - Keine DELETE-Policies auf Vorlagen, Runs, Snippets — Deaktivierung über `is_active`
 - `insert_audit_event` nicht für Client-RPC freigegeben — nur Trigger/SECURITY DEFINER
 - `actor_id` kann NULL sein, wenn Trigger ohne Auth-Kontext laufen (z. B. service_role)
-- Kein automatisches Anlegen von Run-Items beim Run-Start — **v0.3d4 UI** muss Snapshots schreiben
+- ~~Kein automatisches Anlegen von Run-Items beim Run-Start~~ — **behoben in v0.3d3** via `start_checklist_run_from_template`
 - Rollenmodell für „Produktion freigegeben“ noch nicht feingranular
 
 ### Freigabe v0.3d4 UI
@@ -486,9 +622,9 @@ Kachel „Produktionsfreigaben offen“: Vorgänge `FENS`, Status `angenommen` o
 |-------|--------|----------------|
 | **v0.3d1** | Spezifikation (dieses Dokument) | 7a, 7b ✅ |
 | **v0.3d2** | DB-Migration: Tabellen Abschnitt 4 + `audit_events` | v0.3d1 |
-| **v0.3d3** | RLS, Trigger (Audit append-only, Run-Item-Snapshots), Tests | v0.3d2 |
-| **v0.3d4** | UI Checkliste im Vorgangsdetail | v0.3d3 |
-| **v0.3d5** | Hotboard-Kachel „Produktionsfreigaben offen“ | v0.3d4 |
+| **v0.3d3** | RPC `start_checklist_run_from_template`, Idempotenz, Item-Copy | ✅ `20260628160000` |
+| **v0.3d4** | UI Checkliste im Vorgangsdetail | ✅ |
+| **v0.3d5** | Hotboard-Kachel „Produktionsfreigaben offen“ | ✅ |
 | **v0.3d6** | Audit-Ansicht in Kunden-/Vorgangsdetail (lesend) | v0.3d3 |
 | **v0.3e** | UI-Komponenten / Designsystem (ChecklistCard, SnippetPicker) | v0.3d4 |
 | **v0.3f** | Linke Sidebar (Navigation) | eigenes Konzept, nicht hier |

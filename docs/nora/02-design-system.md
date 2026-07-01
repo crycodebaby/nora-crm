@@ -194,11 +194,37 @@ Schlanke **Ansichtsauswahl** in der Vorgangsübersicht — nicht dominant, touch
 | Persistenz | `localStorage` (`nora-deals-kanban-view`) |
 | Fensterservice-Spalten | 8 bevorzugte Status (Teilmenge von `defaultDealStages`); leere Spalten standardmäßig ausgeblendet |
 | Sonderstatus | Vorgänge in anderen Status (z. B. `nachfassen`) erscheinen als zusätzliche Spalte, wenn sie Vorgänge enthalten |
-| S4a/S4b/S4c | Keine Kanban-Spalten — Checklistenpunkte (später v0.3d) |
+| S4a/S4b/S4c | Keine Kanban-Spalten — Checklistenpunkte im Vorgangsdetail (v0.3d4) |
 | Leer | Kategorie-spezifische Empty-State-Meldung |
 | Kombination | „Alle Status anzeigen“ zeigt alle 8 Fenster-Spalten (auch leere); „Leere ausblenden“ nutzt bestehende Logik |
 
 **Kategorien:** `deals.category` — `fensterservice`, `hausmeisterdienst` (technische IDs aus `defaultDealCategories`).
+
+## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
+
+Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
+
+| Element | Regel |
+|---------|--------|
+| Container | `.nora-card` mit klarer Überschrift + Subline |
+| Zeilen | Touchfreundlich (`min-h` ≈ `--nora-touch-min`), Checkbox links, Label + Badge |
+| Pflicht/Optional | `Badge` outline — deutlich, nicht aggressiv |
+| Primäraktion Start | `nora-primary-action` nur für „Checkliste starten“ |
+| Fortschritt | Ruhiger Text „X von Y erledigt“ |
+| Notiz | Kompakt: Button „Notiz“ → Textarea + Speichern/Abbrechen |
+| Demo | Hinweistext statt RPC — kein Absturz |
+
+## Hotboard Produktionsfreigaben offen (Welle v0.3d5)
+
+`HotboardOpenProductionReleases` — gleiches Kartenlayout wie andere Hotboard-Sektionen.
+
+| Element | Regel |
+|---------|--------|
+| Position | Grid in `Hotboard.tsx`, nach „Angebote nachfassen“ |
+| Zeilen | Wie `HotboardDealRow`: Vorgangsnummer, Titel, Kunde, Fortschritt, max. 2 fehlende Pflichtpunkte |
+| Limit | 5 Einträge |
+| Demo | Bereich komplett ausgeblendet (`VITE_IS_DEMO`) |
+| Akzent | Kein Nora-Rot — nur ruhige `text-muted-foreground` |
 
 ## Öffentliche Startseite (Welle 6a)
 

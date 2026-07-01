@@ -242,3 +242,10 @@ export type {
 } from "./types/checklists";
 
 export { FENS_PRODUCTION_RELEASE_TEMPLATE_CODE } from "./types/checklists";
+
+export type {
+  StartChecklistRunFromTemplateArgs,
+  StartChecklistRunFromTemplateResult,
+} from "./types/checklists";
+
+export { START_CHECKLIST_RUN_FROM_TEMPLATE_RPC } from "./types/checklists";

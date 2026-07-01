@@ -15,6 +15,11 @@ import type {
   SalesFormData,
   SignUpData,
 } from "../../types";
+import type {
+  StartChecklistRunFromTemplateArgs,
+  StartChecklistRunFromTemplateResult,
+} from "../../types/checklists";
+import { START_CHECKLIST_RUN_FROM_TEMPLATE_RPC } from "../../types/checklists";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
 import { ATTACHMENTS_BUCKET } from "../commons/attachments";
@@ -228,6 +233,21 @@ const getDataProviderWithCustomMethods = () => {
       }
 
       return data;
+    },
+    async startChecklistRunFromTemplate(
+      args: StartChecklistRunFromTemplateArgs,
+    ): Promise<StartChecklistRunFromTemplateResult> {
+      const { data, error } = await getSupabaseClient().rpc(
+        START_CHECKLIST_RUN_FROM_TEMPLATE_RPC,
+        args,
+      );
+
+      if (error) {
+        console.error("start_checklist_run_from_template.error", error);
+        throw error;
+      }
+
+      return data as StartChecklistRunFromTemplateResult;
     },
     async getConfiguration(): Promise<ConfigurationContextValue> {
       const { data } = await baseDataProvider.getOne("configuration", {

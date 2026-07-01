@@ -201,6 +201,7 @@ Details in `10-checklists-snippets-audit.md`:
 - Audit append-only — Client darf Events nicht ändern/löschen
 - keine getrennten Audit-Tabellen pro Bereich
 - Textbausteine persistent vor Plus/Minus-UI
+- Checklisten-Start nur über `start_checklist_run_from_template` — nicht manuell Run + Items per Client
 
 ## Fensterauftrag-Guardrails (Welle 7a)
 

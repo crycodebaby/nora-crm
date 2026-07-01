@@ -19,6 +19,7 @@ import type {
   SignUpData,
   Task,
 } from "../../types";
+import type { StartChecklistRunFromTemplateArgs } from "../../types/checklists";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { getActivityLog } from "../commons/activity";
 import { getCompanyAvatar } from "../commons/getCompanyAvatar";
@@ -304,6 +305,11 @@ export const createDataProvider = ({
     },
     mergeContacts: async (sourceId: Identifier, targetId: Identifier) => {
       return mergeContacts(sourceId, targetId, baseDataProvider);
+    },
+    startChecklistRunFromTemplate: async (
+      _args: StartChecklistRunFromTemplateArgs,
+    ): Promise<string> => {
+      throw new Error("CHECKLISTS_NOT_AVAILABLE_IN_DEMO");
     },
     getConfiguration: async (): Promise<ConfigurationContextValue> => {
       const { data } = await baseDataProvider.getOne("configuration", {

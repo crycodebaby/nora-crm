@@ -30,6 +30,7 @@ import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { ContactList } from "./ContactList";
 import { DealFollowUpBadge } from "./DealFollowUpBadge";
+import { DealProductionChecklistSection } from "../checklists/DealProductionChecklistSection";
 import { DealTasksSection } from "./DealTasksSection";
 import {
   findDealLabel,
@@ -181,6 +182,8 @@ const DealShowContent = () => {
           </h3>
           <DealTasksSection />
         </section>
+
+        <DealProductionChecklistSection />
 
         <section className="space-y-3">
           <Separator />

@@ -236,7 +236,7 @@ Das Dashboard wird zum **operativen Hotboard** — „Was muss ich heute tun?“
 | **Wartet auf Hersteller** | ✅ `stage = wartet-auf-hersteller` | `manufacturer_name`, Bestelldatum | ✅ `Hotboard` | — |
 | **Offene Aufgaben** | ✅ `tasks` (über `contact_id`) | `deal_id` direkt am Task wäre einfacher | ✅ `HotboardOpenTasks` | Sync optional |
 | **Neue Anfragen** | ✅ `stage = neue-anfrage` | `source_channel` | ✅ `Hotboard` | — |
-| **Produktionsfreigaben offen** | ❌ | `checklist_runs` (v0.3d) | ❌ erst v0.3d5 | — |
+| **Produktionsfreigaben offen** | ✅ v0.3d5 | `checklist_runs` + Items | ✅ Hotboard-Kachel | — |
 
 ### 5.3 Bereits implementiert (Ist) — v0.3b
 
@@ -378,9 +378,9 @@ Kunde erhält Link und sieht Fortschritt „wie Paketverfolgung“.
 | **v0.3c** | Fensterauftrag-Kanban-Filter: `fensterservice`-Ansicht, schlanke Spalten, Labels | ✅ umgesetzt — keine DB-Pflicht |
 | **v0.3d1** | Spezifikation Checklisten/Audit (`10-checklists-snippets-audit.md`) | ✅ |
 | **v0.3d2** | DB-Migration: Checklisten, Textbausteine, `audit_events` | ✅ `20260628150000` |
-| **v0.3d3** | RLS, Trigger, Audit append-only, Tests | v0.3d2 |
-| **v0.3d4** | UI Checkliste im Vorgangsdetail | v0.3d3 |
-| **v0.3d5** | Hotboard „Produktionsfreigaben offen“ | v0.3d4 |
+| **v0.3d3** | RPC `start_checklist_run_from_template` | ✅ `20260628160000` |
+| **v0.3d4** | UI Checkliste im Vorgangsdetail | ✅ |
+| **v0.3d5** | Hotboard „Produktionsfreigaben offen“ | ✅ |
 | **v0.3d6** | Audit-Ansicht Kunde/Vorgang (lesend) | v0.3d3 |
 | **v0.3e** | Terminmodell (`appointments`) | Migration |
 | **v0.3f** | Google Maps (Baustelle/Route) | Objekt- oder Adressmodell |

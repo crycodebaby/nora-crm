@@ -48,6 +48,8 @@ Bei Checklisten-/Audit-Migration (ab v0.3d2) zusätzlich:
 - [ ] FKs für deal, company, contact, checklist_run konsistent
 - [ ] `npx supabase db reset --local` nach Migration
 - [ ] `supabase/tests/checklists_audit_verification.sql` ausführen (Docker: `supabase_db_atomic-crm-demo`)
+- [ ] Checklisten-Start über RPC `start_checklist_run_from_template` — keine manuellen Run-Item-Inserts vom Client
+- [ ] v0.3d4: `DealProductionChecklistSection` in `DealShow` — Demo-Hinweis bei `VITE_IS_DEMO`
 
 Wenn ein Fehler entsteht:
 
