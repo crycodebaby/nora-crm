@@ -93,7 +93,21 @@ Der Chef-Prozess für Fenstertausch/Fensterauftrag ist ein **Spezialworkflow**, 
 | Allgemeiner Vorgang | andere `dealCategories` | `workflow_type = general` |
 
 - **Hauptstatus** für Kanban: schlanke Pipeline (7–8 Meilensteine) — siehe `09-window-order-workflow.md`
-- **Qualitätskontrollen** (Auftragsbestätigung, Vorkasse, Produktionsfreigabe): **Checkliste**, keine Kanban-Spalten
+- **Qualitätskontrollen** (Auftragsbestätigung, Vorkasse, Produktionsfreigabe): **Checkliste**, keine Kanban-Spalten — Datenmodell: `10-checklists-snippets-audit.md`
+- **Servicebereiche** `FENS` / `HAUS` / `IMMO` über `service_area_code` — **nicht** über `company_id`
 - **Hersteller** generisch modellieren — nicht an einen Lieferanten-Namen koppeln
 
-Vollständige Spezifikation: `docs/nora/09-window-order-workflow.md`
+Vollständige Spezifikationen:
+
+- Fensterprozess: `docs/nora/09-window-order-workflow.md`
+- Checklisten, Textbausteine, Audit: `docs/nora/10-checklists-snippets-audit.md`
+
+## Erweiterungen geplant (Welle 7b)
+
+| Fachlich | Technisch (Ziel) | Status |
+|---|---|---|
+| Modulare Checkliste | `checklist_templates`, `checklist_runs`, `checklist_run_items` | spezifiziert |
+| Textbausteine (Plus/Minus) | `saved_text_snippets` | spezifiziert |
+| Audit / Nachvollziehbarkeit | `audit_events` (append-only) | spezifiziert |
+| Servicebereich | `service_area_code` (`FENS`, `HAUS`, `IMMO`) | spezifiziert |
+| Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2 ✅ |

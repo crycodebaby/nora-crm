@@ -255,6 +255,12 @@ export const englishCrmMessages = {
         hide_empty_stages: "Hide empty stages",
         no_deals: "No deals available",
         order_value: "Order value: %{amount}",
+        view_filter_label: "Deal view",
+        view_all: "All deals",
+        view_fensterservice: "Window service",
+        view_hausmeisterdienst: "Caretaker service",
+        no_fensterservice_deals: "No window service deals",
+        no_hausmeisterdienst_deals: "No caretaker service deals",
       },
     },
     notes: {

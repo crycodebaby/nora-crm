@@ -120,10 +120,87 @@ Nur bei belegtem Bedarf:
 | `manufacturer_status` | Wartet auf Hersteller, Lieferant, Ersatzteil |
 | `source_channel` | Google Ads, Website, Telefon, WhatsApp, Empfehlung |
 | `files` / `photos` | Fotos, PDF, Angebot, Aufmaß |
-| `production_checklist` (jsonb) | digitale Kontrollcheckliste vor Produktionsfreigabe (Fensterauftrag) |
-| `workflow_type` | `general` vs. `window_order` — falls `category` nicht reicht |
 | `appointments` | Termine Aufmaß/Montage mit `deal_id`, Start/Ende |
 | `manufacturer_id` / `manufacturer_name` | Herstellerbezug am Vorgang (generisch, nicht Höning-spezifisch) |
+| `service_area_code` | `FENS` / `HAUS` / `IMMO` — Geschäftszweig, **nicht** Kunde — siehe `10-checklists-snippets-audit.md` |
+| `checklist_templates` / `checklist_runs` / `checklist_run_items` | modulare Checklisten — **relational, nicht JSONB-only** — **implementiert** (v0.3d2) |
+| `saved_text_snippets` | wiederverwendbare Textbausteine — **implementiert** (v0.3d2) |
+| `audit_events` | zentrale append-only Audit-Log-Tabelle — **implementiert** (v0.3d2) |
+| `workflow_type` | `general` vs. `window_order` — falls `category` nicht reicht |
+
+**Veraltet / ersetzt durch 10:**
+
+| Kandidat | Status |
+|---|---|
+| `production_checklist` (jsonb) | ❌ nicht als Hauptmodell — relationale Tabellen stattdessen |
+
+### Falle 18: JSONB-only-Checkliste am Vorgang
+
+Falsch:
+
+```text
+deals.production_checklist jsonb als einzige Quelle für Produktionsfreigabe
+```
+
+Richtig:
+
+```text
+checklist_templates + checklist_runs + checklist_run_items mit label_snapshot
+```
+
+Siehe `10-checklists-snippets-audit.md`.
+
+### Falle 19: Servicebereich über company_id
+
+Falsch:
+
+```text
+company_id oder sector als Ersatz für FENS/HAUS/IMMO
+```
+
+Richtig:
+
+```text
+service_area_code auf Vorlage, Lauf und Snippet — company_id bleibt Kunde
+```
+
+### Falle 20: Audit in Notizen oder Freitext
+
+Falsch:
+
+```text
+„Produktion freigegeben von Max am 12.03.“ nur als Notiz
+```
+
+Richtig:
+
+```text
+checklist_run_items.checked_by + checked_at + audit_events
+```
+
+### Falle 21: Checklisten-ID in Notizen
+
+Falsch:
+
+```text
+Notiz: „Checkliste abc-123-def erledigt“
+```
+
+Richtig:
+
+```text
+FK checklist_run_id in strukturierten Tabellen; Notiz optional als Kommentar am Punkt
+```
+
+## Checklisten- und Audit-Guardrails (Welle 7b)
+
+Details in `10-checklists-snippets-audit.md`:
+
+- relationale Tabellen als Hauptmodell — kein JSONB-only
+- Vorlagenpunkte deaktivieren, nicht löschen
+- Audit append-only — Client darf Events nicht ändern/löschen
+- keine getrennten Audit-Tabellen pro Bereich
+- Textbausteine persistent vor Plus/Minus-UI
 
 ## Fensterauftrag-Guardrails (Welle 7a)
 

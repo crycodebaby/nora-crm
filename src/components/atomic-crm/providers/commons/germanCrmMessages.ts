@@ -259,6 +259,12 @@ export const germanCrmMessages = {
         hide_empty_stages: "Leere Status ausblenden",
         no_deals: "Keine Vorgänge vorhanden",
         order_value: "Auftragswert: %{amount}",
+        view_filter_label: "Vorgangsansicht",
+        view_all: "Alle Vorgänge",
+        view_fensterservice: "Fensterservice",
+        view_hausmeisterdienst: "Hausmeisterservice",
+        no_fensterservice_deals: "Keine Fensterservice-Vorgänge vorhanden",
+        no_hausmeisterdienst_deals: "Keine Hausmeisterservice-Vorgänge vorhanden",
       },
     },
     notes: {

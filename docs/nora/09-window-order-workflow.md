@@ -120,11 +120,13 @@ Diese Status sind **Teilmenge** der bestehenden Nora-Status-IDs — keine neuen 
 
 **Terminal / Sonderfälle** (nicht in aktiver Pipeline-Spalte): `abgelehnt`, optional `nachfassen`, `in-kalkulation` als Zwischenstatus im Formular, nicht zwingend als Kanban-Spalte.
 
-### 3.4 UI-Konzept (spätere Welle, nicht jetzt)
+### 3.4 UI-Konzept — v0.3c umgesetzt
 
-- **Kanban-Filter:** „Nur Fensteraufträge“ (`category = fensterservice`) mit **reduzierter Spaltenmenge** (obige 8)
-- **Allgemeines Kanban:** weiter alle Status, leere Spalten standardmäßig ausgeblendet (Kanban-Polish)
+- **Kanban-Filter:** `DealKanbanToolbar` mit Ansicht „Fensterservice“ (`category = fensterservice`) und **reduzierter Spaltenmenge** (8 Hauptstatus, Abschnitt 3.3)
+- **Allgemeines Kanban:** „Alle Vorgänge“ — weiter alle Status, leere Spalten standardmäßig ausgeblendet (Kanban-Polish)
+- **Hausmeisterservice:** `category = hausmeisterdienst`, volle Statusliste
 - **Statuswechsel im Formular:** volle Liste bleibt für Ausnahmen und Nicht-Fenster-Vorgänge
+- **Implementierung:** `dealKanbanView.ts`, `useDealKanbanView.ts`, `DealListContent.tsx`
 
 ### 3.5 Was bewusst **keine** Hauptstatus bleiben
 
@@ -134,6 +136,18 @@ Diese Status sind **Teilmenge** der bestehenden Nora-Status-IDs — keine neuen 
 | S4b Produktion freigegeben | Gate — boolescher Checklistenpunkt |
 | S4c Vorkasse bezahlt | Zahlungsereignis, kein Prozessfortschritt für Kanban |
 | S5 Produktion läuft | Unter `wartet-auf-hersteller` + Checkliste ausreichend |
+
+### 3.6 Spätere Datenmodell-Lücken (nicht v0.3c)
+
+| Thema | Status heute | Später |
+|-------|--------------|--------|
+| S4a/S4b/S4c | Keine `deals.stage`-Werte | Checkliste `FENS_PRODUCTION_RELEASE` — `10-checklists-snippets-audit.md` |
+| `kontaktiert`, `in-kalkulation`, `nachfassen` | In Formular wählbar; im Fenster-Kanban nur als Zusatzspalte wenn belegt | Optional dedizierte Fenster-Labels oder Mapping |
+| Hersteller / Bestelldatum | Notiz oder späteres Feld | `manufacturer_name`, Bestelldatum |
+| Montage-Termin | `termin-vereinbart` als Status | Terminmodell + ggf. Google Kalender |
+| `workflow_type` | Nur `category = fensterservice` | Optional explizites Workflow-Feld |
+
+Alle 12 Nora-Status aus `defaultConfiguration` sind vorhanden — **keine Migration** für v0.3c nötig.
 
 ---
 
@@ -181,16 +195,21 @@ Digitale **Qualitäts- und Freigabesicherung** vor Herstellerproduktion — erse
 | **Dashboard** | Kachel: Vorgänge mit offener Freigabe (`angenommen` oder `wartet-auf-hersteller`, Checkliste unvollständig) |
 | **Nicht** | Eigene Kanban-Spalten pro Punkt |
 
-### 4.5 Technisches Zielmodell (spätere Welle v0.3d)
+### 4.5 Technisches Zielmodell — Welle 7b spezifiziert
 
-**Option A (empfohlen):** JSON-Struktur am Vorgang
+**Entscheidung (7b):** relationale Tabellen als Hauptmodell — **nicht** JSONB-only am Vorgang.
 
-```text
-deals.production_checklist jsonb
-  → [{ key, label, checked, checked_at, checked_by }]
-```
+Vollständige Spezifikation: `docs/nora/10-checklists-snippets-audit.md`
 
-**Option B:** eigene Tabelle `deal_checklist_items` — nur bei Bedarf für Historie/Audit.
+| Komponente | Tabelle |
+|------------|---------|
+| Vorlagen | `checklist_templates`, `checklist_template_items` |
+| Ausführung | `checklist_runs`, `checklist_run_items` (`label_snapshot` Pflicht) |
+| Fenster-Produktionsfreigabe | Vorlage `FENS_PRODUCTION_RELEASE` (9 Punkte, Abschnitt 4.3) |
+| Textbausteine | `saved_text_snippets` |
+| Audit | `audit_events` (append-only) |
+
+**Veraltet:** `deals.production_checklist jsonb` als Option A — nur noch als Anti-Pattern in Guardrails.
 
 **Guardrails:**
 
@@ -217,7 +236,7 @@ Das Dashboard wird zum **operativen Hotboard** — „Was muss ich heute tun?“
 | **Wartet auf Hersteller** | ✅ `stage = wartet-auf-hersteller` | `manufacturer_name`, Bestelldatum | ✅ `Hotboard` | — |
 | **Offene Aufgaben** | ✅ `tasks` (über `contact_id`) | `deal_id` direkt am Task wäre einfacher | ✅ `HotboardOpenTasks` | Sync optional |
 | **Neue Anfragen** | ✅ `stage = neue-anfrage` | `source_channel` | ✅ `Hotboard` | — |
-| **Produktionsfreigaben offen** | ❌ | `production_checklist` | ❌ erst v0.3d | — |
+| **Produktionsfreigaben offen** | ❌ | `checklist_runs` (v0.3d) | ❌ erst v0.3d5 | — |
 
 ### 5.3 Bereits implementiert (Ist) — v0.3b
 
@@ -239,7 +258,7 @@ Das Dashboard wird zum **operativen Hotboard** — „Was muss ich heute tun?“
 |--------|--------|
 | Heutige Termine | Kein `appointments`-Modell |
 | Aufmaß / Montage heute | Aufgaben ohne Vorgangsbezug + kein Kalender |
-| Produktionsfreigaben offen | Checkliste erst v0.3d |
+| Produktionsfreigaben offen | Checkliste erst v0.3d4/v0.3d5 — siehe `10-checklists-snippets-audit.md` |
 | Google Kalender | Integration später — echte Termine, nicht Nachfassdatum |
 
 **Entfernt/ersetzt:** `DealFollowUpPanel` (nur 2 Bereiche, eigene Vorgänge, versteckt wenn leer)
@@ -251,7 +270,7 @@ Das Dashboard wird zum **operativen Hotboard** — „Was muss ich heute tun?“
 3. Wartet auf Hersteller (alle, Team-Ansicht) ✅
 4. Offene Aufgaben (prominent im Hotboard) ✅
 5. Angebote nachfassen (`angebot-gesendet`, `nachfassen`) ✅
-6. Nach v0.3d: Produktionsfreigaben offen
+6. Nach v0.3d5: Produktionsfreigaben offen (`checklist_runs`)
 7. Nach Terminmodell + Google Kalender: Aufmaß/Montage heute
 
 ### 5.5 Layout-Prinzip
@@ -356,15 +375,20 @@ Kunde erhält Link und sieht Fortschritt „wie Paketverfolgung“.
 |-------|--------|----------------|
 | **v0.3a** | Globale Suche abschließen (Welle 6d) | Nummern ✅ |
 | **v0.3b** | Hotboard erweitern (Kacheln Abschnitt 5.4) | vorhandene Deal/Task-Daten |
-| **v0.3c** | Fensterauftrag-Workflow finalisieren: Kanban-Filter `fensterservice`, schlanke Spalten, Labels | keine DB-Pflicht |
-| **v0.3d** | Digitale Kontrollcheckliste (`production_checklist`) | Migration + UI |
-| **v0.3e** | Terminmodell (`appointments`: Typ Aufmaß/Montage, `deal_id`, Datum/Zeit) | Migration |
+| **v0.3c** | Fensterauftrag-Kanban-Filter: `fensterservice`-Ansicht, schlanke Spalten, Labels | ✅ umgesetzt — keine DB-Pflicht |
+| **v0.3d1** | Spezifikation Checklisten/Audit (`10-checklists-snippets-audit.md`) | ✅ |
+| **v0.3d2** | DB-Migration: Checklisten, Textbausteine, `audit_events` | ✅ `20260628150000` |
+| **v0.3d3** | RLS, Trigger, Audit append-only, Tests | v0.3d2 |
+| **v0.3d4** | UI Checkliste im Vorgangsdetail | v0.3d3 |
+| **v0.3d5** | Hotboard „Produktionsfreigaben offen“ | v0.3d4 |
+| **v0.3d6** | Audit-Ansicht Kunde/Vorgang (lesend) | v0.3d3 |
+| **v0.3e** | Terminmodell (`appointments`) | Migration |
 | **v0.3f** | Google Maps (Baustelle/Route) | Objekt- oder Adressmodell |
 | **v0.3g** | Google Kalender (Sync Termine) | v0.3e |
 | **v0.4** | E-Mail-Vorlagen + manueller Versand aus Vorgang | SMTP/Edge |
 | **v0.5** | Kundenstatus-Link / Portal (Token, externe Stufen) | v0.3c–v0.4 stabil |
 
-**Empfohlene nächste Implementierungswelle:** **v0.3a (Globale Suche)** — unabhängig vom Fensterprozess, operativ sofort nutzbar; danach **v0.3b + v0.3c** parallelisierbar.
+**Empfohlene nächste Implementierungswelle:** **v0.3d2** — Datenbankmigration Checklisten, Textbausteine, Audit (`10-checklists-snippets-audit.md`).
 
 ---
 
@@ -374,12 +398,13 @@ Kunde erhält Link und sieht Fortschritt „wie Paketverfolgung“.
 |-------|-----|
 | Vorgangsstatus | `defaultConfiguration.ts` → `defaultDealStages` |
 | Dienstleistung / Fenster | `defaultDealCategories` → `fensterservice` |
-| Kanban | `DealListContent.tsx`, `getVisibleDealStages` |
+| Kanban | `DealListContent.tsx`, `dealKanbanView.ts`, `getVisibleDealStages` |
 | Dashboard Hotboard | `Hotboard.tsx`, `hotboardUtils.ts`, `HotboardOpenTasks.tsx` |
 | Nachfassdatum | `deals.expected_closing_date` |
 | Zuständig | `deals.sales_id` |
 | Aufgaben | `tasks.contact_id` (Umweg über Ansprechpartner) |
 | Nummern | `deals.case_number`, `companies.customer_number` |
+| Checklisten / Audit (Spez) | `docs/nora/10-checklists-snippets-audit.md` |
 
 ---
 

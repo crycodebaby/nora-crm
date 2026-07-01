@@ -15,6 +15,13 @@ alter table public.tasks enable row level security;
 alter table public.configuration enable row level security;
 alter table public.favicons_excluded_domains enable row level security;
 
+alter table public.checklist_templates enable row level security;
+alter table public.checklist_template_items enable row level security;
+alter table public.checklist_runs enable row level security;
+alter table public.checklist_run_items enable row level security;
+alter table public.saved_text_snippets enable row level security;
+alter table public.audit_events enable row level security;
+
 -- Companies
 create policy "Enable read access for authenticated users" on public.companies for select to authenticated using (true);
 create policy "Enable insert for authenticated users only" on public.companies for insert to authenticated with check (true);
@@ -67,3 +74,26 @@ create policy "Enable update for admins" on public.configuration for update to a
 
 -- Favicons excluded domains
 create policy "Enable access for authenticated users only" on public.favicons_excluded_domains to authenticated using (true) with check (true);
+
+-- Checklists (v0.3d2)
+create policy "Checklist templates read" on public.checklist_templates for select to authenticated using (true);
+create policy "Checklist templates insert admin" on public.checklist_templates for insert to authenticated with check (public.is_admin());
+create policy "Checklist templates update admin" on public.checklist_templates for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+create policy "Checklist template items read" on public.checklist_template_items for select to authenticated using (true);
+create policy "Checklist template items insert admin" on public.checklist_template_items for insert to authenticated with check (public.is_admin());
+create policy "Checklist template items update admin" on public.checklist_template_items for update to authenticated using (public.is_admin()) with check (public.is_admin());
+
+create policy "Checklist runs read" on public.checklist_runs for select to authenticated using (true);
+create policy "Checklist runs insert" on public.checklist_runs for insert to authenticated with check (true);
+create policy "Checklist runs update" on public.checklist_runs for update to authenticated using (true) with check (true);
+
+create policy "Checklist run items read" on public.checklist_run_items for select to authenticated using (true);
+create policy "Checklist run items insert" on public.checklist_run_items for insert to authenticated with check (true);
+create policy "Checklist run items update" on public.checklist_run_items for update to authenticated using (true) with check (true);
+
+create policy "Saved text snippets read" on public.saved_text_snippets for select to authenticated using (true);
+create policy "Saved text snippets insert" on public.saved_text_snippets for insert to authenticated with check (true);
+create policy "Saved text snippets update" on public.saved_text_snippets for update to authenticated using (true) with check (true);
+
+create policy "Audit events read" on public.audit_events for select to authenticated using (true);

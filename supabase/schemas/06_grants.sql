@@ -197,6 +197,76 @@ grant all on function public.prevent_case_number_change() to anon;
 grant all on function public.prevent_case_number_change() to authenticated;
 grant all on function public.prevent_case_number_change() to service_role;
 
+-- Checklists / audit (v0.3d2)
+grant all on table public.checklist_templates to anon;
+grant all on table public.checklist_templates to authenticated;
+grant all on table public.checklist_templates to service_role;
+
+grant all on table public.checklist_template_items to anon;
+grant all on table public.checklist_template_items to authenticated;
+grant all on table public.checklist_template_items to service_role;
+
+grant all on table public.checklist_runs to anon;
+grant all on table public.checklist_runs to authenticated;
+grant all on table public.checklist_runs to service_role;
+
+grant all on table public.checklist_run_items to anon;
+grant all on table public.checklist_run_items to authenticated;
+grant all on table public.checklist_run_items to service_role;
+
+grant all on table public.saved_text_snippets to anon;
+grant all on table public.saved_text_snippets to authenticated;
+grant all on table public.saved_text_snippets to service_role;
+
+grant select on table public.audit_events to anon;
+grant select on table public.audit_events to authenticated;
+grant all on table public.audit_events to service_role;
+
+revoke all on function public.insert_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, jsonb, jsonb, jsonb
+) from public;
+revoke all on function public.insert_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, jsonb, jsonb, jsonb
+) from anon;
+revoke all on function public.insert_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, jsonb, jsonb, jsonb
+) from authenticated;
+grant execute on function public.insert_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, jsonb, jsonb, jsonb
+) to service_role;
+
+grant all on function public.set_updated_at() to anon;
+grant all on function public.set_updated_at() to authenticated;
+grant all on function public.set_updated_at() to service_role;
+
+grant all on function public.nora_entity_uuid(text, bigint) to anon;
+grant all on function public.nora_entity_uuid(text, bigint) to authenticated;
+grant all on function public.nora_entity_uuid(text, bigint) to service_role;
+
+grant all on function public.set_checklist_run_defaults() to anon;
+grant all on function public.set_checklist_run_defaults() to authenticated;
+grant all on function public.set_checklist_run_defaults() to service_role;
+
+grant all on function public.prevent_audit_mutation() to anon;
+grant all on function public.prevent_audit_mutation() to authenticated;
+grant all on function public.prevent_audit_mutation() to service_role;
+
+grant all on function public.audit_deal_stage_change() to anon;
+grant all on function public.audit_deal_stage_change() to authenticated;
+grant all on function public.audit_deal_stage_change() to service_role;
+
+grant all on function public.audit_checklist_run_changes() to anon;
+grant all on function public.audit_checklist_run_changes() to authenticated;
+grant all on function public.audit_checklist_run_changes() to service_role;
+
+grant all on function public.audit_checklist_run_item_changes() to anon;
+grant all on function public.audit_checklist_run_item_changes() to authenticated;
+grant all on function public.audit_checklist_run_item_changes() to service_role;
+
+grant all on function public.audit_saved_text_snippet_changes() to anon;
+grant all on function public.audit_saved_text_snippet_changes() to authenticated;
+grant all on function public.audit_saved_text_snippet_changes() to service_role;
+
 -- Default privileges
 alter default privileges for role postgres in schema public grant all on sequences to postgres;
 alter default privileges for role postgres in schema public grant all on sequences to anon;

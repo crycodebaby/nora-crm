@@ -200,3 +200,143 @@ alter table only public.companies
 
 alter table only public.deals
     add constraint deals_case_number_key unique (case_number);
+
+--
+-- Checklists, text snippets, audit (v0.3d2) — see 10-checklists-snippets-audit.md
+--
+
+create table public.checklist_templates (
+    id uuid primary key default gen_random_uuid(),
+    code text not null,
+    name text not null,
+    service_area_code text not null,
+    description text,
+    is_active boolean not null default true,
+    version integer not null default 1,
+    created_by uuid,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint checklist_templates_code_key unique (code),
+    constraint checklist_templates_service_area_code_check
+        check (service_area_code in ('FENS', 'HAUS', 'IMMO')),
+    constraint checklist_templates_version_check check (version >= 1)
+);
+
+create table public.checklist_template_items (
+    id uuid primary key default gen_random_uuid(),
+    template_id uuid not null references public.checklist_templates (id) on delete restrict,
+    label text not null,
+    description text,
+    is_required boolean not null default false,
+    sort_index integer not null default 0,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint checklist_template_items_sort_index_check check (sort_index >= 0)
+);
+
+create table public.checklist_runs (
+    id uuid primary key default gen_random_uuid(),
+    template_id uuid not null references public.checklist_templates (id) on delete restrict,
+    deal_id bigint not null references public.deals (id) on delete restrict,
+    company_id bigint references public.companies (id) on delete restrict,
+    contact_id bigint references public.contacts (id) on delete set null,
+    service_area_code text not null,
+    status text not null default 'open',
+    started_by uuid,
+    completed_by uuid,
+    started_at timestamptz not null default now(),
+    completed_at timestamptz,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint checklist_runs_service_area_code_check
+        check (service_area_code in ('FENS', 'HAUS', 'IMMO')),
+    constraint checklist_runs_status_check
+        check (status in ('open', 'completed', 'cancelled'))
+);
+
+create unique index uq_checklist_runs_one_open_per_deal_template
+    on public.checklist_runs (deal_id, template_id)
+    where status = 'open';
+
+create table public.checklist_run_items (
+    id uuid primary key default gen_random_uuid(),
+    checklist_run_id uuid not null references public.checklist_runs (id) on delete restrict,
+    template_item_id uuid references public.checklist_template_items (id) on delete set null,
+    label_snapshot text not null,
+    is_required boolean not null default false,
+    is_checked boolean not null default false,
+    checked_by uuid,
+    checked_at timestamptz,
+    note text,
+    sort_index integer not null default 0,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint checklist_run_items_sort_index_check check (sort_index >= 0)
+);
+
+create table public.saved_text_snippets (
+    id uuid primary key default gen_random_uuid(),
+    service_area_code text not null,
+    kind text not null,
+    text text not null,
+    shortcut text,
+    is_active boolean not null default true,
+    created_by uuid,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    usage_count integer not null default 0,
+    constraint saved_text_snippets_service_area_code_check
+        check (service_area_code in ('FENS', 'HAUS', 'IMMO')),
+    constraint saved_text_snippets_kind_check
+        check (kind in ('checklist_item', 'task_text', 'note_text', 'issue_text')),
+    constraint saved_text_snippets_usage_count_check check (usage_count >= 0)
+);
+
+create table public.audit_events (
+    id uuid primary key default gen_random_uuid(),
+    actor_id uuid,
+    event_type text not null,
+    entity_type text not null,
+    entity_id uuid not null,
+    company_id bigint references public.companies (id) on delete set null,
+    contact_id bigint references public.contacts (id) on delete set null,
+    deal_id bigint references public.deals (id) on delete set null,
+    checklist_run_id uuid references public.checklist_runs (id) on delete set null,
+    checklist_run_item_id uuid references public.checklist_run_items (id) on delete set null,
+    old_data jsonb,
+    new_data jsonb,
+    metadata jsonb,
+    created_at timestamptz not null default now()
+);
+
+create index checklist_templates_service_area_active_idx
+    on public.checklist_templates (service_area_code, is_active);
+
+create index checklist_template_items_template_sort_idx
+    on public.checklist_template_items (template_id, sort_index);
+
+create index checklist_runs_deal_status_idx on public.checklist_runs (deal_id, status);
+
+create index checklist_runs_company_id_idx on public.checklist_runs (company_id);
+
+create index checklist_runs_service_area_status_idx
+    on public.checklist_runs (service_area_code, status);
+
+create index checklist_run_items_run_sort_idx
+    on public.checklist_run_items (checklist_run_id, sort_index);
+
+create index saved_text_snippets_area_kind_active_idx
+    on public.saved_text_snippets (service_area_code, kind, is_active);
+
+create index audit_events_entity_created_idx
+    on public.audit_events (entity_type, entity_id, created_at desc);
+
+create index audit_events_company_created_idx
+    on public.audit_events (company_id, created_at desc);
+
+create index audit_events_deal_created_idx
+    on public.audit_events (deal_id, created_at desc);
+
+create index audit_events_checklist_run_created_idx
+    on public.audit_events (checklist_run_id, created_at desc);

@@ -183,6 +183,23 @@ Operative Startübersicht nach Login — „Was ist heute wichtig?“
 
 **Bewusst nicht:** „Heutige Termine“, „Montage heute“, „Aufmaß heute“ — kein Terminmodell, kein Google Kalender.
 
+## Vorgangs-Kanban / Fensterfilter (Welle v0.3c)
+
+Schlanke **Ansichtsauswahl** in der Vorgangsübersicht — nicht dominant, touchfreundlich.
+
+| Element | Regel |
+|---------|--------|
+| Position | `DealKanbanToolbar` oberhalb des Kanban-Boards |
+| Steuerung | `ToggleGroup` (Outline): Alle Vorgänge · Fensterservice · Hausmeisterservice |
+| Persistenz | `localStorage` (`nora-deals-kanban-view`) |
+| Fensterservice-Spalten | 8 bevorzugte Status (Teilmenge von `defaultDealStages`); leere Spalten standardmäßig ausgeblendet |
+| Sonderstatus | Vorgänge in anderen Status (z. B. `nachfassen`) erscheinen als zusätzliche Spalte, wenn sie Vorgänge enthalten |
+| S4a/S4b/S4c | Keine Kanban-Spalten — Checklistenpunkte (später v0.3d) |
+| Leer | Kategorie-spezifische Empty-State-Meldung |
+| Kombination | „Alle Status anzeigen“ zeigt alle 8 Fenster-Spalten (auch leere); „Leere ausblenden“ nutzt bestehende Logik |
+
+**Kategorien:** `deals.category` — `fensterservice`, `hausmeisterdienst` (technische IDs aus `defaultDealCategories`).
+
 ## Öffentliche Startseite (Welle 6a)
 
 Nicht eingeloggte Nutzer sehen unter `/` eine minimalistische Startseite (`NoraLandingPage` via `StartPage` als `loginPage`).

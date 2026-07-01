@@ -554,3 +554,187 @@ begin
     return new;
 end;
 $$;
+
+-- Nora CRM v0.3d2: checklists, snippets, audit
+
+CREATE OR REPLACE FUNCTION "public"."set_updated_at"() RETURNS trigger
+    LANGUAGE plpgsql
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    new.updated_at := now();
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."nora_entity_uuid"("p_entity_type" text, "p_id" bigint) RETURNS uuid
+    LANGUAGE sql IMMUTABLE
+    SET "search_path" TO 'public', 'extensions'
+    AS $$
+    select extensions.uuid_generate_v5(
+        '6ba7b811-9dad-11d1-80b4-00c04fd430c8'::uuid,
+        p_entity_type || ':' || p_id::text
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."insert_audit_event"(
+    "p_event_type" text,
+    "p_entity_type" text,
+    "p_entity_id" uuid,
+    "p_company_id" bigint DEFAULT NULL::bigint,
+    "p_contact_id" bigint DEFAULT NULL::bigint,
+    "p_deal_id" bigint DEFAULT NULL::bigint,
+    "p_checklist_run_id" uuid DEFAULT NULL::uuid,
+    "p_checklist_run_item_id" uuid DEFAULT NULL::uuid,
+    "p_old_data" jsonb DEFAULT NULL::jsonb,
+    "p_new_data" jsonb DEFAULT NULL::jsonb,
+    "p_metadata" jsonb DEFAULT NULL::jsonb
+) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+    v_id uuid := gen_random_uuid();
+    v_actor uuid := auth.uid();
+begin
+    insert into public.audit_events (
+        id, actor_id, event_type, entity_type, entity_id,
+        company_id, contact_id, deal_id, checklist_run_id, checklist_run_item_id,
+        old_data, new_data, metadata
+    )
+    values (
+        v_id, v_actor, p_event_type, p_entity_type, p_entity_id,
+        p_company_id, p_contact_id, p_deal_id, p_checklist_run_id, p_checklist_run_item_id,
+        p_old_data, p_new_data, p_metadata
+    );
+    return v_id;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."set_checklist_run_defaults"() RETURNS trigger
+    LANGUAGE plpgsql
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    if new.started_by is null then
+        new.started_by := auth.uid();
+    end if;
+    if new.company_id is null and new.deal_id is not null then
+        select d.company_id into new.company_id from public.deals d where d.id = new.deal_id;
+    end if;
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."prevent_audit_mutation"() RETURNS trigger
+    LANGUAGE plpgsql
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    raise exception 'audit_events is append-only';
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."audit_deal_stage_change"() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    if tg_op = 'UPDATE' and old.stage is distinct from new.stage then
+        perform public.insert_audit_event(
+            'deal.stage_changed', 'deal', public.nora_entity_uuid('deal', new.id),
+            new.company_id, null, new.id, null, null,
+            jsonb_build_object('stage', old.stage),
+            jsonb_build_object('stage', new.stage), null
+        );
+    end if;
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."audit_checklist_run_changes"() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+    v_event_type text;
+begin
+    if tg_op = 'INSERT' then
+        perform public.insert_audit_event(
+            'checklist.run_started', 'checklist_run', new.id,
+            new.company_id, new.contact_id, new.deal_id, new.id, null, null,
+            jsonb_build_object('status', new.status, 'template_id', new.template_id, 'service_area_code', new.service_area_code),
+            null
+        );
+        return new;
+    end if;
+    if tg_op = 'UPDATE' and old.status is distinct from new.status then
+        v_event_type := case
+            when new.status = 'completed' then 'checklist.run_completed'
+            when new.status = 'cancelled' then 'checklist.run_cancelled'
+            else 'checklist.run_status_changed'
+        end;
+        perform public.insert_audit_event(
+            v_event_type, 'checklist_run', new.id,
+            new.company_id, new.contact_id, new.deal_id, new.id, null,
+            jsonb_build_object('status', old.status),
+            jsonb_build_object('status', new.status), null
+        );
+    end if;
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."audit_checklist_run_item_changes"() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+declare
+    v_run public.checklist_runs%rowtype;
+begin
+    select * into v_run from public.checklist_runs where id = coalesce(new.checklist_run_id, old.checklist_run_id);
+    if tg_op = 'UPDATE' and old.is_checked is distinct from new.is_checked then
+        perform public.insert_audit_event(
+            case when new.is_checked then 'checklist.item_checked' else 'checklist.item_unchecked' end,
+            'checklist_run_item', new.id,
+            v_run.company_id, v_run.contact_id, v_run.deal_id, new.checklist_run_id, new.id,
+            jsonb_build_object('is_checked', old.is_checked, 'label', old.label_snapshot),
+            jsonb_build_object('is_checked', new.is_checked, 'label', new.label_snapshot), null
+        );
+    elsif tg_op = 'UPDATE' and old.note is distinct from new.note then
+        perform public.insert_audit_event(
+            'checklist.item_note_changed', 'checklist_run_item', new.id,
+            v_run.company_id, v_run.contact_id, v_run.deal_id, new.checklist_run_id, new.id,
+            jsonb_build_object('note', old.note),
+            jsonb_build_object('note', new.note), null
+        );
+    end if;
+    return new;
+end;
+$$;
+
+CREATE OR REPLACE FUNCTION "public"."audit_saved_text_snippet_changes"() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+begin
+    if tg_op = 'INSERT' then
+        perform public.insert_audit_event(
+            'snippet.created', 'saved_text_snippet', new.id,
+            null, null, null, null, null, null,
+            jsonb_build_object('kind', new.kind, 'service_area_code', new.service_area_code, 'text', new.text),
+            null
+        );
+        return new;
+    end if;
+    if tg_op = 'UPDATE' and old.is_active = true and new.is_active = false then
+        perform public.insert_audit_event(
+            'snippet.deactivated', 'saved_text_snippet', new.id,
+            null, null, null, null, null,
+            jsonb_build_object('is_active', old.is_active),
+            jsonb_build_object('is_active', new.is_active), null
+        );
+    end if;
+    return new;
+end;
+$$;

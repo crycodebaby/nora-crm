@@ -6,9 +6,16 @@ import { useEffect, useState } from "react";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 import { DealColumn } from "./DealColumn";
+import {
+  countHiddenEmptyStages,
+  filterDealsByKanbanView,
+  getPreferredStagesForKanbanView,
+  getVisibleStagesForKanbanView,
+} from "./dealKanbanView";
 import { DealKanbanToolbar } from "./DealKanbanToolbar";
 import type { DealsByStage } from "./stages";
-import { getDealsByStage, getVisibleDealStages } from "./stages";
+import { getDealsByStage } from "./stages";
+import { useDealKanbanView } from "./useDealKanbanView";
 import { useShowAllDealStages } from "./useShowAllDealStages";
 
 export const DealListContent = () => {
@@ -17,6 +24,9 @@ export const DealListContent = () => {
   const dataProvider = useDataProvider();
   const translate = useTranslate();
   const { showAllStages, toggleShowAllStages } = useShowAllDealStages();
+  const { kanbanView, setKanbanView } = useDealKanbanView();
+
+  const filteredDeals = filterDealsByKanbanView(unorderedDeals ?? [], kanbanView);
 
   const [dealsByStage, setDealsByStage] = useState<DealsByStage>(
     getDealsByStage([], dealStages),
@@ -24,24 +34,36 @@ export const DealListContent = () => {
 
   useEffect(() => {
     if (unorderedDeals) {
-      const newDealsByStage = getDealsByStage(unorderedDeals, dealStages);
+      const newDealsByStage = getDealsByStage(filteredDeals, dealStages);
       if (!isEqual(newDealsByStage, dealsByStage)) {
         setDealsByStage(newDealsByStage);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unorderedDeals]);
+  }, [unorderedDeals, kanbanView]);
 
   if (isPending) return null;
 
-  const visibleStages = getVisibleDealStages(
+  const visibleStages = getVisibleStagesForKanbanView(
+    kanbanView,
     dealStages,
     dealsByStage,
     showAllStages,
   );
+  const stageListForHiddenCount =
+    kanbanView === "fensterservice"
+      ? getPreferredStagesForKanbanView(kanbanView, dealStages)
+      : dealStages;
   const hiddenEmptyStageCount = showAllStages
     ? 0
-    : dealStages.length - visibleStages.length;
+    : countHiddenEmptyStages(stageListForHiddenCount, visibleStages);
+
+  const categoryEmptyMessageKey =
+    kanbanView === "fensterservice"
+      ? "resources.deals.kanban.no_fensterservice_deals"
+      : kanbanView === "hausmeisterdienst"
+        ? "resources.deals.kanban.no_hausmeisterdienst_deals"
+        : null;
 
   const onDragEnd: OnDragEndResponder = (result) => {
     const { destination, source } = result;
@@ -87,11 +109,17 @@ export const DealListContent = () => {
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="flex flex-col gap-2 w-full">
         <DealKanbanToolbar
+          kanbanView={kanbanView}
+          onKanbanViewChange={setKanbanView}
           showAllStages={showAllStages}
           onToggleShowAllStages={toggleShowAllStages}
           hiddenEmptyStageCount={hiddenEmptyStageCount}
         />
-        {visibleStages.length === 0 ? (
+        {filteredDeals.length === 0 && categoryEmptyMessageKey ? (
+          <p className="text-center text-muted-foreground py-16 text-base nora-readable mx-auto">
+            {translate(categoryEmptyMessageKey)}
+          </p>
+        ) : visibleStages.length === 0 ? (
           <p className="text-center text-muted-foreground py-16 text-base nora-readable mx-auto">
             {translate("resources.deals.kanban.no_deals")}
           </p>

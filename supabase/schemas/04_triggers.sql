@@ -95,3 +95,53 @@ create or replace trigger assign_case_number_trigger
 create or replace trigger prevent_case_number_change_trigger
     before update on public.deals
     for each row execute function public.prevent_case_number_change();
+
+-- Nora CRM v0.3d2: checklists, snippets, audit
+
+create or replace trigger set_checklist_templates_updated_at
+    before update on public.checklist_templates
+    for each row execute function public.set_updated_at();
+
+create or replace trigger set_checklist_template_items_updated_at
+    before update on public.checklist_template_items
+    for each row execute function public.set_updated_at();
+
+create or replace trigger set_checklist_runs_updated_at
+    before update on public.checklist_runs
+    for each row execute function public.set_updated_at();
+
+create or replace trigger set_checklist_run_items_updated_at
+    before update on public.checklist_run_items
+    for each row execute function public.set_updated_at();
+
+create or replace trigger set_saved_text_snippets_updated_at
+    before update on public.saved_text_snippets
+    for each row execute function public.set_updated_at();
+
+create or replace trigger set_checklist_run_defaults_trigger
+    before insert on public.checklist_runs
+    for each row execute function public.set_checklist_run_defaults();
+
+create or replace trigger prevent_audit_events_update
+    before update on public.audit_events
+    for each row execute function public.prevent_audit_mutation();
+
+create or replace trigger prevent_audit_events_delete
+    before delete on public.audit_events
+    for each row execute function public.prevent_audit_mutation();
+
+create or replace trigger audit_deal_stage_change_trigger
+    after update of stage on public.deals
+    for each row execute function public.audit_deal_stage_change();
+
+create or replace trigger audit_checklist_run_changes_trigger
+    after insert or update on public.checklist_runs
+    for each row execute function public.audit_checklist_run_changes();
+
+create or replace trigger audit_checklist_run_item_changes_trigger
+    after update on public.checklist_run_items
+    for each row execute function public.audit_checklist_run_item_changes();
+
+create or replace trigger audit_saved_text_snippet_changes_trigger
+    after insert or update on public.saved_text_snippets
+    for each row execute function public.audit_saved_text_snippet_changes();

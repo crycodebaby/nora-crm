@@ -260,6 +260,12 @@ export const frenchCrmMessages = {
         hide_empty_stages: "Masquer les statuts vides",
         no_deals: "Aucune affaire disponible",
         order_value: "Valeur de commande : %{amount}",
+        view_filter_label: "Vue des affaires",
+        view_all: "Toutes les affaires",
+        view_fensterservice: "Service fenêtres",
+        view_hausmeisterdienst: "Service conciergerie",
+        no_fensterservice_deals: "Aucune affaire service fenêtres",
+        no_hausmeisterdienst_deals: "Aucune affaire service conciergerie",
       },
     },
     notes: {

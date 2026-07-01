@@ -36,6 +36,19 @@ Bei Nummern-/DB-Änderungen zusätzlich:
 - [ ] `next_*` nicht per RPC für `anon`/`authenticated` ausführbar
 - [ ] Keine zweite Nummernlogik in Demo/CSV/UI-Formularen
 
+Bei Checklisten-/Audit-Migration (ab v0.3d2) zusätzlich:
+
+- [ ] `docs/nora/10-checklists-snippets-audit.md` gelesen
+- [ ] Kein JSONB-only als Haupt-Checklistenmodell
+- [ ] `label_snapshot` an `checklist_run_items` vorhanden
+- [ ] `audit_events` append-only (kein UPDATE/DELETE für App-Rollen)
+- [ ] `service_area_code` nicht mit `company_id` verwechselt
+- [ ] Vorlagen/Snippets: `is_active = false` statt DELETE
+- [ ] Keine Audit-Daten in Notizen/Freitext
+- [ ] FKs für deal, company, contact, checklist_run konsistent
+- [ ] `npx supabase db reset --local` nach Migration
+- [ ] `supabase/tests/checklists_audit_verification.sql` ausführen (Docker: `supabase_db_atomic-crm-demo`)
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

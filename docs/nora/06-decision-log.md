@@ -333,3 +333,72 @@ Nach Login soll das Büro sofort sehen, was heute wichtig ist — ohne neue DB-S
 ### Begründung
 
 Nutzt ausschließlich vorhandene Felder und DataProvider-Abfragen. Hotboard oben, Statistik (`DealsChart`) und Aktivität darunter — ruhiges Nora-Layout für Desktop und Tablet.
+
+## 2026-06-28 – v0.3c: Fenster-Kanban-Filter
+
+### Kontext
+
+Fensteraufträge sollen gezielt im Kanban betrachtet werden können, ohne die allgemeine Vorgangsübersicht zu dominieren. Prozess ist in `09-window-order-workflow.md` spezifiziert; S4a/S4b/S4c bleiben Checklistenpunkte.
+
+### Entscheidung
+
+- **Ansichtsauswahl** in `DealKanbanToolbar`: Alle Vorgänge · Fensterservice · Hausmeisterservice
+- **Client-seitiger Filter** auf `deals.category` — keine DB-Migration, ergänzt (ersetzt nicht) den bestehenden Listenfilter
+- **Fensterservice-Kanban:** 8 bevorzugte Status-Spalten (`FENSTERSERVICE_KANBAN_STAGE_IDS`); Vorgänge in anderen Status erscheinen als Zusatzspalte wenn belegt
+- **Hausmeisterservice:** alle 12 Status, nur Kategorie gefiltert
+- **localStorage** für gewählte Ansicht (`nora-deals-kanban-view`)
+- **Keine neuen Status-IDs**, keine S4-Spalten, keine Produktionscheckliste
+
+### Begründung
+
+Schlanke Fenster-Pipeline ohne Datenmodelländerung. Bestehende Logik „leere Spalten ausblenden“ / „Alle Status anzeigen“ bleibt erhalten und kombinierbar.
+
+## 2026-06-28 – Welle 7b: Checklisten-, Textbaustein- und Audit-Datenmodell spezifiziert
+
+### Kontext
+
+Nach Hotboard und Fenster-Kanban-Filter soll das nächste fachliche Fundament gelegt werden: modulare Checklisten (FENS/HAUS/IMMO), Textbausteine und zentrale Audit-Logs — ohne voreilige Migration.
+
+### Entscheidung
+
+- **Spezifikation** in `10-checklists-snippets-audit.md`
+- **Hauptmodell relational:** `checklist_templates`, `checklist_template_items`, `checklist_runs`, `checklist_run_items`, `saved_text_snippets`, `audit_events`
+- **JSONB-only am Vorgang abgelehnt** als führende Checklistenquelle
+- **Hybrid:** JSONB nur in `audit_events` (old/new/metadata) und optional Run-Metadaten
+- **Servicebereiche:** `FENS`, `HAUS`, `IMMO` über `service_area_code` — **nicht** `company_id`
+- **`label_snapshot` Pflicht** an Run-Items für historische Korrektheit
+- **Audit append-only** — CRM-Nachvollziehbarkeit, kein GoBD-Ersatz
+- **S4a/S4b/S4c** bleiben Checklistenpunkte in Vorlage `FENS_PRODUCTION_RELEASE`
+- **Nächste Implementierung:** v0.3d2 Migration, dann RLS/UI
+
+### Begründung
+
+Relationale Struktur ermöglicht Wiederverwendung, RLS, Hotboard-Auswertung und jahrelange Nachvollziehbarkeit. Verhindert parallele JSONB-Experimente und Audit-Dumps in Notizen.
+
+## 2026-06-28 – v0.3d2: Datenbankmigration Checklisten, Textbausteine, Audit
+
+### Kontext
+
+Spezifikation aus Welle 7b (`10-checklists-snippets-audit.md`) soll persistent werden — ohne UI.
+
+### Entscheidung
+
+- **Migration** `20260628150000_checklists_snippets_audit.sql`
+- **6 Tabellen:** `checklist_templates`, `checklist_template_items`, `checklist_runs`, `checklist_run_items`, `saved_text_snippets`, `audit_events`
+- **FKs** an bestehende `bigint`-PKs (`deals`, `companies`, `contacts`); Checklisten-PKs `uuid`
+- **Constraints:** `service_area_code` ∈ FENS/HAUS/IMMO; Run-Status `open`/`completed`/`cancelled`; Snippet-`kind`; `usage_count >= 0`; partial unique index max. 1 offener Run pro `deal_id + template_id`
+- **Audit:** `insert_audit_event` SECURITY DEFINER; Trigger auf Deals/Runs/Items/Snippets; `prevent_audit_mutation` auf UPDATE/DELETE
+- **RLS:** Templates Admin-write; Runs/Items/Snippets authenticated CRUD ohne DELETE; Audit SELECT-only
+- **Seed:** `FENS_PRODUCTION_RELEASE` mit 9 Punkten (Vorkasse optional)
+- **TypeScript:** `types/checklists.ts`
+- **Keine UI** in dieser Welle
+
+### Verifikation
+
+- `npx supabase db reset --local` ✅
+- `supabase/tests/checklists_audit_verification.sql` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+### Nächste Welle
+
+**v0.3d3** — Trigger-/RLS-Tests erweitern; **v0.3d4** — UI im Vorgangsdetail (freigegeben).
