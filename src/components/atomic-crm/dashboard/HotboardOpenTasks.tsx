@@ -5,6 +5,7 @@ import {
   useGetMany,
   useRedirect,
   useTranslate,
+  CanAccess,
 } from "ra-core";
 import { useMemo } from "react";
 
@@ -61,7 +62,9 @@ export const HotboardOpenTasks = ({ className }: { className?: string }) => {
         <h2 className="text-base font-semibold tracking-tight flex-1">
           {translate("crm.dashboard.hotboard.open_tasks")}
         </h2>
-        <AddTask display="icon" selectContact />
+        <CanAccess resource="tasks" action="create">
+          <AddTask display="icon" selectContact />
+        </CanAccess>
       </div>
       <Card className="nora-card divide-y overflow-hidden">
         {isPending ? (

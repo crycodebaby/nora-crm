@@ -16,69 +16,20 @@ import {
   type CreateBaseProps,
   type FormProps,
 } from "ra-core";
+import { XIcon } from "lucide-react";
 import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useNoraDirtyDialog } from "./useNoraDirtyDialog";
 
 export interface CreateSheetProps extends CreateBaseProps {
-  /**
-   * The children elements that will be rendered inside the sheet as form inputs
-   */
   children: ReactNode;
-
-  /**
-   * Controls whether the sheet is open
-   */
   open: boolean;
-
-  /**
-   * Callback fired when the sheet open state changes
-   */
   onOpenChange: (open: boolean) => void;
-
-  /**
-   * The title displayed in the sheet header
-   */
   title?: ReactNode;
-
-  /**
-   * Default values for the form
-   */
   defaultValues?: FormProps["defaultValues"];
-
-  /**
-   * Optional actions to render in the sheet header, next to the title
-   */
   headerActions?: ReactNode;
 }
 
-/**
- * A Sheet component that contains a create form with externally controlled open state.
- *
- * Renders a Sheet containing a CreateBase form. The sheet has a fixed footer with Save and Close buttons.
- * The open state is controlled externally via the open and onOpenChange props. The sheet will automatically
- * close itself on successful submission (if redirect is false) or when the Close button is clicked.
- *
- * @example
- * ```tsx
- * const [open, setOpen] = useState(false);
- *
- * return (
- *   <>
- *     <Button onClick={() => setOpen(true)}>Create Contact</Button>
- *     <CreateSheet
- *       resource="contacts"
- *       title="Create Contact"
- *       open={open}
- *       onOpenChange={setOpen}
- *     >
- *       <TextInput source="first_name" />
- *       <TextInput source="last_name" />
- *       <TextInput source="email" />
- *     </CreateSheet>
- *   </>
- * );
- * ```
- */
 export const CreateSheet = ({
   children,
   open,
@@ -95,7 +46,6 @@ export const CreateSheet = ({
   const notify = useNotify();
   const redirect = useRedirect();
 
-  // Handle success - close sheet in addition to default behavior
   const handleSuccess = (...args: any[]) => {
     if (mutationOptions?.onSuccess) {
       return mutationOptions.onSuccess(
@@ -122,52 +72,97 @@ export const CreateSheet = ({
     onSuccess: handleSuccess,
   };
 
+  if (!open) return null;
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="h-dvh flex flex-col"
-        aria-describedby={undefined}
-      >
-        <CreateBase
-          {...createBaseProps}
-          redirect={redirectTo}
-          mutationOptions={enhancedMutationOptions}
+    <CreateBase
+      {...createBaseProps}
+      redirect={redirectTo}
+      mutationOptions={enhancedMutationOptions}
+    >
+      <Form defaultValues={defaultValues} className="contents">
+        <CreateSheetBody
+          onOpenChange={onOpenChange}
+          title={title}
+          headerActions={headerActions}
         >
-          <Form
-            defaultValues={defaultValues}
-            className="h-dvh flex-1 flex flex-col"
-          >
-            <SheetHeader className="border-b">
-              <div
-                className={cn(
-                  "flex items-center gap-2",
-                  headerActions && "pr-12",
-                )}
-              >
-                <SheetTitle className="min-w-0 flex-1 truncate">
-                  {typeof title === "string" ? (
-                    <span className="text-xl font-semibold">{title}</span>
-                  ) : (
-                    title
-                  )}
-                </SheetTitle>
-                {headerActions && (
-                  <div className="shrink-0">{headerActions}</div>
-                )}
-              </div>
-            </SheetHeader>
+          {children}
+        </CreateSheetBody>
+      </Form>
+    </CreateBase>
+  );
+};
 
-            <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
-              {children}
+const CreateSheetBody = ({
+  children,
+  onOpenChange,
+  title,
+  headerActions,
+}: {
+  children: ReactNode;
+  onOpenChange: (open: boolean) => void;
+  title?: ReactNode;
+  headerActions?: ReactNode;
+}) => {
+  const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({
+    onClose: () => onOpenChange(false),
+  });
+
+  return (
+    <>
+      <Sheet
+        open
+        onOpenChange={(next) => {
+          if (!next) requestClose();
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          className="h-dvh flex flex-col"
+          aria-describedby={undefined}
+          preventOutsideClose
+          showClose={false}
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+            requestClose();
+          }}
+        >
+          <SheetHeader className="border-b">
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                headerActions && "pr-12",
+              )}
+            >
+              <SheetTitle className="min-w-0 flex-1 truncate">
+                {typeof title === "string" ? (
+                  <span className="text-xl font-semibold">{title}</span>
+                ) : (
+                  title
+                )}
+              </SheetTitle>
+              {headerActions && <div className="shrink-0">{headerActions}</div>}
             </div>
+          </SheetHeader>
 
-            <SheetFooter className="border-t flex flex-row w-full gap-4">
-              <SaveButton className="flex-1 h-12" />
-            </SheetFooter>
-          </Form>
-        </CreateBase>
-      </SheetContent>
-    </Sheet>
+          <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+            {children}
+          </div>
+
+          <SheetFooter className="border-t flex flex-row w-full gap-4">
+            <SaveButton className="flex-1 h-12" />
+          </SheetFooter>
+          <button
+            type="button"
+            className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+            onClick={requestClose}
+            aria-label="Close"
+          >
+            <XIcon className="size-6 md:size-4" />
+          </button>
+        </SheetContent>
+      </Sheet>
+      {dirtyConfirmDialog}
+    </>
   );
 };

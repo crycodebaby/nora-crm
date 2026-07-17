@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
+  useCanAccess,
   useDataProvider,
   useEditController,
   useNotify,
@@ -16,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { CrmDataProvider } from "../providers/types";
 import type { Sale, SalesFormData } from "../types";
 import { SalesInputs } from "./SalesInputs";
+import { NoraPageLoading } from "../misc/NoraPageLoading";
 
 function EditToolbar() {
   return (
@@ -28,7 +31,23 @@ function EditToolbar() {
 
 export function SalesEdit() {
   const { record } = useEditController();
+  const { canAccess, isPending } = useCanAccess({ resource: "sales", action: "edit" });
+  const redirect = useRedirect();
 
+  useEffect(() => {
+    if (!isPending && !canAccess) {
+      redirect("/sales");
+    }
+  }, [canAccess, isPending, redirect]);
+
+  if (isPending || !canAccess) {
+    return <NoraPageLoading variant="inline" className="py-12" />;
+  }
+
+  return <SalesEditForm record={record} />;
+}
+
+function SalesEditForm({ record }: { record: Sale | undefined }) {
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const redirect = useRedirect();
@@ -74,7 +93,7 @@ export function SalesEdit() {
         <CardContent>
           <SimpleForm
             toolbar={<EditToolbar />}
-            onSubmit={onSubmit as SubmitHandler<any>}
+            onSubmit={onSubmit as SubmitHandler<Record<string, unknown>>}
             record={record}
           >
             <SaleEditTitle />

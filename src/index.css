@@ -309,6 +309,275 @@ input[type="time"] {
     border-color: color-mix(in oklab, var(--nora-brand) 30%, var(--border));
   }
 
+  .nora-kanban-scroll {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding-bottom: 1rem;
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent)
+      color-mix(in oklab, var(--muted) 70%, transparent);
+  }
+
+  .nora-kanban-scroll::-webkit-scrollbar {
+    height: 16px;
+  }
+
+  .nora-kanban-scroll::-webkit-scrollbar-track {
+    background: color-mix(in oklab, var(--muted) 55%, transparent);
+    border-radius: 9999px;
+    margin-inline: 0.25rem;
+  }
+
+  .nora-kanban-scroll::-webkit-scrollbar-thumb {
+    min-width: 3rem;
+    background-color: color-mix(in oklab, var(--muted-foreground) 50%, var(--border));
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .nora-kanban-scroll::-webkit-scrollbar-thumb:hover,
+  .nora-kanban-scroll::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in oklab, var(--nora-brand) 55%, var(--muted-foreground));
+  }
+
+  .nora-kanban-board {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(280px, 320px);
+    gap: 1.25rem;
+    width: max-content;
+    min-width: 100%;
+    align-items: start;
+  }
+
+  .nora-kanban-column {
+    min-width: 280px;
+    max-width: 320px;
+    width: 100%;
+  }
+
+  .nora-kanban-column-header {
+    @apply rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm;
+  }
+
+  .nora-kanban-column-title {
+    @apply text-[17px] font-semibold leading-snug text-foreground;
+  }
+
+  .nora-kanban-column-count {
+    @apply text-base font-bold tabular-nums text-foreground/80 leading-none pt-0.5;
+  }
+
+  .nora-kanban-column-meta {
+    @apply text-sm leading-snug text-muted-foreground;
+  }
+
+  .nora-kanban-column-gap {
+    height: 1rem;
+    flex-shrink: 0;
+  }
+
+  .nora-focus-board-scroll {
+    width: 100%;
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent)
+      color-mix(in oklab, var(--muted) 70%, transparent);
+  }
+
+  .nora-focus-board-scroll::-webkit-scrollbar {
+    height: 14px;
+  }
+
+  .nora-focus-column {
+    width: 100%;
+  }
+
+  .nora-kanban-toolbar-sticky {
+    @apply sticky top-0 z-20 bg-background/95 backdrop-blur-sm pb-3 -mx-1 px-1;
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  }
+
+  .nora-business-id-badge {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  .nora-business-id-sm {
+    @apply px-2.5 py-1 text-[14px] leading-none;
+  }
+
+  .nora-business-id-md {
+    @apply px-3 py-1.5 text-[15px] leading-none;
+  }
+
+  .nora-business-id-lg {
+    @apply px-3.5 py-2 text-base leading-none;
+  }
+
+  .nora-business-id-case {
+    border-color: color-mix(in oklab, var(--nora-brand) 28%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-brand) 7%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-business-id-customer {
+    border-color: color-mix(in oklab, var(--border) 90%, transparent);
+    background-color: color-mix(in oklab, var(--muted) 80%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-deal-card-title {
+    @apply text-[17px] font-semibold text-foreground;
+  }
+
+  .nora-deal-card-customer {
+    @apply text-[15px] text-muted-foreground;
+  }
+
+  .nora-deal-card-meta {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .nora-deal-card-today {
+    border-color: color-mix(in oklab, var(--nora-brand) 35%, var(--border));
+  }
+
+  .nora-urgency-badge {
+    @apply inline-flex w-fit max-w-full items-center gap-2 rounded-lg border px-3 py-2 text-[15px] font-semibold leading-snug;
+  }
+
+  .nora-urgency-icon-sm {
+    @apply size-4;
+  }
+
+  .nora-urgency-overdue {
+    border-color: color-mix(in oklab, var(--nora-brand) 55%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-brand) 12%, var(--card));
+    color: var(--nora-brand);
+  }
+
+  .nora-urgency-today {
+    border-color: color-mix(in oklab, var(--nora-brand) 40%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-brand) 8%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-urgency-upcoming {
+    border-color: var(--border);
+    background-color: color-mix(in oklab, var(--muted) 70%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-urgency-alert {
+    @apply flex items-start gap-3 rounded-xl border px-4 py-4;
+  }
+
+  .nora-urgency-alert-overdue {
+    border-color: color-mix(in oklab, var(--nora-brand) 55%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-brand) 10%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-urgency-alert-today {
+    border-color: color-mix(in oklab, var(--nora-brand) 40%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-brand) 7%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-urgency-alert-title {
+    @apply text-base font-semibold leading-snug;
+  }
+
+  .nora-urgency-alert-date {
+    @apply text-sm text-muted-foreground mt-1;
+  }
+
+  .nora-urgency-icon {
+    @apply size-6 shrink-0;
+    color: var(--nora-brand);
+  }
+
+  .nora-deal-dialog {
+    width: min(1100px, 96vw) !important;
+    max-width: min(1100px, 96vw) !important;
+    max-height: 94vh !important;
+    height: 94vh;
+    padding: 0 !important;
+    gap: 0 !important;
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden !important;
+  }
+
+  .nora-detail-scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+    scrollbar-width: auto;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent)
+      color-mix(in oklab, var(--muted) 70%, transparent);
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar {
+    width: 14px;
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-track {
+    background: color-mix(in oklab, var(--muted) 55%, transparent);
+    border-radius: 9999px;
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--muted-foreground) 50%, var(--border));
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-thumb:hover,
+  .nora-detail-scroll::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in oklab, var(--nora-brand) 45%, var(--muted-foreground));
+  }
+
+  .nora-deal-dialog-header {
+    @apply sticky top-0 z-10 flex flex-col gap-4 border-b bg-background/95 px-4 py-4 backdrop-blur-sm sm:flex-row sm:items-start sm:justify-between md:px-6 md:py-5;
+  }
+
+  .nora-deal-dialog-title {
+    @apply text-2xl font-semibold leading-tight tracking-tight md:text-[1.75rem];
+  }
+
+  .nora-deal-dialog-customer {
+    @apply text-base text-muted-foreground;
+  }
+
+  .nora-section-card {
+    @apply rounded-xl border bg-card p-4 md:p-5 shadow-sm;
+  }
+
+  .nora-section-title {
+    @apply text-[17px] font-semibold tracking-tight text-foreground mb-4;
+  }
+
+  .nora-section-body {
+    @apply text-[15px] leading-relaxed;
+  }
+
+  .nora-detail-label {
+    @apply text-sm font-medium text-muted-foreground;
+  }
+
+  .nora-detail-value {
+    @apply text-base font-medium text-foreground;
+  }
+
+  .nora-detail-body {
+    @apply text-[15px] leading-relaxed text-foreground;
+  }
+
   .nora-landing {
     @apply text-[15px] md:text-base;
   }

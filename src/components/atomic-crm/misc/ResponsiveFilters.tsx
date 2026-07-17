@@ -26,6 +26,7 @@ export const ResponsiveFilters = ({
   searchInput?: Partial<SearchInputProps>;
 }) => {
   const translate = useTranslate();
+  const hasSearch = searchInput !== undefined;
   const {
     source = "q",
     className,
@@ -34,19 +35,82 @@ export const ResponsiveFilters = ({
   const isMobile = useIsMobile();
   const { setFilters, filterValues } = useListContext();
 
-  // Count active filters excluding the search filter
   const activeFiltersCount = Object.entries(filterValues || {}).filter(
-    ([key]) => key !== source,
+    ([key]) => key !== (hasSearch ? source : "__none__"),
   ).length;
 
   const handleClearFilters = () => {
-    // Preserve only the search filter
-    const searchValue = filterValues[source];
-    const preservedFilters = searchValue ? { [source]: searchValue } : {};
-    setFilters(preservedFilters, []);
+    if (hasSearch) {
+      const searchValue = filterValues[source];
+      const preservedFilters = searchValue ? { [source]: searchValue } : {};
+      setFilters(preservedFilters, []);
+      return;
+    }
+    setFilters({}, []);
   };
 
+  const filterSheet = (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative size-9"
+          aria-label={translate("ra.action.add_filter")}
+        >
+          <Filter className="size-5" />
+          {activeFiltersCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center"
+            >
+              {activeFiltersCount}
+            </Badge>
+          )}
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="bottom" className="h-dvh p-4 flex flex-col">
+        <SheetHeader className="-p-4">
+          <SheetTitle>
+            <h1 className="text-xl font-semibold">
+              {translate("ra.action.add_filter")}
+            </h1>
+          </SheetTitle>
+        </SheetHeader>
+        <div className="flex-1 overflow-y-auto flex flex-col gap-3 pb-4">
+          {children}
+        </div>
+        <SheetFooter className="-p-4 relative">
+          <div className="absolute -top-12 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+          <div className="flex w-full gap-4">
+            <SheetClose asChild>
+              <Button
+                onClick={handleClearFilters}
+                type="button"
+                variant="secondary"
+                className="flex-1"
+              >
+                {translate("ra.navigation.clear_filters", {
+                  _: "Clear filters",
+                })}
+              </Button>
+            </SheetClose>
+            <SheetClose asChild>
+              <Button className="flex-1">
+                {translate("ra.action.confirm")}
+              </Button>
+            </SheetClose>
+          </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+
   if (isMobile) {
+    if (!hasSearch) {
+      return filterSheet;
+    }
+
     return (
       <div className="flex flex-1 gap-2">
         <FilterLiveForm formComponent={FlexForm}>
@@ -56,69 +120,18 @@ export const ResponsiveFilters = ({
             {...otherSearchInputProps}
           />
         </FilterLiveForm>
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="relative size-9"
-              aria-label={translate("ra.action.add_filter")}
-            >
-              <Filter className="size-5" />
-              {activeFiltersCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center"
-                >
-                  {activeFiltersCount}
-                </Badge>
-              )}
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="bottom" className="h-dvh p-4 flex flex-col">
-            <SheetHeader className="-p-4">
-              <SheetTitle>
-                <h1 className="text-xl font-semibold">
-                  {translate("ra.action.add_filter")}
-                </h1>
-              </SheetTitle>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto flex flex-col gap-3 pb-4">
-              {children}
-            </div>
-            <SheetFooter className="-p-4 relative">
-              <div className="absolute -top-12 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none" />
-              <div className="flex w-full gap-4">
-                <SheetClose asChild>
-                  <Button
-                    onClick={handleClearFilters}
-                    type="button"
-                    variant="secondary"
-                    className="flex-1"
-                  >
-                    {translate("ra.navigation.clear_filters", {
-                      _: "Clear filters",
-                    })}
-                  </Button>
-                </SheetClose>
-                <SheetClose asChild>
-                  <Button className="flex-1">
-                    {translate("ra.action.confirm")}
-                  </Button>
-                </SheetClose>
-              </div>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
+        {filterSheet}
       </div>
     );
   }
 
   return (
     <div className="w-52 min-w-52 order-first pt-0.75 flex flex-col gap-4">
-      <FilterLiveForm>
-        <SearchInput source={source} {...otherSearchInputProps} />
-      </FilterLiveForm>
+      {hasSearch ? (
+        <FilterLiveForm>
+          <SearchInput source={source} {...otherSearchInputProps} />
+        </FilterLiveForm>
+      ) : null}
       {children}
     </div>
   );

@@ -49,9 +49,7 @@ grant all on function public.handle_update_user() to anon;
 grant all on function public.handle_update_user() to authenticated;
 grant all on function public.handle_update_user() to service_role;
 
-grant all on function public.is_admin() to anon;
-grant all on function public.is_admin() to authenticated;
-grant all on function public.is_admin() to service_role;
+-- v0.4b.1: RBAC helpers in nora_private — see migration 20260714140000 for EXECUTE grants.
 
 grant all on function public.lowercase_email_jsonb() to anon;
 grant all on function public.lowercase_email_jsonb() to authenticated;
@@ -118,6 +116,10 @@ grant all on table public.companies_summary to service_role;
 grant all on table public.contacts_summary to anon;
 grant all on table public.contacts_summary to authenticated;
 grant all on table public.contacts_summary to service_role;
+
+grant select on table public.sales_directory to authenticated;
+grant select on table public.sales_directory to service_role;
+revoke all on table public.sales_directory from anon;
 
 grant all on table public.init_state to anon;
 grant all on table public.init_state to authenticated;
@@ -218,9 +220,43 @@ grant all on table public.saved_text_snippets to anon;
 grant all on table public.saved_text_snippets to authenticated;
 grant all on table public.saved_text_snippets to service_role;
 
-grant select on table public.audit_events to anon;
 grant select on table public.audit_events to authenticated;
+grant insert on table public.audit_events to nora_audit_writer;
 grant all on table public.audit_events to service_role;
+
+-- v0.3l: nora_audit_writer capability (role created in migration 20260715120000)
+grant usage on schema public to nora_audit_writer;
+grant usage on schema nora_private to nora_audit_writer;
+grant create on schema nora_private to nora_audit_writer;
+grant insert on table public.audit_events to nora_audit_writer;
+grant select on table public.sales to nora_audit_writer;
+grant select on table public.companies to nora_audit_writer;
+grant select on table public.deals to nora_audit_writer;
+grant nora_audit_writer to postgres;
+
+revoke all on function nora_private.write_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, bigint, bigint,
+    jsonb, jsonb, text, text, text, text
+) from public;
+revoke all on function nora_private.write_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, bigint, bigint,
+    jsonb, jsonb, text, text, text, text
+) from anon;
+revoke all on function nora_private.write_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, bigint, bigint,
+    jsonb, jsonb, text, text, text, text
+) from authenticated;
+revoke all on function nora_private.write_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, bigint, bigint,
+    jsonb, jsonb, text, text, text, text
+) from service_role;
+grant execute on function nora_private.write_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, bigint, bigint,
+    jsonb, jsonb, text, text, text, text
+) to postgres;
+
+grant execute on function nora_private.resolve_audit_actor() to postgres;
+grant execute on function nora_private.resolve_audit_actor() to nora_audit_writer;
 
 revoke all on function public.insert_audit_event(
     text, text, uuid, bigint, bigint, bigint, uuid, uuid, jsonb, jsonb, jsonb
@@ -251,9 +287,56 @@ grant all on function public.prevent_audit_mutation() to anon;
 grant all on function public.prevent_audit_mutation() to authenticated;
 grant all on function public.prevent_audit_mutation() to service_role;
 
-grant all on function public.audit_deal_stage_change() to anon;
-grant all on function public.audit_deal_stage_change() to authenticated;
-grant all on function public.audit_deal_stage_change() to service_role;
+grant all on function public.audit_company_row() to anon;
+grant all on function public.audit_company_row() to authenticated;
+grant all on function public.audit_company_row() to service_role;
+
+grant all on function public.audit_contact_row() to anon;
+grant all on function public.audit_contact_row() to authenticated;
+grant all on function public.audit_contact_row() to service_role;
+
+grant all on function public.audit_deal_row() to anon;
+grant all on function public.audit_deal_row() to authenticated;
+grant all on function public.audit_deal_row() to service_role;
+
+grant all on function public.audit_task_row() to anon;
+grant all on function public.audit_task_row() to authenticated;
+grant all on function public.audit_task_row() to service_role;
+
+grant all on function public.audit_contact_note_row() to anon;
+grant all on function public.audit_contact_note_row() to authenticated;
+grant all on function public.audit_contact_note_row() to service_role;
+
+grant all on function public.audit_deal_note_row() to anon;
+grant all on function public.audit_deal_note_row() to authenticated;
+grant all on function public.audit_deal_note_row() to service_role;
+
+grant all on function public.audit_sales_privilege_change() to anon;
+grant all on function public.audit_sales_privilege_change() to authenticated;
+grant all on function public.audit_sales_privilege_change() to service_role;
+
+revoke all on function public.get_entity_audit_events(text, bigint, integer, timestamptz) from public;
+revoke all on function public.get_entity_audit_events(text, bigint, integer, timestamptz) from anon;
+grant execute on function public.get_entity_audit_events(text, bigint, integer, timestamptz) to authenticated;
+grant execute on function public.get_entity_audit_events(text, bigint, integer, timestamptz) to service_role;
+
+revoke all on function public.get_global_audit_events(
+    integer, timestamptz, text, text, bigint, timestamptz, timestamptz, text
+) from public;
+revoke all on function public.get_global_audit_events(
+    integer, timestamptz, text, text, bigint, timestamptz, timestamptz, text
+) from anon;
+grant execute on function public.get_global_audit_events(
+    integer, timestamptz, text, text, bigint, timestamptz, timestamptz, text
+) to authenticated;
+grant execute on function public.get_global_audit_events(
+    integer, timestamptz, text, text, bigint, timestamptz, timestamptz, text
+) to service_role;
+
+revoke all on function public.get_audit_storage_stats() from public;
+revoke all on function public.get_audit_storage_stats() from anon;
+grant execute on function public.get_audit_storage_stats() to authenticated;
+grant execute on function public.get_audit_storage_stats() to service_role;
 
 grant all on function public.audit_checklist_run_changes() to anon;
 grant all on function public.audit_checklist_run_changes() to authenticated;
@@ -287,3 +370,17 @@ alter default privileges for role postgres in schema public grant all on tables 
 alter default privileges for role postgres in schema public grant all on tables to anon;
 alter default privileges for role postgres in schema public grant all on tables to authenticated;
 alter default privileges for role postgres in schema public grant all on tables to service_role;
+
+-- Google Calendar v0.4c.1
+revoke all on table public.google_calendar_connections from anon;
+revoke insert, update, delete on table public.google_calendar_connections from authenticated;
+grant select on table public.google_calendar_connections to authenticated;
+grant all on table public.google_calendar_connections to service_role;
+
+revoke all on table public.google_calendar_events from anon;
+revoke insert, update, delete on table public.google_calendar_events from authenticated;
+grant select on table public.google_calendar_events to authenticated;
+grant all on table public.google_calendar_events to service_role;
+
+grant select, insert, update on table public.google_calendar_connections to nora_calendar_writer;
+grant select, insert, update, delete on table public.google_calendar_events to nora_calendar_writer;

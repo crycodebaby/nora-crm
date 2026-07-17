@@ -1,9 +1,10 @@
 import { DragDropContext, type OnDragEndResponder } from "@hello-pangea/dnd";
 import isEqual from "lodash/isEqual";
-import { useDataProvider, useListContext, useTranslate, type DataProvider } from "ra-core";
+import { useDataProvider, useCanAccess, useListContext, useTranslate, type DataProvider } from "ra-core";
 import { useEffect, useState } from "react";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
+import { useHorizontalWheelScroll } from "../misc/useHorizontalWheelScroll";
 import type { Deal } from "../types";
 import { DealColumn } from "./DealColumn";
 import {
@@ -17,6 +18,7 @@ import type { DealsByStage } from "./stages";
 import { getDealsByStage } from "./stages";
 import { useDealKanbanView } from "./useDealKanbanView";
 import { useShowAllDealStages } from "./useShowAllDealStages";
+import { NoraPageLoading } from "../misc/NoraPageLoading";
 
 export const DealListContent = () => {
   const { dealStages } = useConfigurationContext();
@@ -25,6 +27,8 @@ export const DealListContent = () => {
   const translate = useTranslate();
   const { showAllStages, toggleShowAllStages } = useShowAllDealStages();
   const { kanbanView, setKanbanView } = useDealKanbanView();
+  const kanbanScrollRef = useHorizontalWheelScroll<HTMLDivElement>();
+  const { canAccess: canEditDeals } = useCanAccess({ resource: "deals", action: "edit" });
 
   const filteredDeals = filterDealsByKanbanView(unorderedDeals ?? [], kanbanView);
 
@@ -42,7 +46,7 @@ export const DealListContent = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unorderedDeals, kanbanView]);
 
-  if (isPending) return null;
+  if (isPending) return <NoraPageLoading variant="kanban" />;
 
   const visibleStages = getVisibleStagesForKanbanView(
     kanbanView,
@@ -66,6 +70,7 @@ export const DealListContent = () => {
         : null;
 
   const onDragEnd: OnDragEndResponder = (result) => {
+    if (!canEditDeals) return;
     const { destination, source } = result;
 
     if (!destination) {
@@ -106,15 +111,17 @@ export const DealListContent = () => {
   };
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex flex-col gap-2 w-full">
-        <DealKanbanToolbar
-          kanbanView={kanbanView}
-          onKanbanViewChange={setKanbanView}
-          showAllStages={showAllStages}
-          onToggleShowAllStages={toggleShowAllStages}
-          hiddenEmptyStageCount={hiddenEmptyStageCount}
-        />
+    <DragDropContext onDragEnd={canEditDeals ? onDragEnd : () => undefined}>
+      <div className="flex flex-col gap-2 w-full min-w-0">
+        <div className="nora-kanban-toolbar-sticky">
+          <DealKanbanToolbar
+            kanbanView={kanbanView}
+            onKanbanViewChange={setKanbanView}
+            showAllStages={showAllStages}
+            onToggleShowAllStages={toggleShowAllStages}
+            hiddenEmptyStageCount={hiddenEmptyStageCount}
+          />
+        </div>
         {filteredDeals.length === 0 && categoryEmptyMessageKey ? (
           <p className="text-center text-muted-foreground py-16 text-base nora-readable mx-auto">
             {translate(categoryEmptyMessageKey)}
@@ -124,14 +131,16 @@ export const DealListContent = () => {
             {translate("resources.deals.kanban.no_deals")}
           </p>
         ) : (
-          <div className="flex gap-5 overflow-x-auto pb-4 -mx-1 px-1">
-            {visibleStages.map((stage) => (
-              <DealColumn
-                stage={stage.value}
-                deals={dealsByStage[stage.value]}
-                key={stage.value}
-              />
-            ))}
+          <div className="nora-kanban-scroll" ref={kanbanScrollRef}>
+            <div className="nora-kanban-board">
+              {visibleStages.map((stage) => (
+                <DealColumn
+                  stage={stage.value}
+                  deals={dealsByStage[stage.value]}
+                  key={stage.value}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

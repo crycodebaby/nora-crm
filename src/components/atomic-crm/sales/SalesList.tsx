@@ -1,4 +1,4 @@
-import { useRecordContext, useTranslate } from "ra-core";
+import { useRecordContext, useTranslate, CanAccess } from "ra-core";
 import { CreateButton } from "@/components/admin/create-button";
 import { DataTable } from "@/components/admin/data-table";
 import { ExportButton } from "@/components/admin/export-button";
@@ -7,11 +7,14 @@ import { SearchInput } from "@/components/admin/search-input";
 import { Badge } from "@/components/ui/badge";
 
 import { TopToolbar } from "../layout/TopToolbar";
+import { NoraListBoundary } from "../misc/NoraListBoundary";
 
 const SalesListActions = () => (
   <TopToolbar>
     <ExportButton />
-    <CreateButton label="resources.sales.action.new" />
+    <CanAccess resource="sales" action="create">
+      <CreateButton label="resources.sales.action.new" />
+    </CanAccess>
   </TopToolbar>
 );
 
@@ -50,14 +53,16 @@ export function SalesList() {
       actions={<SalesListActions />}
       sort={{ field: "first_name", order: "ASC" }}
     >
-      <DataTable>
-        <DataTable.Col source="first_name" />
-        <DataTable.Col source="last_name" />
-        <DataTable.Col source="email" />
-        <DataTable.Col label={false}>
-          <OptionsField />
-        </DataTable.Col>
-      </DataTable>
+      <NoraListBoundary>
+        <DataTable>
+          <DataTable.Col source="first_name" />
+          <DataTable.Col source="last_name" />
+          <DataTable.Col source="email" />
+          <DataTable.Col label={false}>
+            <OptionsField />
+          </DataTable.Col>
+        </DataTable>
+      </NoraListBoundary>
     </List>
   );
 }

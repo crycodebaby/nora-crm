@@ -156,6 +156,10 @@ Statuswechsel in Vorgang-Detail/Bearbeitung bleibt unverändert (Dropdown aller 
 | Mobile / Tablet | Such-Icon in `MobileNavigation` → Vollbild-Overlay |
 | Fokus | `.nora-search-input` — Nora-Rot bei Fokus |
 | Treffer | `.nora-touch-target`, `.nora-list-title` / `.nora-muted` |
+| Primär | Globale Suche ist die **einzige** allgemeine Textsuche — keine redundante Listen-Suche auf `/kontakte` oder `/kunden` |
+| Technik | `type="search"`, `autoComplete="off"`, neutrale IDs `nora-global-search` (kein `card`/`wallet`) |
+
+Listen-Seiten (`/kontakte`, `/kunden`, …) nutzen nur **spezifische Filter** (Kundentyp, Betreuer, Status, Zeitraum, Markierungen, Aufgaben) — keine zweite Volltext-Suchleiste.
 
 ## Hotboard (Welle v0.3b)
 
@@ -167,21 +171,40 @@ Operative Startübersicht nach Login — „Was ist heute wichtig?“
 | Layout | Responsives Grid: 1 Spalte (Mobile), 2 (`md`), 3 (`xl`); max. 5 Einträge pro Bereich |
 | Karten | `.nora-card`, `.nora-touch-target`, `.nora-list-title`, `.nora-muted` |
 | Leer | Ruhige Meldung „Keine Einträge“ pro Bereich (Bereich bleibt sichtbar) |
-| Hinweis | Fußzeile: echte Termine (Aufmaß/Montage) folgen mit Terminmodell — nicht über Nachfassdatum |
+| Hinweis | Fußzeile: echte Termine (Aufmaß/Montage) folgen mit Terminmodell — nicht über den Kontakttermin |
 
 **Bereiche (Daten aus vorhandenen Feldern):**
 
 | Bereich | Datenquelle |
 |---------|-------------|
-| Heute nachfassen | `deals.expected_closing_date` heute/überfällig, nicht archiviert, nicht terminal |
+| Heute Kunden kontaktieren | `deals.expected_closing_date` heute/überfällig, nicht archiviert, nicht terminal |
 | Neue Anfragen | `deals.stage = neue-anfrage` |
 | Wartet auf Hersteller | `deals.stage = wartet-auf-hersteller` |
-| Angebote nachfassen | `deals.stage` ∈ `angebot-gesendet`, `nachfassen` (ohne Duplikat zu „Heute nachfassen“) |
+| Rückmeldung zu Angeboten | `deals.stage` ∈ `angebot-gesendet`, `nachfassen` (ohne Duplikat zu „Heute Kunden kontaktieren“) |
 | Offene Aufgaben | `tasks` über `contact_id`, eigene Aufgaben (`sales_id`) |
 
 **Navigation:** Klick auf Vorgang → `/vorgaenge/:id/show`; Aufgabe → `/kontakte/:id/show` (Ansprechpartner).
 
 **Bewusst nicht:** „Heutige Termine“, „Montage heute“, „Aufmaß heute“ — kein Terminmodell, kein Google Kalender.
+
+## Hotboard Arbeitsboard (Welle v0.3j)
+
+Lesender Schnellzugriff auf aktuelle Vorgänge — **kein** Drag-and-drop, **keine** Statusänderung.
+
+| Element | Regel |
+|---------|--------|
+| Position | Direkt unter Hotboard-Kopf, vor den bestehenden Listen-Bereichen |
+| Titel | „Arbeitsboard“ + Link „Alle Vorgänge öffnen“ → `/vorgaenge` |
+| Spalten | Max. **2**: `neue-anfrage`, `nachfassen` (Label: „Rückmeldung ausstehend“) |
+| Karten | Max. **5** je Spalte; Gesamtzahl im Spaltenkopf; „Weitere X Vorgänge“ bei Overflow |
+| Sortierung | Überfällig → heute → nächster Kontakttermin → zuletzt erstellt |
+| Karteninhalt | VG-Nummer (`BusinessNumber`), Titel, Kunde, Dienstleistungsbereich, `NoraUrgencyBadge` (überfällig/heute), optional Auftragswert |
+| Klick | `/vorgaenge/:id/show` — bestehende Vorgangsakte |
+| Leer | „Keine neuen Anfragen“ / „Keine offenen Rückmeldungen“ (keine leere Kanban-Fläche) |
+| Desktop | Zwei gleichwertige Spalten (`lg:grid-cols-2`) |
+| Tablet/Mobile | Untereinander oder horizontal wischbar (`.nora-focus-board-scroll`, Mausrad via `useHorizontalWheelScroll`) |
+| Berechtigung | Lesen für admin/office/viewer — RLS bleibt autoritativ |
+| Logik | `hotboardUtils` — **keine** zweite Status-/Filterlogik; Drag-and-drop nur auf `/vorgaenge` |
 
 ## Vorgangs-Kanban / Fensterfilter (Welle v0.3c)
 
@@ -199,6 +222,33 @@ Schlanke **Ansichtsauswahl** in der Vorgangsübersicht — nicht dominant, touch
 | Kombination | „Alle Status anzeigen“ zeigt alle 8 Fenster-Spalten (auch leere); „Leere ausblenden“ nutzt bestehende Logik |
 
 **Kategorien:** `deals.category` — `fensterservice`, `hausmeisterdienst` (technische IDs aus `defaultDealCategories`).
+
+## Vorgangs-Kanban Layout (Welle v0.3h)
+
+| Element | Regel |
+|---------|--------|
+| Breite | `/vorgaenge` nutzt volle Viewport-Breite (`Layout` ohne `max-w-screen-xl`) |
+| Board | `.nora-kanban-board` — CSS Grid, `grid-auto-columns: minmax(280px, 320px)` |
+| Scroll | `.nora-kanban-scroll` — horizontales Scrollen bleibt; gestaltete Scrollleiste (Firefox + WebKit) |
+| Spalten | `.nora-kanban-column` — stabile Mindestbreite 280 px, max. 320 px; Karten volle Spaltenbreite |
+| Toolbar | `.nora-kanban-toolbar-sticky` — bleibt beim Scrollen oben sichtbar |
+| Spaltenkopf | `.nora-kanban-column-header` — klar abgesetzt; optional sticky unter Toolbar |
+| Karten | VG-Nummer als Badge, Titel dominant, Kunde sekundär, Kategorie/Wert gedämpft |
+| Terminologie | Status-ID `nachfassen` bleibt; Anzeige „Rückmeldung ausstehend“; Kontakttermin statt „Nachfassen“ |
+
+## Barrierefreies Kanban und Vorgangsakte (Welle v0.3i)
+
+| Element | Regel |
+|---------|--------|
+| Spaltenkopf | Eigene Box mit Status (17 px), Anzahl, optional Auftragswert; `nora-kanban-column-gap` (16 px) vor Karten — kein Sticky-Overlap |
+| Business-ID | `BusinessNumber` — KD/VG als Badge 14–16 px (Kanban), größer im Detail; Nora-Akzent-Outline |
+| Dringlichkeit | `NoraUrgencyBadge` — Icon + Text; heute/überfällig deutlich; Farbe nicht allein |
+| Kanban-Scroll | `.nora-kanban-scroll` — 16 px Höhe, greifbarer Thumb; Mausrad horizontal via `useHorizontalWheelScroll` |
+| Vorgangsdetail | `.nora-deal-dialog` — `min(1100px, 96vw)`, `.nora-detail-scroll` — 14 px vertikale Scrollbar |
+| Abschnitte | `NoraSectionCard` — Übersicht, Ansprechpartner, Beschreibung, Aufgaben, Checkliste, Notizen |
+| Typografie | Grundtext 15–16 px, Kartentitel 17 px, Detailtitel 24–28 px, Metadaten min. 13–14 px |
+| Datum/Zeit | `noraDateTime.ts` — `de-DE`, z. B. `14. Juli 2026`, `Gestern um 17:13 Uhr` |
+| Icons | Kein dekoratives Einzelbuchstaben-Avatar in Vorgangskarten; Firmenname statt Buchstabe in Notizen |
 
 ## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
 
@@ -225,6 +275,47 @@ Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
 | Limit | 5 Einträge |
 | Demo | Bereich komplett ausgeblendet (`VITE_IS_DEMO`) |
 | Akzent | Kein Nora-Rot — nur ruhige `text-muted-foreground` |
+
+## Schnellerfassung (Welle v0.3e)
+
+Dialog-Wizard `QuickCaptureDialog` — Ziel: neue Anfrage in 60–90 Sekunden.
+
+| Element | Regel |
+|---------|--------|
+| Einstieg | Header „Schnellerfassung“ (ab `md`), Hotboard „Neue Anfrage erfassen“, Mobile Plus-Menü |
+| Schritte | Frei anklickbare Tabs (Kunde / Ansprechpartner / Vorgang) — siehe v0.3g |
+| Hierarchie | Vorgangstitel dominant; KD-/VG-Nummern nur in Suchtreffern klein |
+| Primäraktion | `nora-primary-action` nur „Speichern und Vorgang öffnen“ / Hotboard-CTA |
+| Dubletten | Siehe v0.3g — ein Bereich „Mögliche Kunden“ |
+| Demo | Volle FakeRest-Unterstützung über Standard-DataProvider |
+
+## Schnellerfassung UX (Welle v0.3g)
+
+Flexibles Arbeitsfenster für Telefon, WhatsApp, E-Mail und Notizen — nicht linear blockiert.
+
+| Element | Regel |
+|---------|--------|
+| Navigation | `QuickCaptureStepTabs` — jederzeit zwischen Kunde / Ansprechpartner / Vorgang wechseln |
+| Validierung | Erst beim Speichern; Fehler inline am betroffenen Tab |
+| Entwurf | `localStorage` Key `nora-quick-capture-draft` — beim Schließen speichern, beim Öffnen wiederherstellen |
+| Entwurf verwerfen | Ghost-Button löscht lokalen Entwurf |
+| Layout Desktop | `lg:max-w-4xl`, 2 Spalten: Eingabe links, „Mögliche Kunden“ rechts |
+| Layout Mobile | Einspaltig, volle Breite bei Aktionsbuttons |
+| KD-Nummer | `BusinessNumber variant="badge"` — kleiner als Kundenname, mit Abstand |
+
+## Kundenvorschläge (Welle v0.3g)
+
+Ein Bereich `PossibleCustomersPanel` — keine doppelte Trefferliste.
+
+| Element | Regel |
+|---------|--------|
+| Titel | „Mögliche Kunden“ |
+| Untertitel | „Wähle einen bestehenden Kunden aus oder lege bewusst einen neuen an.“ |
+| Kandidaten | Max. 5, je Kunde einmal; Merge aus Suche + Scoring (`mergeCustomerSearchResults`) |
+| Karte | Badge KD-Nummer, Name dominant, Sekundärinfos, Match-Chips |
+| Aktion | „Diesen Kunden verwenden“ (outline, Desktop nicht volle Breite) |
+| Sekundär | „Als neuen Kunden erfassen“ unter der Liste |
+| Kein Auto-Merge | Nutzer wählt bewusst |
 
 ## Öffentliche Startseite (Welle 6a)
 
@@ -271,3 +362,40 @@ Bevorzugt verwenden:
 - Notiz
 - Daten aus Datei importieren
 - Daten herunterladen
+
+## Änderungshistorie / Audit (Welle v0.3l)
+
+Lesende Darstellung von `audit_events` — fachlich formatiert, kein technisches Log.
+
+| Element | Regel |
+|---------|--------|
+| Akten-Abschnitt | `EntityAuditHistory` in `CompanyShow`, `ContactShow`, `DealShow` — `NoraSectionCard`, Titel „Änderungshistorie“ |
+| Admin-Seite | `AuditPage` unter `/audit` — Filter (Entität, Ereignis, Akteur, KD/VG, Zeitraum), Speicherstatistik dezent |
+| Typografie | Grundtext 15–16 px (`.nora-page`); Metadaten `text-xs` / `text-sm`; konsistent mit Vorgangsakte |
+| Businessnummern | `BusinessNumber` in Filtern und Verknüpfungen — nicht rohe IDs |
+| Änderungsdetails | Accordion „X Änderungen anzeigen“; Feldlabels über `crm.audit.fields.*`; Werte über `auditFormatters` (Status, Datum, Währung) |
+| Notizen | Vorschau ≤80 Zeichen — **kein** Volltext-Dump, **kein** rohes JSON |
+| Leer | `NoraEmptyState` — „Noch keine Änderungen protokolliert“ |
+| Laden | `Spinner` zentriert; Admin-Seite zusätzlich `NoraPageLoading` |
+| Fehler | `NoraQueryError` mit manuellem „Erneut versuchen“ |
+| Pagination | „Weitere laden“ (Ghost-Button) in Akte und global |
+| Berechtigung | `CanAccess resource="audit_events"` — Abschnitt/Route nur wenn Rolle Zugriff hat |
+| Demo | synthetische Events (`source = demo`); fiktive Personen |
+
+**Nicht:** JSON-Rohdaten, `old_data`/`new_data` unformatiert, technische `event_type`-Strings ohne Übersetzung.
+
+## Rollenbewusste UI (v0.3k)
+
+- UI nutzt `CanAccess` / `NoraAccessActions` — **niemals** Ersatz für RLS.
+- **Lesemodus** (`NoraReadOnlyBanner`): ein Hinweis pro Seite im Layout, nicht auf jeder Karte.
+- Nicht erlaubte Aktionen **ausblenden**; erklärungsbedürftige Admin-Aktionen dürfen deaktiviert + Tooltip sein.
+- **Office:** Archivieren statt Löschen sichtbar; Delete-Buttons nur für Admin.
+- **Ladezustände:** Skeletons (`NoraPageLoading`) statt leerer Flächen.
+- **Leerzustände:** `NoraEmptyState`; Viewer ohne „Jetzt anlegen“-Aktion.
+- **Fehler:** `NoraQueryError` mit „Erneut versuchen“ — kein FakeRest-Fallback, keine Retry-Schleife.
+- **Ungespeicherte Änderungen:** Bestätigung beim Abbrechen (`NoraCancelButton`).
+- **Dialoge/Sheets (v0.3k.1):** `NoraDialogContent` / erweiterte `DialogContent` und `SheetContent` — X und Escape mit Dirty-Bestätigung, kein Schließen per Außenklick; Quick Capture speichert Draft beim Abbrechen (nur „Entwurf verwerfen“ löscht).
+- **Edit-Guards (v0.3k.1):** `NoraAccessGuard` auf Edit/Create-Routen; Viewer → Show, Sales/Import/Settings nur Admin.
+- **Fehler in Detail/Listen (v0.3k.1):** `NoraShowBoundary`, `NoraListBoundary`, Checklisten-Abschnitt mit `NoraQueryError`.
+- **Lesemodus-Banner:** kompakt (eine Zeile mobil, Hinweis ab `sm`).
+- **Demo-Rollensimulation (v0.3k.2):** `DemoRoleSwitcher` nur bei `VITE_IS_DEMO=true`; kanonische Session in `demoSession.ts`; Hinweis „simuliert nur die Oberfläche“.

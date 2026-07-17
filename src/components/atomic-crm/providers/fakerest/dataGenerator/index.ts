@@ -14,6 +14,14 @@ import type { Db } from "./types";
 export default (): Db => {
   const db = {} as Db;
   db.sales = generateSales(db);
+  db.sales_directory = db.sales
+    .filter((s) => !s.disabled)
+    .map(({ id, first_name, last_name, avatar }) => ({
+      id,
+      first_name,
+      last_name,
+      avatar,
+    }));
   db.tags = generateTags(db);
   db.companies = generateCompanies(db);
   db.contacts = generateContacts(db);

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
 import { Notification } from "@/components/admin/notification";
 import { useConfigurationContext } from "@/components/atomic-crm/root/ConfigurationContext.tsx";
+import { isNoraDemoMode } from "@/components/atomic-crm/misc/noraDemoMode";
+import { useFinalizeDemoLogin } from "@/components/atomic-crm/misc/useSwitchDemoRole";
 import { SSOAuthButton } from "./SSOAuthButton";
 import { AuthPageNav } from "./AuthPageNav";
 
@@ -31,6 +33,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const login = useLogin();
+  const finalizeDemoLogin = useFinalizeDemoLogin();
   const notify = useNotify();
   const translate = useTranslate();
 
@@ -69,7 +72,11 @@ export const LoginPage = (props: { redirectTo?: string }) => {
   const handleSubmit: SubmitHandler<FieldValues> = (values) => {
     setLoading(true);
     login(values, redirectTo)
-      .then(() => {
+      .then(async () => {
+        if (isNoraDemoMode) {
+          await finalizeDemoLogin(redirectTo);
+          return;
+        }
         setLoading(false);
       })
       .catch((error) => {
@@ -119,6 +126,11 @@ export const LoginPage = (props: { redirectTo?: string }) => {
               <h1 className="text-2xl font-semibold tracking-tight">
                 {translate("ra.auth.sign_in")}
               </h1>
+              {isNoraDemoMode ? (
+                <p className="text-sm text-muted-foreground">
+                  {translate("crm.demo.login_hint")}
+                </p>
+              ) : null}
             </div>
             {disableEmailPasswordAuthentication ? null : (
               <Form className="space-y-8" onSubmit={handleSubmit}>

@@ -172,3 +172,9 @@ verify_jwt = false
 verify_jwt = false
 [functions.mcp]
 verify_jwt = false
+[functions.calendar-connect-start]
+verify_jwt = false
+[functions.calendar-connect-callback]
+verify_jwt = false
+[functions.calendar-sync-manual]
+verify_jwt = false

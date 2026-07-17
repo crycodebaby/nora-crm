@@ -120,7 +120,10 @@ Nur bei belegtem Bedarf:
 | `manufacturer_status` | Wartet auf Hersteller, Lieferant, Ersatzteil |
 | `source_channel` | Google Ads, Website, Telefon, WhatsApp, Empfehlung |
 | `files` / `photos` | Fotos, PDF, Angebot, Aufmaß |
-| `appointments` | Termine Aufmaß/Montage mit `deal_id`, Start/Ende |
+| ~~`appointments`~~ | **verworfen** — stattdessen `google_calendar_events` (Cache); Google = System of Record — siehe `11-google-calendar-rbac.md` |
+| `google_calendar_connections` | Singleton-Verbindung zum einen Geschäftskalender (keine Tokens) |
+| `google_calendar_events` | Gespiegelte Google-Events + CRM-Verknüpfung (`origin`, `deal_id`, …) |
+| `sales.role` | `admin` \| `office` \| `viewer` — keine parallele Benutzertabelle |
 | `manufacturer_id` / `manufacturer_name` | Herstellerbezug am Vorgang (generisch, nicht Höning-spezifisch) |
 | `service_area_code` | `FENS` / `HAUS` / `IMMO` — Geschäftszweig, **nicht** Kunde — siehe `10-checklists-snippets-audit.md` |
 | `checklist_templates` / `checklist_runs` / `checklist_run_items` | modulare Checklisten — **relational, nicht JSONB-only** — **implementiert** (v0.3d2) |
@@ -192,6 +195,29 @@ Richtig:
 FK checklist_run_id in strukturierten Tabellen; Notiz optional als Kommentar am Punkt
 ```
 
+## RBAC- und RLS-Guardrails (Welle v0.4b / v0.4b.1)
+
+Details in `11-google-calendar-rbac.md`:
+
+- **`sales.role`** ist die führende Rollenquelle (`admin` | `office` | `viewer`)
+- **Interne Helper** in Schema `nora_private` — nicht in PostgREST-Schemas (`config.toml`: nur `public`)
+- **Öffentliche RPCs** in `public`: `set_sales_role_by_admin`, `start_checklist_run_from_template`
+- **`nora_private.safe_auth_uid()`** nur intern — `auth.uid()` wirft bei malformed JWT-sub; RLS-Helper nutzen safe reader
+- **Capability-Rolle `nora_role_manager`** (NOLOGIN, NOBYPASSRLS) — einziger Owner von `apply_sales_role_change`; kein GUC-Token-Modell (v0.4b.2)
+- **Testrolle `nora_rls_test`** nur lokal via `rbac_rls_setup.sql` — **nie** in Produktionsmigrationen
+- **`anon`:** kein Tabellen-GRANT auf CRM-Tabellen; RLS + Grants zusammen prüfen
+
+### sales-Datenexposition (v0.4b.2)
+
+| Ressource | Wer liest | Felder |
+|-----------|-----------|--------|
+| `public.sales_directory` | alle aktiven Rollen | `id`, `first_name`, `last_name`, `avatar` — Teamlisten, Betreuer-Auswahl |
+| `public.sales` | Admin: alle Zeilen; sonst nur eigene Zeile | vollständiges Profil inkl. `role`, `email`, `disabled` nur für Admin-Verwaltung / eigenes Profil |
+
+Direkte Data-API-Updates auf `role`, `disabled`, `administrator`, `user_id`, `email` bleiben blockiert (Trigger). Rollenänderung nur über `set_sales_role_by_admin` → `nora_private.apply_sales_role_change` (Owner `nora_role_manager`).
+
+Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` — exakt ein Admin unter Parallelität.
+
 ## Checklisten- und Audit-Guardrails (Welle 7b)
 
 Details in `10-checklists-snippets-audit.md`:
@@ -202,6 +228,41 @@ Details in `10-checklists-snippets-audit.md`:
 - keine getrennten Audit-Tabellen pro Bereich
 - Textbausteine persistent vor Plus/Minus-UI
 - Checklisten-Start nur über `start_checklist_run_from_template` — nicht manuell Run + Items per Client
+
+## Schnellerfassung (Welle v0.3e)
+
+- **Keine Migration** — nutzt `companies`, `contacts`, `deals`, optional `tasks`
+- **Quelle/Herkunft** vorerst in `deals.description` als Präfix `Quelle: …` — kein `source_channel`-Feld (später empfohlen)
+- **Keine Tags** für Quelle — vermeidet Datenmodell-Duplikate
+- **Dubletten** nur heuristisch (Name, Telefon, E-Mail) — keine KI
+- **Nicht atomar** — sequentielle Client-CREATEs; bei Fehler nach Kunde/Ansprechpartner Teilzustand möglich → später RPC empfohlen
+- **Keine** Gmail/WhatsApp/Google-Kalender-Integration — nur manuelle Quellen-Auswahl
+
+## Dubletten-Vorschläge (Welle v0.3f)
+
+- **Keine Migration** — nutzt bestehende `companies` / `contacts` über `performGlobalSearch`
+- **Kein Auto-Merge** — Vorschläge sind informativ; Nutzer wählt bewusst
+- **Zentrale Logik** in `duplicateCandidateUtils.ts`:
+  - `DuplicateSearchInput` — Eingabe für Schnellerfassung und später Lexware/CSV
+  - `scoreCompanyAsDuplicate` / `rankDuplicateCandidates` — deterministisches Scoring
+  - Gründe: Kundennummer (100), Telefon/E-Mail (90), ähnlicher Name (50), gleiche Stadt (+20 mit Name)
+  - Mindest-Score 50; max. 5 Kandidaten
+- **Abfrage-Effizienz** (`useDuplicateCandidateSearch`):
+  - Debounce 400 ms
+  - Suche erst ab sinnvoller Eingabe (`canSearchQuery`, ≥3 Zeichen Name, gültige E-Mail/Telefon)
+  - In-Memory-Cache pro Dialog-Session (`buildDuplicateSearchCacheKey`)
+  - Stale-Request-Guard (`latestRequestRef`)
+  - Keine parallele API-Schicht — nur `performGlobalSearch`
+- **Lexware-Import (später):** Import-Assistent liefert `DuplicateSearchInput` (Name, Telefon, E-Mail, PLZ, Stadt) + Kandidatenliste aus DB; gleiche `rankDuplicateCandidates`-Funktion. Grenzen: keine Fuzzy-Adressen, keine Dubletten über Ansprechpartner ohne Firmenbezug, keine phonetische Namenssuche.
+
+## Schnellerfassung UX (Welle v0.3g)
+
+- **Keine Migration** — Entwürfe nur lokal im Browser (`nora-quick-capture-draft` in `localStorage`)
+- **Kein serverseitiger Entwurf** in dieser Welle — später ersetzbar
+- **Freie Tab-Navigation** — keine Blockade durch unvollständige Felder zwischen Schritten
+- **Ein Kundenvorschlags-Bereich** — `mergeCustomerSearchResults` dedupliziert Suche und Scoring
+- **Kein Auto-Merge** — unverändert aus v0.3f
+- **Effiziente Suche** — ein Request über `useDuplicateCandidateSearch` (kein paralleler Fetch im Dialog)
 
 ## Fensterauftrag-Guardrails (Welle 7a)
 
@@ -261,7 +322,91 @@ Zapier/Make verbindet Drive, Keep und Gmail als Workflow-Engine
 Richtig:
 
 ```text
-Nora = System of Record; Google Maps/Kalender optional als Layer (später)
+Nora = System of Record für CRM; Google Kalender = System of Record für Termine
+```
+
+### Falle 22: Zweites Terminsystem in Nora
+
+Falsch:
+
+```text
+appointments-Tabelle als führende Terminquelle parallel zu Google Kalender
+```
+
+Richtig:
+
+```text
+google_calendar_events = Cache + Verknüpfung; Zeit/Titel/Ort führend in Google
+```
+
+### Falle 23: Private iCal-Adresse für Integration
+
+Falsch:
+
+```text
+iCal-URL des Geschäftskalenders in Nora speichern und periodisch abrufen
+```
+
+Richtig:
+
+```text
+Google Calendar API mit OAuth; Kalender-ID in google_calendar_connections
+```
+
+### Falle 24: Kalender-ID in UI-Komponenten
+
+Falsch:
+
+```text
+const CALENDAR_ID = "abc@group.calendar.google.com" in Hotboard.tsx
+```
+
+Richtig:
+
+```text
+Konfiguration aus DB/Edge Function; UI kennt nur Event-Datensätze
+```
+
+### Falle 25: Parallele Benutzerverwaltung für Rollen
+
+Falsch:
+
+```text
+Neue profiles- oder user_roles-Tabelle unabhängig von sales
+```
+
+Richtig:
+
+```text
+sales.role an bestehender CRM-Benutzertabelle; 1:1 zu auth.users
+```
+
+### Falle 26: OAuth-Tokens in CRM-Tabellen oder Audit
+
+Falsch:
+
+```text
+refresh_token in `google_calendar_connections`, `audit_events.metadata` oder Frontend — stattdessen `nora_private.google_calendar_oauth_secrets`
+```
+
+Richtig:
+
+```text
+Tokens nur in Edge Function Secrets / Vault; service_role niemals im Browser
+```
+
+### Falle 27: Google-Termine pauschal editierbar
+
+Falsch:
+
+```text
+Jeder authenticated-Nutzer darf jeden gespiegelten Termin ändern
+```
+
+Richtig:
+
+```text
+origin = google → read-only; origin = nora → office/admin mit Bestätigung beim Löschen
 ```
 
 ## Migrationsregel

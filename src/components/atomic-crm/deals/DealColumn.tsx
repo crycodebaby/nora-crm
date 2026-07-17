@@ -16,28 +16,42 @@ export const DealColumn = ({
   const totalAmount = sumDealAmounts(deals);
   const { dealStages, currency } = useConfigurationContext();
   const translate = useTranslate();
+  const stageLabel = findDealLabel(dealStages, stage);
 
   return (
-    <div className="flex-1 min-w-[16rem] max-w-[20rem] pb-8 shrink-0">
-      <div className="flex flex-col items-center gap-0.5 px-1">
-        <h3 className="text-base font-semibold tracking-tight text-center">
-          {findDealLabel(dealStages, stage)}
-        </h3>
+    <div className="nora-kanban-column flex flex-col shrink-0">
+      <header className="nora-kanban-column-header shrink-0">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="nora-kanban-column-title text-left flex-1 min-w-0">
+            {stageLabel}
+          </h3>
+          <span
+            className="nora-kanban-column-count shrink-0"
+            aria-label={translate("resources.deals.kanban.deal_count", {
+              smart_count: deals.length,
+            })}
+          >
+            {deals.length}
+          </span>
+        </div>
         {totalAmount > 0 ? (
-          <p className="nora-muted text-xs text-center">
+          <p className="nora-kanban-column-meta mt-2 text-left">
             {translate("resources.deals.kanban.order_value", {
               amount: formatDealAmount(totalAmount, currency),
             })}
           </p>
         ) : null}
-      </div>
+      </header>
+
+      <div className="nora-kanban-column-gap" aria-hidden />
+
       <Droppable droppableId={stage}>
         {(droppableProvided, snapshot) => (
           <div
             ref={droppableProvided.innerRef}
             {...droppableProvided.droppableProps}
-            className={`flex flex-col rounded-2xl mt-3 gap-3 ${
-              snapshot.isDraggingOver ? "bg-muted" : ""
+            className={`nora-kanban-column-cards flex flex-col gap-3 min-h-[4rem] ${
+              snapshot.isDraggingOver ? "bg-muted/50 rounded-xl" : ""
             }`}
           >
             {deals.map((deal, index) => (

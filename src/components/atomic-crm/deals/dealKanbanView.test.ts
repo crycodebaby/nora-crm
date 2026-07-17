@@ -12,7 +12,7 @@ const dealStages = [
   { value: "neue-anfrage", label: "Neue Anfrage" },
   { value: "kontaktiert", label: "Kontaktiert" },
   { value: "aufmass-geplant", label: "Aufmaß geplant" },
-  { value: "nachfassen", label: "Nachfassen" },
+  { value: "nachfassen", label: "Rückmeldung ausstehend" },
   { value: "abgeschlossen", label: "Abgeschlossen" },
 ];
 

@@ -4,7 +4,6 @@ import {
   useGetIdentity,
   useGetList,
   useListContext,
-  useTranslate,
 } from "ra-core";
 import { ToggleFilterButton } from "@/components/admin/toggle-filter-button";
 import { Badge } from "@/components/ui/badge";
@@ -20,18 +19,13 @@ export const ContactListFilter = () => {
   const { noteStatuses } = useConfigurationContext();
   const isMobile = useIsMobile();
   const { identity } = useGetIdentity();
-  const translate = useTranslate();
   const { data } = useGetList("tags", {
     pagination: { page: 1, perPage: 10 },
     sort: { field: "name", order: "ASC" },
   });
 
   return (
-    <ResponsiveFilters
-      searchInput={{
-        placeholder: translate("resources.contacts.filters.search"),
-      }}
-    >
+    <ResponsiveFilters>
       <FilterCategory
         label="resources.contacts.fields.last_seen"
         icon={<Clock />}

@@ -14,6 +14,8 @@ Bevor Code geändert wird, muss der Agent diese Datei und die referenzierten Dok
 6. `docs/nora/05-demo-data-guidelines.md`
 7. `docs/nora/06-decision-log.md`
 8. `docs/nora/07-agent-change-checklist.md`
+9. `docs/nora/11-google-calendar-rbac.md`
+10. `docs/nora/12-role-ux-acceptance.md` (Rollen-UX-Abnahmeprotokoll)
 
 Wenn eine Änderung fachliche Entscheidungen berührt, muss der Agent `docs/nora/06-decision-log.md` ergänzen oder einen neuen Decision-Eintrag vorschlagen.
 

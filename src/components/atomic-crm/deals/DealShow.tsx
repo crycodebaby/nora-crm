@@ -13,44 +13,59 @@ import {
   useTranslate,
   useUpdate,
 } from "ra-core";
-import { DeleteButton } from "@/components/admin/delete-button";
-import { EditButton } from "@/components/admin/edit-button";
+import { NoraDeleteButton, NoraEditButton } from "../misc/NoraAccessActions";
+import { CanAccess } from "ra-core";
 import { ReferenceArrayField } from "@/components/admin/reference-array-field";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 
-import { CompanyAvatar } from "../companies/CompanyAvatar";
 import { NoteCreate } from "../notes/NoteCreate";
 import { NotesIterator } from "../notes/NotesIterator";
 import { useGetSalesName } from "../sales/useGetSalesName";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
+import { NoraSectionCard } from "../misc/NoraSectionCard";
 import { ContactList } from "./ContactList";
 import { DealFollowUpBadge } from "./DealFollowUpBadge";
 import { DealProductionChecklistSection } from "../checklists/DealProductionChecklistSection";
 import { DealTasksSection } from "./DealTasksSection";
+import { EntityAuditHistory } from "../audit/EntityAuditHistory";
+import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
+import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import {
   findDealLabel,
   formatDealAmount,
   formatISODateString,
+  getFollowUpStatus,
   isDealTerminalStage,
 } from "./dealUtils";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
+  const { onCloseAutoFocus } = useDialogFocusReturn(open);
+
   const handleClose = () => {
     redirect("list", "deals");
   };
 
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="lg:max-w-4xl p-4 overflow-y-auto max-h-9/10 top-1/20 translate-y-0">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) handleClose();
+      }}
+    >
+      <DialogContent
+        className="nora-deal-dialog"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         {id ? (
           <ShowBase id={id}>
-            <DealShowContent />
+            <NoraShowBoundary>
+              <DealShowContent />
+            </NoraShowBoundary>
           </ShowBase>
         ) : null}
       </DialogContent>
@@ -69,127 +84,140 @@ const DealShowContent = () => {
     record.category;
   const stageLabel = findDealLabel(dealStages, record.stage);
   const showFollowUp = !isDealTerminalStage(record.stage);
+  const followUpStatus = showFollowUp
+    ? getFollowUpStatus(record.expected_closing_date)
+    : null;
   const salesName = useGetSalesName(record.sales_id);
 
   return (
-    <>
-      <div className="space-y-6">
-        {record.archived_at ? <ArchivedTitle /> : null}
+    <div className="nora-detail-scroll flex flex-col min-h-0 flex-1">
+      {record.archived_at ? <ArchivedTitle /> : null}
 
-        <div className="flex justify-between items-start gap-4">
-          <div className="flex items-start gap-4 min-w-0">
+      <header className="nora-deal-dialog-header shrink-0">
+        <div className="min-w-0 flex-1 space-y-2">
+          <BusinessNumber
+            value={record.case_number}
+            kind="case"
+            size="lg"
+            variant="badge"
+          />
+          <h2 className="nora-deal-dialog-title">{record.name}</h2>
+          <p className="nora-deal-dialog-customer">
             <ReferenceField
               source="company_id"
               reference="companies"
               link="show"
-            >
-              <CompanyAvatar />
-            </ReferenceField>
-            <div className="min-w-0">
-              <BusinessNumber value={record.case_number} />
-              <h2 className="text-2xl font-semibold tracking-tight">
-                {record.name}
-              </h2>
-              <span className="nora-muted text-sm mt-1 block">
-                <ReferenceField
-                  source="company_id"
-                  reference="companies"
-                  link="show"
-                />
-              </span>
-            </div>
-          </div>
-          <div className={`flex gap-2 shrink-0 ${record.archived_at ? "" : "pr-12"}`}>
-            {record.archived_at ? (
-              <>
-                <UnarchiveButton record={record} />
-                <DeleteButton />
-              </>
-            ) : (
-              <>
-                <ArchiveButton record={record} />
-                <EditButton />
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 nora-card p-4">
-          <DealFact
-            label={translate("resources.deals.fields.stage")}
-            value={stageLabel}
-          />
-          {record.category ? (
-            <DealFact
-              label={translate("resources.deals.fields.category")}
-              value={categoryLabel}
             />
-          ) : null}
-          <DealFact
-            label={translate("resources.deals.fields.expected_closing_date")}
-            value={
-              isValid(new Date(record.expected_closing_date))
-                ? formatISODateString(record.expected_closing_date)
-                : translate("resources.deals.invalid_date")
-            }
-            extra={
-              showFollowUp ? (
-                <DealFollowUpBadge dateString={record.expected_closing_date} />
-              ) : null
-            }
-          />
-          <DealFact
-            label={translate("resources.deals.fields.amount")}
-            value={formatDealAmount(record.amount, currency, {
-              notation: "compact",
-              minimumSignificantDigits: 3,
-            })}
-          />
-          <DealFact
-            label={translate("resources.deals.fields.sales_id")}
-            value={salesName ?? "—"}
+          </p>
+        </div>
+        <div
+          className={`flex flex-wrap gap-2 shrink-0 justify-end ${record.archived_at ? "" : "pr-10"}`}
+        >
+          {record.archived_at ? (
+            <>
+              <CanAccess resource="deals" action="edit">
+                <UnarchiveButton record={record} />
+              </CanAccess>
+              <NoraDeleteButton resource="deals" />
+            </>
+          ) : (
+            <>
+              <CanAccess resource="deals" action="edit">
+                <ArchiveButton record={record} />
+              </CanAccess>
+              <NoraEditButton resource="deals" />
+            </>
+          )}
+        </div>
+      </header>
+
+      {followUpStatus && (followUpStatus === "today" || followUpStatus === "overdue") ? (
+        <div className="px-4 md:px-6 pt-4 shrink-0">
+          <DealFollowUpBadge
+            dateString={record.expected_closing_date}
+            variant="alert"
+            showDate
           />
         </div>
+      ) : null}
 
-        {!!record.contact_ids?.length && (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold tracking-tight">
-              {translate("resources.deals.fields.contact_ids")}
-            </h3>
-            <ReferenceArrayField
-              source="contact_ids"
-              reference="contacts_summary"
+      <div className="px-4 md:px-6 py-6 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <NoraSectionCard title={translate("resources.deals.sections.overview")}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <DealFact
+                label={translate("resources.deals.fields.stage")}
+                value={stageLabel}
+              />
+              {record.category ? (
+                <DealFact
+                  label={translate("resources.deals.fields.category")}
+                  value={categoryLabel}
+                />
+              ) : null}
+              <DealFact
+                label={translate("resources.deals.fields.expected_closing_date")}
+                value={
+                  isValid(new Date(record.expected_closing_date))
+                    ? formatISODateString(record.expected_closing_date)
+                    : translate("resources.deals.invalid_date")
+                }
+                extra={
+                  showFollowUp && followUpStatus === "upcoming" ? (
+                    <DealFollowUpBadge
+                      dateString={record.expected_closing_date}
+                      variant="inline"
+                    />
+                  ) : null
+                }
+              />
+              <DealFact
+                label={translate("resources.deals.fields.amount")}
+                value={formatDealAmount(record.amount, currency, {
+                  notation: "compact",
+                  minimumSignificantDigits: 3,
+                })}
+              />
+              <DealFact
+                label={translate("resources.deals.fields.sales_id")}
+                value={salesName ?? "—"}
+              />
+            </div>
+          </NoraSectionCard>
+
+          {!!record.contact_ids?.length && (
+            <NoraSectionCard
+              title={translate("resources.deals.fields.contact_ids")}
             >
-              <ContactList />
-            </ReferenceArrayField>
-          </section>
-        )}
+              <ReferenceArrayField
+                source="contact_ids"
+                reference="contacts_summary"
+              >
+                <ContactList />
+              </ReferenceArrayField>
+            </NoraSectionCard>
+          )}
+        </div>
 
         {record.description ? (
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold tracking-tight">
-              {translate("resources.deals.fields.description")}
-            </h3>
-            <p className="nora-readable text-sm whitespace-pre-line">
+          <NoraSectionCard
+            title={translate("resources.deals.fields.description")}
+          >
+            <p className="nora-detail-body whitespace-pre-line">
               {record.description}
             </p>
-          </section>
+          </NoraSectionCard>
         ) : null}
 
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold tracking-tight">
-            {translate("resources.deals.tasks.title")}
-          </h3>
+        <NoraSectionCard title={translate("resources.deals.tasks.title")}>
           <DealTasksSection />
-        </section>
+        </NoraSectionCard>
 
         <DealProductionChecklistSection />
 
-        <section className="space-y-3">
-          <Separator />
-          <h3 className="text-sm font-semibold tracking-tight">
-            {translate("resources.notes.name", { smart_count: 2 })}
-          </h3>
+        <NoraSectionCard
+          title={translate("resources.notes.name", { smart_count: 2 })}
+        >
           <InfiniteListBase
             resource="deal_notes"
             filter={{ deal_id: record.id }}
@@ -197,13 +225,19 @@ const DealShowContent = () => {
             perPage={25}
             disableSyncWithLocation
             storeKey={false}
-            empty={<NoteCreate reference={"deals"} />}
+            empty={
+              <CanAccess resource="deal_notes" action="create">
+                <NoteCreate reference={"deals"} />
+              </CanAccess>
+            }
           >
             <NotesIterator reference="deals" />
           </InfiniteListBase>
-        </section>
+        </NoraSectionCard>
+
+        <EntityAuditHistory entityType="deal" entityId={Number(record.id)} />
       </div>
-    </>
+    </div>
   );
 };
 
@@ -218,11 +252,9 @@ const DealFact = ({
   extra?: React.ReactNode;
   children?: ReactNode;
 }) => (
-  <div className="flex flex-col gap-1">
-    <span className="text-xs text-muted-foreground tracking-wide uppercase">
-      {label}
-    </span>
-    <div className="text-sm font-medium flex flex-wrap items-center gap-2">
+  <div className="flex flex-col gap-1.5">
+    <span className="nora-detail-label">{label}</span>
+    <div className="nora-detail-value flex flex-wrap items-center gap-2">
       {children ?? value}
       {extra}
     </div>
@@ -232,7 +264,7 @@ const DealFact = ({
 const ArchivedTitle = () => {
   const translate = useTranslate();
   return (
-    <div className="bg-orange-500 px-6 py-4">
+    <div className="bg-orange-500 px-6 py-4 shrink-0">
       <h3 className="text-lg font-bold text-white">
         {translate("resources.deals.archived.title")}
       </h3>
@@ -275,11 +307,11 @@ const ArchiveButton = ({ record }: { record: Deal }) => {
   return (
     <Button
       onClick={handleClick}
-      size="sm"
+      size="lg"
       variant="outline"
-      className="flex items-center gap-2 h-9"
+      className="flex items-center gap-2 nora-touch-target"
     >
-      <Archive className="w-4 h-4" />
+      <Archive className="w-4 h-4" aria-hidden />
       {translate("resources.deals.archived.action")}
     </Button>
   );
@@ -316,11 +348,11 @@ const UnarchiveButton = ({ record }: { record: Deal }) => {
   return (
     <Button
       onClick={handleClick}
-      size="sm"
+      size="lg"
       variant="outline"
-      className="flex items-center gap-2 h-9"
+      className="flex items-center gap-2 nora-touch-target"
     >
-      <ArchiveRestore className="w-4 h-4" />
+      <ArchiveRestore className="w-4 h-4" aria-hidden />
       {translate("resources.deals.unarchived.action")}
     </Button>
   );

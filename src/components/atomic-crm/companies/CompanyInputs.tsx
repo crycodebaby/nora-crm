@@ -171,7 +171,7 @@ const CompanyAdditionalInformationInputs = () => {
       </ArrayInput>
       <ReferenceInput
         source="sales_id"
-        reference="sales"
+        reference="sales_directory"
         filter={{
           "disabled@neq": true,
         }}

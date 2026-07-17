@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import {
   useDataProvider,
+  useCanAccess,
   useGetIdentity,
   useGetList,
   useNotify,
@@ -20,6 +21,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import type { CrmDataProvider } from "../providers/types";
 import type { ChecklistRun, ChecklistRunItem, Deal } from "../types";
+import { NoraQueryError } from "../misc/NoraQueryError";
 import {
   FENS_PRODUCTION_RELEASE_TEMPLATE_CODE,
 } from "../types/checklists";
@@ -35,7 +37,7 @@ export const DealProductionChecklistSection = () => {
   const deal = useRecordContext<Deal>();
   const translate = useTranslate();
 
-  const { data: runs, isPending: runsPending } = useGetList<ChecklistRun>(
+  const { data: runs, isPending: runsPending, error: runsError, refetch: refetchRuns } = useGetList<ChecklistRun>(
     "checklist_runs",
     {
       filter: deal?.id ? { deal_id: deal.id } : {},
@@ -46,6 +48,15 @@ export const DealProductionChecklistSection = () => {
   );
 
   if (!deal) return null;
+
+  if (runsError && !isDemoMode) {
+    return (
+      <section className="space-y-3">
+        <ChecklistSectionHeader />
+        <NoraQueryError error={runsError} onRetry={() => refetchRuns()} />
+      </section>
+    );
+  }
 
   const hasAnyRuns = (runs?.length ?? 0) > 0;
   const showSection = shouldShowDealChecklistSection(
@@ -94,6 +105,10 @@ const DealProductionChecklistContent = ({
   runs: ChecklistRun[];
 }) => {
   const translate = useTranslate();
+  const { canAccess: canEditChecklist } = useCanAccess({
+    resource: "deals",
+    action: "edit",
+  });
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const refresh = useRefresh();
@@ -175,7 +190,7 @@ const DealProductionChecklistContent = ({
                 <DealProductionChecklistItem
                   key={runItem.id}
                   item={runItem}
-                  disabled={isLoading}
+                  disabled={isLoading || !canEditChecklist}
                 />
               ))}
             </ul>
@@ -186,7 +201,7 @@ const DealProductionChecklistContent = ({
               </div>
             ) : null}
           </>
-        ) : (
+        ) : canEditChecklist ? (
           <Button
             type="button"
             className="nora-primary-action nora-touch-target"
@@ -198,6 +213,10 @@ const DealProductionChecklistContent = ({
             ) : null}
             {translate("resources.deals.checklist.start")}
           </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {translate("resources.deals.checklist.not_started")}
+          </p>
         )}
       </div>
     </section>

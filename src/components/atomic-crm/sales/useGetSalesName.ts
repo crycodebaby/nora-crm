@@ -7,7 +7,7 @@ export const useGetSalesName = (
 ) => {
   const enabled = options?.enabled ?? id != null;
   const { data, error } = useGetManyAggregate(
-    "sales",
+    "sales_directory",
     { ids: id !== null ? [id] : undefined },
     { enabled },
   );

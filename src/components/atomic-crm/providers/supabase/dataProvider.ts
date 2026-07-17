@@ -20,8 +20,16 @@ import type {
   StartChecklistRunFromTemplateResult,
 } from "../../types/checklists";
 import { START_CHECKLIST_RUN_FROM_TEMPLATE_RPC } from "../../types/checklists";
+import type {
+  AuditStorageStats,
+  GetEntityAuditEventsParams,
+  GetEntityAuditEventsResult,
+  GetGlobalAuditEventsParams,
+  GetGlobalAuditEventsResult,
+} from "../../audit/auditTypes";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
+import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { ATTACHMENTS_BUCKET } from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
@@ -148,7 +156,7 @@ const getDataProviderWithCustomMethods = () => {
       id: Identifier,
       data: Partial<Omit<SalesFormData, "password">>,
     ) {
-      const { email, first_name, last_name, administrator, avatar, disabled } =
+      const { email, first_name, last_name, administrator, avatar, disabled, role } =
         data;
 
       const { data: updatedData, error } =
@@ -164,6 +172,7 @@ const getDataProviderWithCustomMethods = () => {
             administrator,
             disabled,
             avatar,
+            role,
           },
         });
 
@@ -264,6 +273,62 @@ const getDataProviderWithCustomMethods = () => {
         previousData: { id: 1 },
       });
       return data.config as ConfigurationContextValue;
+    },
+    async getEntityAuditEvents(
+      params: GetEntityAuditEventsParams,
+    ): Promise<GetEntityAuditEventsResult> {
+      const { data, error } = await getSupabaseClient().rpc(
+        "get_entity_audit_events",
+        {
+          p_entity_type: params.entityType,
+          p_entity_id: params.entityId,
+          p_limit: params.limit ?? 20,
+          p_before: params.before ?? null,
+        },
+      );
+
+      if (error) {
+        console.error("get_entity_audit_events.error", error);
+        throw error;
+      }
+
+      return data as GetEntityAuditEventsResult;
+    },
+    async getGlobalAuditEvents(
+      params: GetGlobalAuditEventsParams = {},
+    ): Promise<GetGlobalAuditEventsResult> {
+      const { data, error } = await getSupabaseClient().rpc(
+        "get_global_audit_events",
+        {
+          p_limit: params.limit ?? 50,
+          p_before: params.before ?? null,
+          p_entity_type: params.entityType ?? null,
+          p_event_type: params.eventType ?? null,
+          p_actor_sales_id: params.actorSalesId ?? null,
+          p_from: params.from ?? null,
+          p_to: params.to ?? null,
+          p_business_number: params.businessNumber ?? null,
+        },
+      );
+
+      if (error) {
+        console.error("get_global_audit_events.error", error);
+        throw error;
+      }
+
+      return data as GetGlobalAuditEventsResult;
+    },
+    async getAuditStorageStats(): Promise<AuditStorageStats> {
+      const { data, error } = await getSupabaseClient().rpc(
+        "get_audit_storage_stats",
+      );
+
+      if (error) {
+        console.error("get_audit_storage_stats.error", error);
+        throw error;
+      }
+
+      return data as AuditStorageStats;
     },
   } satisfies DataProvider;
 
@@ -397,10 +462,12 @@ export const getDataProvider = () => {
       "Please set the VITE_SB_PUBLISHABLE_KEY environment variable",
     );
   }
-  return withLifecycleCallbacks(
-    getDataProviderWithCustomMethods(),
-    lifeCycleCallbacks,
-  ) as CrmDataProvider;
+  return withCrmErrorHandler(
+    withLifecycleCallbacks(
+      getDataProviderWithCustomMethods(),
+      lifeCycleCallbacks,
+    ) as CrmDataProvider,
+  );
 };
 
 const applyFullTextSearch = (columns: string[]) => (params: GetListParams) => {

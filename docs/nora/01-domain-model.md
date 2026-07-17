@@ -102,12 +102,72 @@ Vollständige Spezifikationen:
 - Fensterprozess: `docs/nora/09-window-order-workflow.md`
 - Checklisten, Textbausteine, Audit: `docs/nora/10-checklists-snippets-audit.md`
 
+## Schnellerfassung (Welle v0.3e)
+
+Operativer Einstieg für neue Anfragen (Telefon, WhatsApp, E-Mail, Google Notizen/Kalender — **manuell**, ohne API):
+
+```text
+Suche Kunde → Ansprechpartner → Vorgang (+ optional Aufgabe)
+```
+
+- Erzeugt `companies` / `contacts` / `deals` / optional `tasks`
+- Quelle vorerst in `deals.description` (`Quelle: …`)
+- Nummern (`customer_number`, `case_number`) serverseitig wie bisher
+
+## Google Kalender (Welle v0.4a)
+
+Google Kalender bleibt das **einzige führende Terminsystem** für Zeit, Titel, Ort, Wiederholung und Existenz von Terminen.
+
+| Fachlich | Technisch (Ziel) | Status |
+|---|---|---|
+| Geschäftskalender (ein Kalender) | `google_calendar_connections.calendar_id` | v0.4c.1 implementiert |
+| Gespiegelte Termine | `google_calendar_events` (Cache + CRM-Verknüpfung) | v0.4c.1 implementiert |
+| Termin-Herkunft | `origin` = `google` \| `nora` | v0.4c.1 (nur Import `google`) |
+| CRM-Verknüpfung | `company_id`, `contact_id`, `deal_id` (bigint FKs) | v0.4c.1 RPC link/unlink |
+| Hotboard „Heutige Termine“ | liest `google_calendar_events` | v0.4d geplant |
+| Nora-Termin anlegen | Google API write scope, Extended Properties | v0.4e geplant |
+
+**Nicht:** paralleles `appointments`-Modell, private iCal-Adresse, zweites Terminsystem in Nora.
+
+Vollständige Spezifikation: `docs/nora/11-google-calendar-rbac.md`
+
+## Rollenmodell (Welle v0.4a)
+
+| Rolle | Zielnutzer | Kurz |
+|---|---|---|
+| `admin` | Chef / IT | Vollzugriff, Kalender verbinden, Rollen verwalten |
+| `office` | Sekretärin / Büro | Operativer CRM-Alltag, Termine lesen/erstellen |
+| `viewer` | schreibgeschützt | Nur Lesen |
+
+Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administrator` ist nur Kompatibilitätsspiegel (`role = admin` ↔ `true`). Teamlisten nutzen **`sales_directory`** (v0.4b.2).
+
+## Änderungshistorie / Audit (Welle v0.3l)
+
+| Fachlich | Technisch | Hinweis |
+|---|---|---|
+| Änderungshistorie | `audit_events` | append-only, eine zentrale Tabelle |
+| Akten-Historie | `EntityAuditHistory` + RPC `get_entity_audit_events` | in Kunden-, Kontakt- und Vorgangsakte |
+| Globaler Verlauf | Route `/audit` + RPC `get_global_audit_events` | nur Admin |
+| Auslöser | DB-Trigger → `nora_private.write_audit_event` | kein Client-INSERT |
+
+**Zweck:** betriebliche Nachvollziehbarkeit — wer hat wann welche CRM-Daten geändert? **Nicht** Mitarbeiter-Leistungsüberwachung, nicht GoBD-Archiv, nicht Klick-Tracking.
+
+**Sichtbarkeit nach Rolle:**
+
+| Rolle | Global (`/audit`) | Kontext (Akte) |
+|---|---|---|
+| `admin` | ✅ | ✅ |
+| `office` | ❌ | ✅ (RPC) |
+| `viewer` | ❌ | ❌ |
+
+Checklisten-Ereignisse (`checklist.*`) und CRM-Kernänderungen (Kunde, Kontakt, Vorgang, Aufgabe, Notiz, Benutzerrecht) nutzen dieselbe Tabelle — siehe `13-crm-audit-retention.md`.
+
 ## Erweiterungen geplant (Welle 7b)
 
 | Fachlich | Technisch (Ziel) | Status |
 |---|---|---|
 | Modulare Checkliste | `checklist_templates`, `checklist_runs`, `checklist_run_items` | spezifiziert |
 | Textbausteine (Plus/Minus) | `saved_text_snippets` | spezifiziert |
-| Audit / Nachvollziehbarkeit | `audit_events` (append-only) | spezifiziert |
+| Audit / Nachvollziehbarkeit | `audit_events` (append-only) | ✅ v0.3l (CRM + Checklisten) |
 | Servicebereich | `service_area_code` (`FENS`, `HAUS`, `IMMO`) | spezifiziert |
 | Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2 ✅ |

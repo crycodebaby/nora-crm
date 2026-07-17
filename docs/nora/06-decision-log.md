@@ -475,3 +475,510 @@ Büro/Leitung braucht operative Sicht auf Fenster-Vorgänge mit offener Produkti
 ### Nächste Welle
 
 **v0.3d6** — Audit-Ansicht lesend im Kunden-/Vorgangsdetail.
+
+## 2026-06-28 – v0.3e: Schnellerfassung / Eingangszentrale
+
+### Kontext
+
+Chefs sollen Anfragen aus Telefon, WhatsApp, E-Mail und Google-Notizen schnell als Kunde/Ansprechpartner/Vorgang erfassen — ohne externe Integrationen in dieser Welle.
+
+### Entscheidung
+
+- **3-Schritt-Dialog** `QuickCaptureDialog` mit Einstieg in Header, Hotboard und Mobile-Plus-Menü
+- **Suche zuerst** via `performGlobalSearch`; Dubletten-Warnung heuristisch
+- **Quelle** in `deals.description` (`Quelle: …`) — kein DB-Feld `source_channel` (später)
+- **Speichern** sequentiell: Kunde → Kontakt → Vorgang → optional Aufgabe; Redirect zum Vorgang
+- **Demo/FakeRest** über Standard-CRUD — keine Einschränkung
+- **Nicht:** Google/Gmail/WhatsApp-API, Migration, atomare RPC
+
+### Verifikation
+
+- `quickCaptureUtils.test.ts` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+### Später empfohlen
+
+- DB-Feld `deals.source_channel` oder `inquiry_sources`
+- Atomare RPC `create_inquiry_from_quick_capture` für Transaktionssicherheit
+- Stärkere Dublettenprüfung (Fuzzy-Match, Adresse)
+
+## 2026-06-28 – v0.3f: Intelligente Dubletten-Vorschläge
+
+### Kontext
+
+Die Schnellerfassung (v0.3e) zeigte nur eine generische Amber-Warnung. Chefs brauchen konkrete Kandidaten mit Begründung, um Dubletten aus Telefon/WhatsApp/E-Mail zu vermeiden.
+
+### Entscheidung
+
+- **Vorschlagsfeld** statt reiner Warnung — Titel „Du meinst vielleicht diesen Kunden“
+- **Deterministisches Scoring** in `duplicateCandidateUtils.ts` — keine KI, kein Auto-Merge
+- **Kriterien:** Kundennummer, Telefon, E-Mail (stark); ähnlicher Name (mittel); Name + Stadt/PLZ (stärker)
+- **Effiziente Suche:** Debounce 400 ms, Cache, stale-Request-Ignore, max. 5 Kandidaten; `performGlobalSearch` wiederverwendet
+- **Verhalten:** „Diesen Kunden verwenden“ → Schritt Ansprechpartner; „Trotzdem neuen Kunden anlegen“ → bewusstes Neuanlegen, Vorschläge ausblenden
+- **Lexware-Vorbereitung:** `DuplicateSearchInput` + `rankDuplicateCandidates` für späteren CSV-Import wiederverwendbar
+- **Nicht:** Migration, neue Tabellen, Auto-Merge, Lexware-Import in dieser Welle
+
+### Verifikation
+
+- `duplicateCandidateUtils.test.ts` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.3f: Realistische Demo- und UX-Testdaten
+
+### Kontext
+
+Die bisherigen FakeRest-Daten (Saarland, 8 Kunden) reichten nicht für realistische UI-Tests von Hotboard, Schnellerfassung, globaler Suche, Kanban und Dubletten-Vorschlägen.
+
+### Entscheidung
+
+- **Region** Düsseldorf / Neuss / Umgebung — vollständig fiktiv (`@nora-demo.local`, `+49 211/2131 000 …`)
+- **Quelle der Wahrheit:** `noraDuesseldorfSeedData.ts` → `noraDemoSeed.ts` (FakeRest)
+- **Umfang:** 25 Kunden, 30 Kontakte, 20 Vorgänge, 20 Aufgaben, 10+ Notizen
+- **UI-Testfälle:** Mehrfach-Kontakte, Kunde ohne Kontakt, Kontakt ohne E-Mail, Vorgang ohne Wert, überfälliges Nachfassen, Dubletten-Paare (Becker/Schneider)
+- **Checklisten-Runs:** nicht in FakeRest — `dev:demo` deaktiviert Checklisten-UI; Vorlage `FENS_PRODUCTION_RELEASE` bleibt in Supabase-Migration für `make start`
+- **Nicht:** Production-DB, Migrationen, neue Fachlogik, dist-Dateien
+
+### Verifikation
+
+- `noraDemoSeed.test.ts` ✅
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+
+## 2026-07-14 – UX-Polish: Kontakte-Suche und globale Suche
+
+### Kontext
+
+Auf `/kontakte` erschien neben der globalen Navigationssuche eine zweite allgemeine Suchleiste. In Chrome trat beim Tippen in der globalen Suche teils ein Wallet-/Kundenkarten-Popup auf.
+
+### Entscheidung
+
+- **Kontakte-Liste:** `SearchInput` in `ContactListFilter` entfernt — spezifische Filter (Zuletzt gesehen, Status, Markierungen, Aufgaben, Betreuer) bleiben
+- **Globale Suche:** Suchfeld technisch als Suche markiert (`type="search"`, `autoComplete="off"`, `spellCheck={false}`, IDs `nora-global-search` / `nora-global-search-mobile`)
+- **ResponsiveFilters:** `searchInput` optional — Mobile zeigt nur Filter-Sheet wenn keine Listen-Suche
+- **Nicht:** Suchlogik, Navigation, Migrationen
+
+### Verifikation
+
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.3g: Schnellerfassung UX-Überarbeitung
+
+### Kontext
+
+Der lineare 3-Schritt-Wizard blockierte während Telefonaten. Doppelte Kundenvorschläge (Suchliste + Dubletten-Box) verwirrten. Entwürfe gingen beim Schließen verloren.
+
+### Entscheidung
+
+- **Frei anklickbare Tabs** — Kunde / Ansprechpartner / Vorgang jederzeit wechselbar; Validierung nur beim Speichern
+- **Lokaler Entwurf** — `localStorage` Key `nora-quick-capture-draft`; wiederherstellen beim Öffnen; löschen nach Speichern oder „Entwurf verwerfen“
+- **Ein Bereich „Mögliche Kunden“** — `PossibleCustomersPanel` + `mergeCustomerSearchResults` (keine doppelte Anzeige)
+- **Layout** — breiterer Dialog, 2-Spalten Desktop, `BusinessNumber` als Badge
+- **Performance** — nur `useDuplicateCandidateSearch` (400 ms Debounce, Cache, stale-guard)
+- **Nicht:** Migration, serverseitige Entwürfe, Auto-Merge, Lexware
+
+### Verifikation
+
+- `quickCaptureDraft.test.ts`, `mergeCustomerSearchResults.test.ts`, `quickCaptureValidation.test.ts` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.3h: Kundenliste und Vorgänge-Kanban responsiver
+
+### Kontext
+
+Auf `/kunden` duplizierte eine Listen-Suche die globale Nora-Suche. Das Kanban war durch `max-w-screen-xl` und `max-w-[20rem]` auf Spalten eng begrenzt. „Nachfassen“ war für Nutzer nicht intuitiv.
+
+### Entscheidung
+
+- **Keine Listen-Suche auf `/kunden`** — nur kundenspezifische Filter (Kundentyp, Betreuer) via `ResponsiveFilters`
+- **Kanban volle Breite** — `Layout` ohne `max-w-screen-xl` auf `/vorgaenge`; Grid-Spalten `minmax(280px, 320px)`
+- **Scrollleiste** — `.nora-kanban-scroll` mit gestalteter horizontaler Scrollbar
+- **Kartenhierarchie** — VG-Badge, Titel, Kunde, Kategorie/Wert, Kontakt-Badge
+- **Terminologie** — sichtbare Texte „Kontakttermin“ / „Rückmeldung ausstehend“; IDs `nachfassen`, `expected_closing_date` unverändert
+- **Nicht:** Migration, Status-IDs, globale Suchlogik, DnD-Bibliothek
+
+### Verifikation
+
+- `dealKanbanView.test.ts` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.3i: Kanban und Vorgangsakte barrierearm
+
+### Kontext
+
+v0.3h lieferte volle Kanban-Breite, aber Spaltenköpfe überlappten Karten, VG-Nummern waren zu klein, Dringlichkeit wirkte wie Fließtext, Scrollbars zu dünn, Vorgangsdetail unstrukturiert, englische Datumsformate sichtbar.
+
+### Entscheidung
+
+- **Spaltenkopf getrennt** — eigene Header-Box, Anzahl, Gap vor Karten; kein sticky Overlap
+- **BusinessNumber** — zentrale Badge-Komponente mit Größen `sm`/`md`/`lg` und KD/VG-Akzent
+- **NoraUrgencyBadge** — heute/überfällig/zukünftig mit Icon + Text + Warnbox im Detail
+- **Scrollbars** — Kanban 16 px horizontal, Detail 14 px vertikal (`.nora-detail-scroll`)
+- **Mausrad horizontal** — `useHorizontalWheelScroll` nur im Kanban-Container
+- **DealShow** — breiter Dialog, `NoraSectionCard`-Abschnitte, sticky Kopf mit VG-Nummer
+- **de-DE Datumsformat** — `noraDateTime.ts`, keine `Jul 14, 2026` mehr
+- **Nicht:** Migration, Status-IDs, DnD-Bibliothek
+
+### Verifikation
+
+- `noraDateTime.test.ts`, `horizontalWheelScroll.test.ts`, `NoraUrgencyBadge.test.ts` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – Demo-Auftragswerte korrigiert
+
+### Kontext
+
+Die Düsseldorf-Demo enthielt sechsstellige Einzelbeträge (bis 320.000 €), was Kanban-Spaltensummen, Dashboard und Geschäftswahrnehmung verfälschte.
+
+### Entscheidung
+
+- **Alle 20 Vorgänge** in `noraDuesseldorfSeedData.ts` auf fachlich plausible Euro-Werte angepasst (Gesamt ca. 57.000 €)
+- **Fensterservice** max. 20.000 €; **Hausmeisterservice** max. 6.000 €
+- **`amount = 0`** bleibt für „wartet auf Hersteller“ / noch nicht kalkuliert
+- **JSON-Dokumentation** (`nora_demo_seed_duesseldorf_neuss.json`) synchronisiert
+- **Tests** in `noraDemoSeed.test.ts` für Betragsgrenzen und Pipeline-Summe
+- **Nicht:** echte Preise, Migration, Produktionsdaten
+
+### Verifikation
+
+- `noraDemoSeed.test.ts` ✅
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+
+## 2026-07-14 – v0.4a: Google-Kalender-Architektur und Nora-Rollenmodell spezifiziert
+
+### Kontext
+
+Nach Hotboard, Checklisten und Schnellerfassung soll Nora Termine aus dem bestehenden Google-Geschäftskalender lesen und mit CRM-Daten verknüpfen — ohne parallele Benutzerverwaltung oder zweites Terminsystem. Die Sekretärin (`office`) braucht klare Rechte; Google bleibt führend für Terminzeit und -existenz.
+
+### Entscheidung
+
+- **Spezifikation** in `11-google-calendar-rbac.md`
+- **System of Record Termine:** Google Kalender (Zeit, Titel, Ort, Wiederholung, Existenz)
+- **Nora speichert:** Cache (`google_calendar_events`), CRM-Verknüpfung, Audit — **kein** `appointments`-Hauptmodell
+- **Ein Geschäftskalender:** `google_calendar_connections.calendar_id` — keine iCal-URL, kein Embed
+- **Termin-Eigentum:** `origin = google` (zunächst read-only) \| `origin = nora` (später bearbeitbar)
+- **Rollen:** `admin`, `office`, `viewer` an **`sales.role`** — keine zweite Benutzertabelle
+- **RBAC-Empfehlung:** Rolle in DB (`sales.role`) + `current_nora_role()` für RLS; optional JWT-Spiegel später
+- **Secrets:** Client Secret und Refresh Token nur in Edge Function Secrets/Vault — nie Frontend/Audit
+- **OAuth:** zuerst `calendar.events.owned.readonly`; Write-Scope eigene Welle (v0.4e)
+- **Sync:** manuell → periodisch → syncToken → Webhook (stufenweise v0.4c–g)
+- **Audit:** bestehende `audit_events` mit `calendar.*`-Event-Typen
+- **Nicht in v0.4a:** Migration, Edge Functions, OAuth, UI
+
+### Begründung
+
+Das bestehende Modell (`auth.users` ↔ `sales` 1:1, `administrator boolean`) reicht als Fundament — eine `sales.role`-Spalte vermeidet parallele Identitäten. Google als Termin-System of Record verhindert Drift zwischen Nora und Kalender. Minimale Scopes und Token-Trennung reduzieren Angriffsfläche.
+
+### Nächste Welle
+
+**v0.4b** — RBAC-Migration (`sales.role`, RLS, `canAccess`, Edge Function `users`)
+
+## 2026-07-14 – v0.4b: RBAC- und RLS-Härtung
+
+### Kontext
+
+v0.4a spezifizierte `admin` / `office` / `viewer` an `sales.role`. v0.4b setzt das technisch um: Least-Privilege-Backfill, gehärtete Rollenfunktionen, tiered RLS, Systemfeld-Schutz und UI-Spiegel in `canAccess` — ohne Google-API, OAuth oder Kalendertabellen.
+
+### Entscheidung
+
+- **Kanonische Benutzertabelle:** `sales` bleibt CRM-Identität (`auth.users` 1:1)
+- **Spalte:** `sales.role text not null` mit CHECK (`admin`, `office`, `viewer`)
+- **Backfill (Least Privilege):** `administrator = true` → `admin`; alle anderen → `viewer`; `office` nur explizit per Admin
+- **Spiegel:** `administrator = (role = 'admin')` per Trigger — widersprüchliche Zustände unmöglich
+- **Rollenänderung:** nur `set_sales_role_by_admin()` (Admin-JWT oder `service_role`); direkte Updates an `role`/`disabled`/`administrator` blockiert
+- **Funktionen:** `nora_auth_uid()`, `nora_is_active_user()`, `current_nora_role()`, `has_nora_role()`, `nora_can_write()`, `is_admin()` — SECURITY DEFINER, festes `search_path`, EXECUTE nur `authenticated`/`service_role`, kein `anon`
+- **RLS-Matrix:** viewer SELECT; office SELECT/INSERT/UPDATE (kein DELETE); admin inkl. DELETE und Konfiguration/Vorlagen
+- **`audit_events`:** SELECT nur admin/office; kein Client-INSERT/UPDATE/DELETE (RLS + append-only Trigger)
+- **`disabled`:** kein Zugriff in Rollenfunktionen, RLS und Auth-Provider
+- **Frontend:** `canAccess.ts`, `resolveNoraRole`, `SalesInputs` mit Rollen-Select, Edge Function `users` nutzt RPC
+- **Tests:** `rbac_rls_verification.sql` + `rbac_rls_matrix.sql` (Rolle `nora_rls_test`, NOBYPASSRLS)
+
+### Rollback / Kompatibilität
+
+| Schritt | Aktion |
+|---------|--------|
+| **Rollback RLS** | Policies aus Migration rückgängig; vorherige Policies aus `20241104153231_sales_policies.sql` u. a. wiederherstellen |
+| **Rollback Rolle** | `DROP COLUMN sales.role` erst nach Entfernen aller Policy-/Funktions-Referenzen |
+| **`administrator`** | Bleibt lesbar als Deprecated-Spiegel; UI/Edge migrieren auf `role` vor Entfernung (Ziel v0.5) |
+| **Backfill rückgängig** | Nicht automatisch — vor Rollback Snapshot der `sales`-Tabelle; `office`-Zuweisungen manuell dokumentieren |
+| **Neue Nutzer** | `handle_new_user`: erster Nutzer `admin`, weitere `viewer` |
+
+### Verifikation
+
+- `npx supabase db reset --local` ✅
+- `rbac_rls_setup` / `rbac_rls_matrix` ✅
+- `checklists_audit_verification.sql` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.3j: Hotboard-Arbeitsboard (Fokusboard)
+
+### Kontext
+
+Das Hotboard listete Vorgänge bereits nach Dringlichkeit und Status, aber ohne kompakten Spaltenüberblick wie im Kanban. Nutzer brauchen einen lesenden Schnellzugriff auf die wichtigsten offenen Vorgänge — ohne das volle Kanban zu duplizieren oder Status per Drag-and-drop zu ändern.
+
+### Entscheidung
+
+- **Arbeitsboard** im Hotboard: max. 2 Spalten (`neue-anfrage`, `nachfassen`), max. 5 Karten je Spalte
+- **Sortierung** über bestehende `hotboardUtils` / `getFollowUpStatus` — keine zweite Statuslogik
+- **Lesend:** Klick öffnet Vorgangsakte; Drag-and-drop bleibt auf `/vorgaenge`
+- **Komponenten:** `HotboardFocusBoard`, `HotboardFocusColumn`, `HotboardFocusCard`
+- **Keine** Migration, keine Status-ID-Änderung, keine neue DnD-Bibliothek
+
+### Verifikation
+
+- `hotboardFocusUtils.test.ts` ✅
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+
+## 2026-07-14 – v0.4b.1: RBAC-Migrations- und Function-Hardening
+
+### Kontext
+
+v0.4b lieferte die Rollenmatrix, aber enthielt eine Test-LOGIN-Rolle in der Produktionsmigration und exponierte interne Helper in `public`. v0.4b.1 bereitet den Production-Push vor — ohne Änderung der fachlichen Matrix.
+
+### Entscheidung
+
+- **Testrolle** aus `20260714120000` entfernt; lokales Setup/Teardown in `supabase/tests/rbac_rls_setup.sql` / `rbac_rls_teardown.sql` (NOLOGIN, kein Passwort in Git)
+- **Schema `nora_private`:** interne Helper (`safe_auth_uid`, `is_active_user`, `current_role`, `has_role`, `can_write`, `is_admin`) — nicht in Data-API-Schemas
+- **`public.nora_auth_uid` entfernt** — `auth.uid()` in öffentlichen RPCs; `nora_private.safe_auth_uid()` intern (malformed sub → NULL, kein Cast-Exception)
+- **`search_path = ''`** auf allen SECURITY DEFINER-Funktionen; vollständig schemaqualifiziert
+- **GUC-Härtung:** `nora.privilege_rpc_token` + `nora.allow_sales_privilege_change` nur in `set_sales_role_by_admin`; Reset nach Erfolg/Fehler
+- **Grants:** `anon` REVOKE auf allen v0.4b-geschützten Tabellen; `authenticated` minimal (z. B. `sales`: SELECT+UPDATE)
+- **Migration:** `20260714140000_nora_rbac_hardening.sql`
+- **Keine** UI-, OAuth-, Kalender- oder Matrix-Änderung
+
+### SECURITY DEFINER-Inventar (v0.4b.1)
+
+| Funktion | Schema | PostgREST | Warum SECURITY DEFINER |
+|----------|--------|-----------|------------------------|
+| `safe_auth_uid` | nora_private | nein | JWT-sub lesen ohne Cast-Exception |
+| `is_active_user` | nora_private | nein | RLS: sales-Lookup trotz Tabellen-RLS |
+| `current_role` | nora_private | nein | RLS: Rolle aus sales |
+| `has_role` | nora_private | nein | RLS: Rollenmatrix |
+| `can_write` | nora_private | nein | RLS: office/admin |
+| `is_admin` | nora_private | nein | RLS: admin-Checks |
+| `set_sales_role_by_admin` | public | ja | Edge Function Rollen-RPC |
+| `start_checklist_run_from_template` | public | ja | Checklisten-Start |
+| `handle_new_user` | public | nein | Auth-Trigger: sales anlegen |
+
+### Verifikation
+
+- `npx supabase db reset --local` ✅
+- `rbac_rls_production_check.sql` (ohne Testrolle) ✅
+- `rbac_rls_setup` → `rbac_rls_matrix` → `rbac_rls_teardown` → production_check ✅
+- `checklists_audit_verification.sql` ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.4b.2: RBAC-Abschluss (Capability, Parallel-Admin, sales_directory)
+
+### Kontext
+
+v0.4b.1 nutzte GUC-Token für Privilegienänderungen — client-setzbare Textwerte sind keine saubere Capability-Grenze. Zusätzlich: Race beim ersten Admin, unnötige `sales`-Vollexposition für Teamlisten.
+
+### Entscheidung
+
+- **GUC-Modell entfernt** (`nora.allow_sales_privilege_change`, `nora.privilege_rpc_token`)
+- **Rolle `nora_role_manager`:** NOLOGIN, NOBYPASSRLS, kein Mitglied für `authenticated`/`anon`/`service_role`
+- **`nora_private.apply_sales_role_change`:** Owner `nora_role_manager`; EXECUTE nur `postgres`
+- **`set_sales_role_by_admin`:** JWT-Check (`nora_private.is_admin()` / `service_role`), delegiert an apply-Funktion
+- **Trigger `prevent_sales_privilege_escalation`:** erlaubt Privileg-UPDATE nur wenn `current_user = nora_role_manager`
+- **Erster Admin:** `nora_private.resolve_first_signup_role()` mit `pg_advisory_xact_lock(89142421, 1)`
+- **View `public.sales_directory`:** `id`, `first_name`, `last_name`, `avatar`; RLS nur aktive Nutzer; `security_invoker = false` + View-RLS
+- **`public.sales` SELECT:** eigene Zeile oder Admin — nicht mehr alle Zeilen für office/viewer
+- **Frontend:** Betreuer-Selects / `useGetSalesName` → `sales_directory`; Admin-Verwaltung bleibt auf `sales` + Edge Function
+- **Migration:** `20260714150000_nora_rbac_final_hardening.sql` — keine Rückänderung an Remote-Migrationen
+- **Keine** Matrix-Änderung (admin/office/viewer), kein Google/Kalender
+
+### Verifikation
+
+- `npx supabase db reset --local`
+- `rbac_rls_production_check` → `first_admin_parallel` → `setup` → `matrix` → `final_hardening` → `checklists_audit` → `teardown` → production_check
+- `rbac_rls_first_admin_parallel_runner.ps1` (zwei Sessions)
+- `npm run typecheck` / `npm run build` / `npm run dev:demo`
+
+## 2026-07-14 – Demo-Seed: `amountCents` → `amountEur`
+
+### Kontext
+
+Nach der Auftragswert-Korrektur war klar: `amountCents` speicherte Euro und wurde 1:1 auf `deals.amount` gemappt. Der Name birgt Faktor-100-Fehler-Risiko.
+
+### Entscheidung
+
+- **Umbenennung** in `DealSeed`: `amountCents` → `amountEur`
+- **Mapping** in `noraDemoSeed.ts`: `amount: seed.amountEur` (keine Umrechnung)
+- **Kategorieverteilung** dokumentiert: 13 Fensterservice, 4 Hausmeisterdienst, 2 Reparatur, 1 Wartung (20 gesamt)
+- **Gesamtsumme** unverändert: 60.020 €
+- **Nicht:** `deals.amount` in DB/Supabase, Migrationen
+
+### Verifikation
+
+- Keine verbleibende `amountCents`-Verwendung im Projekt ✅
+- `noraDemoSeed.test.ts` (Mapping, Kategorien, Summe) ✅
+- `npm run typecheck` / `npm run build` ✅
+
+## 2026-07-14 – v0.3k: Rollenbewusste UX, Ladezustände und Fehlertoleranz
+
+### Kontext
+
+RBAC/RLS (v0.4b.x) war backend-seitig umgesetzt, die UI zeigte aber weiterhin Schreib- und Löschaktionen für alle Rollen. Lade-, Leer- und Fehlerzustände waren uneinheitlich.
+
+### Entscheidung
+
+- **UI spiegelt `canAccess.ts`**, ersetzt aber **niemals** RLS (DB bleibt autoritativ).
+- **Viewer:** Lesemodus-Banner im Layout; keine Create/Edit/Delete; Edit-Routen leiten auf Show um.
+- **Office:** Schreiben und Archivieren; kein physisches Löschen; keine Benutzer-/Konfigurationsverwaltung.
+- **Admin:** unveränderte Verwaltungsaktionen.
+- **Zentrale Fehlernormalisierung** (`normalizeCrmError`, `withCrmErrorHandler`) für PostgREST/Netzwerk — keine technischen DB-Texte in der UI.
+- **Einheitliche Zustände:** `NoraPageLoading`, `NoraEmptyState`, `NoraQueryError` (Retry nur manuell).
+- **Dirty-Form-Schutz:** `NoraCancelButton` in `FormToolbar`.
+- **Demo-Rollentest:** drei feste FakeRest-Benutzer + `DemoRoleSwitcher` nur bei `VITE_IS_DEMO=true`.
+- **Keine** Migration, **keine** RLS-Änderung, **keine** neuen Rollen.
+
+### Verifikation
+
+- `noraRbacUx.test.ts` ✅
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+- Manuelle Rollenprüfung admin/office/viewer im Demo noch ausstehend.
+
+## 2026-07-14 – v0.3k.1: Rollen-UX-Abnahme und Dialog-Polish
+
+### Kontext
+
+v0.3k lieferte die Grundinfrastruktur; Edit-Guards, Dirty-Dialoge, Fehler-Retry und manuelle Demo-Abnahme waren noch unvollständig.
+
+### Entscheidung
+
+- **EditGuards vervollständigt** auf Company/Contact/Deal/Task Edit, Create, SalesEdit (admin-only), Settings, Import.
+- **Dirty-Schutz:** `NoraDialogContent`, `useNoraDirtyDialog`, erweiterte Dialog/Sheet-Primitives — X/Escape bestätigen bei Dirty; Außenklick blockiert.
+- **Quick Capture:** Abbrechen/X/Escape persistiert Draft (`persistDraft`); nur „Entwurf verwerfen“ löscht.
+- **Fokus:** `useDialogFocusReturn` für Dialoge (DealShow, QuickCapture, NoraDialogContent).
+- **Fehler-Retry:** GlobalSearch, SalesList, Company/Contact/Deal Show (`NoraShowBoundary`), Checklisten-Ladevorgang.
+- **Import (bestehend, dokumentiert):**
+  - Importiert per JSON-Stream: `sales`, `companies`, `contacts`, `notes`, `tasks`.
+  - **Nicht reversibel** — kein Rollback; Fehlerbericht-Download bei Teilausfällen.
+  - **Kein** Preview/Mapping/Dubletten-Assistent — daher **nur Admin** (`configuration` edit) bis sicherer Import-Assistent existiert.
+- **Keine** Migration, RLS, Google/OAuth, neue Rollenmatrix.
+
+### Verifikation
+
+- `noraV03k1Ux.test.ts` + `noraRbacUx.test.ts` ✅
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+- Manuelle Browser-Matrix: mit `DemoRoleSwitcher` / separaten Logins empfohlen (siehe Ergebnisbericht).
+
+## 2026-07-14 – v0.3k.2: Demo-Rollensimulation und abschließende Rollen-UX-Abnahme
+
+### Kontext
+
+`DemoRoleSwitcher` wechselte die Rolle visuell, aber `authProvider.ts` setzte bei jedem Modul-Import `DEFAULT_USER` (Anna Admin) in `localStorage` und überschrieb damit den Rollenwechsel nach Reload. Zusätzlich konkurrierten React-Query-Persist-Cache und `logout→login`-Race mit der aktiven Identität.
+
+### Entscheidung
+
+- **Kanonische Demo-Quelle:** `providers/fakerest/demoSession.ts`
+  - Speicher: `localStorage["user"]` (`NORA_DEMO_USER_STORAGE_KEY`)
+  - Statische Demo-Benutzer (`DEMO_SALES_BY_ROLE`) — keine async-Race beim Wechsel
+  - `authProvider.getIdentity` / `canAccess` / `checkAuth` lesen ausschließlich daraus
+  - **Kein** Überschreiben bei Modul-Import; `ensureDemoSession()` nur wenn leer
+- **Rollenwechsel:** `useSwitchDemoRole` + `finalizeDemoSessionSwitch` — setzt Session, leert `REACT_QUERY_OFFLINE_CACHE`, `queryClient.clear()`, kontrollierter `location.assign`
+- **Demo-Login:** `LoginPage` nutzt `useFinalizeDemoLogin` — gleiche Cache-Invalidierung wie Role-Switcher (verhindert Identity-Desync bei Login ohne vorheriges Logout)
+- **Post-Switch-Navigation:** `resolveDemoPostSwitchUrl` für `/settings`, `/import`, `/sales`, Viewer-Edit-URLs
+- **Hinweis im UI:** „Demo-Rolle – simuliert nur die Oberfläche“
+- **Direkte Logins** (`admin@` / `office@` / `viewer@nora.demo`) bleiben Referenz für Abnahme
+- **Keine** Production-Auth-Änderung, **keine** RLS-Umgehung
+
+### Verifikation
+
+- `demoRoleSimulation.test.ts` ✅
+- `docs/nora/12-role-ux-acceptance.md` (Abnahmeprotokoll)
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+
+## 2026-07-15 – v0.3l: Vollständiger CRM-Audit-Verlauf
+
+### Kontext
+
+Checklisten-Audit (`audit_events`, v0.3d2) deckte nur Checklisten, Snippets und `deal.stage_changed` ab. Office hatte globales SELECT auf `audit_events`. Vorgänge, Kunden, Aufgaben und Notizen brauchten serverseitige Trigger und kontextbezogene UI.
+
+### Entscheidung
+
+- **Eine Tabelle:** `audit_events` erweitert um Actor-Snapshots, `source`, `retention_class`, `task_id`, `note_id`
+- **Schreib-Capability:** `nora_audit_writer` (NOLOGIN, INSERT-only) via `nora_private.write_audit_event`
+- **Trigger** für companies, contacts, deals (ersetzt stage-only), tasks, contact_notes, deal_notes, sales (role/disabled)
+- **Kompakte Änderungen** in `metadata.changes`; Notizen ohne Volltext
+- **Lesen:** Admin global (`/audit` + `get_global_audit_events`); Office nur `get_entity_audit_events`; Viewer kein Zugriff
+- **RLS:** direktes SELECT nur admin (Office-Policy entfernt)
+- **Demo:** synthetische Events mit `source=demo`
+- Spezifikation: `docs/nora/13-crm-audit-retention.md`
+
+### Verifikation
+
+- Migration `20260715120000_nora_crm_audit.sql`
+- `crm_audit_verification.sql`, aktualisierte `rbac_rls_matrix.sql`
+- `auditUx.test.ts` ✅
+- `npm run typecheck` / `npm run build`
+
+## 2026-07-15 – v0.3l.1: CRM-Audit-Abschluss (Schema-Sync, Tests, Abnahme)
+
+### Kontext
+
+v0.3l lieferte Migration, Trigger, RPCs und UI-Grundgerüst. v0.3l.1 schließt Schema-Synchronisation, SQL-Verifikation, Frontend-Formatierung und die Rollen-Matrix für den produktionsnahen Demo-Betrieb ab.
+
+### Entscheidung
+
+- **Schema-Sync:** Migrations- und Schema-Dateien (`01_tables`, `04_triggers`, `05_policies`) konsistent mit v0.3l-Audit-Erweiterung
+- **Kanonischer Status-Event:** neue Trigger schreiben `deal.status_changed`; Legacy `deal.stage_changed` (v0.3d2) bleibt lesbar — UI mappt beide auf „Vorgangsstatus geändert“
+- **Checklisten-Audit unverändert:** keine doppelten Events; CRM-Trigger ergänzen, ersetzen Checklisten-Trigger nicht
+- **Tests:** `crm_audit_verification.sql` neu; `rbac_rls_matrix.sql` und `checklists_audit_verification.sql` angepasst; `auditUx.test.ts` für Formatter/Legacy-Label
+- **Zurückgestellt:** Befüllung `event_hash`, `request_id`; externer WORM-Export; automatischer Purge
+- **Immutability-Grenze:** append-only für App-Rollen — kein Anspruch auf Superuser-/Offline-Schutz ohne externen Export
+- **Manuelle Abnahme:** Demo-Rollenmatrix admin (global + Akte), office (nur Akte), viewer (kein Audit)
+
+### Verifikation
+
+- `npx supabase db reset --local` ✅
+- `crm_audit_verification.sql` + `rbac_rls_matrix.sql` + `checklists_audit_verification.sql` ✅
+- `auditUx.test.ts` ✅
+- `npm run typecheck` / `npm run build` / `npm run dev:demo` ✅
+- Manuelle Rollenprüfung in Demo empfohlen (siehe `07-agent-change-checklist.md`, v0.3l-Abschnitt)
+
+## 2026-07-16 – v0.4c.1: Google-Kalender Read-only Grundlage
+
+### Kontext
+
+Spezifikation in `11-google-calendar-rbac.md`. Ziel: technische Grundlage für read-only Google-Kalender-Integration ohne OAuth-Produktivbetrieb.
+
+### Entscheidung
+
+- **System of Record:** Google Kalender; Nora = Cache (`google_calendar_events`) + CRM-Verknüpfung + Audit
+- **Singleton:** max. eine `connected`-Verbindung (Partial Unique Index + Trigger)
+- **Allowlist:** `configuration.config.google_calendar.allowed_calendar_ids` + Edge-Env `GOOGLE_CALENDAR_ALLOWED_ID`
+- **Keine Tokens** in `connections`, `events`, `audit_events`; vorbereitete Ablage `nora_private.google_calendar_oauth_secrets`
+- **Capability `nora_calendar_writer`:** kontrollierte Cache-Schreibzugriffe (Edge/Sync)
+- **Link/Unlink-RPCs:** admin/office; GUC `nora.calendar_link_update` für kontrollierte FK-Updates ohne Google-Mutation
+- **Edge Functions:** Struktur + CSRF-State; Token-Austausch/Sync bewusst **501/503** bis v0.4c.2
+- **Demo:** Hinweis ohne Fake-OAuth
+- **Audit:** `calendar.event_linked` / `calendar.event_unlinked`; `retention_class = integration`
+
+### Verifikation
+
+- Migration `20260716120000_google_calendar_readonly.sql` ✅
+- `google_calendar_verification.sql` + bestehende RBAC/Audit/Checklisten-Tests ✅
+- `config.test.ts` (Allowlist/Env) ✅
+- `npm run typecheck` / `npm run build` ✅
+- **Kein** OAuth-E2E mit echtem Testkalender in dieser Welle
+
+## 2026-07-16 – v0.4c.2: Google OAuth, Token-Verschlüsselung, manueller Sync
+
+### Entscheidung
+
+- **GUC entfernt:** `nora.calendar_link_update` → Capability `nora_calendar_linker` + SECURITY DEFINER intern
+- **OAuth:** openid, email, `calendar.events.owned.readonly`, `calendar.calendarlist.readonly` (nur CalendarList.get für Allowlist)
+- **PKCE S256** + State-Hash, TTL 10 min, atomarer Consume
+- **Token:** AES-GCM-256, Nonce pro Eintrag, Key Version; RPCs `store_/load_google_calendar_refresh_token`
+- **Allowlist:** `GOOGLE_CALENDAR_ALLOWED_ID` bindend; DB-Config wird bei Connect synchronisiert, kann Edge nicht überschreiben
+- **Sync:** Admin-only, 30/365 Tage, singleEvents, showDeleted, etag-basiertes Update, Audit-Summen
+- **Datenminimierung:** description bevorzugt leer, max 500, kein HTML
+- **Admin-UI:** `/google-kalender`
+- **E2E:** dokumentiert, nicht automatisiert — Erfolg erst nach manuellem Testkalender-Lauf
+
+### Verifikation
+
+- Migration `20260717120000_google_calendar_oauth_sync.sql` ✅
+- SQL- + Function-Tests ✅
+- `npm run typecheck` / `npm run build` ✅
+- **OAuth-E2E ausstehend** (Betreiber + isolierter Testkalender)

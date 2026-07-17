@@ -4,6 +4,7 @@ import { CancelButton } from "@/components/admin/cancel-button";
 import { SaveButton } from "@/components/admin/form";
 
 import { CompanyInputs } from "./CompanyInputs";
+import { NoraAccessGuard } from "../misc/NoraEditGuard";
 
 export const CompanyCreate = () => {
   const { identity } = useGetIdentity();
@@ -12,13 +13,13 @@ export const CompanyCreate = () => {
     <CreateBase
       redirect="show"
       transform={(values) => {
-        // add https:// before website if not present
         if (values.website && !values.website.startsWith("http")) {
           values.website = `https://${values.website}`;
         }
         return values;
       }}
     >
+      <NoraAccessGuard resource="companies" action="create" redirectTarget="list">
       <div className="mt-2 flex lg:mr-72">
         <div className="flex-1">
           <Form defaultValues={{ sales_id: identity?.id }}>
@@ -41,6 +42,7 @@ export const CompanyCreate = () => {
           </Form>
         </div>
       </div>
+      </NoraAccessGuard>
     </CreateBase>
   );
 };

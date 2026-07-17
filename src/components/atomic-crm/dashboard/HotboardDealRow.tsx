@@ -36,8 +36,8 @@ export const HotboardDealRow = ({ deal, companyName }: HotboardDealRowProps) => 
       className="w-full text-left px-4 py-3.5 hover:bg-muted/60 transition-colors nora-touch-target flex flex-col gap-1.5"
       aria-label={`${translate("crm.dashboard.hotboard.open_directly")}: ${deal.name}`}
     >
-      <BusinessNumber value={deal.case_number} />
-      <span className="nora-list-title text-sm leading-snug">{deal.name}</span>
+      <BusinessNumber value={deal.case_number} kind="case" size="md" />
+      <span className="nora-list-title text-base leading-snug">{deal.name}</span>
       <span className="nora-muted text-xs">
         {[companyName, stageLabel].filter(Boolean).join(" · ")}
       </span>

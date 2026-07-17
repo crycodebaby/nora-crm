@@ -1,4 +1,4 @@
-import { FileText, Import, Settings, User, Users } from "lucide-react";
+import { CalendarClock, FileText, History, Import, Settings, User, Users } from "lucide-react";
 import { CanAccess, useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { RefreshButton } from "@/components/admin/refresh-button";
@@ -7,9 +7,13 @@ import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 import { GlobalSearch } from "./GlobalSearch";
+import { DemoRoleSwitcher } from "../misc/DemoRoleSwitcher";
+import { QuickCaptureTrigger } from "../quickCapture/QuickCaptureTrigger";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
+import { AuditPage } from "../audit/AuditPage";
+import { GoogleCalendarAdminPage } from "../calendar/GoogleCalendarAdminPage";
 import {
   getActiveNoraResource,
   noraCreatePath,
@@ -85,6 +89,8 @@ const Header = () => {
                 />
               </nav>
               <GlobalSearch className="hidden md:flex flex-1 max-w-sm min-w-[12rem]" />
+              <QuickCaptureTrigger variant="header" />
+              <DemoRoleSwitcher className="hidden md:flex" />
               <div className="flex items-center shrink-0">
                 <ThemeModeToggle />
                 <RefreshButton />
@@ -96,7 +102,15 @@ const Header = () => {
                   <CanAccess resource="configuration" action="edit">
                     <SettingsMenu />
                   </CanAccess>
-                  <ImportFromJsonMenuItem />
+                  <CanAccess resource="google_calendar_connections" action="list">
+                    <GoogleCalendarMenuItem />
+                  </CanAccess>
+                  <CanAccess resource="configuration" action="edit">
+                    <ImportFromJsonMenuItem />
+                  </CanAccess>
+                  <CanAccess resource="audit_events" action="list">
+                    <AuditMenuItem />
+                  </CanAccess>
                   <ChangelogMenuItem />
                 </UserMenu>
               </div>
@@ -193,6 +207,22 @@ const ImportFromJsonMenuItem = () => {
   );
 };
 
+const GoogleCalendarMenuItem = () => {
+  const translate = useTranslate();
+  const userMenuContext = useUserMenu();
+  if (!userMenuContext) {
+    throw new Error("<GoogleCalendarMenuItem> must be used inside <UserMenu>");
+  }
+  return (
+    <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
+      <Link to={GoogleCalendarAdminPage.path} className="flex items-center gap-2">
+        <CalendarClock />
+        {translate("crm.calendar.admin.menu")}
+      </Link>
+    </DropdownMenuItem>
+  );
+};
+
 const ChangelogMenuItem = () => {
   const translate = useTranslate();
   const userMenuContext = useUserMenu();
@@ -204,6 +234,22 @@ const ChangelogMenuItem = () => {
       <Link to={ChangelogPage.path} className="flex items-center gap-2">
         <FileText />
         {translate("crm.changelog.title")}
+      </Link>
+    </DropdownMenuItem>
+  );
+};
+
+const AuditMenuItem = () => {
+  const translate = useTranslate();
+  const userMenuContext = useUserMenu();
+  if (!userMenuContext) {
+    throw new Error("<AuditMenuItem> must be used inside <UserMenu>");
+  }
+  return (
+    <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
+      <Link to={AuditPage.path} className="flex items-center gap-2">
+        <History />
+        {translate("crm.audit.page_title")}
       </Link>
     </DropdownMenuItem>
   );

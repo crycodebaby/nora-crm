@@ -5,12 +5,13 @@ import { Suspense, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { useConfigurationLoader } from "../root/useConfigurationLoader";
+import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
 import { MobileNavigation } from "./MobileNavigation";
 
 export const MobileLayout = ({ children }: { children: ReactNode }) => {
   useConfigurationLoader();
   return (
-    <>
+    <QuickCaptureProvider>
       <ErrorBoundary FallbackComponent={Error}>
         <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
           {children}
@@ -18,6 +19,6 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
       </ErrorBoundary>
       <MobileNavigation />
       <Notification mobileOffset={{ bottom: "72px" }} />
-    </>
+    </QuickCaptureProvider>
   );
 };

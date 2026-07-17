@@ -21,6 +21,7 @@ import { SimpleFormIterator } from "@/components/admin/simple-form-iterator";
 import { TextInput } from "@/components/admin/text-input";
 
 import ImageEditorField from "../misc/ImageEditorField";
+import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import {
   useConfigurationContext,
   useConfigurationUpdater,
@@ -154,7 +155,13 @@ export const SettingsPage = () => {
         },
       }}
     >
-      <SettingsForm />
+      <NoraAccessGuard
+        resource="configuration"
+        action="edit"
+        fallbackPath="/"
+      >
+        <SettingsForm />
+      </NoraAccessGuard>
     </EditBase>
   );
 };

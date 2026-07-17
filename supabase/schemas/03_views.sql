@@ -133,3 +133,18 @@ select count(sub.id) as is_initialized
 from (
     select sales.id from public.sales limit 1
 ) sub;
+
+create or replace view public.sales_directory
+with (security_invoker = false)
+as
+select
+    s.id,
+    s.first_name,
+    s.last_name,
+    s.avatar
+from public.sales s
+where s.disabled = false
+  and nora_private.is_active_user();
+
+comment on view public.sales_directory is
+    'Active team directory; caller must be active (is_active_user). No role/email/user_id.';

@@ -1,51 +1,53 @@
-/* eslint-disable react-refresh/only-export-components */
-import { differenceInDays, formatRelative } from "date-fns";
-import { enUS, fr } from "date-fns/locale";
+import { de, enUS, fr } from "date-fns/locale";import { differenceInDays, formatDistance } from "date-fns";
 import { useLocaleState } from "ra-core";
 
-/**
- * We use date-fns rather than Intl because Intl isn't yet capable of formatting relative dates as we want.
- *
- * The best we could do is this:
- *
- * const relativeDay = new Intl.RelativeTimeFormat(locale, {
- *   numeric: "auto",
- * }).format(diffInDays, "day");
- *
- * const time = new Intl.DateTimeFormat(locale, {
- *   hour: "numeric",
- *   minute: "numeric",
- * }).format(dateObj);
- *
- * return `${relativeDay} ${time}`;
- *
- * This would return relatives dates as "3 days ago 3:00 PM" which isn't ideal. We want "3 days ago at 3:00 PM".
- */
+import {
+  formatNoraDateTime,
+  getDateFnsLocale,
+  NORA_DATE_LOCALE,
+} from "./noraDateTime";
 
-const getDateFnsLocale = (locale: string) =>
-  locale.startsWith("fr") ? fr : enUS;
-
-export const formatLocalizedDate = (date: string, locale = "en") =>
+export const formatLocalizedDate = (date: string, locale = NORA_DATE_LOCALE) =>
   new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "long",
     day: "numeric",
   }).format(new Date(date));
 
-export const formatRelativeDate = (date: string, locale = "en") => {
+export const formatRelativeDate = (date: string, locale = "de") => {
   const dateObj = new Date(date);
   const now = new Date();
   const dateFnsLocale = getDateFnsLocale(locale);
 
   if (differenceInDays(now, dateObj) > 6) {
-    return new Intl.DateTimeFormat(locale).format(dateObj);
+    return locale.startsWith("de")
+      ? formatNoraDateTime(dateObj)
+      : new Intl.DateTimeFormat(locale).format(dateObj);
   }
 
-  return formatRelative(dateObj, now, { locale: dateFnsLocale });
+  const distance = formatDistance(dateObj, now, {
+    addSuffix: true,
+    locale: dateFnsLocale,
+  });
+
+  if (!locale.startsWith("de")) {
+    return distance;
+  }
+
+  return distance
+    .replace("about ", "")
+    .replace("less than a minute ago", "gerade eben")
+    .replace("minute ago", "Minute")
+    .replace("minutes ago", "Minuten")
+    .replace("hour ago", "Stunde")
+    .replace("hours ago", "Stunden")
+    .replace("yesterday at", "Gestern um")
+    .replace("today at", "Heute um")
+    .replace(" at ", " um ");
 };
 
 export const useRelativeDate = (date: string) => {
-  const [locale = "en"] = useLocaleState();
+  const [locale = "de"] = useLocaleState();
 
   return formatRelativeDate(date, locale);
 };
@@ -53,3 +55,6 @@ export const useRelativeDate = (date: string) => {
 export function RelativeDate({ date }: { date: string }) {
   return useRelativeDate(date);
 }
+
+// Re-export for backward compatibility
+export { de, enUS, fr };

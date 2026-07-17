@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 import { ContactInputs } from "./ContactInputs";
 import { FormToolbar } from "../layout/FormToolbar";
+import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import {
   cleanupContactForCreate,
   defaultEmailJsonb,
@@ -22,6 +23,7 @@ export const ContactCreate = ({
       transform={cleanupContactForCreate}
       mutationMode={mutationMode}
     >
+      <NoraAccessGuard resource="contacts" action="create" redirectTarget="list">
       <div className="mt-2 flex lg:mr-72">
         <div className="flex-1">
           <Form
@@ -40,6 +42,7 @@ export const ContactCreate = ({
           </Form>
         </div>
       </div>
+      </NoraAccessGuard>
     </CreateBase>
   );
 };

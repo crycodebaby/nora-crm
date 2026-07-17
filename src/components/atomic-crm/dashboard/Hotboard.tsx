@@ -10,8 +10,12 @@ import { useMemo } from "react";
 
 import type { Company, Deal } from "../types";
 import { HotboardDealSection } from "./HotboardDealSection";
+import { HotboardFocusBoard } from "./HotboardFocusBoard";
 import { HotboardOpenProductionReleases } from "./HotboardOpenProductionReleases";
 import { HotboardOpenTasks } from "./HotboardOpenTasks";
+import { QuickCaptureTrigger } from "../quickCapture/QuickCaptureTrigger";
+import { GoogleCalendarDemoNotice } from "../calendar/GoogleCalendarDemoNotice";
+import { NoraPageLoading } from "../misc/NoraPageLoading";
 import {
   filterFollowUpDeals,
   filterNewInquiryDeals,
@@ -20,6 +24,7 @@ import {
   HOTBOARD_DEAL_LIMIT,
   sortDealsByCreatedDesc,
   sortDealsByFollowUpDate,
+  prepareFocusColumnDeals,
 } from "./hotboardUtils";
 
 export const Hotboard = () => {
@@ -70,6 +75,16 @@ export const Hotboard = () => {
     [deals, followUpIds],
   );
 
+  const focusBoardCompanyIds = useMemo(() => {
+    const newInquiry = prepareFocusColumnDeals(deals ?? [], "neue-anfrage");
+    const nachfassen = prepareFocusColumnDeals(deals ?? [], "nachfassen");
+    return [
+      ...new Set(
+        [...newInquiry.deals, ...nachfassen.deals].map((deal) => deal.company_id),
+      ),
+    ];
+  }, [deals]);
+
   const displayedDeals = useMemo(
     () => [
       ...followUpDeals,
@@ -86,8 +101,13 @@ export const Hotboard = () => {
   );
 
   const companyIds = useMemo(
-    () => [...new Set(displayedDeals.map((deal) => deal.company_id))],
-    [displayedDeals],
+    () => [
+      ...new Set([
+        ...displayedDeals.map((deal) => deal.company_id),
+        ...focusBoardCompanyIds,
+      ]),
+    ],
+    [displayedDeals, focusBoardCompanyIds],
   );
 
   const { data: companies } = useGetMany<Company>(
@@ -105,7 +125,7 @@ export const Hotboard = () => {
   }, [companies]);
 
   if (isPending) {
-    return null;
+    return <NoraPageLoading variant="cards" className="min-h-[24rem]" />;
   }
 
   return (
@@ -113,9 +133,13 @@ export const Hotboard = () => {
       className="flex flex-col gap-5"
       aria-label={translate("crm.dashboard.hotboard.title")}
     >
-      <h1 className="text-xl font-semibold tracking-tight">
-        {translate("crm.dashboard.hotboard.title")}
-      </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">
+          {translate("crm.dashboard.hotboard.title")}
+        </h1>
+        <QuickCaptureTrigger variant="hotboard" />
+      </div>
+      <HotboardFocusBoard deals={deals ?? []} companyById={companyById} />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         <HotboardDealSection
           icon={CalendarClock}
@@ -148,6 +172,7 @@ export const Hotboard = () => {
         <FileText className="inline h-3.5 w-3.5 mr-1 align-text-bottom" />
         {translate("crm.dashboard.hotboard.no_appointments_hint")}
       </p>
+      <GoogleCalendarDemoNotice />
     </section>
   );
 };

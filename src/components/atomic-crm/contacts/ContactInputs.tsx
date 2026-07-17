@@ -214,7 +214,7 @@ const ContactMiscInputs = () => {
       <TextInput source="background" multiline helperText={false} />
       <BooleanInput source="has_newsletter" helperText={false} />
       <ReferenceInput
-        reference="sales"
+        reference="sales_directory"
         source="sales_id"
         sort={{ field: "last_name", order: "ASC" }}
         filter={{

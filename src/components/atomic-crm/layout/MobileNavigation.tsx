@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Home, ListTodo, Plus, Settings, Users } from "lucide-react";
-import { useTranslate } from "ra-core";
+import { CanAccess, useTranslate } from "ra-core";
 import { Link, useLocation, useMatch } from "react-router";
 import { ContactCreateSheet } from "../contacts/ContactCreateSheet";
 import { useState } from "react";
@@ -17,6 +17,7 @@ import {
   getActiveNoraResource,
   noraCreatePath,
 } from "../routing/noraRoutes";
+import { useQuickCapture } from "../quickCapture/QuickCaptureContext";
 import { GlobalSearch } from "./GlobalSearch";
 
 export const MobileNavigation = () => {
@@ -65,7 +66,7 @@ export const MobileNavigation = () => {
             })}
             isActive={currentPath === "contacts"}
           />
-          <CreateButton />
+          <MobileCreateButton />
           <NavigationButton
             href="/tasks"
             Icon={ListTodo}
@@ -108,8 +109,9 @@ const NavigationButton = ({
   </Button>
 );
 
-const CreateButton = () => {
+const MobileCreateButton = () => {
   const translate = useTranslate();
+  const { openQuickCapture } = useQuickCapture();
   const contactMatch = useMatch("/kontakte/:id/*")
     ?? useMatch("/contacts/:id/*");
   const contact_id = contactMatch?.params.id;
@@ -118,59 +120,73 @@ const CreateButton = () => {
   const [taskCreateOpen, setTaskCreateOpen] = useState(false);
 
   return (
-    <>
-      <ContactCreateSheet
-        open={contactCreateOpen}
-        onOpenChange={setContactCreateOpen}
-      />
-      <NoteCreateSheet
-        open={noteCreateOpen}
-        onOpenChange={setNoteCreateOpen}
-        contact_id={contact_id}
-      />
-      <TaskCreateSheet
-        open={taskCreateOpen}
-        onOpenChange={setTaskCreateOpen}
-        contact_id={contact_id}
-      />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            size="icon"
-            className="h-16 w-16 rounded-full -mt-3 nora-primary-action shadow-md"
-            aria-label={translate("ra.action.create")}
-          >
-            <Plus className="size-10" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem
-            className="h-12 px-4 text-base"
-            onSelect={() => {
-              setContactCreateOpen(true);
-            }}
-          >
-            {translate("resources.contacts.forcedCaseName")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="h-12 px-4 text-base"
-            onSelect={() => {
-              setNoteCreateOpen(true);
-            }}
-          >
-            {translate("resources.notes.forcedCaseName")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="h-12 px-4 text-base"
-            onSelect={() => {
-              setTaskCreateOpen(true);
-            }}
-          >
-            {translate("resources.tasks.forcedCaseName")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
+    <CanAccess resource="deals" action="create">
+      <>
+        <ContactCreateSheet
+          open={contactCreateOpen}
+          onOpenChange={setContactCreateOpen}
+        />
+        <NoteCreateSheet
+          open={noteCreateOpen}
+          onOpenChange={setNoteCreateOpen}
+          contact_id={contact_id}
+        />
+        <TaskCreateSheet
+          open={taskCreateOpen}
+          onOpenChange={setTaskCreateOpen}
+          contact_id={contact_id}
+        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon"
+              className="h-16 w-16 rounded-full -mt-3 nora-primary-action shadow-md"
+              aria-label={translate("ra.action.create")}
+            >
+              <Plus className="size-10" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem
+              className="h-12 px-4 text-base"
+              onSelect={openQuickCapture}
+            >
+              {translate("crm.quick_capture.capture_new_inquiry")}
+            </DropdownMenuItem>
+            <CanAccess resource="contacts" action="create">
+              <DropdownMenuItem
+                className="h-12 px-4 text-base"
+                onSelect={() => {
+                  setContactCreateOpen(true);
+                }}
+              >
+                {translate("resources.contacts.forcedCaseName")}
+              </DropdownMenuItem>
+            </CanAccess>
+            <CanAccess resource="contact_notes" action="create">
+              <DropdownMenuItem
+                className="h-12 px-4 text-base"
+                onSelect={() => {
+                  setNoteCreateOpen(true);
+                }}
+              >
+                {translate("resources.notes.forcedCaseName")}
+              </DropdownMenuItem>
+            </CanAccess>
+            <CanAccess resource="tasks" action="create">
+              <DropdownMenuItem
+                className="h-12 px-4 text-base"
+                onSelect={() => {
+                  setTaskCreateOpen(true);
+                }}
+              >
+                {translate("resources.tasks.forcedCaseName")}
+              </DropdownMenuItem>
+            </CanAccess>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    </CanAccess>
   );
 };
 
@@ -180,11 +196,13 @@ const SettingsButton = () => {
   const isActive = location.pathname.startsWith("/settings");
 
   return (
-    <NavigationButton
-      href="/settings"
-      Icon={Settings}
-      label={translate("crm.settings.title")}
-      isActive={isActive}
-    />
+    <CanAccess resource="configuration" action="edit">
+      <NavigationButton
+        href="/settings"
+        Icon={Settings}
+        label={translate("crm.settings.title")}
+        isActive={isActive}
+      />
+    </CanAccess>
   );
 };

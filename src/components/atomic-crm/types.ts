@@ -16,19 +16,30 @@ export type SignUpData = {
   last_name: string;
 };
 
+export type NoraRole = "admin" | "office" | "viewer";
+
 export type SalesFormData = {
   avatar?: string;
   email: string;
   password?: string;
   first_name: string;
   last_name: string;
+  role: NoraRole;
+  /** @deprecated Spiegel von role=admin — nur Kompatibilität */
   administrator: boolean;
   disabled: boolean;
 };
 
+export type SalesDirectory = {
+  first_name: string;
+  last_name: string;
+  avatar?: RAFile;
+} & Pick<RaRecord, "id">;
+
 export type Sale = {
   first_name: string;
   last_name: string;
+  role: NoraRole;
   administrator: boolean;
   avatar?: RAFile;
   disabled?: boolean;

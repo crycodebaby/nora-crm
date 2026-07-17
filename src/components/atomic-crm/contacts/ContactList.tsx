@@ -7,16 +7,17 @@ import {
   type Exporter,
 } from "ra-core";
 import { BulkActionsToolbar } from "@/components/admin/bulk-actions-toolbar";
-import { BulkDeleteButton } from "@/components/admin/bulk-delete-button";
 import { BulkExportButton } from "@/components/admin/bulk-export-button";
-import { CreateButton } from "@/components/admin/create-button";
 import { ExportButton } from "@/components/admin/export-button";
 import { List } from "@/components/admin/list";
 import { SelectAllButton } from "@/components/admin/select-all-button";
 import { SortButton } from "@/components/admin/sort-button";
+import { CanAccess } from "ra-core";
 import { Card } from "@/components/ui/card";
 
-import type { Company, Contact, Sale, Tag } from "../types";
+import type { Company, Contact, SalesDirectory, Tag } from "../types";
+import { NoraBulkDeleteButton, NoraCreateButton } from "../misc/NoraAccessActions";
+import { NoraPageLoading } from "../misc/NoraPageLoading";
 import { BulkTagButton } from "./BulkTagButton";
 import { ContactEmpty } from "./ContactEmpty";
 import { ContactImportButton } from "./ContactImportButton";
@@ -56,7 +57,7 @@ const ContactListLayoutDesktop = () => {
 
   const hasFilters = filterValues && Object.keys(filterValues).length > 0;
 
-  if (isPending) return null;
+  if (isPending) return <NoraPageLoading />;
 
   if (!data?.length && !hasFilters) return <ContactEmpty />;
 
@@ -80,7 +81,7 @@ const ContactBulkActionButtons = () => (
     <SelectAllButton />
     <BulkTagButton />
     <BulkExportButton />
-    <BulkDeleteButton />
+    <NoraBulkDeleteButton resource="contacts" />
   </>
 );
 
@@ -90,10 +91,12 @@ const ContactListActions = () => (
       <SortButton fields={["first_name", "last_name", "last_seen"]} />
     </div>
     <div className="flex items-center gap-1 border-r border-border pr-3 mr-3">
-      <ContactImportButton />
+      <CanAccess resource="contacts" action="create">
+        <ContactImportButton />
+      </CanAccess>
       <ExportButton exporter={exporter} />
     </div>
-    <CreateButton />
+    <NoraCreateButton resource="contacts" />
   </TopToolbar>
 );
 
@@ -148,7 +151,11 @@ const exporter: Exporter<Contact> = async (records, fetchRelatedRecords) => {
     "company_id",
     "companies",
   );
-  const sales = await fetchRelatedRecords<Sale>(records, "sales_id", "sales");
+  const sales = await fetchRelatedRecords<SalesDirectory>(
+    records,
+    "sales_id",
+    "sales_directory",
+  );
   const tags = await fetchRelatedRecords<Tag>(records, "tags", "tags");
 
   const contacts = records.map((contact) => {

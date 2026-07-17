@@ -5,12 +5,12 @@ import {
   useRecordContext,
   useTranslate,
 } from "ra-core";
-import { EditButton } from "@/components/admin/edit-button";
-import { DeleteButton } from "@/components/admin/delete-button";
 import { ShowButton } from "@/components/admin/show-button";
 import { TextField } from "@/components/admin/text-field";
 import { UrlField } from "@/components/admin/url-field";
 import { SelectField } from "@/components/admin/select-field";
+
+import { NoraDeleteButton, NoraEditButton } from "../misc/NoraAccessActions";
 
 import { formatLocalizedDate } from "../misc/RelativeDate";
 import { AsideSection } from "../misc/AsideSection";
@@ -34,7 +34,10 @@ export const CompanyAside = ({ link = "edit" }: CompanyAsideProps) => {
     <div className="hidden sm:block w-92 min-w-92 space-y-4">
       <div className="flex flex-row space-x-1">
         {link === "edit" ? (
-          <EditButton label={translate("resources.companies.action.edit")} />
+          <NoraEditButton
+            resource="companies"
+            label={translate("resources.companies.action.edit")}
+          />
         ) : (
           <ShowButton label={translate("resources.companies.action.show")} />
         )}
@@ -50,7 +53,8 @@ export const CompanyAside = ({ link = "edit" }: CompanyAsideProps) => {
 
       {link !== "edit" && (
         <div className="mt-6 pt-6 border-t hidden sm:flex flex-col gap-2 items-start">
-          <DeleteButton
+          <NoraDeleteButton
+            resource="companies"
             className="h-6 cursor-pointer hover:bg-destructive/10! text-destructive! border-destructive! focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40"
             size="sm"
           />

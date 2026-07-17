@@ -32,7 +32,7 @@ export const defaultDealStages = [
   { value: "in-kalkulation", label: "In Kalkulation" },
   { value: "wartet-auf-hersteller", label: "Wartet auf Hersteller" },
   { value: "angebot-gesendet", label: "Angebot gesendet" },
-  { value: "nachfassen", label: "Nachfassen" },
+  { value: "nachfassen", label: "Rückmeldung ausstehend" },
   { value: "angenommen", label: "Angenommen" },
   { value: "abgelehnt", label: "Abgelehnt" },
   { value: "abgeschlossen", label: "Abgeschlossen" },
@@ -65,7 +65,7 @@ export const defaultTaskTypes = [
   { value: "aufmass", label: "Aufmaß" },
   { value: "herstelleranfrage", label: "Herstelleranfrage" },
   { value: "angebot-erstellen", label: "Angebot erstellen" },
-  { value: "angebot-nachfassen", label: "Angebot nachfassen" },
+  { value: "angebot-nachfassen", label: "Rückmeldung zu Angebot" },
   { value: "termin-vereinbaren", label: "Termin vereinbaren" },
   { value: "dokumentation", label: "Dokumentation" },
 ];

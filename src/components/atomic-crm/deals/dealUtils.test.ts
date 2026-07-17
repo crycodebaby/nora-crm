@@ -85,7 +85,7 @@ describe("formatISODateString", () => {
   it("formats a valid ISO date string correctly", () => {
     const isoDate = "2024-06-15";
     const formattedDate = formatISODateString(isoDate);
-    expect(formattedDate).toBe("Jun 15, 2024");
+    expect(formattedDate).toBe("15. Juni 2024");
   });
 
   it("should not shift the date regardless of timezone", async () => {
@@ -95,16 +95,16 @@ describe("formatISODateString", () => {
     // dates in negative-offset timezones like America/New_York.
     const isoDate = "2024-06-15";
     await commands.setTimezone("America/New_York");
-    expect(formatISODateString(isoDate)).toBe("Jun 15, 2024");
+    expect(formatISODateString(isoDate)).toBe("15. Juni 2024");
 
     await commands.setTimezone("Asia/Tokyo");
-    expect(formatISODateString(isoDate)).toBe("Jun 15, 2024");
+    expect(formatISODateString(isoDate)).toBe("15. Juni 2024");
 
     await commands.setTimezone("UTC");
-    expect(formatISODateString(isoDate)).toBe("Jun 15, 2024");
+    expect(formatISODateString(isoDate)).toBe("15. Juni 2024");
 
     await commands.setTimezone("Pacific/Auckland");
-    expect(formatISODateString(isoDate)).toBe("Jun 15, 2024");
+    expect(formatISODateString(isoDate)).toBe("15. Juni 2024");
   });
 
   it("throw for an invalid date string", () => {

@@ -26,6 +26,8 @@ import { SignupPage } from "../login/SignupPage";
 import { ConfirmationRequired } from "../login/ConfirmationRequired";
 import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
+import { AuditPage } from "../audit/AuditPage";
+import { GoogleCalendarAdminPage } from "../calendar/GoogleCalendarAdminPage";
 import {
   getAuthProvider as defaultAuthProviderBuilder,
   getDataProvider as defaultDataProviderBuilder,
@@ -271,6 +273,8 @@ const DesktopAdmin = (
         <Route path={SettingsPage.path} element={<SettingsPage />} />
         <Route path={ImportPage.path} element={<ImportPage />} />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+        <Route path={AuditPage.path} element={<AuditPage />} />
+        <Route path={GoogleCalendarAdminPage.path} element={<GoogleCalendarAdminPage />} />
         {noraAliasRoutes}
       </CustomRoutes>
       <Resource name="deals" {...deals} />
@@ -347,6 +351,7 @@ const MobileAdmin = (
             element={<SettingsPageMobile />}
           />
           <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+          <Route path={AuditPage.path} element={<AuditPage />} />
           {noraAliasRoutes}
         </CustomRoutes>
         <Resource

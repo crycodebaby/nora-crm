@@ -5,6 +5,7 @@ import type { Contact } from "../types";
 import { ContactAside } from "./ContactAside";
 import { ContactInputs } from "./ContactInputs";
 import { FormToolbar } from "../layout/FormToolbar";
+import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import {
   cleanupContactForEdit,
   defaultEmailJsonb,
@@ -41,7 +42,8 @@ const ContactEditContent = () => {
   const { isPending, record } = useEditContext<Contact>();
   if (isPending || !record) return null;
   return (
-    <div className="mt-2 flex gap-8">
+    <NoraAccessGuard resource="contacts">
+      <div className="mt-2 flex gap-8">
       <Form
         className="flex flex-1 flex-col gap-4"
         record={normalizeContactArrayFields(record)}
@@ -56,5 +58,6 @@ const ContactEditContent = () => {
 
       <ContactAside link="show" />
     </div>
+    </NoraAccessGuard>
   );
 };

@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
 import { useDataProvider, useRedirect, useTranslate } from "ra-core";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,8 +28,23 @@ import { noraCreatePath } from "../routing/noraRoutes";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { CrmDataProvider } from "../providers/types";
 import type { Company, Contact } from "../types";
+import { NoraQueryError } from "../misc/NoraQueryError";
 
 const DEBOUNCE_MS = 300;
+
+const GLOBAL_SEARCH_INPUT_ID = "nora-global-search";
+const GLOBAL_SEARCH_MOBILE_INPUT_ID = "nora-global-search-mobile";
+const GLOBAL_SEARCH_RESULTS_ID = "nora-global-search-results";
+
+/** Reduce Chrome Wallet / loyalty-card autofill on search fields */
+const globalSearchInputProps = {
+  type: "search" as const,
+  autoComplete: "off",
+  autoCorrect: "off",
+  autoCapitalize: "off",
+  spellCheck: false,
+  inputMode: "search" as const,
+};
 
 function useDebouncedValue<T>(value: T, delay = DEBOUNCE_MS): T {
   const [debounced, setDebounced] = useState(value);
@@ -53,7 +68,9 @@ export const GlobalSearch = ({
   const dataProvider = useDataProvider<CrmDataProvider>();
   const redirect = useRedirect();
   const { dealStages, dealCategories } = useConfigurationContext();
-  const inputId = useId();
+  const inputId =
+    variant === "mobile" ? GLOBAL_SEARCH_MOBILE_INPUT_ID : GLOBAL_SEARCH_INPUT_ID;
+  const inputName = inputId;
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -63,11 +80,12 @@ export const GlobalSearch = ({
   const debouncedQuery = useDebouncedValue(query);
   const searchEnabled = canSearchQuery(debouncedQuery);
 
-  const { data: result, isFetching } = useQuery({
+  const { data: result, isFetching, error, refetch } = useQuery({
     queryKey: ["globalSearch", debouncedQuery],
     queryFn: () => performGlobalSearch(dataProvider, debouncedQuery),
     enabled: searchEnabled && (variant === "mobile" ? mobileOpen : open),
     staleTime: 30_000,
+    retry: false,
   });
 
   const navigateTo = useCallback(
@@ -126,6 +144,8 @@ export const GlobalSearch = ({
     <SearchResults
       result={result}
       isFetching={isFetching}
+      error={error}
+      onRetry={() => refetch()}
       searchEnabled={searchEnabled}
       query={debouncedQuery}
       dealStages={dealStages}
@@ -156,12 +176,16 @@ export const GlobalSearch = ({
           <div className="border-b px-3 py-2">
             <Input
               ref={inputRef}
+              id={inputId}
+              name={inputName}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={translate("crm.search.hint")}
               className="nora-search-input nora-touch-target border-0 shadow-none focus-visible:ring-0"
+              role="searchbox"
               autoFocus
+              {...globalSearchInputProps}
             />
           </div>
           {resultsPanel}
@@ -181,7 +205,7 @@ export const GlobalSearch = ({
           <Input
             ref={inputRef}
             id={inputId}
-            type="search"
+            name={inputName}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -192,14 +216,15 @@ export const GlobalSearch = ({
             placeholder={translate("crm.search.hint")}
             aria-label={translate("crm.search.placeholder")}
             aria-expanded={open}
-            aria-controls={`${inputId}-results`}
+            aria-controls={GLOBAL_SEARCH_RESULTS_ID}
+            role="searchbox"
             className="nora-search-input nora-touch-target pl-9 h-10 w-full bg-background/95"
-            autoComplete="off"
+            {...globalSearchInputProps}
           />
         </div>
       </PopoverAnchor>
       <PopoverContent
-        id={`${inputId}-results`}
+        id={GLOBAL_SEARCH_RESULTS_ID}
         align="end"
         className="w-[min(100vw-2rem,28rem)] p-0"
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -213,6 +238,8 @@ export const GlobalSearch = ({
 const SearchResults = ({
   result,
   isFetching,
+  error,
+  onRetry,
   searchEnabled,
   query,
   dealStages,
@@ -221,6 +248,8 @@ const SearchResults = ({
 }: {
   result: GlobalSearchResponse | undefined;
   isFetching: boolean;
+  error: unknown;
+  onRetry: () => void;
   searchEnabled: boolean;
   query: string;
   dealStages: { value: string; label: string }[];
@@ -249,6 +278,14 @@ const SearchResults = ({
       <p className="px-4 py-6 text-sm text-muted-foreground text-center">
         {translate("crm.common.loading")}
       </p>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="px-3 py-4">
+        <NoraQueryError error={error} onRetry={onRetry} />
+      </div>
     );
   }
 

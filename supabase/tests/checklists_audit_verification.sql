@@ -140,12 +140,62 @@ declare
     v_test_user uuid := 'a0000000-0000-4000-8000-000000000099';
     v_company_id bigint;
     v_deal_id bigint;
+    v_sale_id bigint;
     v_run_id uuid;
     v_run_id2 uuid;
     v_item_count int;
     v_audit_count int;
     v_required_ok boolean;
 begin
+    insert into auth.users (
+        instance_id,
+        id,
+        aud,
+        role,
+        email,
+        encrypted_password,
+        email_confirmed_at,
+        recovery_sent_at,
+        last_sign_in_at,
+        raw_app_meta_data,
+        raw_user_meta_data,
+        created_at,
+        updated_at,
+        confirmation_token,
+        email_change,
+        email_change_token_new,
+        recovery_token
+    )
+    values (
+        '00000000-0000-0000-0000-000000000000',
+        v_test_user,
+        'authenticated',
+        'authenticated',
+        'checklist-rpc@nora.test',
+        crypt('password', gen_salt('bf')),
+        now(),
+        now(),
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{}'::jsonb,
+        now(),
+        now(),
+        '',
+        '',
+        '',
+        ''
+    )
+    on conflict (id) do nothing;
+
+    begin
+        insert into public.sales (first_name, last_name, email, user_id, role, administrator, disabled)
+        values ('Checklist', 'RPC', 'checklist-rpc@nora.test', v_test_user, 'office', false, false);
+    exception
+        when unique_violation then
+            select id into v_sale_id from public.sales where user_id = v_test_user;
+            perform nora_private.apply_sales_role_change(v_sale_id, 'office', false);
+    end;
+
     perform set_config('request.jwt.claim.sub', v_test_user::text, true);
     execute 'set local role authenticated';
 
@@ -198,6 +248,9 @@ begin
         raise exception 'is_required/sort_index not copied from template items';
     end if;
 
+    -- v0.3l: office cannot SELECT audit_events globally; verify as postgres
+    reset role;
+
     select count(*)::int
     into v_audit_count
     from public.audit_events
@@ -207,6 +260,9 @@ begin
     if v_audit_count <> 1 then
         raise exception 'Expected 1 checklist.run_started audit, got %', v_audit_count;
     end if;
+
+    perform set_config('request.jwt.claim.sub', v_test_user::text, true);
+    execute 'set local role authenticated';
 
     v_run_id2 := public.start_checklist_run_from_template(
         'FENS_PRODUCTION_RELEASE',
@@ -226,6 +282,8 @@ begin
         raise exception 'Idempotent call duplicated items: %', v_item_count;
     end if;
 
+    reset role;
+
     select count(*)::int
     into v_audit_count
     from public.audit_events
@@ -235,6 +293,9 @@ begin
     if v_audit_count <> 1 then
         raise exception 'Idempotent call must not duplicate audit, got %', v_audit_count;
     end if;
+
+    perform set_config('request.jwt.claim.sub', v_test_user::text, true);
+    execute 'set local role authenticated';
 
     begin
         perform public.start_checklist_run_from_template('UNKNOWN_TEMPLATE_X', v_deal_id);

@@ -130,9 +130,34 @@ create or replace trigger prevent_audit_events_delete
     before delete on public.audit_events
     for each row execute function public.prevent_audit_mutation();
 
-create or replace trigger audit_deal_stage_change_trigger
-    after update of stage on public.deals
-    for each row execute function public.audit_deal_stage_change();
+-- Nora CRM v0.3l: CRM entity audit (replaces deal stage-only trigger)
+create or replace trigger audit_company_row_trigger
+    after insert or update or delete on public.companies
+    for each row execute function public.audit_company_row();
+
+create or replace trigger audit_contact_row_trigger
+    after insert or update or delete on public.contacts
+    for each row execute function public.audit_contact_row();
+
+create or replace trigger audit_deal_row_trigger
+    after insert or update or delete on public.deals
+    for each row execute function public.audit_deal_row();
+
+create or replace trigger audit_task_row_trigger
+    after insert or update or delete on public.tasks
+    for each row execute function public.audit_task_row();
+
+create or replace trigger audit_contact_note_row_trigger
+    after insert or update or delete on public.contact_notes
+    for each row execute function public.audit_contact_note_row();
+
+create or replace trigger audit_deal_note_row_trigger
+    after insert or update or delete on public.deal_notes
+    for each row execute function public.audit_deal_note_row();
+
+create or replace trigger audit_sales_privilege_change_trigger
+    after update of role, disabled on public.sales
+    for each row execute function public.audit_sales_privilege_change();
 
 create or replace trigger audit_checklist_run_changes_trigger
     after insert or update on public.checklist_runs

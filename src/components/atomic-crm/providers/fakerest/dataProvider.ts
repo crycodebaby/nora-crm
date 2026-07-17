@@ -30,11 +30,21 @@ import {
   nextCustomerNumberForFakeRest,
 } from "../../misc/numbering";
 import { performGlobalSearch } from "../../misc/globalSearch";
+import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
+import type {
+  GetEntityAuditEventsParams,
+  GetGlobalAuditEventsParams,
+} from "../../audit/auditTypes";
 import type { CrmDataProvider } from "../types";
 import {
-  authProvider as defaultAuthProvider,
-  USER_STORAGE_KEY,
-} from "./authProvider";
+  filterDemoEntityAuditEvents,
+  filterDemoGlobalAuditEvents,
+  getDemoAuditStorageStats,
+} from "./dataGenerator/noraDemoAuditSeed";
+import {
+  setActiveDemoSale,
+} from "./demoSession";
+import { authProvider as defaultAuthProvider } from "./authProvider";
 import generateData from "./dataGenerator";
 import type { Db } from "./dataGenerator/types";
 import { withSupabaseFilterAdapter } from "./internal/supabaseAdapter";
@@ -330,6 +340,31 @@ export const createDataProvider = ({
       });
       return config;
     },
+    getEntityAuditEvents: async (params: GetEntityAuditEventsParams) => {
+      const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+      const data = filterDemoEntityAuditEvents(
+        params.entityType,
+        params.entityId,
+        limit,
+        params.before,
+      );
+      return { data, limit };
+    },
+    getGlobalAuditEvents: async (params: GetGlobalAuditEventsParams = {}) => {
+      const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+      const data = filterDemoGlobalAuditEvents({
+        limit,
+        before: params.before,
+        entityType: params.entityType,
+        eventType: params.eventType,
+        actorSalesId: params.actorSalesId,
+        from: params.from,
+        to: params.to,
+        businessNumber: params.businessNumber,
+      });
+      return { data, limit };
+    },
+    getAuditStorageStats: async () => getDemoAuditStorageStats(),
   };
 
   const dataProvider = withLifecycleCallbacks(
@@ -352,18 +387,39 @@ export const createDataProvider = ({
         resource: "sales",
         beforeCreate: async (params) => {
           const { data } = params;
-          // If administrator role is not set, we simply set it to false
+          if (data.role == null) {
+            data.role = data.administrator ? "admin" : "viewer";
+          }
           if (data.administrator == null) {
-            data.administrator = false;
+            data.administrator = data.role === "admin";
           }
           return params;
         },
         afterSave: async (data) => {
+          const entry = {
+            id: data.id,
+            first_name: data.first_name,
+            last_name: data.last_name,
+            avatar: data.avatar,
+          };
+          const directoryIndex = db.sales_directory.findIndex(
+            (row) => row.id === data.id,
+          );
+          if (!data.disabled) {
+            if (directoryIndex >= 0) {
+              db.sales_directory[directoryIndex] = entry;
+            } else {
+              db.sales_directory.push(entry);
+            }
+          } else if (directoryIndex >= 0) {
+            db.sales_directory.splice(directoryIndex, 1);
+          }
+
           // Since the current user is stored in localStorage in fakerest authProvider
           // we need to update it to keep information up to date in the UI
           const currentUser = await getIdentity();
           if (currentUser?.id === data.id) {
-            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data));
+            setActiveDemoSale(data);
           }
           return data;
         },
@@ -435,6 +491,10 @@ export const createDataProvider = ({
               },
             }),
           ]);
+
+          db.sales_directory = db.sales_directory.filter(
+            (row) => row.id !== params.id,
+          );
 
           return params;
         },
@@ -632,7 +692,7 @@ export const createDataProvider = ({
   return dataProvider;
 };
 
-export const dataProvider = createDataProvider();
+export const dataProvider = withCrmErrorHandler(createDataProvider());
 
 /**
  * Convert a `File` object returned by the upload input into a base 64 string.

@@ -229,18 +229,18 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     SET "search_path" TO ''
     AS $$
 declare
-  sales_count int;
+  v_role text;
 begin
-  select count(id) into sales_count
-  from public.sales;
+  v_role := nora_private.resolve_first_signup_role();
 
-  insert into public.sales (first_name, last_name, email, user_id, administrator)
+  insert into public.sales (first_name, last_name, email, user_id, role, administrator)
   values (
     coalesce(new.raw_user_meta_data ->> 'first_name', new.raw_user_meta_data -> 'custom_claims' ->> 'first_name', 'Pending'),
     coalesce(new.raw_user_meta_data ->> 'last_name', new.raw_user_meta_data -> 'custom_claims' ->> 'last_name', 'Pending'),
     new.email,
     new.id,
-    case when sales_count > 0 then FALSE else TRUE end
+    v_role,
+    (v_role = 'admin')
   );
   return new;
 end;
@@ -262,16 +262,8 @@ begin
 end;
 $$;
 
-CREATE OR REPLACE FUNCTION "public"."is_admin"() RETURNS boolean
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-begin
-  return exists (
-    select 1 from public.sales where user_id = auth.uid() and administrator = true
-  );
-end;
-$$;
+-- v0.4b.1: is_admin() moved to nora_private.is_admin() — not exposed in public schema.
+-- Public RPCs: set_sales_role_by_admin, start_checklist_run_from_template.
 
 CREATE OR REPLACE FUNCTION "public"."merge_contacts"("loser_id" bigint, "winner_id" bigint) RETURNS bigint
     LANGUAGE "plpgsql"
@@ -591,23 +583,61 @@ CREATE OR REPLACE FUNCTION "public"."insert_audit_event"(
     "p_metadata" jsonb DEFAULT NULL::jsonb
 ) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
-    SET "search_path" TO 'public'
+    SET "search_path" TO ''
     AS $$
 declare
-    v_id uuid := gen_random_uuid();
-    v_actor uuid := auth.uid();
+    v_changes jsonb := '{}'::jsonb;
+    v_key text;
+    v_retention text := 'checklist';
+    v_meta jsonb := coalesce(p_metadata, '{}'::jsonb);
 begin
-    insert into public.audit_events (
-        id, actor_id, event_type, entity_type, entity_id,
-        company_id, contact_id, deal_id, checklist_run_id, checklist_run_item_id,
-        old_data, new_data, metadata
-    )
-    values (
-        v_id, v_actor, p_event_type, p_entity_type, p_entity_id,
-        p_company_id, p_contact_id, p_deal_id, p_checklist_run_id, p_checklist_run_item_id,
-        p_old_data, p_new_data, p_metadata
+    if p_event_type like 'checklist.%' or p_event_type like 'snippet.%' then
+        v_retention := case
+            when p_event_type like 'snippet.%' then 'crm_change'
+            else 'checklist'
+        end;
+    elsif p_event_type like 'user.%' then
+        v_retention := 'user_management';
+    else
+        v_retention := 'crm_change';
+    end if;
+
+    if p_old_data is not null or p_new_data is not null then
+        for v_key in
+            select key from (
+                select jsonb_object_keys(coalesce(p_old_data, '{}'::jsonb)) as key
+                union
+                select jsonb_object_keys(coalesce(p_new_data, '{}'::jsonb)) as key
+            ) keys
+        loop
+            v_changes := v_changes || jsonb_build_object(
+                v_key,
+                jsonb_build_object(
+                    'old', p_old_data -> v_key,
+                    'new', p_new_data -> v_key
+                )
+            );
+        end loop;
+    end if;
+
+    return nora_private.write_audit_event(
+        p_event_type,
+        p_entity_type,
+        p_entity_id,
+        p_company_id,
+        p_contact_id,
+        p_deal_id,
+        p_checklist_run_id,
+        p_checklist_run_item_id,
+        null,
+        null,
+        v_changes,
+        v_meta,
+        v_retention,
+        'user',
+        null,
+        null
     );
-    return v_id;
 end;
 $$;
 
@@ -632,23 +662,6 @@ CREATE OR REPLACE FUNCTION "public"."prevent_audit_mutation"() RETURNS trigger
     AS $$
 begin
     raise exception 'audit_events is append-only';
-end;
-$$;
-
-CREATE OR REPLACE FUNCTION "public"."audit_deal_stage_change"() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET "search_path" TO 'public'
-    AS $$
-begin
-    if tg_op = 'UPDATE' and old.stage is distinct from new.stage then
-        perform public.insert_audit_event(
-            'deal.stage_changed', 'deal', public.nora_entity_uuid('deal', new.id),
-            new.company_id, null, new.id, null, null,
-            jsonb_build_object('stage', old.stage),
-            jsonb_build_object('stage', new.stage), null
-        );
-    end if;
-    return new;
 end;
 $$;
 
@@ -841,3 +854,1060 @@ begin
     end;
 end;
 $$;
+
+-- v0.4b.2 RBAC final hardening (see migration 20260714150000)
+
+CREATE OR REPLACE FUNCTION nora_private.resolve_first_signup_role()
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    sales_count int;
+BEGIN
+    PERFORM pg_catalog.pg_advisory_xact_lock(89142421, 1);
+    SELECT count(*)::int INTO sales_count FROM public.sales;
+    IF sales_count > 0 THEN
+        RETURN 'viewer';
+    END IF;
+    RETURN 'admin';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION nora_private.apply_sales_role_change(
+    p_sale_id bigint,
+    p_role text,
+    p_disabled boolean DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    IF p_role IS NULL OR p_role NOT IN ('admin', 'office', 'viewer') THEN
+        RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
+    END IF;
+
+    UPDATE public.sales
+    SET
+        role = p_role,
+        disabled = coalesce(p_disabled, disabled)
+    WHERE id = p_sale_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'sales profile not found: %', p_sale_id USING ERRCODE = 'P0002';
+    END IF;
+END;
+$$;
+
+ALTER FUNCTION nora_private.apply_sales_role_change(bigint, text, boolean) OWNER TO nora_role_manager;
+
+CREATE OR REPLACE FUNCTION public.prevent_sales_privilege_escalation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+    IF current_user = 'nora_role_manager' THEN
+        IF tg_op = 'UPDATE' THEN
+            IF new.id IS DISTINCT FROM old.id THEN
+                RAISE EXCEPTION 'sales.id is immutable';
+            END IF;
+            IF new.user_id IS DISTINCT FROM old.user_id THEN
+                RAISE EXCEPTION 'sales.user_id is immutable';
+            END IF;
+            IF new.email IS DISTINCT FROM old.email THEN
+                RAISE EXCEPTION 'sales.email is immutable for role manager';
+            END IF;
+            IF new.first_name IS DISTINCT FROM old.first_name
+                OR new.last_name IS DISTINCT FROM old.last_name
+                OR new.avatar IS DISTINCT FROM old.avatar THEN
+                RAISE EXCEPTION 'role manager may only change role and disabled';
+            END IF;
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        IF new.id IS DISTINCT FROM old.id THEN
+            RAISE EXCEPTION 'sales.id is immutable';
+        END IF;
+        IF new.user_id IS DISTINCT FROM old.user_id THEN
+            RAISE EXCEPTION 'sales.user_id is immutable';
+        END IF;
+        IF new.email IS DISTINCT FROM old.email THEN
+            RAISE EXCEPTION 'sales.email is immutable for direct updates';
+        END IF;
+        IF new.role IS DISTINCT FROM old.role THEN
+            RAISE EXCEPTION 'sales.role is immutable for direct updates';
+        END IF;
+        IF new.administrator IS DISTINCT FROM old.administrator THEN
+            RAISE EXCEPTION 'sales.administrator is immutable for direct updates';
+        END IF;
+        IF new.disabled IS DISTINCT FROM old.disabled THEN
+            RAISE EXCEPTION 'sales.disabled is immutable for direct updates';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.set_sales_role_by_admin(
+    p_sale_id bigint,
+    p_role text,
+    p_disabled boolean DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    IF p_role IS NULL OR p_role NOT IN ('admin', 'office', 'viewer') THEN
+        RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
+    END IF;
+
+    IF coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' THEN
+        IF NOT nora_private.is_admin() THEN
+            RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+        END IF;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.sales WHERE id = p_sale_id) THEN
+        RAISE EXCEPTION 'sales profile not found: %', p_sale_id USING ERRCODE = 'P0002';
+    END IF;
+
+    PERFORM nora_private.apply_sales_role_change(p_sale_id, p_role, p_disabled);
+END;
+$$;
+
+-- Nora CRM v0.3l: CRM audit writer, diff builders, entity triggers, read RPCs
+-- Role nora_audit_writer is created in migration 20260715120000_nora_crm_audit.sql
+
+CREATE OR REPLACE FUNCTION nora_private.resolve_audit_actor()
+RETURNS TABLE (
+    actor_auth_id uuid,
+    actor_sales_id bigint,
+    actor_name text,
+    actor_role text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_uid uuid;
+    v_sale public.sales%rowtype;
+BEGIN
+    v_uid := nora_private.safe_auth_uid();
+    IF v_uid IS NULL THEN
+        RETURN QUERY SELECT null::uuid, null::bigint, 'System'::text, null::text;
+        RETURN;
+    END IF;
+    SELECT * INTO v_sale FROM public.sales s
+    WHERE s.user_id = v_uid AND s.disabled = false LIMIT 1;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT v_uid, null::bigint, 'Unbekannter Benutzer'::text, null::text;
+        RETURN;
+    END IF;
+    RETURN QUERY SELECT v_uid, v_sale.id, trim(v_sale.first_name || ' ' || v_sale.last_name), v_sale.role;
+END;
+$$;
+
+ALTER FUNCTION nora_private.resolve_audit_actor() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.audit_json_field(p_old jsonb, p_new jsonb, p_key text)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+    SELECT CASE
+        WHEN p_old IS NOT DISTINCT FROM p_new THEN null
+        ELSE jsonb_build_object('old', p_old, 'new', p_new)
+    END;
+$$;
+
+ALTER FUNCTION nora_private.audit_json_field(jsonb, jsonb, text) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.write_audit_event(
+    p_event_type text, p_entity_type text, p_entity_id uuid,
+    p_company_id bigint DEFAULT null, p_contact_id bigint DEFAULT null, p_deal_id bigint DEFAULT null,
+    p_checklist_run_id uuid DEFAULT null, p_checklist_run_item_id uuid DEFAULT null,
+    p_task_id bigint DEFAULT null, p_note_id bigint DEFAULT null,
+    p_changes jsonb DEFAULT null, p_metadata jsonb DEFAULT null,
+    p_retention_class text DEFAULT 'crm_change', p_source text DEFAULT 'user',
+    p_customer_number text DEFAULT null, p_case_number text DEFAULT null
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_id uuid := gen_random_uuid();
+    v_actor record;
+    v_meta jsonb := coalesce(p_metadata, '{}'::jsonb);
+BEGIN
+    SELECT * INTO v_actor FROM nora_private.resolve_audit_actor() r LIMIT 1;
+    IF p_changes IS NOT NULL AND p_changes <> '{}'::jsonb THEN
+        v_meta := v_meta || jsonb_build_object('changes', p_changes);
+    END IF;
+    IF p_customer_number IS NOT NULL THEN
+        v_meta := v_meta || jsonb_build_object('customer_number', p_customer_number);
+    END IF;
+    IF p_case_number IS NOT NULL THEN
+        v_meta := v_meta || jsonb_build_object('case_number', p_case_number);
+    END IF;
+    INSERT INTO public.audit_events (
+        id, actor_id, actor_sales_id, actor_name_snapshot, actor_role_snapshot,
+        source, retention_class, event_type, entity_type, entity_id,
+        company_id, contact_id, deal_id, checklist_run_id, checklist_run_item_id,
+        task_id, note_id, old_data, new_data, metadata
+    ) VALUES (
+        v_id, v_actor.actor_auth_id, v_actor.actor_sales_id, v_actor.actor_name, v_actor.actor_role,
+        coalesce(p_source, 'user'), coalesce(p_retention_class, 'crm_change'),
+        p_event_type, p_entity_type, p_entity_id,
+        p_company_id, p_contact_id, p_deal_id, p_checklist_run_id, p_checklist_run_item_id,
+        p_task_id, p_note_id, null, null, v_meta
+    );
+    RETURN v_id;
+END;
+$$;
+
+ALTER FUNCTION nora_private.write_audit_event(
+    text, text, uuid, bigint, bigint, bigint, uuid, uuid, bigint, bigint,
+    jsonb, jsonb, text, text, text, text
+) OWNER TO nora_audit_writer;
+
+-- Whitelist diff builders
+
+CREATE OR REPLACE FUNCTION nora_private.audit_company_changes(
+    p_old public.companies,
+    p_new public.companies
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+    v jsonb := '{}'::jsonb;
+    part jsonb;
+BEGIN
+    part := nora_private.audit_json_field(to_jsonb(p_old.name), to_jsonb(p_new.name), 'name');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('name', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.address), to_jsonb(p_new.address), 'address');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('address', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.phone_number), to_jsonb(p_new.phone_number), 'phone_number');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('phone_number', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.website), to_jsonb(p_new.website), 'website');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('website', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.sales_id), to_jsonb(p_new.sales_id), 'sales_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('sales_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.sector), to_jsonb(p_new.sector), 'sector');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('sector', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.city), to_jsonb(p_new.city), 'city');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('city', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.zipcode), to_jsonb(p_new.zipcode), 'zipcode');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('zipcode', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.state_abbr), to_jsonb(p_new.state_abbr), 'state_abbr');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('state_abbr', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.country), to_jsonb(p_new.country), 'country');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('country', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.description), to_jsonb(p_new.description), 'description');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('description', part); END IF;
+    RETURN v;
+END;
+$$;
+
+ALTER FUNCTION nora_private.audit_company_changes(public.companies, public.companies) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.audit_contact_changes(
+    p_old public.contacts,
+    p_new public.contacts
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+    v jsonb := '{}'::jsonb;
+    part jsonb;
+BEGIN
+    part := nora_private.audit_json_field(to_jsonb(p_old.first_name), to_jsonb(p_new.first_name), 'first_name');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('first_name', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.last_name), to_jsonb(p_new.last_name), 'last_name');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('last_name', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.company_id), to_jsonb(p_new.company_id), 'company_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('company_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.phone_jsonb), to_jsonb(p_new.phone_jsonb), 'phone_jsonb');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('phone_jsonb', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.email_jsonb), to_jsonb(p_new.email_jsonb), 'email_jsonb');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('email_jsonb', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.title), to_jsonb(p_new.title), 'title');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('title', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.sales_id), to_jsonb(p_new.sales_id), 'sales_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('sales_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.status), to_jsonb(p_new.status), 'status');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('status', part); END IF;
+    RETURN v;
+END;
+$$;
+
+ALTER FUNCTION nora_private.audit_contact_changes(public.contacts, public.contacts) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.audit_deal_changes(
+    p_old public.deals,
+    p_new public.deals
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+    v jsonb := '{}'::jsonb;
+    part jsonb;
+BEGIN
+    part := nora_private.audit_json_field(to_jsonb(p_old.name), to_jsonb(p_new.name), 'name');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('name', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.company_id), to_jsonb(p_new.company_id), 'company_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('company_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.contact_ids), to_jsonb(p_new.contact_ids), 'contact_ids');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('contact_ids', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.stage), to_jsonb(p_new.stage), 'stage');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('stage', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.category), to_jsonb(p_new.category), 'category');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('category', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.amount), to_jsonb(p_new.amount), 'amount');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('amount', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.expected_closing_date), to_jsonb(p_new.expected_closing_date), 'expected_closing_date');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('expected_closing_date', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.sales_id), to_jsonb(p_new.sales_id), 'sales_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('sales_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.archived_at), to_jsonb(p_new.archived_at), 'archived_at');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('archived_at', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.description), to_jsonb(p_new.description), 'description');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('description', part); END IF;
+    RETURN v;
+END;
+$$;
+
+ALTER FUNCTION nora_private.audit_deal_changes(public.deals, public.deals) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.audit_task_changes(
+    p_old public.tasks,
+    p_new public.tasks
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $$
+DECLARE
+    v jsonb := '{}'::jsonb;
+    part jsonb;
+BEGIN
+    part := nora_private.audit_json_field(to_jsonb(p_old.text), to_jsonb(p_new.text), 'text');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('text', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.due_date), to_jsonb(p_new.due_date), 'due_date');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('due_date', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.done_date), to_jsonb(p_new.done_date), 'done_date');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('done_date', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.contact_id), to_jsonb(p_new.contact_id), 'contact_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('contact_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.sales_id), to_jsonb(p_new.sales_id), 'sales_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('sales_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.type), to_jsonb(p_new.type), 'type');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('type', part); END IF;
+    RETURN v;
+END;
+$$;
+
+ALTER FUNCTION nora_private.audit_task_changes(public.tasks, public.tasks) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.audit_note_content_meta(
+    p_old_text text,
+    p_new_text text
+)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $$
+    SELECT jsonb_build_object(
+        'content_changed', true,
+        'old_length', coalesce(length(p_old_text), 0),
+        'new_length', coalesce(length(p_new_text), 0),
+        'old_preview', left(coalesce(p_old_text, ''), 80),
+        'new_preview', left(coalesce(p_new_text, ''), 80),
+        'old_hash', md5(coalesce(p_old_text, '')),
+        'new_hash', md5(coalesce(p_new_text, ''))
+    );
+$$;
+
+ALTER FUNCTION nora_private.audit_note_content_meta(text, text) OWNER TO postgres;
+
+-- Entity audit trigger functions (triggers defined in 04_triggers.sql)
+
+CREATE OR REPLACE FUNCTION public.audit_company_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_changes jsonb;
+    v_event text;
+    v_cn text;
+BEGIN
+    IF tg_op = 'INSERT' THEN
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'company.created',
+            p_entity_type := 'company',
+            p_entity_id := public.nora_entity_uuid('company', new.id),
+            p_company_id := new.id,
+            p_customer_number := new.customer_number
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        v_changes := nora_private.audit_company_changes(old, new);
+        IF v_changes = '{}'::jsonb THEN
+            RETURN new;
+        END IF;
+        v_event := 'company.updated';
+        v_cn := new.customer_number;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := v_event,
+            p_entity_type := 'company',
+            p_entity_id := public.nora_entity_uuid('company', new.id),
+            p_company_id := new.id,
+            p_changes := v_changes,
+            p_customer_number := v_cn
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'DELETE' THEN
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'company.deleted',
+            p_entity_type := 'company',
+            p_entity_id := public.nora_entity_uuid('company', old.id),
+            p_company_id := old.id,
+            p_retention_class := 'security',
+            p_customer_number := old.customer_number
+        );
+        RETURN old;
+    END IF;
+
+    RETURN coalesce(new, old);
+END;
+$$;
+
+ALTER FUNCTION public.audit_company_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.audit_contact_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_changes jsonb;
+    v_cn text;
+BEGIN
+    IF tg_op = 'INSERT' THEN
+        SELECT c.customer_number INTO v_cn
+        FROM public.companies c WHERE c.id = new.company_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'contact.created',
+            p_entity_type := 'contact',
+            p_entity_id := public.nora_entity_uuid('contact', new.id),
+            p_company_id := new.company_id,
+            p_contact_id := new.id,
+            p_customer_number := v_cn
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        v_changes := nora_private.audit_contact_changes(old, new);
+        IF v_changes = '{}'::jsonb THEN
+            RETURN new;
+        END IF;
+        SELECT c.customer_number INTO v_cn
+        FROM public.companies c WHERE c.id = new.company_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'contact.updated',
+            p_entity_type := 'contact',
+            p_entity_id := public.nora_entity_uuid('contact', new.id),
+            p_company_id := new.company_id,
+            p_contact_id := new.id,
+            p_changes := v_changes,
+            p_customer_number := v_cn
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'DELETE' THEN
+        SELECT c.customer_number INTO v_cn
+        FROM public.companies c WHERE c.id = old.company_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'contact.deleted',
+            p_entity_type := 'contact',
+            p_entity_id := public.nora_entity_uuid('contact', old.id),
+            p_company_id := old.company_id,
+            p_contact_id := old.id,
+            p_retention_class := 'security',
+            p_customer_number := v_cn
+        );
+        RETURN old;
+    END IF;
+
+    RETURN coalesce(new, old);
+END;
+$$;
+
+ALTER FUNCTION public.audit_contact_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.audit_deal_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_changes jsonb;
+    v_event text;
+    v_cn text;
+BEGIN
+    IF tg_op = 'INSERT' THEN
+        SELECT c.customer_number INTO v_cn
+        FROM public.companies c WHERE c.id = new.company_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'deal.created',
+            p_entity_type := 'deal',
+            p_entity_id := public.nora_entity_uuid('deal', new.id),
+            p_company_id := new.company_id,
+            p_deal_id := new.id,
+            p_customer_number := v_cn,
+            p_case_number := new.case_number
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        IF old.archived_at IS NULL AND new.archived_at IS NOT NULL THEN
+            SELECT c.customer_number INTO v_cn FROM public.companies c WHERE c.id = new.company_id;
+            PERFORM nora_private.write_audit_event(
+                p_event_type := 'deal.archived',
+                p_entity_type := 'deal',
+                p_entity_id := public.nora_entity_uuid('deal', new.id),
+                p_company_id := new.company_id,
+                p_deal_id := new.id,
+                p_customer_number := v_cn,
+                p_case_number := new.case_number
+            );
+            RETURN new;
+        END IF;
+
+        IF old.archived_at IS NOT NULL AND new.archived_at IS NULL THEN
+            SELECT c.customer_number INTO v_cn FROM public.companies c WHERE c.id = new.company_id;
+            PERFORM nora_private.write_audit_event(
+                p_event_type := 'deal.restored',
+                p_entity_type := 'deal',
+                p_entity_id := public.nora_entity_uuid('deal', new.id),
+                p_company_id := new.company_id,
+                p_deal_id := new.id,
+                p_customer_number := v_cn,
+                p_case_number := new.case_number
+            );
+            RETURN new;
+        END IF;
+
+        v_changes := nora_private.audit_deal_changes(old, new);
+        IF v_changes = '{}'::jsonb THEN
+            RETURN new;
+        END IF;
+
+        IF v_changes ? 'stage' AND (SELECT count(*) FROM jsonb_object_keys(v_changes)) = 1 THEN
+            v_event := 'deal.status_changed';
+        ELSE
+            v_event := 'deal.updated';
+        END IF;
+
+        SELECT c.customer_number INTO v_cn FROM public.companies c WHERE c.id = new.company_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := v_event,
+            p_entity_type := 'deal',
+            p_entity_id := public.nora_entity_uuid('deal', new.id),
+            p_company_id := new.company_id,
+            p_deal_id := new.id,
+            p_changes := v_changes,
+            p_customer_number := v_cn,
+            p_case_number := new.case_number
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'DELETE' THEN
+        SELECT c.customer_number INTO v_cn FROM public.companies c WHERE c.id = old.company_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'deal.deleted',
+            p_entity_type := 'deal',
+            p_entity_id := public.nora_entity_uuid('deal', old.id),
+            p_company_id := old.company_id,
+            p_deal_id := old.id,
+            p_retention_class := 'security',
+            p_customer_number := v_cn,
+            p_case_number := old.case_number
+        );
+        RETURN old;
+    END IF;
+
+    RETURN coalesce(new, old);
+END;
+$$;
+
+ALTER FUNCTION public.audit_deal_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.audit_task_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_changes jsonb;
+    v_event text;
+    v_company_id bigint;
+    v_deal_id bigint;
+    v_cn text;
+BEGIN
+    IF tg_op = 'INSERT' THEN
+        SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = new.contact_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'task.created',
+            p_entity_type := 'task',
+            p_entity_id := public.nora_entity_uuid('task', new.id),
+            p_company_id := v_company_id,
+            p_contact_id := new.contact_id,
+            p_task_id := new.id
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        IF old.done_date IS NULL AND new.done_date IS NOT NULL THEN
+            v_event := 'task.completed';
+        ELSIF old.done_date IS NOT NULL AND new.done_date IS NULL THEN
+            v_event := 'task.reopened';
+        ELSE
+            v_event := 'task.updated';
+        END IF;
+
+        v_changes := nora_private.audit_task_changes(old, new);
+        IF v_event = 'task.updated' AND v_changes = '{}'::jsonb THEN
+            RETURN new;
+        END IF;
+
+        SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = new.contact_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := v_event,
+            p_entity_type := 'task',
+            p_entity_id := public.nora_entity_uuid('task', new.id),
+            p_company_id := v_company_id,
+            p_contact_id := new.contact_id,
+            p_task_id := new.id,
+            p_changes := CASE WHEN v_event = 'task.updated' THEN v_changes ELSE null END
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'DELETE' THEN
+        SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = old.contact_id;
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'task.deleted',
+            p_entity_type := 'task',
+            p_entity_id := public.nora_entity_uuid('task', old.id),
+            p_company_id := v_company_id,
+            p_contact_id := old.contact_id,
+            p_task_id := old.id,
+            p_retention_class := 'security'
+        );
+        RETURN old;
+    END IF;
+
+    RETURN coalesce(new, old);
+END;
+$$;
+
+ALTER FUNCTION public.audit_task_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.audit_contact_note_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_company_id bigint;
+    v_meta jsonb;
+BEGIN
+    SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = coalesce(new.contact_id, old.contact_id);
+
+    IF tg_op = 'INSERT' THEN
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'contact_note.created',
+            p_entity_type := 'contact_note',
+            p_entity_id := public.nora_entity_uuid('contact_note', new.id),
+            p_company_id := v_company_id,
+            p_contact_id := new.contact_id,
+            p_note_id := new.id,
+            p_changes := nora_private.audit_note_content_meta(null, new.text)
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        IF old.text IS NOT DISTINCT FROM new.text THEN
+            RETURN new;
+        END IF;
+        v_meta := nora_private.audit_note_content_meta(old.text, new.text);
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'contact_note.updated',
+            p_entity_type := 'contact_note',
+            p_entity_id := public.nora_entity_uuid('contact_note', new.id),
+            p_company_id := v_company_id,
+            p_contact_id := new.contact_id,
+            p_note_id := new.id,
+            p_changes := v_meta
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'DELETE' THEN
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'contact_note.deleted',
+            p_entity_type := 'contact_note',
+            p_entity_id := public.nora_entity_uuid('contact_note', old.id),
+            p_company_id := v_company_id,
+            p_contact_id := old.contact_id,
+            p_note_id := old.id,
+            p_changes := nora_private.audit_note_content_meta(old.text, null),
+            p_retention_class := 'security'
+        );
+        RETURN old;
+    END IF;
+
+    RETURN coalesce(new, old);
+END;
+$$;
+
+ALTER FUNCTION public.audit_contact_note_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.audit_deal_note_row()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_deal public.deals%rowtype;
+    v_meta jsonb;
+BEGIN
+    SELECT * INTO v_deal FROM public.deals d WHERE d.id = coalesce(new.deal_id, old.deal_id);
+
+    IF tg_op = 'INSERT' THEN
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'deal_note.created',
+            p_entity_type := 'deal_note',
+            p_entity_id := public.nora_entity_uuid('deal_note', new.id),
+            p_company_id := v_deal.company_id,
+            p_deal_id := new.deal_id,
+            p_note_id := new.id,
+            p_changes := nora_private.audit_note_content_meta(null, new.text),
+            p_case_number := v_deal.case_number
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'UPDATE' THEN
+        IF old.text IS NOT DISTINCT FROM new.text THEN
+            RETURN new;
+        END IF;
+        v_meta := nora_private.audit_note_content_meta(old.text, new.text);
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'deal_note.updated',
+            p_entity_type := 'deal_note',
+            p_entity_id := public.nora_entity_uuid('deal_note', new.id),
+            p_company_id := v_deal.company_id,
+            p_deal_id := new.deal_id,
+            p_note_id := new.id,
+            p_changes := v_meta,
+            p_case_number := v_deal.case_number
+        );
+        RETURN new;
+    END IF;
+
+    IF tg_op = 'DELETE' THEN
+        PERFORM nora_private.write_audit_event(
+            p_event_type := 'deal_note.deleted',
+            p_entity_type := 'deal_note',
+            p_entity_id := public.nora_entity_uuid('deal_note', old.id),
+            p_company_id := v_deal.company_id,
+            p_deal_id := old.deal_id,
+            p_note_id := old.id,
+            p_changes := nora_private.audit_note_content_meta(old.text, null),
+            p_retention_class := 'security',
+            p_case_number := v_deal.case_number
+        );
+        RETURN old;
+    END IF;
+
+    RETURN coalesce(new, old);
+END;
+$$;
+
+ALTER FUNCTION public.audit_deal_note_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.audit_sales_privilege_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    IF tg_op = 'UPDATE' THEN
+        IF old.role IS DISTINCT FROM new.role THEN
+            PERFORM nora_private.write_audit_event(
+                p_event_type := 'user.role_changed',
+                p_entity_type := 'sales',
+                p_entity_id := public.nora_entity_uuid('sales', new.id),
+                p_changes := jsonb_build_object(
+                    'role',
+                    jsonb_build_object('old', old.role, 'new', new.role)
+                ),
+                p_metadata := jsonb_build_object('sale_id', new.id),
+                p_retention_class := 'user_management'
+            );
+        END IF;
+
+        IF old.disabled IS DISTINCT FROM new.disabled THEN
+            PERFORM nora_private.write_audit_event(
+                p_event_type := CASE WHEN new.disabled THEN 'user.disabled' ELSE 'user.enabled' END,
+                p_entity_type := 'sales',
+                p_entity_id := public.nora_entity_uuid('sales', new.id),
+                p_changes := jsonb_build_object(
+                    'disabled',
+                    jsonb_build_object('old', old.disabled, 'new', new.disabled)
+                ),
+                p_metadata := jsonb_build_object('sale_id', new.id),
+                p_retention_class := 'user_management'
+            );
+        END IF;
+    END IF;
+
+    RETURN new;
+END;
+$$;
+
+ALTER FUNCTION public.audit_sales_privilege_change() OWNER TO postgres;
+
+-- Read RPCs (sanitized for office, full for admin)
+
+CREATE OR REPLACE FUNCTION public.get_entity_audit_events(
+    p_entity_type text,
+    p_entity_id bigint,
+    p_limit integer DEFAULT 20,
+    p_before timestamptz DEFAULT null
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_limit integer := least(greatest(coalesce(p_limit, 20), 1), 100);
+    v_role text;
+    v_rows jsonb;
+BEGIN
+    IF p_entity_type IS NULL OR p_entity_id IS NULL THEN
+        RAISE EXCEPTION 'entity_type and entity_id required' USING errcode = '22023';
+    END IF;
+
+    IF p_entity_type NOT IN ('company', 'contact', 'deal') THEN
+        RAISE EXCEPTION 'invalid entity_type: %', p_entity_type USING errcode = '22023';
+    END IF;
+
+    v_role := nora_private.current_role();
+    IF v_role IS NULL OR v_role = 'viewer' THEN
+        RAISE EXCEPTION 'forbidden' USING errcode = '42501';
+    END IF;
+
+    SELECT coalesce(jsonb_agg(row_to_json(q)::jsonb ORDER BY q.created_at DESC), '[]'::jsonb)
+    INTO v_rows
+    FROM (
+        SELECT
+            ae.id,
+            ae.created_at,
+            ae.event_type,
+            ae.entity_type,
+            ae.actor_name_snapshot,
+            ae.actor_role_snapshot,
+            ae.source,
+            ae.metadata,
+            ae.company_id,
+            ae.contact_id,
+            ae.deal_id,
+            ae.task_id,
+            ae.note_id
+        FROM public.audit_events ae
+        WHERE (
+            CASE p_entity_type
+                WHEN 'company' THEN ae.company_id = p_entity_id
+                WHEN 'contact' THEN ae.contact_id = p_entity_id
+                WHEN 'deal' THEN ae.deal_id = p_entity_id
+            END
+        )
+        AND (p_before IS NULL OR ae.created_at < p_before)
+        ORDER BY ae.created_at DESC
+        LIMIT v_limit
+    ) q;
+
+    RETURN jsonb_build_object('data', v_rows, 'limit', v_limit);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_global_audit_events(
+    p_limit integer DEFAULT 50,
+    p_before timestamptz DEFAULT null,
+    p_entity_type text DEFAULT null,
+    p_event_type text DEFAULT null,
+    p_actor_sales_id bigint DEFAULT null,
+    p_from timestamptz DEFAULT null,
+    p_to timestamptz DEFAULT null,
+    p_business_number text DEFAULT null
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+    v_rows jsonb;
+BEGIN
+    IF NOT nora_private.is_admin() THEN
+        RAISE EXCEPTION 'forbidden' USING errcode = '42501';
+    END IF;
+
+    SELECT coalesce(jsonb_agg(row_to_json(q)::jsonb ORDER BY q.created_at DESC), '[]'::jsonb)
+    INTO v_rows
+    FROM (
+        SELECT
+            ae.id,
+            ae.created_at,
+            ae.event_type,
+            ae.entity_type,
+            ae.actor_id,
+            ae.actor_sales_id,
+            ae.actor_name_snapshot,
+            ae.actor_role_snapshot,
+            ae.source,
+            ae.retention_class,
+            ae.metadata,
+            ae.company_id,
+            ae.contact_id,
+            ae.deal_id,
+            ae.task_id,
+            ae.note_id
+        FROM public.audit_events ae
+        WHERE (p_before IS NULL OR ae.created_at < p_before)
+          AND (p_entity_type IS NULL OR ae.entity_type = p_entity_type)
+          AND (p_event_type IS NULL OR ae.event_type = p_event_type)
+          AND (p_actor_sales_id IS NULL OR ae.actor_sales_id = p_actor_sales_id)
+          AND (p_from IS NULL OR ae.created_at >= p_from)
+          AND (p_to IS NULL OR ae.created_at <= p_to)
+          AND (
+              p_business_number IS NULL
+              OR ae.metadata ->> 'customer_number' ILIKE p_business_number
+              OR ae.metadata ->> 'case_number' ILIKE p_business_number
+          )
+        ORDER BY ae.created_at DESC
+        LIMIT v_limit
+    ) q;
+
+    RETURN jsonb_build_object('data', v_rows, 'limit', v_limit);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_audit_storage_stats()
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_count bigint;
+    v_oldest timestamptz;
+    v_newest timestamptz;
+    v_last_30 bigint;
+    v_table_bytes bigint;
+    v_index_bytes bigint;
+    v_avg_meta numeric;
+BEGIN
+    IF NOT nora_private.is_admin() THEN
+        RAISE EXCEPTION 'forbidden' USING errcode = '42501';
+    END IF;
+
+    SELECT count(*), min(created_at), max(created_at)
+    INTO v_count, v_oldest, v_newest
+    FROM public.audit_events;
+
+    SELECT count(*) INTO v_last_30
+    FROM public.audit_events
+    WHERE created_at >= now() - interval '30 days';
+
+    SELECT
+        pg_catalog.pg_relation_size('public.audit_events'::regclass),
+        pg_catalog.pg_indexes_size('public.audit_events'::regclass)
+    INTO v_table_bytes, v_index_bytes;
+
+    SELECT avg(pg_catalog.pg_column_size(metadata)) INTO v_avg_meta
+    FROM public.audit_events;
+
+    RETURN jsonb_build_object(
+        'event_count', v_count,
+        'oldest_event', v_oldest,
+        'newest_event', v_newest,
+        'events_last_30_days', v_last_30,
+        'table_bytes', v_table_bytes,
+        'index_bytes', v_index_bytes,
+        'total_bytes', v_table_bytes + v_index_bytes,
+        'avg_metadata_bytes', round(coalesce(v_avg_meta, 0)),
+        'growth_hint',
+            CASE
+                WHEN v_count < 10000 THEN 'unauffaellig'
+                WHEN v_count < 100000 THEN 'wachstum_beobachten'
+                ELSE 'archivierungsplanung_erforderlich'
+            END,
+        'projection_note',
+            'Schaetzung: bei gleichbleibendem Tempo ~' ||
+            round(v_last_30::numeric * 12)::text ||
+            ' Ereignisse/Jahr (nur Indikator, keine Garantie).'
+    );
+END;
+$$;
+

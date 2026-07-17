@@ -176,7 +176,7 @@ export const DealInputs = () => {
 
           source="sales_id"
 
-          reference="sales"
+          reference="sales_directory"
 
           filter={{
 

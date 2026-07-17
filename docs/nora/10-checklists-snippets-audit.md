@@ -5,7 +5,8 @@
 **Welle v0.3d3** — RPC `start_checklist_run_from_template` umgesetzt  
 **Welle v0.3d4** — Checklisten-UI im Vorgangsdetail umgesetzt  
 **Welle v0.3d5** — Hotboard-Kachel „Produktionsfreigaben offen“ umgesetzt  
-**Status:** Tabellen, RLS, Audit, Run-Start, Vorgangs-UI und **Hotboard-Kachel** implementiert
+**Welle v0.3l** — CRM-Audit-Verlauf (Kern-CRM-Trigger + UI) umgesetzt  
+**Status:** Tabellen, RLS, Audit, Run-Start, Vorgangs-UI, **Hotboard-Kachel** und **CRM-Änderungshistorie** implementiert
 
 Dieses Dokument definiert das fachliche und technische Fundament für modulare Checklisten, wiederverwendbare Textbausteine und zentrale Audit-Logs. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `09-window-order-workflow.md` und den Decision Log.
 
@@ -21,6 +22,15 @@ Dieses Dokument definiert das fachliche und technische Fundament für modulare C
 | Utils/Tests | `productionReleaseHotboardUtils.ts`, `.test.ts` |
 | DB | keine Migration — liest `checklist_*` + `deals` + `companies` |
 | Demo | Bereich ausgeblendet (`VITE_IS_DEMO`) |
+
+### Demo-Daten und Checklisten (v0.3f)
+
+| Modus | Checklisten |
+|-------|-------------|
+| `npm run dev:demo` (FakeRest) | UI deaktiviert — keine `checklist_runs` im Seed |
+| `make start` (lokales Supabase) | Vorlage `FENS_PRODUCTION_RELEASE` via Migration; Runs manuell oder per RPC starten |
+
+Für Hotboard-Tests der Produktionsfreigaben: lokales Supabase mit Fensterservice-Vorgang und gestarteter Checkliste — nicht im FakeRest-Demo-Seed enthalten (keine parallele Checklisten-API-Schicht).
 
 ### Filterlogik
 
@@ -172,7 +182,7 @@ const { data: runId } = await supabase.rpc(START_CHECKLIST_RUN_FROM_TEMPLATE_RPC
 
 | Event | Auslöser |
 |-------|----------|
-| `deal.stage_changed` | `deals.stage` UPDATE |
+| `deal.stage_changed` | `deals.stage` UPDATE (**Legacy** — v0.3d2-Trigger; siehe Abgrenzung v0.3l) |
 | `checklist.run_started` | `checklist_runs` INSERT |
 | `checklist.run_completed` / `cancelled` / `run_status_changed` | Status-UPDATE |
 | `checklist.item_checked` / `unchecked` | `is_checked` UPDATE |
@@ -191,6 +201,24 @@ const { data: runId } = await supabase.rpc(START_CHECKLIST_RUN_FROM_TEMPLATE_RPC
 ### Freigabe v0.3d4 UI
 
 **Ja** — Datenmodell, Constraints, RLS, Audit-Fundament und Seed-Vorlage sind lokal verifiziert (`db reset` + SQL-Test). UI kann Runs/Items über PostgREST anlegen.
+
+---
+
+## Abgrenzung Checklisten-Audit vs. CRM-Audit (v0.3l)
+
+**Checklisten-Audit (v0.3d2 ff.) bleibt unverändert** — dieselben Trigger und `event_type`-Codes (`checklist.*`, `snippet.*`).
+
+**CRM-Audit (v0.3l)** ergänzt **eigene Trigger** für Kern-CRM-Entitäten (companies, contacts, deals, tasks, notes, sales). Keine zweite Audit-Tabelle.
+
+| Regel | Umsetzung |
+|-------|-----------|
+| Checklisten-Events | weiterhin nur Checklisten-Trigger — **keine** Duplikate durch CRM-Trigger |
+| Vorgangsstatus | **Kanonisch:** `deal.status_changed` (v0.3l CRM-Trigger auf `deals.stage`) |
+| Legacy | `deal.stage_changed` aus v0.3d2 kann in Bestandsdaten vorkommen — UI mappt auf dasselbe Label |
+| Neue Events | **Nicht** `deal.stage_changed` für neue Schreibvorgänge verwenden |
+| Run-Start | Idempotenz: kein doppeltes `checklist.run_started` (v0.3d3 unverändert) |
+
+Vollständige CRM-Audit-Spezifikation: `docs/nora/13-crm-audit-retention.md`
 
 ---
 
@@ -500,7 +528,7 @@ audit_events → optional FK-Kontext: company, contact, deal, checklist_run, che
 | `event_type` | Auslöser |
 |--------------|----------|
 | `deal.created` | Vorgang angelegt |
-| `deal.stage_changed` | `deals.stage` geändert |
+| `deal.stage_changed` | `deals.stage` geändert (**Legacy** — kanonisch: `deal.status_changed`) |
 | `deal.updated` | andere Vorgangsfelder |
 | `company.updated` | Kunde geändert |
 | `contact.updated` | Ansprechpartner geändert |
@@ -552,7 +580,8 @@ audit_events → optional FK-Kontext: company, contact, deal, checklist_run, che
 | Checklisten-**Vorlage** bearbeiten/deaktivieren | eingeschränkt (Admin/Meister — offen) |
 | Textbaustein **anlegen** (Plus) | normale Nutzer im eigenen Servicebereich |
 | Textbaustein **deaktivieren** (Minus) | Owner oder Admin |
-| **Audit lesen** | alle Nutzer im Mandant (oder rollenabhängig später) |
+| **Audit lesen (global)** | nur Admin (`/audit`) |
+| **Audit lesen (Akte)** | admin + office via RPC; viewer ❌ (v0.3l) |
 | **Audit schreiben/löschen** | System/Trigger only |
 
 ### 7.2 Technische Leitplanken
@@ -625,7 +654,7 @@ Kachel „Produktionsfreigaben offen“: Vorgänge `FENS`, Status `angenommen` o
 | **v0.3d3** | RPC `start_checklist_run_from_template`, Idempotenz, Item-Copy | ✅ `20260628160000` |
 | **v0.3d4** | UI Checkliste im Vorgangsdetail | ✅ |
 | **v0.3d5** | Hotboard-Kachel „Produktionsfreigaben offen“ | ✅ |
-| **v0.3d6** | Audit-Ansicht in Kunden-/Vorgangsdetail (lesend) | v0.3d3 |
+| **v0.3d6** | Audit-Ansicht in Kunden-/Vorgangsdetail (lesend) | ✅ v0.3l (`EntityAuditHistory`) |
 | **v0.3e** | UI-Komponenten / Designsystem (ChecklistCard, SnippetPicker) | v0.3d4 |
 | **v0.3f** | Linke Sidebar (Navigation) | eigenes Konzept, nicht hier |
 
@@ -680,3 +709,4 @@ S4a/S4b/S4c bleiben **Checklistenpunkte**, keine `deals.stage`-Werte.
 | `07-agent-change-checklist.md` | Checklisten bei DB-Änderungen |
 | `08-numbering-and-global-search.md` | KD/VG-Nummern |
 | `09-window-order-workflow.md` | Fensterprozess, UI-Zielorte |
+| `14-google-calendar-readonly-implementation.md` | Kalender-Audit (`calendar.*`, `retention_class = integration`) |

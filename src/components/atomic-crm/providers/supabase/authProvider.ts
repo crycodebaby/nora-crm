@@ -1,7 +1,7 @@
 import type { AuthProvider } from "ra-core";
 import { supabaseAuthProvider } from "ra-supabase-core";
 
-import { canAccess } from "../commons/canAccess";
+import { canAccess, resolveNoraRole } from "../commons/canAccess";
 import { getSupabaseClient } from "./supabase";
 
 const getBaseAuthProvider = () =>
@@ -17,6 +17,7 @@ const getBaseAuthProvider = () =>
         id: sale.id,
         fullName: `${sale.first_name} ${sale.last_name}`,
         avatar: sale.avatar?.src,
+        role: resolveNoraRole(sale),
       };
     },
   });
@@ -69,7 +70,7 @@ const getSale = async () => {
 
   const { data: dataSale, error: errorSale } = await getSupabaseClient()
     .from("sales")
-    .select("id, first_name, last_name, avatar, administrator")
+    .select("id, first_name, last_name, avatar, administrator, role, disabled")
     .match({ user_id: dataSession?.session?.user.id })
     .single();
 
@@ -141,19 +142,26 @@ export const getAuthProvider = (): AuthProvider => {
         };
       }
 
+      const sale = await getSale();
+      if (sale == null || sale.disabled) {
+        await getSupabaseClient().auth.signOut();
+        clearCache();
+        throw {
+          redirectTo: "/login",
+          message: false,
+        };
+      }
+
       return baseAuthProvider.checkAuth(params);
     },
     canAccess: async (params) => {
       const isInitialized = await getIsInitialized();
       if (!isInitialized) return false;
 
-      // Get the current user
       const sale = await getSale();
-      if (sale == null) return false;
+      if (sale == null || sale.disabled) return false;
 
-      // Compute access rights from the sale role
-      const role = sale.administrator ? "admin" : "user";
-      return canAccess(role, params);
+      return canAccess(resolveNoraRole(sale), params);
     },
     getAuthorizationDetails(authorizationId: string) {
       return getSupabaseClient().auth.oauth.getAuthorizationDetails(

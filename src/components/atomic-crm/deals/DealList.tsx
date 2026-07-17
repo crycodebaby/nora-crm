@@ -4,7 +4,6 @@ import { useGetIdentity, useListContext, useTranslate } from "ra-core";
 import { matchPath, useLocation } from "react-router";
 import { matchesNoraSubPath } from "../routing/noraRoutes";
 import { AutocompleteInput } from "@/components/admin/autocomplete-input";
-import { CreateButton } from "@/components/admin/create-button";
 import { ExportButton } from "@/components/admin/export-button";
 import { List } from "@/components/admin/list";
 import { ReferenceInput } from "@/components/admin/reference-input";
@@ -14,6 +13,8 @@ import { SelectInput } from "@/components/admin/select-input";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { TopToolbar } from "../layout/TopToolbar";
+import { NoraCreateButton } from "../misc/NoraAccessActions";
+import { NoraPageLoading } from "../misc/NoraPageLoading";
 import { DealArchivedList } from "./DealArchivedList";
 import { DealCreate } from "./DealCreate";
 import { DealEdit } from "./DealEdit";
@@ -81,7 +82,7 @@ const DealLayout = () => {
   const { data, isPending, filterValues } = useListContext();
   const hasFilters = filterValues && Object.keys(filterValues).length > 0;
 
-  if (isPending) return null;
+  if (isPending) return <NoraPageLoading variant="kanban" />;
   if (!data?.length && !hasFilters)
     return (
       <>
@@ -111,7 +112,7 @@ const DealActions = () => (
     <div className="flex items-center gap-1 border-r border-border pr-3 mr-3">
       <ExportButton />
     </div>
-    <CreateButton label="resources.deals.action.create" />
+    <NoraCreateButton resource="deals" label="resources.deals.action.create" />
   </TopToolbar>
 );
 

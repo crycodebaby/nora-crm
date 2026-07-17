@@ -3,18 +3,16 @@ import {
   Form,
   useNotify,
   useTranslate,
+  CanAccess,
   type Identifier,
 } from "ra-core";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { SaveButton } from "@/components/admin/form";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
+import { NoraAccessGuard } from "../misc/NoraEditGuard";
+import { NoraDialogContent } from "../misc/NoraDialogContent";
+import { useNoraDirtyDialog } from "../misc/useNoraDirtyDialog";
 import { TaskFormContent } from "./TaskFormContent";
 
 export const TaskEdit = ({
@@ -27,10 +25,10 @@ export const TaskEdit = ({
   close: () => void;
 }) => {
   const notify = useNotify();
-  const translate = useTranslate();
+
   return (
-    <Dialog open={open} onOpenChange={close}>
-      {open && taskId && (
+    <Dialog open={open}>
+      {open && taskId ? (
         <EditBase
           id={taskId}
           resource="tasks"
@@ -46,33 +44,57 @@ export const TaskEdit = ({
           }}
           redirect={false}
         >
-          <DialogContent className="lg:max-w-xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0">
-            <Form className="flex flex-col gap-4">
-              <DialogHeader>
-                <DialogTitle>
-                  {translate("resources.tasks.action.edit")}
-                </DialogTitle>
-              </DialogHeader>
-              <TaskFormContent />
-              <DialogFooter className="w-full sm:justify-between gap-4">
-                <DeleteButton
-                  mutationOptions={{
-                    onSuccess: () => {
-                      close();
-                      notify("resources.tasks.deleted", {
-                        type: "info",
-                        undoable: true,
-                      });
-                    },
-                  }}
-                  redirect={false}
-                />
-                <SaveButton label="ra.action.save" />
-              </DialogFooter>
+          <NoraAccessGuard resource="tasks" action="edit">
+            <Form className="contents">
+              <TaskEditDialogBody close={close} notify={notify} />
             </Form>
-          </DialogContent>
+          </NoraAccessGuard>
         </EditBase>
-      )}
+      ) : null}
     </Dialog>
+  );
+};
+
+const TaskEditDialogBody = ({
+  close,
+  notify,
+}: {
+  close: () => void;
+  notify: ReturnType<typeof useNotify>;
+}) => {
+  const translate = useTranslate();
+  const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({ onClose: close });
+
+  return (
+    <>
+      <NoraDialogContent
+        open
+        onRequestClose={requestClose}
+        className="lg:max-w-xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
+      >
+        <DialogHeader>
+          <DialogTitle>{translate("resources.tasks.action.edit")}</DialogTitle>
+        </DialogHeader>
+        <TaskFormContent />
+        <DialogFooter className="w-full sm:justify-between gap-4">
+          <CanAccess resource="tasks" action="delete">
+            <DeleteButton
+              mutationOptions={{
+                onSuccess: () => {
+                  close();
+                  notify("resources.tasks.deleted", {
+                    type: "info",
+                    undoable: true,
+                  });
+                },
+              }}
+              redirect={false}
+            />
+          </CanAccess>
+          <SaveButton label="ra.action.save" />
+        </DialogFooter>
+      </NoraDialogContent>
+      {dirtyConfirmDialog}
+    </>
   );
 };

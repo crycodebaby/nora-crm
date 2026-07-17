@@ -1,9 +1,19 @@
 {
   "meta": {
     "name": "Nora CRM Demo-Daten Düsseldorf-Neuss",
-    "created": "2026-06-28",
+    "created": "2026-07-14",
+    "updated": "2026-07-14",
     "synthetic": true,
-    "note": "Alle Daten sind synthetisch und für Demo-/Testzwecke erstellt. Keine echten personenbezogenen Kundendaten."
+    "source_of_truth": "src/components/atomic-crm/providers/fakerest/dataGenerator/noraDuesseldorfSeedData.ts",
+    "counts": {
+      "companies": 25,
+      "contacts": 30,
+      "deals": 20,
+      "tasks": 20,
+      "contact_notes": 10,
+      "deal_notes": 6
+    },
+    "note": "Alle Daten sind synthetisch und für Demo-/Testzwecke erstellt. Keine echten personenbezogenen Kundendaten. FakeRest lädt die TypeScript-Seed-Datei; dieses JSON dient als lesbare Dokumentation. Auftragswerte in amount_eur sind fiktiv und dienen UX-/Dashboard-Tests — keine Preis- oder Angebotsvorgabe."
   },
   "companies": [
     {
@@ -401,7 +411,7 @@
       "contact_id": 2002,
       "status": "neue-anfrage",
       "service_type": "Fensterservice",
-      "amount_eur": 280,
+      "amount_eur": 650,
       "city": "Neuss",
       "description": "Fenstergriff im Wohnzimmer dreht durch. Kunde bittet um Rückruf und kurzfristige Besichtigung."
     },
@@ -412,7 +422,7 @@
       "contact_id": 2001,
       "status": "kontaktiert",
       "service_type": "Haustür",
-      "amount_eur": 1450,
+      "amount_eur": 1850,
       "city": "Düsseldorf-Bilk",
       "description": "Haustür fällt nicht zuverlässig ins Schloss. Mieter melden Zugluft und lautes Zuschlagen."
     },
@@ -423,7 +433,7 @@
       "contact_id": 2004,
       "status": "termin-vereinbart",
       "service_type": "Fensterbeschlag",
-      "amount_eur": 420,
+      "amount_eur": 1450,
       "city": "Düsseldorf-Bilk",
       "description": "Fenster im Behandlungsraum lässt sich nur schwer kippen. Termin außerhalb der Sprechzeiten."
     },
@@ -434,7 +444,7 @@
       "contact_id": 2005,
       "status": "aufmass-geplant",
       "service_type": "Aufmaß",
-      "amount_eur": 2200,
+      "amount_eur": 7200,
       "city": "Kaarst",
       "description": "Altes Kellerfenster soll ersetzt werden. Aufmaß und Fotos vor Angebot erforderlich."
     },
@@ -445,7 +455,7 @@
       "contact_id": 2006,
       "status": "angebot-gesendet",
       "service_type": "Fensterbeschlag",
-      "amount_eur": 390,
+      "amount_eur": 750,
       "city": "Neuss",
       "description": "Schaufenstergriff klemmt beim Abschließen. Angebot wurde gesendet, Nachfassung offen."
     },
@@ -456,7 +466,7 @@
       "contact_id": 2007,
       "status": "aufmass-erledigt",
       "service_type": "Wartung",
-      "amount_eur": 980,
+      "amount_eur": 2400,
       "city": "Düsseldorf-Rath",
       "description": "Mehrere Showroom-Fenster prüfen, Beschläge schmieren und lose Griffe befestigen."
     },
@@ -467,7 +477,7 @@
       "contact_id": 2008,
       "status": "in-kalkulation",
       "service_type": "Balkontür",
-      "amount_eur": 760,
+      "amount_eur": 1850,
       "city": "Düsseldorf-Hafen",
       "description": "Balkontür in Eigentumswohnung zieht. Dichtungen und Beschlag prüfen, Kosten vor Beirat klären."
     },
@@ -489,7 +499,7 @@
       "contact_id": 2009,
       "status": "nachfassen",
       "service_type": "Fensterservice",
-      "amount_eur": 640,
+      "amount_eur": 8500,
       "city": "Meerbusch",
       "description": "Angebot telefonisch besprochen. Rückmeldung der Hotelleitung steht aus."
     },
@@ -500,7 +510,7 @@
       "contact_id": 2011,
       "status": "angenommen",
       "service_type": "Hausmeisterservice",
-      "amount_eur": 310,
+      "amount_eur": 450,
       "city": "Neuss",
       "description": "Türschließer am Nebeneingang prüfen und einstellen. Auftrag angenommen."
     },
@@ -511,7 +521,7 @@
       "contact_id": 2012,
       "status": "abgelehnt",
       "service_type": "Fenster",
-      "amount_eur": 1850,
+      "amount_eur": 5900,
       "city": "Dormagen",
       "description": "Angebot wegen Budget verschoben. Wiedervorlage in drei Monaten sinnvoll."
     },
@@ -522,7 +532,7 @@
       "contact_id": 2013,
       "status": "abgeschlossen",
       "service_type": "Fensterservice",
-      "amount_eur": 540,
+      "amount_eur": 2100,
       "city": "Erkrath",
       "description": "Treppenhausfenster eingestellt, Griff befestigt, kurze Fotodokumentation erledigt."
     },
@@ -533,7 +543,7 @@
       "contact_id": 2014,
       "status": "neue-anfrage",
       "service_type": "Fensterservice",
-      "amount_eur": 260,
+      "amount_eur": 890,
       "city": "Düsseldorf-Bilk",
       "description": "Mieter meldet klemmendes Fenster. Verwaltung muss Freigabe geben."
     },
@@ -544,7 +554,7 @@
       "contact_id": 2018,
       "status": "kontaktiert",
       "service_type": "Hausmeisterservice",
-      "amount_eur": 1200,
+      "amount_eur": 2400,
       "city": "Dormagen",
       "description": "Monatliche Sichtkontrolle und kleinere Instandsetzungen im Lager besprechen."
     }

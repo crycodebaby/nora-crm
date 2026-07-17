@@ -238,9 +238,10 @@ Das Dashboard wird zum **operativen Hotboard** — „Was muss ich heute tun?“
 | **Neue Anfragen** | ✅ `stage = neue-anfrage` | `source_channel` | ✅ `Hotboard` | — |
 | **Produktionsfreigaben offen** | ✅ v0.3d5 | `checklist_runs` + Items | ✅ Hotboard-Kachel | — |
 
-### 5.3 Bereits implementiert (Ist) — v0.3b
+### 5.3 Bereits implementiert (Ist) — v0.3b / v0.3j
 
 - **`Hotboard`** (`Hotboard.tsx`): operative Startübersicht oben auf Desktop- und Mobile-Dashboard
+  - **Arbeitsboard** (v0.3j): lesender 2-Spalten-Schnellzugriff (`neue-anfrage`, `nachfassen`), max. 5 Karten je Spalte — **kein** Drag-and-drop; vollständiges Kanban bleibt auf `/vorgaenge`
   - Heute nachfassen (überfällig + heute, `expected_closing_date`)
   - Neue Anfragen (`neue-anfrage`)
   - Wartet auf Hersteller (`wartet-auf-hersteller`)
@@ -248,7 +249,7 @@ Das Dashboard wird zum **operativen Hotboard** — „Was muss ich heute tun?“
   - Offene Aufgaben (`HotboardOpenTasks`, max. 5, über `contact_id`)
 - **Team-Ansicht** — alle nicht archivierten Vorgänge, nicht nur eigene (`sales_id`)
 - **Navigation:** Klick → `/vorgaenge/:id/show` bzw. `/kontakte/:id/show`
-- **Filterlogik:** `hotboardUtils.ts` (unit-getestet)
+- **Filterlogik:** `hotboardUtils.ts` (unit-getestet, inkl. `prepareFocusColumnDeals` / `sortDealsByFocusPriority`)
 - `DealsChart`: Pipeline-Übersicht (statistisch, unterhalb Hotboard)
 - `HotContacts`, `DashboardActivityLog`
 

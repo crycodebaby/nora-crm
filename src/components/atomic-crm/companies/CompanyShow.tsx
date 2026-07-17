@@ -23,6 +23,7 @@ import {
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ActivityLog } from "../activity/ActivityLog";
+import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { Avatar } from "../contacts/Avatar";
 import { TagsList } from "../contacts/TagsList";
 import { findDealLabel, formatDealAmount } from "../deals/dealUtils";
@@ -34,6 +35,7 @@ import { Status } from "../misc/Status";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Contact, Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
+import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import {
   AdditionalInfo,
   AddressInfo,
@@ -48,15 +50,17 @@ export const CompanyShow = () => {
 
   return (
     <ShowBase>
-      {isMobile ? <CompanyShowContentMobile /> : <CompanyShowContent />}
+      <NoraShowBoundary>
+        {isMobile ? <CompanyShowContentMobile /> : <CompanyShowContent />}
+      </NoraShowBoundary>
     </ShowBase>
   );
 };
 
 const CompanyShowContentMobile = () => {
   const translate = useTranslate();
-  const { record, isPending } = useShowContext<Company>();
-  if (isPending || !record) return null;
+  const { record } = useShowContext<Company>();
+  if (!record) return null;
 
   return (
     <>
@@ -92,7 +96,7 @@ const CompanyShowContentMobile = () => {
 
 const CompanyShowContent = () => {
   const translate = useTranslate();
-  const { record, isPending } = useShowContext<Company>();
+  const { record } = useShowContext<Company>();
   const navigate = useNavigate();
 
   // Get tab from URL or default to "activity"
@@ -108,7 +112,7 @@ const CompanyShowContent = () => {
     navigate(`/companies/${record?.id}/show/${value}`);
   };
 
-  if (isPending || !record) return null;
+  if (!record) return null;
 
   return (
     <div className="mt-2 flex pb-2 gap-8">
@@ -123,9 +127,12 @@ const CompanyShowContent = () => {
               </div>
             </div>
             <Tabs defaultValue={currentTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="activity">
                   {translate("crm.common.activity")}
+                </TabsTrigger>
+                <TabsTrigger value="history">
+                  {translate("crm.audit.history_title")}
                 </TabsTrigger>
                 <TabsTrigger value="contacts">
                   {record.nb_contacts === 0
@@ -144,6 +151,13 @@ const CompanyShowContent = () => {
               </TabsList>
               <TabsContent value="activity" className="pt-2">
                 <ActivityLog companyId={record.id} context="company" />
+              </TabsContent>
+              <TabsContent value="history" className="pt-2">
+                <EntityAuditHistory
+                  entityType="company"
+                  entityId={Number(record.id)}
+                  embedded
+                />
               </TabsContent>
               <TabsContent value="contacts">
                 {record.nb_contacts ? (

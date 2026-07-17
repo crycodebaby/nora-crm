@@ -22,6 +22,7 @@ import {
   type ImportFromJsonState,
   useImportFromJson,
 } from "./useImportFromJson";
+import { NoraAccessGuard } from "./NoraEditGuard";
 import sampleFile from "./import-sample.json?url";
 
 export const ImportPage = () => {
@@ -29,7 +30,12 @@ export const ImportPage = () => {
   const [importState, importFile, reset] = useImportFromJson();
 
   return (
-    <div className="max-w-2xl mx-auto mt-8">
+    <NoraAccessGuard
+      resource="configuration"
+      action="edit"
+      fallbackPath="/"
+    >
+      <div className="max-w-2xl mx-auto mt-8">
       <Card>
         <CardHeader>
           <CardTitle>{translate("crm.import.title")}</CardTitle>
@@ -58,6 +64,7 @@ export const ImportPage = () => {
         </CardContent>
       </Card>
     </div>
+    </NoraAccessGuard>
   );
 };
 

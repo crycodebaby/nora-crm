@@ -31,7 +31,9 @@ import { ContactTasksList } from "./ContactTasksList";
 import type { Contact } from "../types";
 import { Avatar } from "./Avatar";
 import { ContactAside } from "./ContactAside";
+import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { MobileBackButton } from "../misc/MobileBackButton";
+import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 
 export const ContactShow = (props: ShowBaseProps = {}) => {
   const isMobile = useIsMobile();
@@ -42,24 +44,26 @@ export const ContactShow = (props: ShowBaseProps = {}) => {
         onError: isMobile
           ? () => {
               {
-                /** Disable error notification as the content handles offline */
+                /** Disable error notification as NoraShowBoundary handles it */
               }
             }
           : undefined,
       }}
       {...props}
     >
-      {isMobile ? <ContactShowContentMobile /> : <ContactShowContent />}
+      <NoraShowBoundary>
+        {isMobile ? <ContactShowContentMobile /> : <ContactShowContent />}
+      </NoraShowBoundary>
     </ShowBase>
   );
 };
 
 const ContactShowContentMobile = () => {
   const translate = useTranslate();
-  const { defaultTitle, record, isPending } = useShowContext<Contact>();
+  const { defaultTitle, record } = useShowContext<Contact>();
   const [noteCreateOpen, setNoteCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  if (isPending || !record) return null;
+  if (!record) return null;
 
   const taskCount = record.nb_tasks ?? 0;
 
@@ -237,8 +241,8 @@ const ContactShowContentMobile = () => {
 
 const ContactShowContent = () => {
   const translate = useTranslate();
-  const { record, isPending } = useShowContext<Contact>();
-  if (isPending || !record) return null;
+  const { record } = useShowContext<Contact>();
+  if (!record) return null;
 
   return (
     <div className="mt-2 mb-2 flex gap-8">
@@ -293,6 +297,10 @@ const ContactShowContent = () => {
             >
               <NotesIterator reference="contacts" showStatus />
             </InfiniteListBase>
+            <EntityAuditHistory
+              entityType="contact"
+              entityId={Number(record.id)}
+            />
           </CardContent>
         </Card>
       </div>
