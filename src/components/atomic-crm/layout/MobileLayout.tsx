@@ -12,13 +12,15 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
   useConfigurationLoader();
   return (
     <QuickCaptureProvider>
-      <ErrorBoundary FallbackComponent={Error}>
-        <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
-          {children}
-        </Suspense>
-      </ErrorBoundary>
-      <MobileNavigation />
-      <Notification mobileOffset={{ bottom: "72px" }} />
+      <div data-testid="authenticated-app-shell">
+        <ErrorBoundary FallbackComponent={Error}>
+          <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
+            {children}
+          </Suspense>
+        </ErrorBoundary>
+        <MobileNavigation />
+        <Notification mobileOffset={{ bottom: "72px" }} />
+      </div>
     </QuickCaptureProvider>
   );
 };

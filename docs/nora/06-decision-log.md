@@ -1044,3 +1044,21 @@ Active-User-Prüfung selbst korrekt angelegte Auth-Benutzer.
   Passwort-Session und den authentifizierten Self-Select vor dem Browserlauf.
   Diagnosen nennen Schritt und Ressource, redigieren aber Schlüssel,
   Passwörter, JWTs und Authorization-Werte.
+
+## 2026-07-17 – v0.4c.2c: E2E-Auth-Assertions und First-Run-Dashboard
+
+### Kontext
+
+Nach erfolgreichem Login rendert Nora ohne Kontakte den Onboarding-Stepper
+(`DashboardStepper` Schritt 1), nicht das Hotboard. Der Login-Helper prüfte
+fälschlich Hotboard und ließ First-Run- sowie Bulk-Tag-Tests scheitern.
+
+### Entscheidung
+
+- `loginAsAdmin` bestätigt nur Auth und die authentifizierte App-Shell
+  (`data-testid="authenticated-app-shell"`), nicht Dashboard-Inhalte.
+- First-Run und Hotboard sind getrennte E2E-Specs.
+- Atomic-CRM-Telemetrie ist für Nora dauerhaft deaktiviert
+  (`<CRM disableTelemetry />`).
+- Der E2E-Build deaktiviert den PWA-Service-Worker; Produktion bleibt
+  unverändert.

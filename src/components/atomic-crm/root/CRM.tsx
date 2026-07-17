@@ -133,10 +133,11 @@ export const CRM = ({
   googleWorkplaceDomain = import.meta.env.VITE_GOOGLE_WORKPLACE_DOMAIN,
   disableEmailPasswordAuthentication = import.meta.env
     .VITE_DISABLE_EMAIL_PASSWORD_AUTHENTICATION === "true",
-  disableTelemetry,
+  disableTelemetry = true,
   ...rest
 }: CRMProps) => {
   useEffect(() => {
+    // Nora never reports Atomic CRM host telemetry.
     if (
       disableTelemetry ||
       process.env.NODE_ENV !== "production" ||
