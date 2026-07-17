@@ -12,10 +12,7 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraUrgencyBadge } from "../misc/NoraUrgencyBadge";
-import {
-  getFollowUpStatus,
-  isDealTerminalStage,
-} from "./dealUtils";
+import { getFollowUpStatus, isDealTerminalStage } from "./dealUtils";
 
 export const DealCard = ({ deal, index }: { deal: Deal; index: number }) => {
   if (!deal) return null;

@@ -281,14 +281,14 @@ export const germanCrmMessages = {
         hide_empty_stages: "Leere Status ausblenden",
         no_deals: "Keine Vorgänge vorhanden",
         order_value: "Auftragswert: %{amount}",
-        deal_count:
-          "%{smart_count} Vorgang |||| %{smart_count} Vorgänge",
+        deal_count: "%{smart_count} Vorgang |||| %{smart_count} Vorgänge",
         view_filter_label: "Vorgangsansicht",
         view_all: "Alle Vorgänge",
         view_fensterservice: "Fensterservice",
         view_hausmeisterdienst: "Hausmeisterservice",
         no_fensterservice_deals: "Keine Fensterservice-Vorgänge vorhanden",
-        no_hausmeisterdienst_deals: "Keine Hausmeisterservice-Vorgänge vorhanden",
+        no_hausmeisterdienst_deals:
+          "Keine Hausmeisterservice-Vorgänge vorhanden",
       },
     },
     notes: {
@@ -565,7 +565,8 @@ export const germanCrmMessages = {
       history_title: "Änderungsverlauf",
       events_heading: "Ereignisse",
       load_more: "Mehr anzeigen",
-      show_changes: "%{count} Änderung anzeigen |||| %{count} Änderungen anzeigen",
+      show_changes:
+        "%{count} Änderung anzeigen |||| %{count} Änderungen anzeigen",
       change_count: "%{count} Änderung |||| %{count} Änderungen",
       note_before: "Vorheriger Text",
       note_after: "Neuer Text",
@@ -697,8 +698,7 @@ export const germanCrmMessages = {
       added_note: "%{name} hat eine Notiz hinzugefügt zu",
       you_added_note: "Sie haben eine Notiz hinzugefügt zu",
       added_note_about_deal: "%{name} hat eine Notiz zum Vorgang hinzugefügt",
-      you_added_note_about_deal:
-        "Sie haben eine Notiz zum Vorgang hinzugefügt",
+      you_added_note_about_deal: "Sie haben eine Notiz zum Vorgang hinzugefügt",
       added_deal: "%{name} hat einen Vorgang angelegt",
       you_added_deal: "Sie haben einen Vorgang angelegt",
       at_company: "bei",
@@ -770,7 +770,8 @@ export const germanCrmMessages = {
         sync_button: "Jetzt synchronisieren",
         connect_error: "Verbindung konnte nicht gestartet werden.",
         sync_error: "Synchronisation fehlgeschlagen.",
-        sync_success: "Sync abgeschlossen: %{imported} neu, %{updated} aktualisiert.",
+        sync_success:
+          "Sync abgeschlossen: %{imported} neu, %{updated} aktualisiert.",
         oauth_connected: "Google Kalender erfolgreich verbunden.",
         oauth_error: "Verbindung fehlgeschlagen: %{reason}",
         unknown_error: "Unbekannter Fehler",
@@ -822,8 +823,7 @@ export const germanCrmMessages = {
         complete: "Import abgeschlossen.",
         failed: "Fehlgeschlagen",
         imported: "Importiert",
-        in_progress:
-          "Import läuft. Bitte verlassen Sie diese Seite nicht.",
+        in_progress: "Import läuft. Bitte verlassen Sie diese Seite nicht.",
         some_failed: "Einige Datensätze wurden nicht importiert.",
         table_caption: "Importstatus",
       },

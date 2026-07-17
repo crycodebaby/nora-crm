@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { handleHorizontalWheelScroll } from "./horizontalWheelScroll";
 
-function createContainer(scrollLeft: number, scrollWidth: number, clientWidth: number) {
+function createContainer(
+  scrollLeft: number,
+  scrollWidth: number,
+  clientWidth: number,
+) {
   return {
     scrollLeft,
     scrollWidth,

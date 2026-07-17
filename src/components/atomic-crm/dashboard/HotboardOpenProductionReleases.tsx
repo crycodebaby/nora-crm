@@ -1,10 +1,5 @@
 import { ListChecks } from "lucide-react";
-import {
-  useGetList,
-  useGetMany,
-  useRedirect,
-  useTranslate,
-} from "ra-core";
+import { useGetList, useGetMany, useRedirect, useTranslate } from "ra-core";
 import { useMemo } from "react";
 
 import { Card } from "@/components/ui/card";
@@ -53,9 +48,7 @@ export const HotboardOpenProductionReleases = ({
   const { data: runs, isPending: runsPending } = useGetList<ChecklistRun>(
     "checklist_runs",
     {
-      filter: templateId
-        ? { template_id: templateId, status: "open" }
-        : {},
+      filter: templateId ? { template_id: templateId, status: "open" } : {},
       pagination: { page: 1, perPage: 100 },
       sort: { field: "started_at", order: "ASC" },
     },
@@ -67,16 +60,13 @@ export const HotboardOpenProductionReleases = ({
     [runs],
   );
 
-  const runIdsFilter =
-    runIds.length > 0 ? `(${runIds.join(",")})` : undefined;
+  const runIdsFilter = runIds.length > 0 ? `(${runIds.join(",")})` : undefined;
 
   const { data: runItems, isPending: itemsPending } =
     useGetList<ChecklistRunItem>(
       "checklist_run_items",
       {
-        filter: runIdsFilter
-          ? { "checklist_run_id@in": runIdsFilter }
-          : {},
+        filter: runIdsFilter ? { "checklist_run_id@in": runIdsFilter } : {},
         pagination: { page: 1, perPage: 500 },
         sort: { field: "sort_index", order: "ASC" },
       },

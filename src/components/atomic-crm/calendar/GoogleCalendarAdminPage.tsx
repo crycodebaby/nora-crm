@@ -1,11 +1,6 @@
 import { CalendarClock, RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import {
-  useGetList,
-  useNotify,
-  useRefresh,
-  useTranslate,
-} from "ra-core";
+import { useGetList, useNotify, useRefresh, useTranslate } from "ra-core";
 import { useSearchParams } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -70,11 +65,15 @@ const GoogleCalendarAdminContent = () => {
   const isConnected = connection?.status === "connected";
 
   const { data: events, isPending: eventsPending } =
-    useGetList<CalendarEventRow>("google_calendar_events", {
-      pagination: { page: 1, perPage: 10 },
-      sort: { field: "starts_at", order: "ASC" },
-      filter: { deleted_at: null },
-    }, { enabled: isConnected && !isDemoMode });
+    useGetList<CalendarEventRow>(
+      "google_calendar_events",
+      {
+        pagination: { page: 1, perPage: 10 },
+        sort: { field: "starts_at", order: "ASC" },
+        filter: { deleted_at: null },
+      },
+      { enabled: isConnected && !isDemoMode },
+    );
 
   const statusLabel = useMemo(() => {
     if (!connection) {
@@ -131,7 +130,10 @@ const GoogleCalendarAdminContent = () => {
       if (error) {
         throw error;
       }
-      const payload = data as { status?: string; summary?: Record<string, number> };
+      const payload = data as {
+        status?: string;
+        summary?: Record<string, number>;
+      };
       if (payload.status === "ok" && payload.summary) {
         notify(
           translate("crm.calendar.admin.sync_success", {
@@ -176,7 +178,8 @@ const GoogleCalendarAdminContent = () => {
       {calendarStatus === "error" ? (
         <p className="text-sm text-destructive">
           {translate("crm.calendar.admin.oauth_error", {
-            reason: calendarReason ?? translate("crm.calendar.admin.unknown_error"),
+            reason:
+              calendarReason ?? translate("crm.calendar.admin.unknown_error"),
           })}
         </p>
       ) : null}
@@ -195,30 +198,40 @@ const GoogleCalendarAdminContent = () => {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <p>
-            <span className="font-medium">{translate("crm.calendar.admin.field_status")}: </span>
+            <span className="font-medium">
+              {translate("crm.calendar.admin.field_status")}:{" "}
+            </span>
             {statusLabel}
           </p>
           {connection?.google_account_email ? (
             <p>
-              <span className="font-medium">{translate("crm.calendar.admin.field_account")}: </span>
+              <span className="font-medium">
+                {translate("crm.calendar.admin.field_account")}:{" "}
+              </span>
               {connection.google_account_email}
             </p>
           ) : null}
           {connection?.calendar_name ? (
             <p>
-              <span className="font-medium">{translate("crm.calendar.admin.field_calendar")}: </span>
+              <span className="font-medium">
+                {translate("crm.calendar.admin.field_calendar")}:{" "}
+              </span>
               {connection.calendar_name}
             </p>
           ) : null}
           {connection?.last_sync_at ? (
             <p>
-              <span className="font-medium">{translate("crm.calendar.admin.field_last_sync")}: </span>
+              <span className="font-medium">
+                {translate("crm.calendar.admin.field_last_sync")}:{" "}
+              </span>
               {new Date(connection.last_sync_at).toLocaleString("de-DE")}
             </p>
           ) : null}
           {connection?.last_sync_error ? (
             <p className="text-destructive">
-              <span className="font-medium">{translate("crm.calendar.admin.field_last_error")}: </span>
+              <span className="font-medium">
+                {translate("crm.calendar.admin.field_last_error")}:{" "}
+              </span>
               {connection.last_sync_error}
             </p>
           ) : null}
@@ -229,7 +242,9 @@ const GoogleCalendarAdminContent = () => {
                 onClick={handleConnect}
                 disabled={busy !== null || isConnected}
               >
-                {busy === "connect" ? <Spinner className="mr-2 h-4 w-4" /> : null}
+                {busy === "connect" ? (
+                  <Spinner className="mr-2 h-4 w-4" />
+                ) : null}
                 {translate("crm.calendar.admin.connect_button")}
               </Button>
               <Button
@@ -237,7 +252,9 @@ const GoogleCalendarAdminContent = () => {
                 onClick={handleSync}
                 disabled={busy !== null || !isConnected}
               >
-                {busy === "sync" ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {busy === "sync" ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
                 {translate("crm.calendar.admin.sync_button")}
               </Button>
             </div>
@@ -262,9 +279,13 @@ const GoogleCalendarAdminContent = () => {
             ) : (
               <ul className="space-y-2 text-sm">
                 {(events ?? []).map((event) => (
-                  <li key={event.id} className="border-b border-border/60 pb-2 last:border-0">
+                  <li
+                    key={event.id}
+                    className="border-b border-border/60 pb-2 last:border-0"
+                  >
                     <div className="font-medium">
-                      {event.title_snapshot || translate("crm.calendar.admin.untitled_event")}
+                      {event.title_snapshot ||
+                        translate("crm.calendar.admin.untitled_event")}
                     </div>
                     <div className="nora-muted text-xs">
                       {formatWhen(event)}
@@ -282,7 +303,11 @@ const GoogleCalendarAdminContent = () => {
 };
 
 export const GoogleCalendarAdminPage = () => (
-  <NoraAccessGuard resource="google_calendar_connections" action="list" fallbackPath="/">
+  <NoraAccessGuard
+    resource="google_calendar_connections"
+    action="list"
+    fallbackPath="/"
+  >
     <GoogleCalendarAdminContent />
   </NoraAccessGuard>
 );

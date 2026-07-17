@@ -72,9 +72,7 @@ export function sortDealsByFocusPriority(deals: Deal[]): Deal[] {
       if (dateCmp !== 0) return dateCmp;
     }
 
-    return (
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 }
 
@@ -89,7 +87,9 @@ export function prepareFocusColumnDeals(
   stage: FocusBoardStage,
   limit: number = HOTBOARD_DEAL_LIMIT,
 ): FocusColumnDeals {
-  const sorted = sortDealsByFocusPriority(filterDealsForFocusStage(deals, stage));
+  const sorted = sortDealsByFocusPriority(
+    filterDealsForFocusStage(deals, stage),
+  );
   return {
     deals: sorted.slice(0, limit),
     total: sorted.length,

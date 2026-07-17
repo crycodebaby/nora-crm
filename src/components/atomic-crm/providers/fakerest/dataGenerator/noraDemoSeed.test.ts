@@ -60,9 +60,9 @@ describe("Nora Düsseldorf demo seed", () => {
       (d) => d.name.includes("Hotelzimmer") && d.stage === "nachfassen",
     );
     expect(overdue).toBeDefined();
-    expect(overdue!.expected_closing_date < new Date().toISOString().slice(0, 10)).toBe(
-      true,
-    );
+    expect(
+      overdue!.expected_closing_date < new Date().toISOString().slice(0, 10),
+    ).toBe(true);
   });
 
   it("includes duplicate-test customers (Becker, Schneider)", () => {
@@ -124,7 +124,9 @@ describe("Nora Düsseldorf demo seed", () => {
     const PIPELINE_MAX = 120_000;
 
     it("keeps fensterservice deals within demo ceiling", () => {
-      for (const deal of db.deals.filter((d) => d.category === "fensterservice")) {
+      for (const deal of db.deals.filter(
+        (d) => d.category === "fensterservice",
+      )) {
         expect(deal.amount).toBeLessThanOrEqual(FENSTER_MAX);
       }
     });

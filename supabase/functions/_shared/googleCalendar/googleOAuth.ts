@@ -37,7 +37,9 @@ export const exchangeAuthorizationCode = async (
   const payload = await response.json();
   if (!response.ok) {
     const err = payload as GoogleTokenError;
-    throw new Error(err.error_description || err.error || "token_exchange_failed");
+    throw new Error(
+      err.error_description || err.error || "token_exchange_failed",
+    );
   }
 
   return payload as GoogleTokenResponse;
@@ -63,7 +65,8 @@ export const refreshAccessToken = async (
   const payload = await response.json();
   if (!response.ok) {
     const err = payload as GoogleTokenError;
-    const message = err.error_description || err.error || "token_refresh_failed";
+    const message =
+      err.error_description || err.error || "token_refresh_failed";
     const error = new Error(message);
     (error as Error & { code?: string }).code = err.error;
     throw error;
@@ -94,9 +97,12 @@ export const fetchGoogleEmail = async (
     }
   }
 
-  const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const response = await fetch(
+    "https://openidconnect.googleapis.com/v1/userinfo",
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
   if (!response.ok) {
     return null;
   }

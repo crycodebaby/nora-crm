@@ -35,9 +35,12 @@ export const consumeOAuthState = async (
 ): Promise<OAuthStateConsumeResult | null> => {
   const stateHash = await sha256Hex(state);
 
-  const { data, error } = await supabaseAdmin.rpc("consume_google_oauth_state", {
-    p_state_hash: stateHash,
-  });
+  const { data, error } = await supabaseAdmin.rpc(
+    "consume_google_oauth_state",
+    {
+      p_state_hash: stateHash,
+    },
+  );
 
   if (error) {
     throw error;

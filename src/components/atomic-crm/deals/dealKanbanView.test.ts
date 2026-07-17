@@ -40,9 +40,7 @@ describe("filterDealsByKanbanView", () => {
 
 describe("getVisibleStagesForKanbanView", () => {
   it("uses all stages for the default view", () => {
-    const deals = [
-      { ...baseDeal, stage: "neue-anfrage" },
-    ] as Deal[];
+    const deals = [{ ...baseDeal, stage: "neue-anfrage" }] as Deal[];
     const byStage = getDealsByStage(deals, dealStages);
 
     const visible = getVisibleStagesForKanbanView(

@@ -282,8 +282,7 @@ export const frenchCrmMessages = {
         hide_empty_stages: "Masquer les statuts vides",
         no_deals: "Aucune affaire disponible",
         order_value: "Valeur de commande : %{amount}",
-        deal_count:
-          "%{smart_count} affaire |||| %{smart_count} affaires",
+        deal_count: "%{smart_count} affaire |||| %{smart_count} affaires",
         view_filter_label: "Vue des affaires",
         view_all: "Toutes les affaires",
         view_fensterservice: "Service fenêtres",
@@ -545,8 +544,7 @@ export const frenchCrmMessages = {
       errors: {
         company_name_required: "Veuillez saisir un nom de client",
         company_create_failed: "Impossible de créer le client",
-        contact_name_required:
-          "Veuillez saisir le prénom et le nom du contact",
+        contact_name_required: "Veuillez saisir le prénom et le nom du contact",
         contact_create_failed: "Impossible de créer le contact",
         deal_create_failed: "Impossible de créer l'affaire",
         deal_title_required: "Veuillez saisir un titre d'affaire",
@@ -572,7 +570,8 @@ export const frenchCrmMessages = {
       note_after: "Nouveau texte",
       empty: {
         title: "Aucun événement d'audit",
-        description: "Les modifications de cet enregistrement apparaîtront ici.",
+        description:
+          "Les modifications de cet enregistrement apparaîtront ici.",
       },
       filters: {
         title: "Filtres",
@@ -755,7 +754,8 @@ export const frenchCrmMessages = {
       admin: {
         menu: "Google Agenda",
         title: "Google Agenda",
-        subtitle: "Connexion en lecture seule au calendrier de test isolé (admin).",
+        subtitle:
+          "Connexion en lecture seule au calendrier de test isolé (admin).",
         connection_card: "Connexion",
         field_status: "Statut",
         field_account: "Compte Google",
@@ -771,7 +771,8 @@ export const frenchCrmMessages = {
         sync_button: "Synchroniser maintenant",
         connect_error: "Impossible de démarrer la connexion.",
         sync_error: "Échec de la synchronisation.",
-        sync_success: "Synchro terminée : %{imported} importés, %{updated} mis à jour.",
+        sync_success:
+          "Synchro terminée : %{imported} importés, %{updated} mis à jour.",
         oauth_connected: "Google Agenda connecté avec succès.",
         oauth_error: "Échec de la connexion : %{reason}",
         unknown_error: "Erreur inconnue",
@@ -908,7 +909,8 @@ export const frenchCrmMessages = {
     },
     access: {
       read_only_mode: "Mode lecture seule",
-      read_only_hint: "Vous pouvez consulter les données mais pas les modifier.",
+      read_only_hint:
+        "Vous pouvez consulter les données mais pas les modifier.",
     },
     errors: {
       permission_denied: "Vous n'avez pas l'autorisation pour cette action.",
@@ -926,7 +928,8 @@ export const frenchCrmMessages = {
     },
     unsaved_changes: {
       title: "Abandonner les modifications ?",
-      message: "Des modifications ne sont pas enregistrées. Quitter sans enregistrer ?",
+      message:
+        "Des modifications ne sont pas enregistrées. Quitter sans enregistrer ?",
       discard: "Abandonner les modifications",
       keep_editing: "Continuer l'édition",
     },

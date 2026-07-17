@@ -28,7 +28,10 @@ describe("normalizeCrmError", () => {
   });
 
   it("maps missing records", () => {
-    const result = normalizeCrmError({ code: "PGRST116", message: "not found" });
+    const result = normalizeCrmError({
+      code: "PGRST116",
+      message: "not found",
+    });
     expect(result.kind).toBe("not_found");
     expect(result.messageKey).toBe("crm.errors.record_not_found");
   });
@@ -36,36 +39,42 @@ describe("normalizeCrmError", () => {
 
 describe("role matrix (UI guard)", () => {
   it("viewer cannot create, edit or delete CRM records", () => {
-    expect(canAccess("viewer", { resource: "contacts", action: "create" })).toBe(
-      false,
-    );
+    expect(
+      canAccess("viewer", { resource: "contacts", action: "create" }),
+    ).toBe(false);
     expect(canAccess("viewer", { resource: "deals", action: "edit" })).toBe(
       false,
     );
-    expect(canAccess("viewer", { resource: "companies", action: "delete" })).toBe(
-      false,
-    );
+    expect(
+      canAccess("viewer", { resource: "companies", action: "delete" }),
+    ).toBe(false);
     expect(canAccess("viewer", { resource: "contacts", action: "list" })).toBe(
       true,
     );
   });
 
   it("office can write and archive but not delete or manage users", () => {
-    expect(canAccess("office", { resource: "deals", action: "edit" })).toBe(true);
+    expect(canAccess("office", { resource: "deals", action: "edit" })).toBe(
+      true,
+    );
     expect(canAccess("office", { resource: "deals", action: "delete" })).toBe(
       false,
     );
-    expect(canAccess("office", { resource: "sales", action: "list" })).toBe(false);
-    expect(canAccess("office", { resource: "configuration", action: "edit" })).toBe(
+    expect(canAccess("office", { resource: "sales", action: "list" })).toBe(
       false,
     );
+    expect(
+      canAccess("office", { resource: "configuration", action: "edit" }),
+    ).toBe(false);
   });
 
   it("admin retains management actions", () => {
-    expect(canAccess("admin", { resource: "sales", action: "create" })).toBe(true);
-    expect(canAccess("admin", { resource: "configuration", action: "edit" })).toBe(
+    expect(canAccess("admin", { resource: "sales", action: "create" })).toBe(
       true,
     );
+    expect(
+      canAccess("admin", { resource: "configuration", action: "edit" }),
+    ).toBe(true);
     expect(canAccess("admin", { resource: "contacts", action: "delete" })).toBe(
       true,
     );

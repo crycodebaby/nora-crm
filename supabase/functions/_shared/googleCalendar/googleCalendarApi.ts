@@ -29,10 +29,7 @@ export type GoogleCalendarEvent = {
   end?: GoogleEventDateTime;
 };
 
-const googleFetch = async <T>(
-  url: string,
-  accessToken: string,
-): Promise<T> => {
+const googleFetch = async <T>(url: string, accessToken: string): Promise<T> => {
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -40,7 +37,7 @@ const googleFetch = async <T>(
     const text = await response.text();
     throw new Error(`google_api_${response.status}: ${text.slice(0, 200)}`);
   }
-  return await response.json() as T;
+  return (await response.json()) as T;
 };
 
 export const verifyAllowlistedCalendarAccess = async (
@@ -49,8 +46,7 @@ export const verifyAllowlistedCalendarAccess = async (
 ): Promise<{ calendarName: string; accessRole: string }> => {
   assertAllowedCalendarId(env.allowedCalendarId, env);
 
-  const url =
-    `https://www.googleapis.com/calendar/v3/users/me/calendarList/${encodeURIComponent(env.allowedCalendarId)}`;
+  const url = `https://www.googleapis.com/calendar/v3/users/me/calendarList/${encodeURIComponent(env.allowedCalendarId)}`;
 
   const entry = await googleFetch<GoogleCalendarListEntry>(url, accessToken);
 
@@ -92,8 +88,7 @@ export const listCalendarEvents = async (
     params.set("pageToken", options.pageToken);
   }
 
-  const url =
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.allowedCalendarId)}/events?${params.toString()}`;
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.allowedCalendarId)}/events?${params.toString()}`;
 
   const data = await googleFetch<{
     items?: GoogleCalendarEvent[];

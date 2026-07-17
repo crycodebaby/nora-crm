@@ -74,9 +74,9 @@ describe("formatAuditFieldValue", () => {
   });
 
   it("maps stage values via dealUtils labels", () => {
-    expect(
-      formatAuditFieldValue("stage", "opportunity", { dealStages }),
-    ).toBe("Neue Anfrage");
+    expect(formatAuditFieldValue("stage", "opportunity", { dealStages })).toBe(
+      "Neue Anfrage",
+    );
   });
 
   it("formats ISO date-only strings in German long form", () => {

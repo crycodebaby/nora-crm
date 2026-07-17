@@ -11,7 +11,9 @@ import {
   fetchGoogleEmail,
 } from "../_shared/googleCalendar/googleOAuth.ts";
 import { verifyAllowlistedCalendarAccess } from "../_shared/googleCalendar/googleCalendarApi.ts";
-import { loadRefreshToken, markConnectionConnected,
+import {
+  loadRefreshToken,
+  markConnectionConnected,
   markConnectionError,
   storeRefreshToken,
   upsertConnectingConnection,
@@ -63,7 +65,11 @@ Deno.serve(async (req: Request) => {
     const state = url.searchParams.get("state");
 
     if (oauthError) {
-      return redirectWithStatus(envStatus.env.adminReturnUrl, "error", oauthError);
+      return redirectWithStatus(
+        envStatus.env.adminReturnUrl,
+        "error",
+        oauthError,
+      );
     }
 
     if (!code || !state) {
@@ -94,10 +100,11 @@ Deno.serve(async (req: Request) => {
 
       assertAllowedCalendarId(envStatus.env.allowedCalendarId, envStatus.env);
 
-      const { calendarName, accessRole } = await verifyAllowlistedCalendarAccess(
-        envStatus.env,
-        tokens.access_token,
-      );
+      const { calendarName, accessRole } =
+        await verifyAllowlistedCalendarAccess(
+          envStatus.env,
+          tokens.access_token,
+        );
 
       const connection = await upsertConnectingConnection(
         envStatus.env,
@@ -113,7 +120,10 @@ Deno.serve(async (req: Request) => {
           false,
         );
       } else {
-        const existingRefresh = await loadRefreshToken(connection.id, envStatus.env);
+        const existingRefresh = await loadRefreshToken(
+          connection.id,
+          envStatus.env,
+        );
         if (!existingRefresh) {
           throw new Error("missing refresh token from Google consent");
         }

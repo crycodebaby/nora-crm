@@ -13,11 +13,8 @@ import { ContactCreateSheet } from "../contacts/ContactCreateSheet";
 import { useState } from "react";
 import { NoteCreateSheet } from "../notes/NoteCreateSheet";
 import { TaskCreateSheet } from "../tasks/TaskCreateSheet";
-import {
-  getActiveNoraResource,
-  noraCreatePath,
-} from "../routing/noraRoutes";
-import { useQuickCapture } from "../quickCapture/QuickCaptureContext";
+import { getActiveNoraResource, noraCreatePath } from "../routing/noraRoutes";
+import { useQuickCapture } from "../quickCapture/useQuickCapture";
 import { GlobalSearch } from "./GlobalSearch";
 
 export const MobileNavigation = () => {
@@ -112,8 +109,9 @@ const NavigationButton = ({
 const MobileCreateButton = () => {
   const translate = useTranslate();
   const { openQuickCapture } = useQuickCapture();
-  const contactMatch = useMatch("/kontakte/:id/*")
-    ?? useMatch("/contacts/:id/*");
+  const germanContactMatch = useMatch("/kontakte/:id/*");
+  const legacyContactMatch = useMatch("/contacts/:id/*");
+  const contactMatch = germanContactMatch ?? legacyContactMatch;
   const contact_id = contactMatch?.params.id;
   const [contactCreateOpen, setContactCreateOpen] = useState(false);
   const [noteCreateOpen, setNoteCreateOpen] = useState(false);

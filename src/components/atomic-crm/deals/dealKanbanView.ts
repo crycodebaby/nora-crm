@@ -4,7 +4,10 @@ import type { DealsByStage } from "./stages";
 import { getVisibleDealStages } from "./stages";
 
 /** Client-side Kanban category views — no DB filter, complements list filters. */
-export type DealKanbanCategoryView = "all" | "fensterservice" | "hausmeisterdienst";
+export type DealKanbanCategoryView =
+  | "all"
+  | "fensterservice"
+  | "hausmeisterdienst";
 
 export const DEAL_KANBAN_VIEW_STORAGE_KEY = "nora-deals-kanban-view";
 
@@ -56,9 +59,7 @@ export function getPreferredStagesForKanbanView(
 ) {
   if (!dealStages) return [];
   if (view !== "fensterservice") return dealStages;
-  return dealStages.filter((stage) =>
-    isFensterserviceKanbanStage(stage.value),
-  );
+  return dealStages.filter((stage) => isFensterserviceKanbanStage(stage.value));
 }
 
 /**

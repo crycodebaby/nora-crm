@@ -52,13 +52,7 @@ export function useDuplicateCandidateSearch({
         contactPhone,
         contactEmail,
       }),
-    [
-      contactEmail,
-      contactPhone,
-      createNewCompany,
-      newCompanyName,
-      searchQuery,
-    ],
+    [contactEmail, contactPhone, createNewCompany, newCompanyName, searchQuery],
   );
 
   const [debouncedInput, setDebouncedInput] = useState(input);

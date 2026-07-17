@@ -8,7 +8,12 @@ import {
 } from "ra-core";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { SaveButton } from "@/components/admin/form";
-import { Dialog, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import { NoraDialogContent } from "../misc/NoraDialogContent";
@@ -63,7 +68,9 @@ const TaskEditDialogBody = ({
   notify: ReturnType<typeof useNotify>;
 }) => {
   const translate = useTranslate();
-  const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({ onClose: close });
+  const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({
+    onClose: close,
+  });
 
   return (
     <>

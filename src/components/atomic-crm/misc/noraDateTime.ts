@@ -97,7 +97,9 @@ export function formatNoraRelativeDay(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const diff = Math.round((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const diff = Math.round(
+    (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
 
   if (Math.abs(diff) > 7) {
     return new Intl.DateTimeFormat(locale, {

@@ -93,7 +93,11 @@ export const runManualReadOnlySync = async (
     } catch (error) {
       const code = (error as Error & { code?: string }).code;
       if (code === "invalid_grant") {
-        await markConnectionError(connection.id, "refresh token revoked", "token_expired");
+        await markConnectionError(
+          connection.id,
+          "refresh token revoked",
+          "token_expired",
+        );
       }
       throw error;
     }
@@ -122,7 +126,9 @@ export const runManualReadOnlySync = async (
 
           const { data: existing, error: existingError } = await supabaseAdmin
             .from("google_calendar_events")
-            .select("id, google_etag, google_updated_at, title_snapshot, location_snapshot, google_status, deleted_at")
+            .select(
+              "id, google_etag, google_updated_at, title_snapshot, location_snapshot, google_status, deleted_at",
+            )
             .eq("connection_id", connection.id)
             .eq("google_event_id", mapped.google_event_id)
             .maybeSingle();
@@ -235,5 +241,6 @@ export const runManualReadOnlySync = async (
   }
 };
 
-export const getConnectionForAdmin = async (): Promise<CalendarConnection | null> =>
-  await getConnectedConnection();
+export const getConnectionForAdmin =
+  async (): Promise<CalendarConnection | null> =>
+    await getConnectedConnection();

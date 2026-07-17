@@ -44,20 +44,20 @@ const ContactEditContent = () => {
   return (
     <NoraAccessGuard resource="contacts">
       <div className="mt-2 flex gap-8">
-      <Form
-        className="flex flex-1 flex-col gap-4"
-        record={normalizeContactArrayFields(record)}
-      >
-        <Card>
-          <CardContent>
-            <ContactInputs />
-            <FormToolbar />
-          </CardContent>
-        </Card>
-      </Form>
+        <Form
+          className="flex flex-1 flex-col gap-4"
+          record={normalizeContactArrayFields(record)}
+        >
+          <Card>
+            <CardContent>
+              <ContactInputs />
+              <FormToolbar />
+            </CardContent>
+          </Card>
+        </Form>
 
-      <ContactAside link="show" />
-    </div>
+        <ContactAside link="show" />
+      </div>
     </NoraAccessGuard>
   );
 };

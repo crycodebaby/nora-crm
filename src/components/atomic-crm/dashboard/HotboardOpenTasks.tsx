@@ -29,9 +29,13 @@ export const HotboardOpenTasks = ({ className }: { className?: string }) => {
     filter: identity?.id ? { sales_id: identity.id } : {},
   });
 
-  const openTasks =
-    tasks?.filter((task) => task.done_date == null).slice(0, HOTBOARD_DEAL_LIMIT) ??
-    [];
+  const openTasks = useMemo(
+    () =>
+      tasks
+        ?.filter((task) => task.done_date == null)
+        .slice(0, HOTBOARD_DEAL_LIMIT) ?? [],
+    [tasks],
+  );
 
   const contactIds = useMemo(
     () => openTasks.map((task) => task.contact_id),
@@ -45,7 +49,10 @@ export const HotboardOpenTasks = ({ className }: { className?: string }) => {
   );
 
   const contactById = useMemo(() => {
-    const map = new Map<string | number, { first_name: string; last_name: string }>();
+    const map = new Map<
+      string | number,
+      { first_name: string; last_name: string }
+    >();
     for (const contact of contacts ?? []) {
       map.set(contact.id, contact);
     }
@@ -111,7 +118,11 @@ const HotboardTaskRow = ({
 
   const openContact = () => {
     redirect(
-      noraCreatePath({ resource: "contacts", type: "show", id: task.contact_id }),
+      noraCreatePath({
+        resource: "contacts",
+        type: "show",
+        id: task.contact_id,
+      }),
       undefined,
       undefined,
       undefined,

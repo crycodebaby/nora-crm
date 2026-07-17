@@ -1,9 +1,6 @@
 import type { DataProvider, Identifier } from "ra-core";
 
-import {
-  formatCaseNumber,
-  formatCustomerNumber,
-} from "./numbering";
+import { formatCaseNumber, formatCustomerNumber } from "./numbering";
 import type { Company, Contact, Deal } from "../types";
 
 export const GLOBAL_SEARCH_RESULT_LIMIT = 5;

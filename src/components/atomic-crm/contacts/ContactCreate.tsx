@@ -23,25 +23,29 @@ export const ContactCreate = ({
       transform={cleanupContactForCreate}
       mutationMode={mutationMode}
     >
-      <NoraAccessGuard resource="contacts" action="create" redirectTarget="list">
-      <div className="mt-2 flex lg:mr-72">
-        <div className="flex-1">
-          <Form
-            defaultValues={{
-              sales_id: identity?.id,
-              email_jsonb: defaultEmailJsonb,
-              phone_jsonb: defaultPhoneJsonb,
-            }}
-          >
-            <Card>
-              <CardContent>
-                <ContactInputs />
-                <FormToolbar />
-              </CardContent>
-            </Card>
-          </Form>
+      <NoraAccessGuard
+        resource="contacts"
+        action="create"
+        redirectTarget="list"
+      >
+        <div className="mt-2 flex lg:mr-72">
+          <div className="flex-1">
+            <Form
+              defaultValues={{
+                sales_id: identity?.id,
+                email_jsonb: defaultEmailJsonb,
+                phone_jsonb: defaultPhoneJsonb,
+              }}
+            >
+              <Card>
+                <CardContent>
+                  <ContactInputs />
+                  <FormToolbar />
+                </CardContent>
+              </Card>
+            </Form>
+          </div>
         </div>
-      </div>
       </NoraAccessGuard>
     </CreateBase>
   );

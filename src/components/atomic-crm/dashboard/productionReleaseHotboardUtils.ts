@@ -101,8 +101,7 @@ export function sortProductionReleaseHotboardEntries(
   };
 
   return [...entries].sort((a, b) => {
-    const byPriority =
-      priorityOrder[a.priority] - priorityOrder[b.priority];
+    const byPriority = priorityOrder[a.priority] - priorityOrder[b.priority];
     if (byPriority !== 0) return byPriority;
 
     const byStarted = a.sortStartedAt.localeCompare(b.sortStartedAt);

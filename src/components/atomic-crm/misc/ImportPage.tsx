@@ -30,40 +30,39 @@ export const ImportPage = () => {
   const [importState, importFile, reset] = useImportFromJson();
 
   return (
-    <NoraAccessGuard
-      resource="configuration"
-      action="edit"
-      fallbackPath="/"
-    >
+    <NoraAccessGuard resource="configuration" action="edit" fallbackPath="/">
       <div className="max-w-2xl mx-auto mt-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>{translate("crm.import.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {importState.status === "idle" ? (
-            <ImportFromJsonIdle importFile={importFile} translate={translate} />
-          ) : importState.status === "error" ? (
-            <ImportFromJsonError
-              importState={importState}
-              importFile={importFile}
-              translate={translate}
-            />
-          ) : importState.status === "importing" ? (
-            <ImportFromJsonStatus
-              importState={importState}
-              translate={translate}
-            />
-          ) : (
-            <ImportFromJsonSuccess
-              importState={importState}
-              reset={reset}
-              translate={translate}
-            />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>{translate("crm.import.title")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {importState.status === "idle" ? (
+              <ImportFromJsonIdle
+                importFile={importFile}
+                translate={translate}
+              />
+            ) : importState.status === "error" ? (
+              <ImportFromJsonError
+                importState={importState}
+                importFile={importFile}
+                translate={translate}
+              />
+            ) : importState.status === "importing" ? (
+              <ImportFromJsonStatus
+                importState={importState}
+                translate={translate}
+              />
+            ) : (
+              <ImportFromJsonSuccess
+                importState={importState}
+                reset={reset}
+                translate={translate}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </NoraAccessGuard>
   );
 };

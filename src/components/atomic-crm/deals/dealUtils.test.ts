@@ -1,6 +1,10 @@
 import { commands } from "vitest/browser";
 
-import { formatISODateString, findDealLabel, sumDealAmounts } from "./dealUtils";
+import {
+  formatISODateString,
+  findDealLabel,
+  sumDealAmounts,
+} from "./dealUtils";
 import { getVisibleDealStages, type DealsByStage } from "./stages";
 
 describe("findDealLabel", () => {
@@ -56,9 +60,9 @@ describe("getVisibleDealStages", () => {
       b: [],
       c: [{ id: 2 }],
     } as unknown as DealsByStage;
-    expect(getVisibleDealStages(stages, byStage, false).map((s) => s.value)).toEqual(
-      ["a", "c"],
-    );
+    expect(
+      getVisibleDealStages(stages, byStage, false).map((s) => s.value),
+    ).toEqual(["a", "c"]);
   });
 
   it("shows all stages when requested", () => {

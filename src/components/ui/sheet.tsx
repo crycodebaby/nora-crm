@@ -51,10 +51,10 @@ function SheetContent({
   preventOutsideClose = false,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left";
-  showClose?: boolean;
-  onCloseClick?: () => void;
-  preventOutsideClose?: boolean;
+  side?: "top" | "right" | "bottom" | "left"
+  showClose?: boolean
+  onCloseClick?: () => void
+  preventOutsideClose?: boolean
 }) {
   return (
     <SheetPortal>
@@ -75,15 +75,15 @@ function SheetContent({
         )}
         onPointerDownOutside={(event) => {
           if (preventOutsideClose) {
-            event.preventDefault();
+            event.preventDefault()
           }
-          props.onPointerDownOutside?.(event);
+          props.onPointerDownOutside?.(event)
         }}
         onInteractOutside={(event) => {
           if (preventOutsideClose) {
-            event.preventDefault();
+            event.preventDefault()
           }
-          props.onInteractOutside?.(event);
+          props.onInteractOutside?.(event)
         }}
         {...props}
       >

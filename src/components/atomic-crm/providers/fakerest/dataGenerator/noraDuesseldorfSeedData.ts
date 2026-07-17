@@ -191,7 +191,8 @@ export const DUesseldorf_COMPANY_SEEDS: CompanySeed[] = [
     zipcode: "41464",
     address: "Weberstraße 31",
     phone_number: "+49 2131 000 71 12",
-    description: "Sicherheitsrelevante Arbeiten nur nach Absprache mit Leitung.",
+    description:
+      "Sicherheitsrelevante Arbeiten nur nach Absprache mit Leitung.",
     size: 15,
     createdDaysAgo: 60,
   },
@@ -950,7 +951,8 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     contact_ids: [1],
     category: "fensterservice",
     stage: "neue-anfrage",
-    description: "Mieter meldet klemmendes Fenster. Verwaltung muss Freigabe geben.",
+    description:
+      "Mieter meldet klemmendes Fenster. Verwaltung muss Freigabe geben.",
     amountEur: 890,
     createdDaysAgo: 2,
     updatedDaysAgo: 1,
@@ -1017,7 +1019,8 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     contact_ids: [3],
     category: "fensterservice",
     stage: "angenommen",
-    description: "Fenstergriff-Reparatur angenommen — Montagetermin koordinieren.",
+    description:
+      "Fenstergriff-Reparatur angenommen — Montagetermin koordinieren.",
     amountEur: 650,
     createdDaysAgo: 6,
     updatedDaysAgo: 1,
@@ -1030,7 +1033,8 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     contact_ids: [8],
     category: "reparatur",
     stage: "angebot-gesendet",
-    description: "Schaufenstergriff klemmt beim Abschließen. Angebot versendet.",
+    description:
+      "Schaufenstergriff klemmt beim Abschließen. Angebot versendet.",
     amountEur: 750,
     createdDaysAgo: 13,
     updatedDaysAgo: 2,

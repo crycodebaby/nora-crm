@@ -6,7 +6,7 @@ import {
   WithRecord,
 } from "ra-core";
 import { TextField } from "@/components/admin/text-field";
-import { formatLocalizedDate } from "../misc/RelativeDate";
+import { formatLocalizedDate } from "../misc/relativeDateUtils";
 import { useGetSalesName } from "../sales/useGetSalesName";
 import type { Contact } from "../types";
 

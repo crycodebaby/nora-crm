@@ -3,9 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import {
-  normalizePhoneForSearch,
-} from "../misc/globalSearch";
+import { normalizePhoneForSearch } from "../misc/globalSearch";
 import type { Company, Contact } from "../types";
 import {
   DUPLICATE_MAX_CANDIDATES,
@@ -26,9 +24,7 @@ const company = (overrides: Partial<Company> & Pick<Company, "id">): Company =>
     ...overrides,
   }) as Company;
 
-const contact = (
-  overrides: Partial<Contact> & Pick<Contact, "id">,
-): Contact =>
+const contact = (overrides: Partial<Contact> & Pick<Contact, "id">): Contact =>
   ({
     first_name: "Anna",
     last_name: "Müller",
@@ -56,21 +52,13 @@ describe("scoreCompanyAsDuplicate", () => {
   const base = company({ id: 1 });
 
   it("scores exact customer number", () => {
-    const result = scoreCompanyAsDuplicate(
-      base,
-      { query: "KD-000042" },
-      [],
-    );
+    const result = scoreCompanyAsDuplicate(base, { query: "KD-000042" }, []);
     expect(result?.reasons).toContain("customer_number");
     expect(result?.score).toBeGreaterThanOrEqual(100);
   });
 
   it("scores same phone on company", () => {
-    const result = scoreCompanyAsDuplicate(
-      base,
-      { phone: "030 123 456" },
-      [],
-    );
+    const result = scoreCompanyAsDuplicate(base, { phone: "030 123 456" }, []);
     expect(result?.reasons).toContain("same_phone");
   });
 

@@ -91,6 +91,10 @@ export type AuditStorageStats = {
   index_bytes: number;
   total_bytes: number;
   avg_metadata_bytes: number;
-  growth_hint: "unauffaellig" | "wachstum_beobachten" | "archivierungsplanung_erforderlich" | string;
+  growth_hint:
+    | "unauffaellig"
+    | "wachstum_beobachten"
+    | "archivierungsplanung_erforderlich"
+    | string;
   projection_note: string;
 };

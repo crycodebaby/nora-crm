@@ -1,11 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { History, RotateCcw } from "lucide-react";
-import {
-  useDataProvider,
-  useGetList,
-  useTranslate,
-} from "ra-core";
+import { useDataProvider, useGetList, useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -210,7 +206,9 @@ const AuditPageContent = () => {
                   {translate("resources.contacts.forcedCaseName")}
                 </SelectItem>
                 <SelectItem value="deal">
-                  {translate("resources.deals.forcedCaseName", { _: "Vorgang" })}
+                  {translate("resources.deals.forcedCaseName", {
+                    _: "Vorgang",
+                  })}
                 </SelectItem>
                 <SelectItem value="task">
                   {translate("resources.tasks.name", { smart_count: 1 })}
@@ -331,7 +329,9 @@ const AuditPageContent = () => {
                     event={event}
                     formatContext={formatContext}
                   />
-                  {index < events.length - 1 ? <Separator className="mt-4" /> : null}
+                  {index < events.length - 1 ? (
+                    <Separator className="mt-4" />
+                  ) : null}
                 </div>
               ))}
 

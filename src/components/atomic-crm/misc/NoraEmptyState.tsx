@@ -34,7 +34,9 @@ export const NoraEmptyState = ({
           <p className="text-sm text-muted-foreground">{description}</p>
         ) : null}
       </div>
-      {action ? <div className="flex flex-wrap gap-2 justify-center">{action}</div> : null}
+      {action ? (
+        <div className="flex flex-wrap gap-2 justify-center">{action}</div>
+      ) : null}
       <span className="sr-only">{translate("crm.common.empty_state")}</span>
     </div>
   );

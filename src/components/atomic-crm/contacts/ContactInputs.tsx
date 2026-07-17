@@ -58,9 +58,7 @@ const ContactIdentityInputs = () => {
   const translate = useTranslate();
   return (
     <div className="nora-form-section">
-      <h6>
-        {translate("resources.contacts.field_categories.identity")}
-      </h6>
+      <h6>{translate("resources.contacts.field_categories.identity")}</h6>
       <RadioButtonGroupInput
         label={false}
         row
@@ -82,9 +80,7 @@ const ContactPositionInputs = () => {
   const translate = useTranslate();
   return (
     <div className="nora-form-section">
-      <h6>
-        {translate("resources.contacts.field_categories.position")}
-      </h6>
+      <h6>{translate("resources.contacts.field_categories.position")}</h6>
       <TextInput source="title" helperText={false} />
       <ReferenceInput source="company_id" reference="companies" perPage={10}>
         <AutocompleteCompanyInput label="resources.contacts.fields.company_id" />
@@ -139,9 +135,7 @@ const ContactPersonalInformationInputs = () => {
 
   return (
     <div className="nora-form-section">
-      <h6>
-        {translate("resources.contacts.field_categories.personal_info")}
-      </h6>
+      <h6>{translate("resources.contacts.field_categories.personal_info")}</h6>
       <ArrayInput source="email_jsonb" helperText={false}>
         <SimpleFormIterator
           inline
@@ -208,9 +202,7 @@ const ContactMiscInputs = () => {
   const translate = useTranslate();
   return (
     <div className="nora-form-section">
-      <h6>
-        {translate("resources.contacts.field_categories.misc")}
-      </h6>
+      <h6>{translate("resources.contacts.field_categories.misc")}</h6>
       <TextInput source="background" multiline helperText={false} />
       <BooleanInput source="has_newsletter" helperText={false} />
       <ReferenceInput

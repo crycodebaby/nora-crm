@@ -11,7 +11,9 @@ import { createOAuthState } from "../_shared/googleCalendar/oauthState.ts";
 import { upsertConnectingConnection } from "../_shared/googleCalendar/connectionStore.ts";
 import { supabaseAdmin } from "../_shared/supabaseAdmin.ts";
 
-const syncAllowlistToConfiguration = async (calendarId: string): Promise<void> => {
+const syncAllowlistToConfiguration = async (
+  calendarId: string,
+): Promise<void> => {
   const { data } = await supabaseAdmin
     .from("configuration")
     .select("config")
@@ -19,20 +21,21 @@ const syncAllowlistToConfiguration = async (calendarId: string): Promise<void> =
     .maybeSingle();
 
   const config = (data?.config ?? {}) as Record<string, unknown>;
-  const googleCalendar = (config.google_calendar ?? {}) as Record<string, unknown>;
+  const googleCalendar = (config.google_calendar ?? {}) as Record<
+    string,
+    unknown
+  >;
 
-  await supabaseAdmin
-    .from("configuration")
-    .upsert({
-      id: 1,
-      config: {
-        ...config,
-        google_calendar: {
-          ...googleCalendar,
-          allowed_calendar_ids: [calendarId],
-        },
+  await supabaseAdmin.from("configuration").upsert({
+    id: 1,
+    config: {
+      ...config,
+      google_calendar: {
+        ...googleCalendar,
+        allowed_calendar_ids: [calendarId],
       },
-    });
+    },
+  });
 };
 
 Deno.serve(async (req: Request) => {
@@ -85,8 +88,7 @@ Deno.serve(async (req: Request) => {
 
         return new Response(
           JSON.stringify({
-            authorization_url:
-              `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+            authorization_url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
           }),
           {
             status: 200,

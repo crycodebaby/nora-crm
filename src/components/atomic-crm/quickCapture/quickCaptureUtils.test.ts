@@ -21,9 +21,7 @@ const company = (overrides: Partial<Company> & Pick<Company, "id">): Company =>
     ...overrides,
   }) as Company;
 
-const contact = (
-  overrides: Partial<Contact> & Pick<Contact, "id">,
-): Contact =>
+const contact = (overrides: Partial<Contact> & Pick<Contact, "id">): Contact =>
   ({
     first_name: "Anna",
     last_name: "Müller",
@@ -58,11 +56,9 @@ describe("findPossibleDuplicateCompanies", () => {
 
   it("flags companies by matching contact email", () => {
     expect(
-      findPossibleDuplicateCompanies(
-        companies,
-        { email: "anna@example.com" },
-        [contact({ id: 10, company_id: 1 })],
-      ),
+      findPossibleDuplicateCompanies(companies, { email: "anna@example.com" }, [
+        contact({ id: 10, company_id: 1 }),
+      ]),
     ).toHaveLength(1);
   });
 

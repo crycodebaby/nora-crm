@@ -1,16 +1,12 @@
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import { createElement, isValidElement } from "react";
 import {
-  Navigate,
   ResourceContextProvider,
   RestoreScrollPosition,
   useRouterProvider,
 } from "ra-core";
-import { useParams } from "react-router";
-import {
-  NORA_RESOURCE_PATHS,
-  type NoraRoutableResource,
-} from "./noraRoutes";
+import { LegacyPathRedirect } from "./LegacyPathRedirect";
+import { NORA_RESOURCE_PATHS, type NoraRoutableResource } from "./noraRoutes";
 
 type ResourceViews = {
   list?: ComponentType | ReactElement;
@@ -65,12 +61,8 @@ export const useNoraResourceAliasRoutes = ({
         element={
           <ResourceContextProvider value={resource}>
             <Routes>
-              {create && (
-                <Route path="create/*" element={getElement(create)} />
-              )}
-              {show && (
-                <Route path=":id/show/*" element={getElement(show)} />
-              )}
+              {create && <Route path="create/*" element={getElement(create)} />}
+              {show && <Route path=":id/show/*" element={getElement(show)} />}
               {edit && <Route path=":id/*" element={getElement(edit)} />}
               {list && (
                 <Route
@@ -112,14 +104,4 @@ export const useNoraResourceAliasRoutes = ({
       element={<LegacyPathRedirect from="deals" />}
     />,
   ].filter(Boolean);
-};
-
-const LegacyPathRedirect = ({ from }: { from: NoraRoutableResource }) => {
-  const params = useParams();
-  const splat = params["*"];
-  const target = splat
-    ? `/${NORA_RESOURCE_PATHS[from]}/${splat}`
-    : `/${NORA_RESOURCE_PATHS[from]}`;
-
-  return <Navigate to={target} replace />;
 };

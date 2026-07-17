@@ -73,10 +73,12 @@ const DealList = () => {
 const DealLayout = () => {
   const location = useLocation();
   const matchCreate = matchesNoraSubPath("deals", "create", location.pathname);
-  const matchShow = matchPath("/deals/:id/show", location.pathname)
-    ?? matchPath("/vorgaenge/:id/show", location.pathname);
-  const matchEditRaw = matchPath("/deals/:id", location.pathname)
-    ?? matchPath("/vorgaenge/:id", location.pathname);
+  const matchShow =
+    matchPath("/deals/:id/show", location.pathname) ??
+    matchPath("/vorgaenge/:id/show", location.pathname);
+  const matchEditRaw =
+    matchPath("/deals/:id", location.pathname) ??
+    matchPath("/vorgaenge/:id", location.pathname);
   const matchEdit = matchEditRaw && !matchShow ? matchEditRaw : null;
 
   const { data, isPending, filterValues } = useListContext();

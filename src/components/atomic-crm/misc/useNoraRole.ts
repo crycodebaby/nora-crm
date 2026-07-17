@@ -1,9 +1,6 @@
 import { useGetIdentity } from "ra-core";
 
-import {
-  type NoraRole,
-  resolveNoraRole,
-} from "../providers/commons/canAccess";
+import { type NoraRole, resolveNoraRole } from "../providers/commons/canAccess";
 
 export type NoraIdentity = {
   id?: string | number;

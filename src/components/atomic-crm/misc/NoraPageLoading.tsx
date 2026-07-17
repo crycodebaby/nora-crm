@@ -41,7 +41,10 @@ export const NoraPageLoading = ({
   if (variant === "cards") {
     return (
       <div
-        className={cn("grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4", className)}
+        className={cn(
+          "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4",
+          className,
+        )}
         aria-busy
       >
         {Array.from({ length: rows }).map((_, index) => (

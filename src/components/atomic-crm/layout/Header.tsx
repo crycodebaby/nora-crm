@@ -1,4 +1,12 @@
-import { CalendarClock, FileText, History, Import, Settings, User, Users } from "lucide-react";
+import {
+  CalendarClock,
+  FileText,
+  History,
+  Import,
+  Settings,
+  User,
+  Users,
+} from "lucide-react";
 import { CanAccess, useTranslate, useUserMenu } from "ra-core";
 import { Link, matchPath, useLocation } from "react-router";
 import { RefreshButton } from "@/components/admin/refresh-button";
@@ -14,10 +22,7 @@ import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import { AuditPage } from "../audit/AuditPage";
 import { GoogleCalendarAdminPage } from "../calendar/GoogleCalendarAdminPage";
-import {
-  getActiveNoraResource,
-  noraCreatePath,
-} from "../routing/noraRoutes";
+import { getActiveNoraResource, noraCreatePath } from "../routing/noraRoutes";
 
 const Header = () => {
   const { darkModeLogo, lightModeLogo, title } = useConfigurationContext();
@@ -102,7 +107,10 @@ const Header = () => {
                   <CanAccess resource="configuration" action="edit">
                     <SettingsMenu />
                   </CanAccess>
-                  <CanAccess resource="google_calendar_connections" action="list">
+                  <CanAccess
+                    resource="google_calendar_connections"
+                    action="list"
+                  >
                     <GoogleCalendarMenuItem />
                   </CanAccess>
                   <CanAccess resource="configuration" action="edit">
@@ -215,7 +223,10 @@ const GoogleCalendarMenuItem = () => {
   }
   return (
     <DropdownMenuItem asChild onClick={userMenuContext.onClose}>
-      <Link to={GoogleCalendarAdminPage.path} className="flex items-center gap-2">
+      <Link
+        to={GoogleCalendarAdminPage.path}
+        className="flex items-center gap-2"
+      >
         <CalendarClock />
         {translate("crm.calendar.admin.menu")}
       </Link>

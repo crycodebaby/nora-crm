@@ -6,7 +6,8 @@ import { SortButton } from "@/components/admin/sort-button";
 
 import { TopToolbar } from "../layout/TopToolbar";
 import { NoraCreateButton } from "../misc/NoraAccessActions";
-import { NoraPageLoading } from "../misc/NoraPageLoading";import { CompanyEmpty } from "./CompanyEmpty";
+import { NoraPageLoading } from "../misc/NoraPageLoading";
+import { CompanyEmpty } from "./CompanyEmpty";
 import { CompanyListFilter } from "./CompanyListFilter";
 import { ImageList } from "./GridList";
 
@@ -30,7 +31,8 @@ const CompanyListLayout = () => {
   const { data, isPending, filterValues } = useListContext();
   const hasFilters = filterValues && Object.keys(filterValues).length > 0;
 
-  if (isPending) return <NoraPageLoading variant="cards" />;  if (!data?.length && !hasFilters) return <CompanyEmpty />;
+  if (isPending) return <NoraPageLoading variant="cards" />;
+  if (!data?.length && !hasFilters) return <CompanyEmpty />;
 
   return (
     <div className="w-full flex flex-col md:flex-row gap-4 md:gap-8">
@@ -57,6 +59,7 @@ const CompanyListActions = () => {
         label={translate("resources.companies.action.new", {
           _: "New Company",
         })}
-      />    </TopToolbar>
+      />{" "}
+    </TopToolbar>
   );
 };

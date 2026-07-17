@@ -1,14 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { QuickCaptureDialog } from "./QuickCaptureDialog";
-
-type QuickCaptureContextValue = {
-  open: boolean;
-  openQuickCapture: () => void;
-  closeQuickCapture: () => void;
-};
-
-const QuickCaptureContext = createContext<QuickCaptureContextValue | null>(null);
+import { QuickCaptureContext } from "./quickCaptureContextValue";
 
 export const QuickCaptureProvider = ({ children }: { children: ReactNode }) => {
   const [open, setOpen] = useState(false);
@@ -28,12 +21,4 @@ export const QuickCaptureProvider = ({ children }: { children: ReactNode }) => {
       <QuickCaptureDialog open={open} onOpenChange={setOpen} />
     </QuickCaptureContext.Provider>
   );
-};
-
-export const useQuickCapture = () => {
-  const context = useContext(QuickCaptureContext);
-  if (!context) {
-    throw new Error("useQuickCapture must be used within QuickCaptureProvider");
-  }
-  return context;
 };

@@ -982,3 +982,34 @@ Spezifikation in `11-google-calendar-rbac.md`. Ziel: technische Grundlage für r
 - SQL- + Function-Tests ✅
 - `npm run typecheck` / `npm run build` ✅
 - **OAuth-E2E ausstehend** (Betreiber + isolierter Testkalender)
+
+## 2026-07-17 – v0.4c.2c: Release-Gates und Deployment-Bereinigung
+
+### Kontext
+
+Der bisherige GitHub-Workflow `deploy.yml` stammte aus dem Atomic-CRM-Setup. Er
+veröffentlichte Dokumentation, Demo und Supabase-Frontend über GitHub Pages und
+konnte bei einem Push auf `main` zusätzlich Remote-Migrationen und Edge
+Functions ausrollen. Nora nutzt für das Frontend die Vercel-Git-Integration;
+die alten Ziel-Repositories und zugehörigen Secrets sind nicht Teil des
+freigegebenen Nora-Produktionsablaufs.
+
+### Entscheidung
+
+- Der Legacy-Workflow `.github/workflows/deploy.yml` wird vollständig entfernt.
+- Es wird kein Ersatz-Workflow für automatische Supabase-Migrationen, Edge
+  Functions oder GitHub Pages angelegt.
+- Vercel-Deployment und ein späterer Supabase-Production-Bootstrap bleiben
+  getrennte, ausdrücklich freizugebende Betriebsaufgaben.
+- ESLint und Prettier laufen als direkte, getrennte Jobs über die kanonischen
+  npm-Skripte. Die von `wearerequired/lint-action` erzeugten widersprüchlichen
+  Wrapper- und Child-Checks entfallen.
+- Fehlgeschlagene E2E-Läufe laden Playwright-Kontext, Traces und HTML-Bericht
+  als kurzlebiges GitHub-Artefakt hoch.
+
+### Begründung
+
+Damit lösen normale Nora-Codeänderungen keine unbekannten GitHub-Pages- oder
+Supabase-Remote-Deployments mehr aus. Direkte npm-Skripte machen lokale und
+GitHub-Prüfungen identisch und verhindern, dass ein erfolgreicher Wrapper-Job
+gleichzeitig fehlgeschlagene ESLint-/Prettier-Child-Checks erzeugt.

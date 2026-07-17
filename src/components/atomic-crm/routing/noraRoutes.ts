@@ -18,13 +18,10 @@ const LEGACY_PATH_TO_RESOURCE: Record<string, NoraRoutableResource> = {
 
 export const isNoraRoutableResource = (
   resource: string,
-): resource is NoraRoutableResource =>
-  resource in NORA_RESOURCE_PATHS;
+): resource is NoraRoutableResource => resource in NORA_RESOURCE_PATHS;
 
 export const getResourceSlug = (resource: string): string =>
-  isNoraRoutableResource(resource)
-    ? NORA_RESOURCE_PATHS[resource]
-    : resource;
+  isNoraRoutableResource(resource) ? NORA_RESOURCE_PATHS[resource] : resource;
 
 export type NoraPathType = "list" | "create" | "edit" | "show";
 

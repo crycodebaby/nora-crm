@@ -11,7 +11,9 @@ describe("validateQuickCaptureForSave", () => {
     selectedCompany: { id: 1 },
     createNewCompany: false,
     newCompanyName: "",
-    selectedContact: { id: 2 } as QuickCaptureValidationInput["selectedContact"],
+    selectedContact: {
+      id: 2,
+    } as QuickCaptureValidationInput["selectedContact"],
     createNewContact: false,
     contactFirstName: "",
     contactLastName: "",

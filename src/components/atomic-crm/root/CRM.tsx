@@ -274,7 +274,10 @@ const DesktopAdmin = (
         <Route path={ImportPage.path} element={<ImportPage />} />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
         <Route path={AuditPage.path} element={<AuditPage />} />
-        <Route path={GoogleCalendarAdminPage.path} element={<GoogleCalendarAdminPage />} />
+        <Route
+          path={GoogleCalendarAdminPage.path}
+          element={<GoogleCalendarAdminPage />}
+        />
         {noraAliasRoutes}
       </CustomRoutes>
       <Resource name="deals" {...deals} />
@@ -313,9 +316,7 @@ const MobileAdmin = (
     contacts: {
       list: ContactListMobile,
       show: ContactShow,
-      children: (
-        <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
-      ),
+      children: <Route path=":id/notes/:noteId" element={<NoteShowPage />} />,
     },
     companies: { show: CompanyShow },
     deals: {},

@@ -1,6 +1,9 @@
 import { add, subDays } from "date-fns";
 
-import { assignCaseNumbers, assignCustomerNumbers } from "../../../misc/numbering";
+import {
+  assignCaseNumbers,
+  assignCustomerNumbers,
+} from "../../../misc/numbering";
 import { defaultDealStages } from "../../../root/defaultConfiguration";
 import type {
   Company,
@@ -131,10 +134,7 @@ export const generateNoraTasks = (contacts: Contact[]): Task[] => {
   const taskCounts = new Map<string | number, number>();
 
   const tasks = DUesseldorf_TASK_SEEDS.map((seed) => {
-    taskCounts.set(
-      seed.contact_id,
-      (taskCounts.get(seed.contact_id) ?? 0) + 1,
-    );
+    taskCounts.set(seed.contact_id, (taskCounts.get(seed.contact_id) ?? 0) + 1);
     return {
       id: seed.id,
       contact_id: seed.contact_id,

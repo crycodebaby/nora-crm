@@ -7,9 +7,9 @@ import {
   readGoogleCalendarEnv,
 } from "./config.ts";
 
-const KEY_B64 = Buffer.from(Uint8Array.from({ length: 32 }, (_, i) => i + 1)).toString(
-  "base64",
-);
+const KEY_B64 = Buffer.from(
+  Uint8Array.from({ length: 32 }, (_, i) => i + 1),
+).toString("base64");
 
 const ENV_KEYS = [
   "GOOGLE_CALENDAR_CLIENT_ID",
@@ -73,9 +73,11 @@ describe("assertAllowedCalendarId", () => {
 
 describe("GOOGLE_OAUTH_SCOPES", () => {
   it("includes read-only calendar scopes only", () => {
-    expect(GOOGLE_OAUTH_SCOPES.join(" ")).not.toMatch(/calendar\.events(?!\.owned\.readonly)/);
-    expect(GOOGLE_OAUTH_SCOPES.some((s) => s.includes("calendarlist.readonly"))).toBe(
-      true,
+    expect(GOOGLE_OAUTH_SCOPES.join(" ")).not.toMatch(
+      /calendar\.events(?!\.owned\.readonly)/,
     );
+    expect(
+      GOOGLE_OAUTH_SCOPES.some((s) => s.includes("calendarlist.readonly")),
+    ).toBe(true);
   });
 });

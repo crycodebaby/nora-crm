@@ -22,9 +22,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { CrmDataProvider } from "../providers/types";
 import type { ChecklistRun, ChecklistRunItem, Deal } from "../types";
 import { NoraQueryError } from "../misc/NoraQueryError";
-import {
-  FENS_PRODUCTION_RELEASE_TEMPLATE_CODE,
-} from "../types/checklists";
+import { FENS_PRODUCTION_RELEASE_TEMPLATE_CODE } from "../types/checklists";
 import {
   allRequiredItemsChecked,
   computeChecklistProgress,
@@ -37,7 +35,12 @@ export const DealProductionChecklistSection = () => {
   const deal = useRecordContext<Deal>();
   const translate = useTranslate();
 
-  const { data: runs, isPending: runsPending, error: runsError, refetch: refetchRuns } = useGetList<ChecklistRun>(
+  const {
+    data: runs,
+    isPending: runsPending,
+    error: runsError,
+    refetch: refetchRuns,
+  } = useGetList<ChecklistRun>(
     "checklist_runs",
     {
       filter: deal?.id ? { deal_id: deal.id } : {},
@@ -59,10 +62,7 @@ export const DealProductionChecklistSection = () => {
   }
 
   const hasAnyRuns = (runs?.length ?? 0) > 0;
-  const showSection = shouldShowDealChecklistSection(
-    deal.category,
-    hasAnyRuns,
-  );
+  const showSection = shouldShowDealChecklistSection(deal.category, hasAnyRuns);
 
   if (!showSection) {
     if (deal.category !== "fensterservice" && runsPending) return null;
@@ -144,9 +144,7 @@ const DealProductionChecklistContent = ({
         p_template_code: FENS_PRODUCTION_RELEASE_TEMPLATE_CODE,
         p_deal_id: Number(deal.id),
         p_contact_id:
-          deal.contact_ids?.[0] != null
-            ? Number(deal.contact_ids[0])
-            : null,
+          deal.contact_ids?.[0] != null ? Number(deal.contact_ids[0]) : null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["checklist_runs"] });
@@ -162,8 +160,7 @@ const DealProductionChecklistContent = ({
   const progress = computeChecklistProgress(sortedItems);
   const requiredComplete =
     sortedItems.length > 0 && allRequiredItemsChecked(sortedItems);
-  const isLoading =
-    templatesPending || (openRun && itemsPending) || isStarting;
+  const isLoading = templatesPending || (openRun && itemsPending) || isStarting;
 
   return (
     <section className="space-y-3">
@@ -208,9 +205,7 @@ const DealProductionChecklistContent = ({
             disabled={isStarting || templatesPending || !templateId}
             onClick={() => startRun()}
           >
-            {isStarting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : null}
+            {isStarting ? <Loader2 className="size-4 animate-spin" /> : null}
             {translate("resources.deals.checklist.start")}
           </Button>
         ) : (

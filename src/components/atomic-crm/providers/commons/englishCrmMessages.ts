@@ -761,7 +761,8 @@ export const englishCrmMessages = {
         sync_button: "Sync now",
         connect_error: "Could not start connection.",
         sync_error: "Sync failed.",
-        sync_success: "Sync complete: %{imported} imported, %{updated} updated.",
+        sync_success:
+          "Sync complete: %{imported} imported, %{updated} updated.",
         oauth_connected: "Google Calendar connected successfully.",
         oauth_error: "Connection failed: %{reason}",
         unknown_error: "Unknown error",
@@ -930,7 +931,8 @@ export const englishCrmMessages = {
         office: "Office (demo)",
         viewer: "Viewer (demo)",
       },
-      login_hint: "Demo accounts: admin@nora.demo, office@nora.demo, viewer@nora.demo (password: demo)",
+      login_hint:
+        "Demo accounts: admin@nora.demo, office@nora.demo, viewer@nora.demo (password: demo)",
     },
   },
 } as const;

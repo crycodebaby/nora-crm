@@ -31,11 +31,7 @@ export function SalesInputs() {
         readOnly={isSelf}
         helperText={false}
       />
-      <BooleanInput
-        source="disabled"
-        readOnly={isSelf}
-        helperText={false}
-      />
+      <BooleanInput source="disabled" readOnly={isSelf} helperText={false} />
     </div>
   );
 }

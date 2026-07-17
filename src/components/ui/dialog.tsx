@@ -52,9 +52,9 @@ function DialogContent({
   preventOutsideClose = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  showClose?: boolean;
-  onCloseClick?: () => void;
-  preventOutsideClose?: boolean;
+  showClose?: boolean
+  onCloseClick?: () => void
+  preventOutsideClose?: boolean
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -67,15 +67,15 @@ function DialogContent({
         )}
         onPointerDownOutside={(event) => {
           if (preventOutsideClose) {
-            event.preventDefault();
+            event.preventDefault()
           }
-          props.onPointerDownOutside?.(event);
+          props.onPointerDownOutside?.(event)
         }}
         onInteractOutside={(event) => {
           if (preventOutsideClose) {
-            event.preventDefault();
+            event.preventDefault()
           }
-          props.onInteractOutside?.(event);
+          props.onInteractOutside?.(event)
         }}
         {...props}
       >

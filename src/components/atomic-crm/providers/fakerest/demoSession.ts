@@ -171,7 +171,11 @@ export const resolveDemoPostSwitchUrl = (
 
   if (role === "viewer") {
     if (normalized.endsWith("/create")) return "/";
-    const editPatterns = [/^\/kunden\/[^/]+$/, /^\/kontakte\/[^/]+$/, /^\/vorgaenge\/[^/]+$/];
+    const editPatterns = [
+      /^\/kunden\/[^/]+$/,
+      /^\/kontakte\/[^/]+$/,
+      /^\/vorgaenge\/[^/]+$/,
+    ];
     const legacyEditPatterns = [
       /^\/companies\/[^/]+$/,
       /^\/contacts\/[^/]+$/,

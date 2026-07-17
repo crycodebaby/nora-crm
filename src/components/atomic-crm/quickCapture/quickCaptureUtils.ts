@@ -43,8 +43,7 @@ export function contactMatchesPhone(contact: Contact, phone: string): boolean {
   if (!normalized) return false;
   return (contact.phone_jsonb ?? []).some(
     (entry) =>
-      entry.number &&
-      normalizePhoneForSearch(entry.number) === normalized,
+      entry.number && normalizePhoneForSearch(entry.number) === normalized,
   );
 }
 
@@ -86,7 +85,9 @@ export function findPossibleDuplicateCompanies(
   if (criteria.email) {
     for (const contact of contacts) {
       if (!contactMatchesEmail(contact, criteria.email)) continue;
-      const company = companies.find((entry) => entry.id === contact.company_id);
+      const company = companies.find(
+        (entry) => entry.id === contact.company_id,
+      );
       if (company) matches.set(company.id, company);
     }
   }
@@ -94,7 +95,9 @@ export function findPossibleDuplicateCompanies(
   if (criteria.phone) {
     for (const contact of contacts) {
       if (!contactMatchesPhone(contact, criteria.phone)) continue;
-      const company = companies.find((entry) => entry.id === contact.company_id);
+      const company = companies.find(
+        (entry) => entry.id === contact.company_id,
+      );
       if (company) matches.set(company.id, company);
     }
   }

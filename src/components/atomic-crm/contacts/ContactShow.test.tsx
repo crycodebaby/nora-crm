@@ -73,6 +73,8 @@ describe("ContactShow", () => {
       })
       .toBe("hot");
 
-    await expect.element(screen.getByRole("combobox")).toHaveTextContent("Heiß");
+    await expect
+      .element(screen.getByRole("combobox"))
+      .toHaveTextContent("Heiß");
   });
 });

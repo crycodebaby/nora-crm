@@ -30,7 +30,7 @@ import { findDealLabel, formatDealAmount } from "../deals/dealUtils";
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
 import { MobileBackButton } from "../misc/MobileBackButton";
-import { formatRelativeDate } from "../misc/RelativeDate";
+import { formatRelativeDate } from "../misc/relativeDateUtils";
 import { Status } from "../misc/Status";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Contact, Deal } from "../types";

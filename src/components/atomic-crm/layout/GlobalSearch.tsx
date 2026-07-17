@@ -12,7 +12,11 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 import { findDealLabel } from "../deals/dealUtils";
@@ -69,7 +73,9 @@ export const GlobalSearch = ({
   const redirect = useRedirect();
   const { dealStages, dealCategories } = useConfigurationContext();
   const inputId =
-    variant === "mobile" ? GLOBAL_SEARCH_MOBILE_INPUT_ID : GLOBAL_SEARCH_INPUT_ID;
+    variant === "mobile"
+      ? GLOBAL_SEARCH_MOBILE_INPUT_ID
+      : GLOBAL_SEARCH_INPUT_ID;
   const inputName = inputId;
 
   const [query, setQuery] = useState("");
@@ -80,7 +86,12 @@ export const GlobalSearch = ({
   const debouncedQuery = useDebouncedValue(query);
   const searchEnabled = canSearchQuery(debouncedQuery);
 
-  const { data: result, isFetching, error, refetch } = useQuery({
+  const {
+    data: result,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ["globalSearch", debouncedQuery],
     queryFn: () => performGlobalSearch(dataProvider, debouncedQuery),
     enabled: searchEnabled && (variant === "mobile" ? mobileOpen : open),
@@ -127,10 +138,7 @@ export const GlobalSearch = ({
     if (event.key !== "Enter" || !result || result.kind !== "results") {
       return;
     }
-    const first =
-      result.companies[0] ??
-      result.contacts[0] ??
-      result.deals[0];
+    const first = result.companies[0] ?? result.contacts[0] ?? result.deals[0];
     if (!first) return;
     const resource = result.companies[0]
       ? "companies"
@@ -352,9 +360,7 @@ const GroupedResults = ({
                 <span className="nora-list-title text-sm">{company.name}</span>
                 <span className="nora-muted text-xs">
                   {company.customer_number}
-                  {company.phone_number
-                    ? ` · ${company.phone_number}`
-                    : null}
+                  {company.phone_number ? ` · ${company.phone_number}` : null}
                 </span>
               </CommandItem>
             ))}
@@ -412,11 +418,7 @@ const GroupedResults = ({
 const ContactSecondaryLine = ({ contact }: { contact: Contact }) => {
   const email = getContactPrimaryEmail(contact);
   const phone = getContactPrimaryPhone(contact);
-  const parts = [
-    contact.company_name,
-    phone,
-    email,
-  ].filter(Boolean);
+  const parts = [contact.company_name, phone, email].filter(Boolean);
 
   if (!parts.length) return null;
 

@@ -15,12 +15,11 @@ concurrency:
     cancel-in-progress: true
 
 permissions:
-    contents: write
-    checks: write
+    contents: read
 
 jobs:
-    lint:
-        name: 🔬 ESLint
+    eslint:
+        name: ESLint
         runs-on: ubuntu-latest
         timeout-minutes: 10
         if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
@@ -37,14 +36,29 @@ jobs:
             - name: 📥 Download deps
               run: npm ci
 
-            - name: 🔬 Lint
-              uses: wearerequired/lint-action@v2
-              with:
-                  eslint: true
-                  eslint_args: "**/*.{mjs,ts,tsx}"
-                  prettier: true
-                  prettier_args: "--config ./.prettierrc.json \"**/*.{js,json,ts,tsx,css,md,html}\""
+            - name: 🔬 ESLint
+              run: npm run lint
 
+    prettier:
+        name: Prettier
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v4
+
+            - name: ⚙️ Setup node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: 📥 Download deps
+              run: npm ci
+
+            - name: 🎨 Prettier
+              run: npm run prettier
 
     typecheck:
         name: 🏷️ Typecheck
@@ -66,7 +80,7 @@ jobs:
 
             - name: 🏷️ Typecheck
               run: npm run typecheck
-              
+
     test-app:
         name: 🔎 Test
         runs-on: ubuntu-latest
@@ -94,25 +108,40 @@ jobs:
               run: CI=1 npm run test:unit:functions -- --run
 
     e2e-test:
-      timeout-minutes: 10
-      runs-on: ubuntu-latest
-      steps:
-      - name: 📥 Checkout repo
-        uses: actions/checkout@v4
+        timeout-minutes: 10
+        runs-on: ubuntu-latest
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v4
 
-      - name: ⚙️ Setup node
-        uses: actions/setup-node@v4
-        with:
-            node-version: 20
-            cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium-headless-shell 1>/dev/null
-      - name: Install wait-on and serve
-        run: npm install -g wait-on serve
-      - name: Run Playwright tests
-        run: make test-e2e-ci
+            - name: ⚙️ Setup node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Install Playwright Browsers
+              run: npx playwright install --with-deps chromium-headless-shell 1>/dev/null
+
+            - name: Install wait-on and serve
+              run: npm install -g wait-on serve
+
+            - name: Run Playwright tests
+              run: make test-e2e-ci
+
+            - name: Upload Playwright failure artifacts
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: playwright-failure-${{ github.run_id }}
+                  path: |
+                      test-results/
+                      playwright-report/
+                  if-no-files-found: warn
+                  retention-days: 7
 
     build:
         name: 🔨 Build

@@ -20,19 +20,20 @@ export type CalendarConnection = {
   last_sync_error: string | null;
 };
 
-export const getConnectedConnection = async (): Promise<CalendarConnection | null> => {
-  const { data, error } = await supabaseAdmin
-    .from("google_calendar_connections")
-    .select("*")
-    .eq("status", "connected")
-    .maybeSingle();
+export const getConnectedConnection =
+  async (): Promise<CalendarConnection | null> => {
+    const { data, error } = await supabaseAdmin
+      .from("google_calendar_connections")
+      .select("*")
+      .eq("status", "connected")
+      .maybeSingle();
 
-  if (error) {
-    throw error;
-  }
+    if (error) {
+      throw error;
+    }
 
-  return data as CalendarConnection | null;
-};
+    return data as CalendarConnection | null;
+  };
 
 export const upsertConnectingConnection = async (
   env: GoogleCalendarEnv,
@@ -157,13 +158,16 @@ export const storeRefreshToken = async (
     env.tokenKeyVersion,
   );
 
-  const { error } = await supabaseAdmin.rpc("store_google_calendar_refresh_token", {
-    p_connection_id: connectionId,
-    p_ciphertext: encrypted.ciphertext,
-    p_nonce: encrypted.nonce,
-    p_key_version: encrypted.keyVersion,
-    p_preserve_existing: preserveExisting,
-  });
+  const { error } = await supabaseAdmin.rpc(
+    "store_google_calendar_refresh_token",
+    {
+      p_connection_id: connectionId,
+      p_ciphertext: encrypted.ciphertext,
+      p_nonce: encrypted.nonce,
+      p_key_version: encrypted.keyVersion,
+      p_preserve_existing: preserveExisting,
+    },
+  );
 
   if (error) {
     throw error;

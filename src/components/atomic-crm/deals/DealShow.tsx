@@ -77,6 +77,7 @@ const DealShowContent = () => {
   const translate = useTranslate();
   const { dealStages, dealCategories, currency } = useConfigurationContext();
   const record = useRecordContext<Deal>();
+  const salesName = useGetSalesName(record?.sales_id);
   if (!record) return null;
 
   const categoryLabel =
@@ -87,7 +88,6 @@ const DealShowContent = () => {
   const followUpStatus = showFollowUp
     ? getFollowUpStatus(record.expected_closing_date)
     : null;
-  const salesName = useGetSalesName(record.sales_id);
 
   return (
     <div className="nora-detail-scroll flex flex-col min-h-0 flex-1">
@@ -131,7 +131,8 @@ const DealShowContent = () => {
         </div>
       </header>
 
-      {followUpStatus && (followUpStatus === "today" || followUpStatus === "overdue") ? (
+      {followUpStatus &&
+      (followUpStatus === "today" || followUpStatus === "overdue") ? (
         <div className="px-4 md:px-6 pt-4 shrink-0">
           <DealFollowUpBadge
             dateString={record.expected_closing_date}
@@ -143,7 +144,9 @@ const DealShowContent = () => {
 
       <div className="px-4 md:px-6 py-6 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <NoraSectionCard title={translate("resources.deals.sections.overview")}>
+          <NoraSectionCard
+            title={translate("resources.deals.sections.overview")}
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <DealFact
                 label={translate("resources.deals.fields.stage")}
@@ -156,7 +159,9 @@ const DealShowContent = () => {
                 />
               ) : null}
               <DealFact
-                label={translate("resources.deals.fields.expected_closing_date")}
+                label={translate(
+                  "resources.deals.fields.expected_closing_date",
+                )}
                 value={
                   isValid(new Date(record.expected_closing_date))
                     ? formatISODateString(record.expected_closing_date)

@@ -88,10 +88,7 @@ const EntityAuditHistoryContent = ({
 
     if (query.error) {
       return (
-        <NoraQueryError
-          error={query.error}
-          onRetry={() => query.refetch()}
-        />
+        <NoraQueryError error={query.error} onRetry={() => query.refetch()} />
       );
     }
 
@@ -256,7 +253,9 @@ const AuditChangeList = ({
               {formatAuditFieldValue(field, change.old, formatContext)}
             </span>
             <span aria-hidden>→</span>
-            <span>{formatAuditFieldValue(field, change.new, formatContext)}</span>
+            <span>
+              {formatAuditFieldValue(field, change.new, formatContext)}
+            </span>
           </dd>
         </div>
       ))}

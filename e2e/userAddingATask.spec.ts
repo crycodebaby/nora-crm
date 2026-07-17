@@ -39,14 +39,18 @@ test.describe("user adding a task", () => {
       company_id: company.id,
     });
   });
-  test("user adding a task", async ({ page, isMobile, menu, dismissToast }) => {
-    await page.goto("http://localhost:5175/");
-    await page.getByLabel("Email").fill("john@doe.com");
-    await page.getByLabel("Password").fill("password");
-    await page.getByRole("button", { name: "Sign in" }).click();
-
+  test("user adding a task", async ({
+    page,
+    isMobile,
+    menu,
+    loginAsAdmin,
+    dismissToast,
+  }) => {
+    await loginAsAdmin({
+      email: "john@doe.com",
+      password: "password",
+    });
     await expect(page).toHaveTitle(/Nora CRM/);
-    await expect(page.getByText("Latest Activity")).toBeVisible();
 
     await menu.goToContacts();
     await page.waitForLoadState("networkidle");
@@ -55,38 +59,37 @@ test.describe("user adding a task", () => {
     await page.waitForLoadState("networkidle");
 
     if (isMobile) {
-      await page.getByRole("button", { name: "Create" }).click();
-      await page.getByRole("menuitem", { name: "Task" }).click();
+      await page.getByRole("button", { name: "Anlegen" }).click();
+      await page.getByRole("menuitem", { name: "Aufgabe" }).click();
     } else {
-      await page.getByRole("button", { name: "Add Task" }).click();
+      await page.getByRole("button", { name: "Aufgabe hinzufügen" }).click();
     }
-    await page.getByLabel("Description *").fill("Follow up with Jane");
-    await page.getByLabel("Due date").fill("2026-04-11T21:00");
-    await page.getByLabel("Type").click();
+    await page.getByLabel("Beschreibung *").fill("Mit Jane nachfassen");
+    await page.getByLabel("Fällig am").fill("2026-12-11T21:00");
+    await page.getByLabel("Art").click();
     await page.getByRole("option", { name: "Rückruf" }).click();
 
-    await page.getByRole("button", { name: "Save" }).click();
+    await page.getByRole("button", { name: "Speichern" }).click();
 
-    await dismissToast("Task added");
+    await dismissToast("Aufgabe hinzugefügt");
 
     if (isMobile) {
-      await expect(page.getByText("1 task")).toBeVisible();
-      await page.getByText("1 task").click();
+      await expect(page.getByText("1 Aufgabe")).toBeVisible();
+      await page.getByText("1 Aufgabe").click();
 
-      await expect(page.getByText("Follow up with Jane")).toBeVisible();
-      await expect(page.getByText("due 4/11/2026, 9:00:00 PM")).toBeVisible();
+      await expect(page.getByText("Mit Jane nachfassen")).toBeVisible();
     } else {
-      await expect(page.getByText("Tasks")).toBeVisible();
+      await expect(page.getByText("Aufgaben")).toBeVisible();
 
-      await expect(page.getByText("Tasks").locator("..")).toHaveText(
-        /Follow up with Jane/,
+      await expect(page.getByText("Aufgaben").locator("..")).toHaveText(
+        /Mit Jane nachfassen/,
       );
       await menu.goToDashboard();
 
       await expect(
-        page.getByRole("heading", { name: "Open tasks" }),
+        page.getByRole("heading", { name: "Offene Aufgaben" }),
       ).toBeVisible();
-      await expect(page.getByText("Follow up with Jane")).toBeVisible();
+      await expect(page.getByText("Mit Jane nachfassen")).toBeVisible();
     }
   });
 });

@@ -130,9 +130,7 @@ export function isFollowUpDueToday(dateString: string): boolean {
 
 export type FollowUpStatus = "overdue" | "today" | "upcoming";
 
-export function getFollowUpStatus(
-  dateString: string,
-): FollowUpStatus | null {
+export function getFollowUpStatus(dateString: string): FollowUpStatus | null {
   if (!isoDateStringRegex.test(dateString)) {
     return null;
   }

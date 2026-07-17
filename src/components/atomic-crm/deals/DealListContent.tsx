@@ -1,6 +1,12 @@
 import { DragDropContext, type OnDragEndResponder } from "@hello-pangea/dnd";
 import isEqual from "lodash/isEqual";
-import { useDataProvider, useCanAccess, useListContext, useTranslate, type DataProvider } from "ra-core";
+import {
+  useDataProvider,
+  useCanAccess,
+  useListContext,
+  useTranslate,
+  type DataProvider,
+} from "ra-core";
 import { useEffect, useState } from "react";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
@@ -28,9 +34,15 @@ export const DealListContent = () => {
   const { showAllStages, toggleShowAllStages } = useShowAllDealStages();
   const { kanbanView, setKanbanView } = useDealKanbanView();
   const kanbanScrollRef = useHorizontalWheelScroll<HTMLDivElement>();
-  const { canAccess: canEditDeals } = useCanAccess({ resource: "deals", action: "edit" });
+  const { canAccess: canEditDeals } = useCanAccess({
+    resource: "deals",
+    action: "edit",
+  });
 
-  const filteredDeals = filterDealsByKanbanView(unorderedDeals ?? [], kanbanView);
+  const filteredDeals = filterDealsByKanbanView(
+    unorderedDeals ?? [],
+    kanbanView,
+  );
 
   const [dealsByStage, setDealsByStage] = useState<DealsByStage>(
     getDealsByStage([], dealStages),

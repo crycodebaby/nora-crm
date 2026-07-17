@@ -44,9 +44,10 @@ Deno.serve(async (req: Request) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         } catch (error) {
-          const message = error instanceof Error
-            ? error.message.slice(0, 200)
-            : "sync_failed";
+          const message =
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : "sync_failed";
           return new Response(
             JSON.stringify({ status: "error", error: message }),
             {

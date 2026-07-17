@@ -3,7 +3,11 @@ import { useRedirect, RecordContextProvider } from "ra-core";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-import { formatDealAmount, getFollowUpStatus, isDealTerminalStage } from "../deals/dealUtils";
+import {
+  formatDealAmount,
+  getFollowUpStatus,
+  isDealTerminalStage,
+} from "../deals/dealUtils";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraUrgencyBadge } from "../misc/NoraUrgencyBadge";
 import { noraCreatePath } from "../routing/noraRoutes";
@@ -22,12 +26,12 @@ export const HotboardFocusCard = ({
   const redirect = useRedirect();
   const { dealCategories, currency } = useConfigurationContext();
 
-  const categoryLabel = dealCategories.find((c) => c.value === deal.category)
-    ?.label;
-  const followUpStatus =
-    !isDealTerminalStage(deal.stage)
-      ? getFollowUpStatus(deal.expected_closing_date)
-      : null;
+  const categoryLabel = dealCategories.find(
+    (c) => c.value === deal.category,
+  )?.label;
+  const followUpStatus = !isDealTerminalStage(deal.stage)
+    ? getFollowUpStatus(deal.expected_closing_date)
+    : null;
   const showUrgency =
     followUpStatus === "overdue" || followUpStatus === "today";
 

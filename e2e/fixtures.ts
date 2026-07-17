@@ -1,5 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { loginAsAdmin } from "./helpers/auth";
 
 const adminSupabase = createClient(
   process.env.VITE_SUPABASE_URL ?? "http://127.0.0.1:54341",
@@ -83,20 +84,40 @@ async function createSales({
     last_name,
   });
 
-  const { data, error } = await adminSupabase
-    .from("sales")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
+  const deadline = Date.now() + 5_000;
+  let lastState = "sales profile not found";
 
-  if (error) {
-    throw new Error(`Failed to create sales: ${error.message}`);
-  }
-  if (data.role !== "admin") {
-    throw new Error("First E2E auth user was not bootstrapped as admin");
+  while (Date.now() < deadline) {
+    const { data, error } = await adminSupabase
+      .from("sales")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      lastState = error.message;
+    } else if (
+      data?.user_id === user.id &&
+      data.role === "admin" &&
+      data.administrator === true &&
+      data.disabled === false
+    ) {
+      return data;
+    } else if (data) {
+      lastState = JSON.stringify({
+        user_id: data.user_id,
+        role: data.role,
+        administrator: data.administrator,
+        disabled: data.disabled,
+      });
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  return data;
+  throw new Error(
+    `First E2E auth user was not bootstrapped as an active admin: ${lastState}`,
+  );
 }
 
 async function createNotes({
@@ -204,11 +225,11 @@ async function createContact({
 
 const getMenuMethod = ({ page }: { page: Page; isMobile: boolean }) => ({
   goToDashboard: async () => {
-    await page.getByRole("link", { name: "Dashboard" }).click();
+    await page.getByRole("link", { name: "Übersicht" }).click();
     await page.waitForLoadState("networkidle");
   },
   goToContacts: async () => {
-    await page.getByRole("link", { name: "Contacts" }).click();
+    await page.getByRole("link", { name: "Kontakte" }).click();
     await page.waitForLoadState("networkidle");
   },
 });
@@ -228,6 +249,10 @@ export const test = base.extend<{
   createContact: typeof createContact;
   createNotes: typeof createNotes;
   menu: ReturnType<typeof getMenuMethod>;
+  loginAsAdmin: (credentials: {
+    email: string;
+    password: string;
+  }) => Promise<void>;
   dismissToast: (content: string) => Promise<void>;
 }>({
   resetDb: [
@@ -262,6 +287,9 @@ export const test = base.extend<{
   },
   menu: async ({ page, isMobile }, cb) => {
     await cb(getMenuMethod({ page, isMobile }));
+  },
+  loginAsAdmin: async ({ page }, cb) => {
+    await cb((credentials) => loginAsAdmin(page, credentials));
   },
   dismissToast: async ({ page }, cb) => {
     await cb((content: string) => dismissToast(page, content));

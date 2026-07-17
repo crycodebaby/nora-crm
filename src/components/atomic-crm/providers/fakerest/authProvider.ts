@@ -59,8 +59,7 @@ export const authProvider: AuthProvider = {
     clearActiveDemoSale();
     return Promise.resolve();
   },
-  checkAuth: () =>
-    getActiveDemoSale() ? Promise.resolve() : Promise.reject(),
+  checkAuth: () => (getActiveDemoSale() ? Promise.resolve() : Promise.reject()),
   checkError: () => Promise.resolve(),
   canAccess: async ({ signal: _signal, ...params }) => {
     const localUser = getActiveDemoSale();

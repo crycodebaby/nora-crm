@@ -80,7 +80,9 @@ export function shouldRunDuplicateSearch(input: DuplicateSearchInput): boolean {
   return false;
 }
 
-export function buildDuplicateSearchCacheKey(input: DuplicateSearchInput): string {
+export function buildDuplicateSearchCacheKey(
+  input: DuplicateSearchInput,
+): string {
   return JSON.stringify({
     query: input.query?.trim() ?? "",
     name: input.name?.trim() ?? "",
@@ -188,7 +190,8 @@ export function scoreCompanyAsDuplicate(
     score,
     reasons,
     displayPhone:
-      company.phone_number || getContactPrimaryPhone(primaryContact ?? ({} as Contact)),
+      company.phone_number ||
+      getContactPrimaryPhone(primaryContact ?? ({} as Contact)),
     displayEmail: getContactPrimaryEmail(primaryContact ?? ({} as Contact)),
     displayLocation: formatCompanyLocation(company),
   };
@@ -235,7 +238,9 @@ export function buildDuplicateSearchInput(params: {
 
   return {
     query: searchQuery,
-    name: params.createNewCompany ? newCompanyName : searchQuery || newCompanyName,
+    name: params.createNewCompany
+      ? newCompanyName
+      : searchQuery || newCompanyName,
     phone: params.contactPhone?.trim() || undefined,
     email: params.contactEmail?.trim() || undefined,
     city: params.city,

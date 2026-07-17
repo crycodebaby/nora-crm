@@ -16,7 +16,10 @@ import { CanAccess } from "ra-core";
 import { Card } from "@/components/ui/card";
 
 import type { Company, Contact, SalesDirectory, Tag } from "../types";
-import { NoraBulkDeleteButton, NoraCreateButton } from "../misc/NoraAccessActions";
+import {
+  NoraBulkDeleteButton,
+  NoraCreateButton,
+} from "../misc/NoraAccessActions";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
 import { BulkTagButton } from "./BulkTagButton";
 import { ContactEmpty } from "./ContactEmpty";

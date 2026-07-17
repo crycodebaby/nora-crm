@@ -155,11 +155,7 @@ export const SettingsPage = () => {
         },
       }}
     >
-      <NoraAccessGuard
-        resource="configuration"
-        action="edit"
-        fallbackPath="/"
-      >
+      <NoraAccessGuard resource="configuration" action="edit" fallbackPath="/">
         <SettingsForm />
       </NoraAccessGuard>
     </EditBase>

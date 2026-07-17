@@ -11,7 +11,10 @@ type NoraCreateButtonProps = {
   label?: string;
 };
 
-export const NoraCreateButton = ({ resource, label }: NoraCreateButtonProps) => (
+export const NoraCreateButton = ({
+  resource,
+  label,
+}: NoraCreateButtonProps) => (
   <CanAccess resource={resource} action="create">
     <CreateButton label={label} />
   </CanAccess>

@@ -26,7 +26,10 @@ export const ContactAside = ({ link = "edit" }: { link?: "edit" | "show" }) => {
     <div className="hidden sm:block w-92 min-w-92 text-sm">
       <div className="mb-4 -ml-1">
         {link === "edit" ? (
-          <NoraEditButton resource="contacts" label="resources.contacts.action.edit" />
+          <NoraEditButton
+            resource="contacts"
+            label="resources.contacts.action.edit"
+          />
         ) : (
           <ShowButton label="resources.contacts.action.show" />
         )}
@@ -81,7 +84,11 @@ export const ContactAside = ({ link = "edit" }: { link?: "edit" | "show" }) => {
             </div>
           </NoraWriteAccess>
           <div className="mt-6 pt-6 border-t hidden sm:flex flex-col gap-2 items-start">
-            <NoraDeleteButton resource="contacts" className="h-6 cursor-pointer hover:bg-destructive/10! text-destructive! border-destructive! focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40" size="sm" />
+            <NoraDeleteButton
+              resource="contacts"
+              className="h-6 cursor-pointer hover:bg-destructive/10! text-destructive! border-destructive! focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40"
+              size="sm"
+            />
           </div>
         </>
       )}

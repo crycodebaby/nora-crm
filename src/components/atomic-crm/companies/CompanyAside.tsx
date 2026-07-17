@@ -12,7 +12,7 @@ import { SelectField } from "@/components/admin/select-field";
 
 import { NoraDeleteButton, NoraEditButton } from "../misc/NoraAccessActions";
 
-import { formatLocalizedDate } from "../misc/RelativeDate";
+import { formatLocalizedDate } from "../misc/relativeDateUtils";
 import { AsideSection } from "../misc/AsideSection";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { useConfigurationContext } from "../root/ConfigurationContext";

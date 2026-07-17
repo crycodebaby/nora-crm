@@ -6,6 +6,7 @@ test("user adds a tag to several contacts", async ({
   createContact,
   createSales,
   menu,
+  loginAsAdmin,
   dismissToast,
 }) => {
   test.skip(isMobile, "Bulk tag is only available on desktop");
@@ -30,14 +31,13 @@ test("user adds a tag to several contacts", async ({
     title: "Rear Admiral",
   });
 
-  await page.goto("http://localhost:5175/");
-
-  await page.getByLabel("Email").fill("john@doe.com");
-  await page.getByLabel("Password").fill("password");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await loginAsAdmin({
+    email: "john@doe.com",
+    password: "password",
+  });
 
   await expect(page).toHaveTitle(/Nora CRM/);
-  await expect(page.getByRole("link", { name: "Contacts" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Kontakte" })).toBeVisible();
 
   await menu.goToContacts();
   await expect(page.getByText("Ada Lovelace")).toBeVisible();
@@ -45,19 +45,19 @@ test("user adds a tag to several contacts", async ({
 
   const checkboxes = page.getByRole("checkbox");
   await checkboxes.nth(1).click();
-  await page.getByRole("button", { name: /select all/i }).click();
+  await page.getByRole("button", { name: "Alle auswählen" }).click();
 
-  await page.getByRole("button", { name: /^Tag$/ }).click();
-  await page.getByRole("button", { name: "Create new tag" }).click();
-  await page.getByLabel("Tag name").fill("Prospect");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Markieren" }).click();
+  await page.getByRole("button", { name: "Neue Markierung anlegen" }).click();
+  await page.getByLabel("Name der Markierung").fill("Interessent");
+  await page.getByRole("button", { name: "Speichern" }).click();
 
-  await dismissToast("Tag added to 2 contacts");
+  await dismissToast("Markierung zu 2 Kontakten hinzugefügt");
 
   await expect(
     page.getByText("Grace Hopper").locator("xpath=ancestor::a[1]"),
-  ).toContainText("Prospect");
+  ).toContainText("Interessent");
   await expect(
     page.getByText("Ada Lovelace").locator("xpath=ancestor::a[1]"),
-  ).toContainText("Prospect");
+  ).toContainText("Interessent");
 });

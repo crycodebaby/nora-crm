@@ -37,7 +37,8 @@ export const NoraQueryError = ({
       <AlertCircle className="size-8 text-destructive/80" aria-hidden />
       <div className="space-y-1 max-w-md">
         <p className="font-medium">{translate(normalized.messageKey)}</p>
-        {normalized.kind === "network" || normalized.kind === "service_unavailable" ? (
+        {normalized.kind === "network" ||
+        normalized.kind === "service_unavailable" ? (
           <p className="text-sm text-muted-foreground">
             {translate("crm.errors.retry_hint")}
           </p>

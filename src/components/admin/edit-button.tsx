@@ -2,11 +2,7 @@ import React from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import type { RaRecord } from "ra-core";
-import {
-  useRecordContext,
-  useResourceContext,
-  Translate,
-} from "ra-core";
+import { useRecordContext, useResourceContext, Translate } from "ra-core";
 import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import { Link } from "react-router";
 

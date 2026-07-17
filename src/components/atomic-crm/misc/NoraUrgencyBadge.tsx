@@ -3,14 +3,8 @@ import { useTranslate } from "ra-core";
 
 import { cn } from "@/lib/utils";
 
-import {
-  formatNoraDate,
-  formatNoraRelativeDay,
-} from "./noraDateTime";
-import {
-  getFollowUpStatus,
-  type FollowUpStatus,
-} from "../deals/dealUtils";
+import { formatNoraDate, formatNoraRelativeDay } from "./noraDateTime";
+import { getFollowUpStatus, type FollowUpStatus } from "../deals/dealUtils";
 
 export type NoraUrgencyVariant = "compact" | "inline" | "alert";
 

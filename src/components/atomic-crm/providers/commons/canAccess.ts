@@ -20,13 +20,7 @@ const READ_ACTIONS = new Set([
   "getManyReference",
 ]);
 
-const WRITE_ACTIONS = new Set([
-  "create",
-  "edit",
-  "update",
-  "write",
-  "clone",
-]);
+const WRITE_ACTIONS = new Set(["create", "edit", "update", "write", "clone"]);
 
 const DELETE_ACTIONS = new Set(["delete", "remove"]);
 

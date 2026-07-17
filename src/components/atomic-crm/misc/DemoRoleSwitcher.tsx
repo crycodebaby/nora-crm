@@ -18,7 +18,7 @@ import { isNoraDemoMode } from "./noraDemoMode";
 import { useNoraRole } from "./useNoraRole";
 import { useSwitchDemoRole } from "./useSwitchDemoRole";
 
-export const DEMO_ROLE_USERS = {
+const DEMO_ROLE_USERS = {
   admin: {
     email: DEMO_ROLE_EMAILS.admin,
     labelKey: "crm.demo.roles.admin",

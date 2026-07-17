@@ -66,7 +66,7 @@ export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
 
 const DealEditDialog = ({ onClose }: { onClose: () => void }) => {
   return (
-      <NoraAccessGuard resource="deals" action="edit">
+    <NoraAccessGuard resource="deals" action="edit">
       <Form className="contents">
         <DealEditDialogBody onClose={onClose} />
       </Form>

@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { RotateCcw } from "lucide-react";
 
 import { Status } from "../misc/Status";
-import { formatRelativeDate } from "../misc/RelativeDate";
+import { formatRelativeDate } from "../misc/relativeDateUtils";
 import type { Contact } from "../types";
 import { Avatar } from "./Avatar";
 import { TagsList } from "./TagsList";

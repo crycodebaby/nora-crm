@@ -113,9 +113,9 @@ describe("prepareFocusColumnDeals", () => {
       baseDeal({ id: 2, stage: "nachfassen" }),
       baseDeal({ id: 3, stage: "angebot-gesendet" }),
     ];
-    expect(filterDealsForFocusStage(deals, "nachfassen").map((d) => d.id)).toEqual(
-      [2],
-    );
+    expect(
+      filterDealsForFocusStage(deals, "nachfassen").map((d) => d.id),
+    ).toEqual([2]);
     expect(
       prepareFocusColumnDeals(deals, "neue-anfrage").deals.map((d) => d.id),
     ).toEqual([1]);
@@ -124,8 +124,8 @@ describe("prepareFocusColumnDeals", () => {
 
 describe("deal show route", () => {
   it("uses German vorgaenge show path", () => {
-    expect(
-      noraCreatePath({ resource: "deals", type: "show", id: 42 }),
-    ).toBe("/vorgaenge/42/show");
+    expect(noraCreatePath({ resource: "deals", type: "show", id: 42 })).toBe(
+      "/vorgaenge/42/show",
+    );
   });
 });

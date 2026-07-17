@@ -18,7 +18,7 @@ import {
   clearDemoQueryPersistCache,
   isRouteAllowedForDemoRole,
 } from "../providers/fakerest/demoSession";
-import { getAccessRedirectTarget } from "./NoraEditGuard";
+import { getAccessRedirectTarget } from "./noraAccessGuardUtils";
 import { canAccess } from "../providers/commons/canAccess";
 import { resolveDemoReloadPath } from "./finalizeDemoSessionSwitch";
 
@@ -91,34 +91,36 @@ describe("demo role switch access matrix", () => {
   });
 
   it("office → admin enables sales and configuration", () => {
-    expect(canAccess("admin", { resource: "sales", action: "list" })).toBe(true);
-    expect(canAccess("admin", { resource: "configuration", action: "edit" })).toBe(
+    expect(canAccess("admin", { resource: "sales", action: "list" })).toBe(
       true,
     );
+    expect(
+      canAccess("admin", { resource: "configuration", action: "edit" }),
+    ).toBe(true);
   });
 
   it("audit global list only for admin", () => {
-    expect(canAccess("admin", { resource: "audit_events", action: "list" })).toBe(
-      true,
-    );
-    expect(canAccess("office", { resource: "audit_events", action: "list" })).toBe(
-      false,
-    );
-    expect(canAccess("viewer", { resource: "audit_events", action: "list" })).toBe(
-      false,
-    );
+    expect(
+      canAccess("admin", { resource: "audit_events", action: "list" }),
+    ).toBe(true);
+    expect(
+      canAccess("office", { resource: "audit_events", action: "list" }),
+    ).toBe(false);
+    expect(
+      canAccess("viewer", { resource: "audit_events", action: "list" }),
+    ).toBe(false);
   });
 
   it("audit context history for admin and office, not viewer", () => {
-    expect(canAccess("admin", { resource: "audit_events", action: "show" })).toBe(
-      true,
-    );
-    expect(canAccess("office", { resource: "audit_events", action: "show" })).toBe(
-      true,
-    );
-    expect(canAccess("viewer", { resource: "audit_events", action: "show" })).toBe(
-      false,
-    );
+    expect(
+      canAccess("admin", { resource: "audit_events", action: "show" }),
+    ).toBe(true);
+    expect(
+      canAccess("office", { resource: "audit_events", action: "show" }),
+    ).toBe(true);
+    expect(
+      canAccess("viewer", { resource: "audit_events", action: "show" }),
+    ).toBe(false);
   });
 });
 

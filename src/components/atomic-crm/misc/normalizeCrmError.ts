@@ -167,7 +167,11 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
     };
   }
 
-  if (matchesAny(message, SERVICE_PATTERNS) || status === 502 || status === 503) {
+  if (
+    matchesAny(message, SERVICE_PATTERNS) ||
+    status === 502 ||
+    status === 503
+  ) {
     return {
       kind: "service_unavailable",
       messageKey: "crm.errors.service_unavailable",
@@ -184,9 +188,17 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
   };
 };
 
-export const logCrmErrorInDev = (error: unknown, normalized: NormalizedCrmError) => {
+export const logCrmErrorInDev = (
+  error: unknown,
+  normalized: NormalizedCrmError,
+) => {
   if (import.meta.env.DEV && normalized.technicalMessage) {
-    console.error("[Nora CRM]", normalized.kind, normalized.technicalMessage, error);
+    console.error(
+      "[Nora CRM]",
+      normalized.kind,
+      normalized.technicalMessage,
+      error,
+    );
   }
 };
 

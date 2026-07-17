@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { canAccess } from "../providers/commons/canAccess";
-import { getAccessRedirectTarget } from "./NoraEditGuard";
+import { getAccessRedirectTarget } from "./noraAccessGuardUtils";
 import { resolveDirtyClose } from "./useNoraDirtyDialog";
 import {
   clearQuickCaptureDraft,

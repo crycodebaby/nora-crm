@@ -31,7 +31,10 @@ function EditToolbar() {
 
 export function SalesEdit() {
   const { record } = useEditController();
-  const { canAccess, isPending } = useCanAccess({ resource: "sales", action: "edit" });
+  const { canAccess, isPending } = useCanAccess({
+    resource: "sales",
+    action: "edit",
+  });
   const redirect = useRedirect();
 
   useEffect(() => {

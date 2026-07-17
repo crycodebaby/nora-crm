@@ -20,13 +20,11 @@ type HotboardFocusBoardProps = {
   className?: string;
 };
 
-const EMPTY_MESSAGE_KEYS: Record<
-  (typeof FOCUS_BOARD_STAGES)[number],
-  string
-> = {
-  "neue-anfrage": "crm.dashboard.hotboard.focus_board.empty_new_inquiries",
-  nachfassen: "crm.dashboard.hotboard.focus_board.empty_follow_up",
-};
+const EMPTY_MESSAGE_KEYS: Record<(typeof FOCUS_BOARD_STAGES)[number], string> =
+  {
+    "neue-anfrage": "crm.dashboard.hotboard.focus_board.empty_new_inquiries",
+    nachfassen: "crm.dashboard.hotboard.focus_board.empty_follow_up",
+  };
 
 export const HotboardFocusBoard = ({
   deals,
@@ -36,13 +34,11 @@ export const HotboardFocusBoard = ({
   const translate = useTranslate();
   const scrollRef = useHorizontalWheelScroll<HTMLDivElement>();
 
-  const columns: Record<
-    (typeof FOCUS_BOARD_STAGES)[number],
-    FocusColumnDeals
-  > = {
-    "neue-anfrage": prepareFocusColumnDeals(deals, "neue-anfrage"),
-    nachfassen: prepareFocusColumnDeals(deals, "nachfassen"),
-  };
+  const columns: Record<(typeof FOCUS_BOARD_STAGES)[number], FocusColumnDeals> =
+    {
+      "neue-anfrage": prepareFocusColumnDeals(deals, "neue-anfrage"),
+      nachfassen: prepareFocusColumnDeals(deals, "nachfassen"),
+    };
 
   return (
     <section

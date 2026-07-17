@@ -2,11 +2,7 @@ import React from "react";
 import { Link } from "react-router";
 import { buttonVariants } from "@/components/ui/button";
 import { Eye } from "lucide-react";
-import {
-  Translate,
-  useRecordContext,
-  useResourceContext,
-} from "ra-core";
+import { Translate, useRecordContext, useResourceContext } from "ra-core";
 import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 
 export type ShowButtonProps = {

@@ -12,7 +12,10 @@ type HotboardDealRowProps = {
   companyName?: string;
 };
 
-export const HotboardDealRow = ({ deal, companyName }: HotboardDealRowProps) => {
+export const HotboardDealRow = ({
+  deal,
+  companyName,
+}: HotboardDealRowProps) => {
   const translate = useTranslate();
   const redirect = useRedirect();
   const { dealStages } = useConfigurationContext();
@@ -37,7 +40,9 @@ export const HotboardDealRow = ({ deal, companyName }: HotboardDealRowProps) => 
       aria-label={`${translate("crm.dashboard.hotboard.open_directly")}: ${deal.name}`}
     >
       <BusinessNumber value={deal.case_number} kind="case" size="md" />
-      <span className="nora-list-title text-base leading-snug">{deal.name}</span>
+      <span className="nora-list-title text-base leading-snug">
+        {deal.name}
+      </span>
       <span className="nora-muted text-xs">
         {[companyName, stageLabel].filter(Boolean).join(" · ")}
       </span>

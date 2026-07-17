@@ -1,4 +1,9 @@
-import { type Identifier, useGetList, useRecordContext, useTranslate } from "ra-core";
+import {
+  type Identifier,
+  useGetList,
+  useRecordContext,
+  useTranslate,
+} from "ra-core";
 
 import { AddTask } from "../tasks/AddTask";
 import { Task } from "../tasks/Task";

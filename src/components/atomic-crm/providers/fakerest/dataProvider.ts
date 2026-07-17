@@ -41,9 +41,7 @@ import {
   filterDemoGlobalAuditEvents,
   getDemoAuditStorageStats,
 } from "./dataGenerator/noraDemoAuditSeed";
-import {
-  setActiveDemoSale,
-} from "./demoSession";
+import { setActiveDemoSale } from "./demoSession";
 import { authProvider as defaultAuthProvider } from "./authProvider";
 import generateData from "./dataGenerator";
 import type { Db } from "./dataGenerator/types";

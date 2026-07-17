@@ -49,7 +49,8 @@ export function loadQuickCaptureDraft(): QuickCaptureDraft | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as QuickCaptureDraft;
     if (!parsed || typeof parsed !== "object") return null;
-    if (parsed.step !== 1 && parsed.step !== 2 && parsed.step !== 3) return null;
+    if (parsed.step !== 1 && parsed.step !== 2 && parsed.step !== 3)
+      return null;
     return parsed;
   } catch {
     return null;

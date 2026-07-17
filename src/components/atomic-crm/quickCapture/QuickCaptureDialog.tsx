@@ -109,29 +109,30 @@ export const QuickCaptureDialog = ({
     null,
   );
 
-  const patchForm = useCallback(
-    (patch: Partial<typeof form>) => {
-      setForm((current) => ({ ...current, ...patch }));
-      setFieldErrors((current) => {
-        const next = { ...current };
-        if (patch.selectedCompany !== undefined || patch.newCompanyName !== undefined || patch.createNewCompany !== undefined) {
-          delete next.customer;
-        }
-        if (
-          patch.selectedContact !== undefined ||
-          patch.contactFirstName !== undefined ||
-          patch.contactLastName !== undefined ||
-          patch.createNewContact !== undefined
-        ) {
-          delete next.contact;
-        }
-        if (patch.dealTitle !== undefined) delete next.dealTitle;
-        if (patch.dealCategory !== undefined) delete next.dealCategory;
-        return next;
-      });
-    },
-    [],
-  );
+  const patchForm = useCallback((patch: Partial<typeof form>) => {
+    setForm((current) => ({ ...current, ...patch }));
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (
+        patch.selectedCompany !== undefined ||
+        patch.newCompanyName !== undefined ||
+        patch.createNewCompany !== undefined
+      ) {
+        delete next.customer;
+      }
+      if (
+        patch.selectedContact !== undefined ||
+        patch.contactFirstName !== undefined ||
+        patch.contactLastName !== undefined ||
+        patch.createNewContact !== undefined
+      ) {
+        delete next.contact;
+      }
+      if (patch.dealTitle !== undefined) delete next.dealTitle;
+      if (patch.dealCategory !== undefined) delete next.dealCategory;
+      return next;
+    });
+  }, []);
 
   const applyDraft = useCallback((draft: QuickCaptureDraft) => {
     setForm({
@@ -202,9 +203,7 @@ export const QuickCaptureDialog = ({
   ]);
 
   const customerSearchEnabled =
-    open &&
-    form.step === 1 &&
-    (!form.selectedCompany || form.createNewCompany);
+    open && form.step === 1 && (!form.selectedCompany || form.createNewCompany);
 
   const { mergedEntries, isPending: customersPending } =
     useDuplicateCandidateSearch({
@@ -253,7 +252,9 @@ export const QuickCaptureDialog = ({
       createNewCompany: true,
       dismissCustomerSuggestions: true,
       newCompanyName:
-        form.newCompanyName.trim() || form.searchQuery.trim() || form.newCompanyName,
+        form.newCompanyName.trim() ||
+        form.searchQuery.trim() ||
+        form.newCompanyName,
     });
   };
 
@@ -531,9 +532,7 @@ export const QuickCaptureDialog = ({
               disabled={isSaving || !identity?.id}
               onClick={handleSave}
             >
-              {isSaving ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : null}
+              {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
               {translate("crm.quick_capture.save_and_open")}
             </Button>
           </div>

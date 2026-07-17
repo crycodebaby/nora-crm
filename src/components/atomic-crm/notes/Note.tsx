@@ -20,7 +20,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-
 import { Markdown } from "../misc/Markdown";
 import { RelativeDate } from "../misc/RelativeDate";
 import { Status } from "../misc/Status";
@@ -108,7 +107,11 @@ export const Note = ({
     >
       <div className="flex items-center space-x-4 w-full">
         <span className="inline-flex h-full items-center text-sm text-muted-foreground min-w-0">
-          <ReferenceField source="company_id" reference="companies" link="show" />
+          <ReferenceField
+            source="company_id"
+            reference="companies"
+            link="show"
+          />
           {" · "}
           {translate(
             isCurrentUser

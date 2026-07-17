@@ -38,9 +38,10 @@ const getEnv = (key: string): string | undefined => {
 const decodeBase64Key = (raw: string): Uint8Array | null => {
   try {
     const normalized = raw.trim();
-    const binary = typeof atob === "function"
-      ? atob(normalized)
-      : Buffer.from(normalized, "base64").toString("binary");
+    const binary =
+      typeof atob === "function"
+        ? atob(normalized)
+        : Buffer.from(normalized, "base64").toString("binary");
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
@@ -79,12 +80,16 @@ export const readGoogleCalendarEnv = (): GoogleCalendarEnvStatus => {
     return { configured: false, missing: [...missing] };
   }
 
-  const encryptionKeyRaw = getEnv("GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY")!.trim();
+  const encryptionKeyRaw = getEnv(
+    "GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY",
+  )!.trim();
   const encryptionKey = decodeBase64Key(encryptionKeyRaw);
   if (!encryptionKey) {
     return {
       configured: false,
-      missing: ["GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY (invalid base64 or not 32 bytes)"],
+      missing: [
+        "GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY (invalid base64 or not 32 bytes)",
+      ],
     };
   }
 

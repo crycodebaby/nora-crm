@@ -87,7 +87,9 @@ export const PossibleCustomersPanel = ({
                 entry.displayPhone ||
                 entry.displayEmail) && (
                 <div className="text-xs text-muted-foreground space-y-0.5">
-                  {entry.displayLocation ? <p>{entry.displayLocation}</p> : null}
+                  {entry.displayLocation ? (
+                    <p>{entry.displayLocation}</p>
+                  ) : null}
                   {entry.displayPhone ? <p>{entry.displayPhone}</p> : null}
                   {entry.displayEmail ? <p>{entry.displayEmail}</p> : null}
                 </div>

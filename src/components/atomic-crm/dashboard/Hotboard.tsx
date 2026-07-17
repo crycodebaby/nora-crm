@@ -80,7 +80,9 @@ export const Hotboard = () => {
     const nachfassen = prepareFocusColumnDeals(deals ?? [], "nachfassen");
     return [
       ...new Set(
-        [...newInquiry.deals, ...nachfassen.deals].map((deal) => deal.company_id),
+        [...newInquiry.deals, ...nachfassen.deals].map(
+          (deal) => deal.company_id,
+        ),
       ),
     ];
   }, [deals]);

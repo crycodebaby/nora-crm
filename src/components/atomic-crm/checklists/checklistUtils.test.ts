@@ -68,8 +68,8 @@ describe("allRequiredItemsChecked", () => {
   });
 
   it("returns false when there are no required items", () => {
-    expect(allRequiredItemsChecked([item({ id: "1", is_required: false })])).toBe(
-      false,
-    );
+    expect(
+      allRequiredItemsChecked([item({ id: "1", is_required: false })]),
+    ).toBe(false);
   });
 });

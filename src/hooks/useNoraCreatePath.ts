@@ -5,7 +5,4 @@ import {
 } from "@/components/atomic-crm/routing/noraRoutes";
 
 export const useNoraCreatePath = () =>
-  useCallback(
-    (params: NoraCreatePathParams) => noraCreatePath(params),
-    [],
-  );
+  useCallback((params: NoraCreatePathParams) => noraCreatePath(params), []);

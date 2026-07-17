@@ -1,10 +1,6 @@
 import { Handshake } from "lucide-react";
 import { Link } from "react-router";
-import {
-  useListContext,
-  useRecordContext,
-  useTranslate,
-} from "ra-core";
+import { useListContext, useRecordContext, useTranslate } from "ra-core";
 import { useNoraAwareCreatePath } from "@/hooks/useNoraAwareCreatePath";
 import { ReferenceManyField } from "@/components/admin/reference-many-field";
 import { Card } from "@/components/ui/card";
@@ -39,7 +35,11 @@ export const CompanyCard = (props: { record?: Company }) => {
           <CompanyAvatar />
           <div className="text-center mt-1">
             <h6 className="nora-list-title text-center">{record.name}</h6>
-            <BusinessNumber value={record.customer_number} kind="customer" size="md" />
+            <BusinessNumber
+              value={record.customer_number}
+              kind="customer"
+              size="md"
+            />
             {sectorLabel ? (
               <p className="nora-muted text-xs mt-0.5">{sectorLabel}</p>
             ) : null}

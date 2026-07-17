@@ -127,16 +127,13 @@ const germanRaMessagesOverride = {
       about: "Über",
       access_denied: "Sie haben keine Berechtigung für diese Seite",
       are_you_sure: "Sind Sie sicher?",
-      authentication_error:
-        "Die Anmeldedaten konnten nicht überprüft werden.",
-      auth_error:
-        "Beim Prüfen des Anmeldetokens ist ein Fehler aufgetreten.",
+      authentication_error: "Die Anmeldedaten konnten nicht überprüft werden.",
+      auth_error: "Beim Prüfen des Anmeldetokens ist ein Fehler aufgetreten.",
       bulk_delete_content:
         'Möchten Sie „%{name}" wirklich löschen? |||| Möchten Sie diese %{smart_count} Einträge wirklich löschen?',
-      bulk_delete_title:
-        "%{name} löschen |||| %{smart_count} %{name} löschen",
+      bulk_delete_title: "%{name} löschen |||| %{smart_count} %{name} löschen",
       bulk_update_content:
-        'Möchten Sie %{name} %{recordRepresentation} wirklich aktualisieren? |||| Möchten Sie diese %{smart_count} Einträge wirklich aktualisieren?',
+        "Möchten Sie %{name} %{recordRepresentation} wirklich aktualisieren? |||| Möchten Sie diese %{smart_count} Einträge wirklich aktualisieren?",
       bulk_update_title:
         "%{name} %{recordRepresentation} aktualisieren |||| %{smart_count} %{name} aktualisieren",
       delete_content: 'Möchten Sie „%{name}" wirklich löschen?',
@@ -164,8 +161,7 @@ const germanRaMessagesOverride = {
       first: "Zur ersten Seite",
       last: "Zur letzten Seite",
       next: "Nächste Seite",
-      no_filtered_results:
-        "Keine %{name} mit den aktuellen Filtern gefunden.",
+      no_filtered_results: "Keine %{name} mit den aktuellen Filtern gefunden.",
       no_more_results:
         "Die Seitenzahl %{page} liegt außerhalb des gültigen Bereichs.",
       no_results: "Keine %{name} gefunden",
@@ -187,18 +183,17 @@ const germanRaMessagesOverride = {
       created: "Eintrag angelegt",
       data_provider_error:
         "Datenanbieter-Fehler. Details finden Sie in der Konsole.",
-      deleted:
-        "Eintrag gelöscht |||| %{smart_count} Einträge gelöscht",
+      deleted: "Eintrag gelöscht |||| %{smart_count} Einträge gelöscht",
       http_error: "Kommunikationsfehler mit dem Server",
       i18n_error:
         "Übersetzungen für die gewählte Sprache konnten nicht geladen werden.",
       item_doesnt_exist: "Der Eintrag existiert nicht",
       logged_out:
         "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.",
-      not_authorized: "Sie sind nicht berechtigt, auf diese Ressource zuzugreifen.",
+      not_authorized:
+        "Sie sind nicht berechtigt, auf diese Ressource zuzugreifen.",
       offline: "Keine Verbindung. Daten konnten nicht geladen werden.",
-      updated:
-        "Eintrag aktualisiert |||| %{smart_count} Einträge aktualisiert",
+      updated: "Eintrag aktualisiert |||| %{smart_count} Einträge aktualisiert",
     },
     sort: {
       ASC: "aufsteigend",

@@ -42,9 +42,7 @@ export const minimizeDescription = (
   return plain.slice(0, 500);
 };
 
-const parseOriginalStart = (
-  event: GoogleCalendarEvent,
-): string | null => {
+const parseOriginalStart = (event: GoogleCalendarEvent): string | null => {
   const value = event.originalStartTime;
   if (!value) {
     return null;
