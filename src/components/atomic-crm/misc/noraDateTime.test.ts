@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   formatNoraDate,
@@ -9,6 +9,15 @@ import {
   formatNoraRelativeDateTime,
   formatNoraRelativeDay,
 } from "./noraDateTime";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-15T10:00:00.000Z"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("formatNoraDate", () => {
   it("formats ISO dates in German long form", () => {
@@ -43,10 +52,8 @@ describe("formatNoraRelativeDay", () => {
 
 describe("formatNoraRelativeDateTime", () => {
   it("uses German locale for de", () => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(17, 13, 0, 0);
+    const yesterday = new Date("2026-07-14T17:13:00.000Z");
     const result = formatNoraRelativeDateTime(yesterday, "de");
-    expect(result.toLowerCase()).toMatch(/gestern|tag/);
+    expect(result).toBe("vor etwa 17 Stunden");
   });
 });

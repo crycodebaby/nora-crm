@@ -150,7 +150,7 @@ const CreateSheetBody = ({
           </div>
 
           <SheetFooter className="border-t flex flex-row w-full gap-4">
-            <SaveButton className="flex-1 h-12" />
+            <SaveButton type="button" className="flex-1 h-12" />
           </SheetFooter>
           <button
             type="button"

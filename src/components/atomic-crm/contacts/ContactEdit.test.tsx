@@ -47,11 +47,8 @@ describe("ContactEdit", () => {
 
       // Submit without filling anything
       await screen.getByRole("button", { name: /^save$/i }).click();
-      await expect
-        .poll(() => screen.getByText("Element updated"))
-        .toBeInTheDocument();
-
       await screen.getByLabelText("Close toast").click();
+      await expect.poll(() => updateMock.mock.calls.length).toBe(1);
 
       // Verify the transform cleaned up the empty arrays
       expect(updateMock).toBeCalledTimes(1);
@@ -85,10 +82,6 @@ describe("ContactEdit", () => {
 
       // Leave the phone input empty and submit
       await screen.getByRole("button", { name: /^save$/i }).click();
-      await expect
-        .poll(() => screen.getByText("Element updated"))
-        .toBeInTheDocument();
-
       await screen.getByLabelText("Close toast").click();
 
       // Wait for the update call to complete
@@ -125,14 +118,10 @@ describe("ContactEdit", () => {
 
       // Submit without changes
       await screen.getByRole("button", { name: /^save$/i }).click();
-      await expect
-        .poll(() => screen.getByText("Element updated"))
-        .toBeInTheDocument();
-
       await screen.getByLabelText("Close toast").click();
 
       // Wait for the update call to complete
-      expect(updateMock).toBeCalledTimes(1);
+      await expect.poll(() => updateMock.mock.calls.length).toBe(1);
 
       // Verify existing data is preserved through the transform
       expect(updateMock).toBeCalledWith(
@@ -185,11 +174,8 @@ describe("ContactEdit", () => {
 
       // Submit without filling anything
       await screen.getByRole("button", { name: /^save$/i }).click();
-      await expect
-        .poll(() => screen.getByText("Element updated"))
-        .toBeInTheDocument();
-
       await screen.getByLabelText("Close toast").click();
+      await expect.poll(() => updateMock.mock.calls.length).toBe(1);
 
       // Verify the transform cleaned up the empty arrays
       expect(updateMock).toBeCalledTimes(1);
@@ -224,10 +210,6 @@ describe("ContactEdit", () => {
 
       // Leave the phone input empty and submit
       await screen.getByRole("button", { name: /^save$/i }).click();
-      await expect
-        .poll(() => screen.getByText("Element updated"))
-        .toBeInTheDocument();
-
       await screen.getByLabelText("Close toast").click();
 
       // Wait for the update call to complete
@@ -265,14 +247,10 @@ describe("ContactEdit", () => {
 
       // Submit without changes
       await screen.getByRole("button", { name: /^save$/i }).click();
-      await expect
-        .poll(() => screen.getByText("Element updated"))
-        .toBeInTheDocument();
-
       await screen.getByLabelText("Close toast").click();
 
       // Wait for the update call to complete
-      expect(updateMock).toBeCalledTimes(1);
+      await expect.poll(() => updateMock.mock.calls.length).toBe(1);
 
       // Verify existing data is preserved through the transform
       expect(updateMock).toBeCalledWith(

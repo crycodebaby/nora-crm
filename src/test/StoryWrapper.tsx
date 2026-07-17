@@ -7,7 +7,11 @@ import { Notification } from "@/components/admin/notification";
 import { createDataProvider } from "@/components/atomic-crm/providers/fakerest";
 import { DEFAULT_USER } from "@/components/atomic-crm/providers/fakerest/authProvider";
 import type { Db } from "@/components/atomic-crm/providers/fakerest/dataGenerator/types";
-import type { Contact, Sale } from "@/components/atomic-crm/types";
+import type {
+  Contact,
+  Sale,
+  SalesDirectory,
+} from "@/components/atomic-crm/types";
 import { CRM } from "@/components/atomic-crm/root/CRM";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
 
@@ -37,6 +41,15 @@ const baseSale: Sale = {
   user_id: DEFAULT_USER.id.toString(),
 };
 
+export const TEST_SALES_DIRECTORY = [
+  {
+    id: baseSale.id,
+    first_name: baseSale.first_name,
+    last_name: baseSale.last_name,
+    avatar: baseSale.avatar,
+  },
+] satisfies SalesDirectory[];
+
 // Provide a minimal FakeRest database shape so tests can override only the records
 // that matter for each scenario.
 export const createCrmDb = (overrides: Partial<Db> = {}): Db =>
@@ -48,6 +61,7 @@ export const createCrmDb = (overrides: Partial<Db> = {}): Db =>
     deal_notes: [],
     deals: [],
     sales: [baseSale],
+    sales_directory: TEST_SALES_DIRECTORY,
     tags: [],
     tasks: [],
     ...overrides,

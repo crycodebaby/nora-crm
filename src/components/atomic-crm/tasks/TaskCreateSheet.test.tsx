@@ -12,25 +12,27 @@ describe("TaskCreateSheet", () => {
       return null;
     };
     const originalLastSeen = "2025-01-02T10:00:00.000Z";
+    const contacts = [
+      buildContact({
+        first_name: "Ada",
+        id: 1,
+        last_name: "Lovelace",
+        last_seen: "2025-01-01T10:00:00.000Z",
+        nb_tasks: 1,
+      }),
+      buildContact({
+        first_name: "Grace",
+        id: 2,
+        last_name: "Hopper",
+        last_seen: originalLastSeen,
+      }),
+    ];
 
     const screen = await render(
       <Mobile
         data={{
-          contacts: [
-            buildContact({
-              first_name: "Ada",
-              id: 1,
-              last_name: "Lovelace",
-              last_seen: "2025-01-01T10:00:00.000Z",
-              nb_tasks: 1,
-            }),
-            buildContact({
-              first_name: "Grace",
-              id: 2,
-              last_name: "Hopper",
-              last_seen: originalLastSeen,
-            }),
-          ],
+          contacts,
+          contacts_summary: contacts,
           tasks: [
             {
               contact_id: 1,
@@ -51,14 +53,13 @@ describe("TaskCreateSheet", () => {
       .getByLabelText(/description/i)
       .fill("Follow up about onboarding");
 
-    const [contactInput, typeInput] = screen.getByRole("combobox").all();
+    const [typeInput, contactInput] = screen.getByRole("combobox").all();
 
     await contactInput.click();
-    await screen.getByText("Grace Hopper").click();
+    await screen.getByRole("option", { name: "Grace Hopper" }).click();
 
     await typeInput.click();
-    const typeOptions = screen.getByRole("listbox");
-    await typeOptions.getByText("Call").click();
+    await screen.getByRole("option", { name: "Rückruf" }).click();
 
     const dueDateInput = screen.getByLabelText(/due date/i);
     await dueDateInput.clear();
@@ -95,7 +96,7 @@ describe("TaskCreateSheet", () => {
     expect(createdTask).toMatchObject({
       contact_id: 2,
       text: "Follow up about onboarding",
-      type: "call",
+      type: "rueckruf",
     });
     expect(tasks.data).toHaveLength(2);
 

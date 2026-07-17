@@ -37,14 +37,25 @@ async function resetDb() {
 async function createUser({
   email,
   password,
+  first_name,
+  last_name,
 }: {
   email: string;
   password: string;
+  first_name?: string;
+  last_name?: string;
 }) {
   const { data, error } = await adminSupabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
+    user_metadata:
+      first_name || last_name
+        ? {
+            first_name,
+            last_name,
+          }
+        : undefined,
   });
 
   if (error) {
@@ -65,26 +76,24 @@ async function createSales({
   email: string;
   password: string;
 }) {
-  const { data: userData, error: userError } =
-    await adminSupabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-
-  if (userError) {
-    throw new Error(`Failed to create sales: ${userError.message}`);
-  }
+  const user = await createUser({
+    email,
+    password,
+    first_name,
+    last_name,
+  });
 
   const { data, error } = await adminSupabase
     .from("sales")
-    .update({ first_name, last_name, administrator: false })
-    .eq("user_id", userData.user?.id)
-    .select()
+    .select("*")
+    .eq("user_id", user.id)
     .single();
 
   if (error) {
     throw new Error(`Failed to create sales: ${error.message}`);
+  }
+  if (data.role !== "admin") {
+    throw new Error("First E2E auth user was not bootstrapped as admin");
   }
 
   return data;

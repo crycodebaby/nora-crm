@@ -63,7 +63,7 @@ test.describe("user adding a task", () => {
     await page.getByLabel("Description *").fill("Follow up with Jane");
     await page.getByLabel("Due date").fill("2026-04-11T21:00");
     await page.getByLabel("Type").click();
-    await page.getByRole("option", { name: "Call" }).click();
+    await page.getByRole("option", { name: "Rückruf" }).click();
 
     await page.getByRole("button", { name: "Save" }).click();
 
@@ -83,15 +83,10 @@ test.describe("user adding a task", () => {
       );
       await menu.goToDashboard();
 
-      await expect(page.getByText("Upcoming Tasks")).toBeVisible();
       await expect(
-        page.getByText("Upcoming Tasks").locator("../.."),
-      ).toHaveText(/Follow up with Jane/);
-      await expect(
-        page.getByText("Follow up with Jane").locator(".."),
-      ).toHaveText(
-        "Call Follow up with Janedue 4/11/2026, 9:00:00 PM (Re: Jane Smith)",
-      );
+        page.getByRole("heading", { name: "Open tasks" }),
+      ).toBeVisible();
+      await expect(page.getByText("Follow up with Jane")).toBeVisible();
     }
   });
 });

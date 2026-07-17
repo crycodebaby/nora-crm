@@ -20,7 +20,10 @@ export const Status = ({
         className="inline-block w-2.5 h-2.5 rounded-full"
         style={{ backgroundColor: statusObject.color }}
       />
-      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+      <div
+        aria-hidden="true"
+        className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-800 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10"
+      >
         {statusObject.label}
       </div>
     </div>
