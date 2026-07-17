@@ -1,12 +1,15 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { loginAsAdmin } from "./helpers/auth";
+import { runAuthRbacPreflight } from "./helpers/authPreflight";
 
 const adminSupabase = createClient(
   process.env.VITE_SUPABASE_URL ?? "http://127.0.0.1:54341",
   process.env.SERVICE_ROLE_KEY!,
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
+
+const CANONICAL_CONFIGURATION = { id: 1, config: {} };
 
 // Tables in FK-safe deletion order (children before parents)
 const TABLES = [
@@ -18,7 +21,6 @@ const TABLES = [
   "companies",
   "tags",
   "favicons_excluded_domains",
-  "configuration",
   "sales",
 ];
 
@@ -26,6 +28,25 @@ async function resetDb() {
   for (const table of TABLES) {
     // Supabase client delete need a where clause to get executed, so we use one that will match on all rows (id is not null)
     await adminSupabase.from(table).delete().not("id", "is", null);
+  }
+
+  const { data: configuration, error: configurationError } = await adminSupabase
+    .from("configuration")
+    .upsert(CANONICAL_CONFIGURATION)
+    .select("id, config")
+    .single();
+
+  if (
+    configurationError ||
+    configuration?.id !== CANONICAL_CONFIGURATION.id ||
+    configuration.config == null ||
+    Array.isArray(configuration.config) ||
+    typeof configuration.config !== "object" ||
+    Object.keys(configuration.config).length !== 0
+  ) {
+    throw new Error(
+      `Failed to restore canonical configuration: ${configurationError?.message ?? "unexpected row"}`,
+    );
   }
 
   // Delete all auth users (cascades to sales via DB trigger)
@@ -102,6 +123,12 @@ async function createSales({
       data.administrator === true &&
       data.disabled === false
     ) {
+      await runAuthRbacPreflight({
+        adminSupabase,
+        userId: user.id,
+        email,
+        password,
+      });
       return data;
     } else if (data) {
       lastState = JSON.stringify({

@@ -48,6 +48,28 @@ begin
         raise exception 'authenticated must EXECUTE nora_private.is_active_user for RLS';
     end if;
 
+    if has_function_privilege('anon', 'nora_private.safe_auth_uid()', 'EXECUTE') then
+        raise exception 'anon must not EXECUTE nora_private.safe_auth_uid';
+    end if;
+    if not has_function_privilege('authenticated', 'nora_private.safe_auth_uid()', 'EXECUTE')
+       or not has_function_privilege('service_role', 'nora_private.safe_auth_uid()', 'EXECUTE') then
+        raise exception 'authenticated and service_role must EXECUTE nora_private.safe_auth_uid';
+    end if;
+
+    if not exists (
+        select 1
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        join pg_roles r on r.oid = p.proowner
+        where n.nspname = 'nora_private'
+          and p.proname = 'safe_auth_uid'
+          and p.prosecdef
+          and r.rolname = 'postgres'
+          and pg_get_functiondef(p.oid) like '%request.jwt.claims%'
+    ) then
+        raise exception 'safe_auth_uid must be postgres-owned SECURITY DEFINER with request.jwt.claims support';
+    end if;
+
     if not exists (select 1 from pg_roles where rolname = 'nora_role_manager') then
         raise exception 'nora_role_manager role missing';
     end if;

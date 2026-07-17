@@ -1013,3 +1013,34 @@ Damit lösen normale Nora-Codeänderungen keine unbekannten GitHub-Pages- oder
 Supabase-Remote-Deployments mehr aus. Direkte npm-Skripte machen lokale und
 GitHub-Prüfungen identisch und verhindern, dass ein erfolgreicher Wrapper-Job
 gleichzeitig fehlgeschlagene ESLint-/Prettier-Child-Checks erzeugt.
+
+## 2026-07-17 – v0.4c.2c: E2E-Bootstrap und Profilzugriff
+
+### Kontext
+
+Der E2E-Reset löschte den kanonischen `configuration`-Singleton. Gleichzeitig
+wertete `nora_private.safe_auth_uid()` nur das Legacy-GUC
+`request.jwt.claim.sub` aus, während aktuelle PostgREST-Anfragen den Betreff im
+JSON-GUC `request.jwt.claims` bereitstellen. Dadurch verwarf die bestehende
+Active-User-Prüfung selbst korrekt angelegte Auth-Benutzer.
+
+### Entscheidung
+
+- `configuration.id = 1` mit `config = {}` bleibt ein notwendiger
+  Systemdatensatz und wird nach jedem E2E-Reset kanonisch wiederhergestellt und
+  verifiziert.
+- Der Auth-Provider liest das eigene vollständige Profil weiterhin aus
+  `public.sales`. `sales_directory` bleibt das reduzierte Verzeichnis für
+  Team-Auswahlen und enthält bewusst weder `user_id` noch Rollen- oder
+  Aktivierungsdaten.
+- `safe_auth_uid()` unterstützt das Legacy-GUC und das aktuelle
+  `request.jwt.claims`-JSON. Ungültige oder fehlende Werte ergeben weiterhin
+  `NULL`.
+- Die Policy-Matrix bleibt unverändert: aktive Benutzer sehen in `sales` nur
+  die eigene Zeile; Administratoren sehen alle Zeilen; anonyme und deaktivierte
+  Benutzer sehen keine. Es wird keine Test-Policy und kein allgemeines
+  `SELECT`-Recht ergänzt.
+- Ein E2E-Preflight prüft Auth-Benutzer, Service-Role-Bootstrap, normale
+  Passwort-Session und den authentifizierten Self-Select vor dem Browserlauf.
+  Diagnosen nennen Schritt und Ressource, redigieren aber Schlüssel,
+  Passwörter, JWTs und Authorization-Werte.

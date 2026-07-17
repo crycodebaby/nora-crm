@@ -175,6 +175,30 @@ begin
         raise exception 'office must see own profile on public.sales';
     end if;
 
+    -- E. Current PostgREST sends JWT data through request.jwt.claims JSON.
+    perform set_config('request.jwt.claim.sub', '', true);
+    perform set_config(
+        'request.jwt.claims',
+        jsonb_build_object(
+            'sub', v_viewer::text,
+            'role', 'authenticated'
+        )::text,
+        true
+    );
+
+    if nora_private.safe_auth_uid() is distinct from v_viewer then
+        raise exception 'safe_auth_uid must resolve sub from request.jwt.claims';
+    end if;
+    if (select count(*) from public.sales) <> 1 then
+        raise exception 'claims JSON viewer must see exactly one own sales row';
+    end if;
+    if not exists (select 1 from public.sales where user_id = v_viewer) then
+        raise exception 'claims JSON viewer must see own sales profile';
+    end if;
+    if exists (select 1 from public.sales where user_id <> v_viewer) then
+        raise exception 'claims JSON viewer must not see foreign sales profiles';
+    end if;
+
     raise exception 'ROLLBACK_FINAL_HARDENING' using errcode = 'P0001';
 exception
     when others then
