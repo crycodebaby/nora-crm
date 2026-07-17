@@ -13,6 +13,8 @@ import { ContactCreateSheet } from "../contacts/ContactCreateSheet";
 import { ContactImportButton } from "../contacts/ContactImportButton";
 import useAppBarHeight from "../misc/useAppBarHeight";
 import { NoteCreateSheet } from "../notes/NoteCreateSheet";
+import { noraCreatePath } from "../routing/noraRoutes";
+import { resolveFirstContactId } from "./dashboardStepperUtils";
 
 export const DashboardStepper = ({
   step,
@@ -26,6 +28,12 @@ export const DashboardStepper = ({
   const isMobile = useIsMobile();
   const [contactCreateOpen, setContactCreateOpen] = useState(false);
   const [noteCreateOpen, setNoteCreateOpen] = useState(false);
+  const firstContactId = resolveFirstContactId(contactId);
+  const canAddNote = firstContactId != null;
+  const addNoteLabel = translate("resources.notes.action.add", {
+    _: "Add note",
+  });
+
   return (
     <>
       <ContactCreateSheet
@@ -35,7 +43,7 @@ export const DashboardStepper = ({
       <NoteCreateSheet
         open={noteCreateOpen}
         onOpenChange={setNoteCreateOpen}
-        contact_id={contactId}
+        contact_id={firstContactId}
       />
       <div
         className="flex justify-center items-center"
@@ -121,24 +129,38 @@ export const DashboardStepper = ({
                       _: "Go to a contact page and add a note",
                     })}
                   </p>
-                  {isMobile ? (
-                    <Button
-                      onClick={() => setNoteCreateOpen(true)}
-                      disabled={step < 2}
-                      className="w-fit gap-2"
-                    >
-                      <Plus className="h-4 w-4" />
-                      {translate("resources.notes.action.add", {
-                        _: "Add note",
-                      })}
-                    </Button>
+                  {canAddNote ? (
+                    isMobile ? (
+                      <Button
+                        type="button"
+                        onClick={() => setNoteCreateOpen(true)}
+                        className="w-fit gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {addNoteLabel}
+                      </Button>
+                    ) : (
+                      <Button asChild className="w-fit">
+                        <Link
+                          to={noraCreatePath({
+                            resource: "contacts",
+                            type: "show",
+                            id: firstContactId,
+                          })}
+                        >
+                          {addNoteLabel}
+                        </Link>
+                      </Button>
+                    )
                   ) : (
-                    <Button asChild disabled={step < 2} className="w-fit">
-                      <Link role="button" to={`/contacts/${contactId}/show`}>
-                        {translate("resources.notes.action.add", {
-                          _: "Add note",
-                        })}
-                      </Link>
+                    <Button
+                      type="button"
+                      disabled
+                      className="w-fit gap-2"
+                      aria-disabled="true"
+                    >
+                      {isMobile ? <Plus className="h-4 w-4" /> : null}
+                      {addNoteLabel}
                     </Button>
                   )}
                 </div>
