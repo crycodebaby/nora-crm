@@ -46,6 +46,7 @@ import MobileHeader from "../layout/MobileHeader";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import ImageEditorField from "../misc/ImageEditorField";
 import type { CrmDataProvider } from "../providers/types";
+import { getSupabaseClient } from "../providers/supabase/supabase";
 import type { SalesFormData } from "../types";
 
 const ChangePasswordButton = () => {
@@ -166,10 +167,34 @@ const ProfileSection = () => {
       );
 
       try {
-        await dataProvider.salesUpdate(identity.id, {
-          ...data,
-          [field]: value,
-        } as SalesFormData);
+        const first_name =
+          field === "first_name" ? value : String(data.first_name ?? "");
+        const last_name =
+          field === "last_name" ? value : String(data.last_name ?? "");
+
+        if (field === "first_name" || field === "last_name") {
+          const client = getSupabaseClient();
+          const { error: metaError } = await client.auth.updateUser({
+            data: { first_name, last_name },
+          });
+          if (metaError) throw metaError;
+
+          const { error: saleError } = await client
+            .from("sales")
+            .update({ first_name, last_name })
+            .eq("id", identity.id);
+          if (saleError) throw saleError;
+        } else {
+          await dataProvider.salesUpdate(identity.id, {
+            first_name: data.first_name,
+            last_name: data.last_name,
+            email: data.email,
+            role: data.role,
+            administrator: data.administrator,
+            disabled: data.disabled,
+            [field]: value,
+          } as SalesFormData);
+        }
         refetchIdentity();
         refetchUser();
         notify("crm.profile.updated", {

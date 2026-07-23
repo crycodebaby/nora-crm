@@ -7,6 +7,7 @@ import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
 import { EmployeeAccessShell } from "@/components/atomic-crm/login/EmployeeAccessShell";
+import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
 
 interface PasswordFormData {
@@ -110,8 +111,8 @@ export const SetPasswordPage = () => {
         if (session?.user) {
           const meta = session.user.user_metadata ?? {};
           setProfileDefaults({
-            first_name: String(meta.first_name ?? "").trim(),
-            last_name: String(meta.last_name ?? "").trim(),
+            first_name: normalizePersonName(meta.first_name),
+            last_name: normalizePersonName(meta.last_name),
           });
         }
       } catch {
@@ -190,8 +191,8 @@ export const SetPasswordPage = () => {
       const { data } = await client.auth.getUser();
       const meta = data.user?.user_metadata ?? {};
       setProfileDefaults({
-        first_name: String(meta.first_name ?? "").trim(),
-        last_name: String(meta.last_name ?? "").trim(),
+        first_name: normalizePersonName(meta.first_name),
+        last_name: normalizePersonName(meta.last_name),
       });
       setStep(3);
     } catch {

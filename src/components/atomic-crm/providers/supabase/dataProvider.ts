@@ -148,25 +148,25 @@ const getDataProviderWithCustomMethods = () => {
         role,
       } = data;
 
+      const body: Record<string, unknown> = { sales_id: id };
+      if (email !== undefined) body.email = email;
+      if (first_name !== undefined) body.first_name = first_name;
+      if (last_name !== undefined) body.last_name = last_name;
+      if (administrator !== undefined) body.administrator = administrator;
+      if (avatar !== undefined) body.avatar = avatar;
+      if (disabled !== undefined) body.disabled = disabled;
+      if (role !== undefined) body.role = role;
+
       const { data: updatedData, error } =
         await getSupabaseClient().functions.invoke<{
           data: Sale;
         }>("users", {
           method: "PATCH",
-          body: {
-            sales_id: id,
-            email,
-            first_name,
-            last_name,
-            administrator,
-            disabled,
-            avatar,
-            role,
-          },
+          body,
         });
 
       if (!updatedData || error) {
-        console.error("salesCreate.error", error);
+        console.error("salesUpdate.error", error);
         throw new Error("Failed to update account manager");
       }
 

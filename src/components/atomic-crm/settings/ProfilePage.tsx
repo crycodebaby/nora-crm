@@ -32,7 +32,9 @@ import {
 } from "@/components/ui/tooltip";
 
 import ImageEditorField from "../misc/ImageEditorField";
+import { normalizePersonName } from "../misc/personName";
 import type { CrmDataProvider } from "../providers/types";
+import { getSupabaseClient } from "../providers/supabase/supabase";
 import type { Sale, SalesFormData } from "../types";
 
 export const ProfilePage = () => {
@@ -46,16 +48,49 @@ export const ProfilePage = () => {
   const dataProvider = useDataProvider<CrmDataProvider>();
 
   const { mutate } = useMutation({
-    mutationKey: ["signup"],
-    mutationFn: async (data: SalesFormData) => {
-      if (!identity) {
+    mutationKey: ["profile-update"],
+    mutationFn: async (formValues: SalesFormData) => {
+      if (!identity || !data) {
         throw new Error(
           translate("crm.profile.record_not_found", {
             _: "Record not found",
           }),
         );
       }
-      return dataProvider.salesUpdate(identity.id, data);
+
+      const first_name = String(formValues.first_name ?? "").trim();
+      const last_name = String(formValues.last_name ?? "").trim();
+      const email = String(formValues.email ?? "").trim();
+      const emailChanged = Boolean(email) && email !== data.email;
+
+      // Name (and unchanged email) can be saved via RLS + auth metadata —
+      // avoids the users edge function privilege path for simple profile edits.
+      if (!emailChanged) {
+        const client = getSupabaseClient();
+        const { error: metaError } = await client.auth.updateUser({
+          data: { first_name, last_name },
+        });
+        if (metaError) throw metaError;
+
+        const { data: sale, error: saleError } = await client
+          .from("sales")
+          .update({ first_name, last_name })
+          .eq("id", identity.id)
+          .select("*")
+          .single();
+        if (saleError || !sale) throw saleError ?? new Error("Update failed");
+        return sale as Sale;
+      }
+
+      return dataProvider.salesUpdate(identity.id, {
+        first_name,
+        last_name,
+        email,
+        avatar: formValues.avatar,
+        role: data.role,
+        administrator: data.administrator,
+        disabled: data.disabled,
+      });
     },
     onSuccess: () => {
       refetchIdentity();
@@ -83,9 +118,17 @@ export const ProfilePage = () => {
     mutate(values);
   };
 
+  const formRecord = data
+    ? {
+        ...data,
+        first_name: normalizePersonName(data.first_name),
+        last_name: normalizePersonName(data.last_name),
+      }
+    : data;
+
   return (
     <div className="max-w-lg mx-auto mt-8">
-      <Form onSubmit={handleOnSubmit} record={data}>
+      <Form onSubmit={handleOnSubmit} record={formRecord}>
         <ProfileForm isEditMode={isEditMode} setEditMode={setEditMode} />
       </Form>
     </div>

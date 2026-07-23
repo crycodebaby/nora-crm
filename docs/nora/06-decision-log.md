@@ -1089,6 +1089,23 @@ ungültig.
 - Kein Service-Role im Frontend/Vercel/`VITE_*`. Remote-Deploy und
   Production-Migration nicht Teil dieses Commits.
 
+## 2026-07-23 – Profil-Update: Pending-Default und Rollen-Seiteneffekt
+
+### Kontext
+
+Neue Benutzer ohne Metadaten erscheinen als „Pending Pending“. Das Speichern
+des eigenen Namens im Profil schlug fehl bzw. riskierte eine unbeabsichtigte
+Rollenzurücksetzung auf `viewer`.
+
+### Entscheidung
+
+- „Pending“ ist nur ein Bootstrap-Platzhalter (`handle_new_user` / Spalten-Default),
+  wenn bei der Einladung keine Namen mitgegeben wurden.
+- Profil-Namensänderungen speichern über Auth-Metadaten + RLS-Update auf
+  `sales` (ohne Edge-Privilege-Pfad).
+- Edge Function `users` PATCH: Rolle/Disabled nur bei expliziter Angabe ändern;
+  Namen immer auf `sales` setzen. Remote-Deploy der Function separat nötig.
+
 ## 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen
 
 ### Kontext

@@ -239,6 +239,7 @@ async function inviteUser(req: Request, currentUserSale: any) {
 }
 
 async function patchUser(req: Request, currentUserSale: any) {
+  const body = await req.json();
   const {
     sales_id,
     email,
@@ -248,7 +249,8 @@ async function patchUser(req: Request, currentUserSale: any) {
     administrator,
     disabled,
     role,
-  } = await req.json();
+  } = body;
+
   const { data: sale } = await supabaseAdmin
     .from("sales")
     .select("*")
@@ -263,63 +265,102 @@ async function patchUser(req: Request, currentUserSale: any) {
     return createErrorResponse(401, "Not Authorized");
   }
 
+  const nextFirstName =
+    typeof first_name === "string" ? first_name.trim() : sale.first_name;
+  const nextLastName =
+    typeof last_name === "string" ? last_name.trim() : sale.last_name;
+
+  const authUpdate: {
+    email?: string;
+    ban_duration?: string;
+    user_metadata: { first_name: string; last_name: string };
+  } = {
+    user_metadata: {
+      first_name: nextFirstName,
+      last_name: nextLastName,
+    },
+  };
+
+  if (typeof email === "string" && email.trim() && email.trim() !== sale.email) {
+    authUpdate.email = email.trim();
+  }
+
+  if (typeof disabled === "boolean") {
+    authUpdate.ban_duration = disabled ? "87600h" : "none";
+  }
+
   const { data, error: userError } =
-    await supabaseAdmin.auth.admin.updateUserById(sale.user_id, {
-      email,
-      ban_duration: disabled ? "87600h" : "none",
-      user_metadata: { first_name, last_name },
-    });
+    await supabaseAdmin.auth.admin.updateUserById(sale.user_id, authUpdate);
 
   if (!data?.user || userError) {
     console.error("Error patching user:", userError);
     return createErrorResponse(500, "Internal Server Error");
   }
 
-  if (avatar) {
-    await updateSaleAvatar(data.user.id, avatar);
-  }
+  // Persist names on sales explicitly (do not rely only on auth trigger).
+  // Email stays immutable on sales for direct updates — auth trigger syncs it.
+  const { error: saleUpdateError } = await supabaseAdmin
+    .from("sales")
+    .update({
+      first_name: nextFirstName,
+      last_name: nextLastName,
+    })
+    .eq("id", sales_id);
 
-  if (!isAdminSale(currentUserSale)) {
-    const { data: new_sale } = await supabaseAdmin
-      .from("sales")
-      .select("*")
-      .eq("id", sales_id)
-      .single();
-    return new Response(
-      JSON.stringify({
-        data: new_sale,
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        },
-      },
-    );
-  }
-
-  try {
-    const resolvedRole = resolveRole(role, administrator);
-    const updatedSale = await setSaleRoleAndDisabled(
-      sales_id,
-      resolvedRole,
-      disabled ?? sale.disabled ?? false,
-    );
-    return new Response(
-      JSON.stringify({
-        data: updatedSale,
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        },
-      },
-    );
-  } catch (e) {
-    console.error("Error patching sale:", e);
+  if (saleUpdateError) {
+    console.error("Error patching sale profile fields:", saleUpdateError);
     return createErrorResponse(500, "Internal Server Error");
   }
+
+  if (avatar) {
+    try {
+      await updateSaleAvatar(data.user.id, avatar);
+    } catch (e) {
+      console.error("Error updating avatar:", e);
+      return createErrorResponse(500, "Internal Server Error");
+    }
+  }
+
+  // Only change role/disabled when the caller explicitly sent those fields.
+  // Profile name edits often omit role — never default that to viewer.
+  const shouldPatchPrivileges =
+    role !== undefined ||
+    administrator !== undefined ||
+    disabled !== undefined;
+
+  if (isAdminSale(currentUserSale) && shouldPatchPrivileges) {
+    try {
+      const resolvedRole = resolveRole(
+        role ?? sale.role,
+        administrator ?? sale.administrator,
+      );
+      const updatedSale = await setSaleRoleAndDisabled(
+        sales_id,
+        resolvedRole,
+        typeof disabled === "boolean" ? disabled : (sale.disabled ?? false),
+      );
+      return new Response(JSON.stringify({ data: updatedSale }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (e) {
+      console.error("Error patching sale:", e);
+      return createErrorResponse(500, "Internal Server Error");
+    }
+  }
+
+  const { data: new_sale, error: reloadError } = await supabaseAdmin
+    .from("sales")
+    .select("*")
+    .eq("id", sales_id)
+    .single();
+
+  if (!new_sale || reloadError) {
+    return createErrorResponse(500, "Internal Server Error");
+  }
+
+  return new Response(JSON.stringify({ data: new_sale }), {
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
 }
 
 Deno.serve(async (req: Request) =>
