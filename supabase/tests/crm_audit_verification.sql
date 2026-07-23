@@ -530,4 +530,155 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- Volatility + direct audit_*_changes / storage stats regression
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+    v_old_company public.companies;
+    v_new_company public.companies;
+    v_old_contact public.contacts;
+    v_new_contact public.contacts;
+    v_old_deal public.deals;
+    v_new_deal public.deals;
+    v_old_task public.tasks;
+    v_new_task public.tasks;
+    v_diff jsonb;
+    v_stats jsonb;
+    v_vol text;
+    v_admin uuid;
+begin
+    if (
+        select p.provolatile
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'nora_private'
+          and p.proname = 'audit_company_changes'
+    ) is distinct from 's' then
+        raise exception 'audit_company_changes must be STABLE';
+    end if;
+    if (
+        select p.provolatile
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'nora_private'
+          and p.proname = 'audit_contact_changes'
+    ) is distinct from 's' then
+        raise exception 'audit_contact_changes must be STABLE';
+    end if;
+    if (
+        select p.provolatile
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'nora_private'
+          and p.proname = 'audit_deal_changes'
+    ) is distinct from 's' then
+        raise exception 'audit_deal_changes must be STABLE';
+    end if;
+    if (
+        select p.provolatile
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'nora_private'
+          and p.proname = 'audit_task_changes'
+    ) is distinct from 's' then
+        raise exception 'audit_task_changes must be STABLE';
+    end if;
+
+    select p.provolatile into v_vol
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'get_audit_storage_stats';
+    if v_vol is distinct from 'v' then
+        raise exception 'get_audit_storage_stats must be VOLATILE, got %', v_vol;
+    end if;
+
+    v_old_company.name := 'Alt';
+    v_old_company.city := 'Düsseldorf';
+    v_new_company := v_old_company;
+    v_new_company.city := 'Neuss';
+    v_diff := nora_private.audit_company_changes(v_old_company, v_new_company);
+    if v_diff -> 'city' ->> 'old' is distinct from 'Düsseldorf'
+       or v_diff -> 'city' ->> 'new' is distinct from 'Neuss'
+       or v_diff ? 'name'
+       or jsonb_typeof(v_diff) is distinct from 'object' then
+        raise exception 'audit_company_changes regression failed: %', v_diff;
+    end if;
+
+    v_old_contact.first_name := 'Ada';
+    v_old_contact.last_name := 'Lovelace';
+    v_old_contact.status := 'cold';
+    v_new_contact := v_old_contact;
+    v_new_contact.status := 'warm';
+    v_diff := nora_private.audit_contact_changes(v_old_contact, v_new_contact);
+    if v_diff -> 'status' ->> 'old' is distinct from 'cold'
+       or v_diff -> 'status' ->> 'new' is distinct from 'warm'
+       or v_diff ? 'first_name' then
+        raise exception 'audit_contact_changes regression failed: %', v_diff;
+    end if;
+
+    v_old_deal.name := 'Vorgang';
+    v_old_deal.stage := 'opportunity';
+    v_new_deal := v_old_deal;
+    v_new_deal.stage := 'proposal-sent';
+    v_diff := nora_private.audit_deal_changes(v_old_deal, v_new_deal);
+    if v_diff -> 'stage' ->> 'old' is distinct from 'opportunity'
+       or v_diff -> 'stage' ->> 'new' is distinct from 'proposal-sent'
+       or v_diff ? 'name' then
+        raise exception 'audit_deal_changes regression failed: %', v_diff;
+    end if;
+
+    v_old_task.text := 'Anrufen';
+    v_old_task.type := 'call';
+    v_new_task := v_old_task;
+    v_new_task.text := 'Zurückrufen';
+    v_diff := nora_private.audit_task_changes(v_old_task, v_new_task);
+    if v_diff -> 'text' ->> 'old' is distinct from 'Anrufen'
+       or v_diff -> 'text' ->> 'new' is distinct from 'Zurückrufen'
+       or v_diff ? 'type' then
+        raise exception 'audit_task_changes regression failed: %', v_diff;
+    end if;
+
+    -- Storage stats: VOLATILE class + admin-only shape (same keys as before).
+    select user_id into v_admin
+    from public.sales
+    where administrator = true and disabled = false
+    limit 1;
+    if v_admin is null then
+        raise exception 'admin sales user required for get_audit_storage_stats check';
+    end if;
+    perform set_config('request.jwt.claim.sub', v_admin::text, true);
+    perform set_config(
+        'request.jwt.claims',
+        jsonb_build_object('sub', v_admin::text, 'role', 'authenticated')::text,
+        true
+    );
+    set local role authenticated;
+
+    v_stats := public.get_audit_storage_stats();
+    reset role;
+
+    if not (
+        v_stats ? 'event_count'
+        and v_stats ? 'events_last_30_days'
+        and v_stats ? 'table_bytes'
+        and v_stats ? 'index_bytes'
+        and v_stats ? 'total_bytes'
+        and v_stats ? 'avg_metadata_bytes'
+        and v_stats ? 'growth_hint'
+        and v_stats ? 'projection_note'
+    ) then
+        raise exception 'get_audit_storage_stats missing required keys: %', v_stats;
+    end if;
+    if (v_stats ->> 'total_bytes')::bigint
+         is distinct from
+       ((v_stats ->> 'table_bytes')::bigint + (v_stats ->> 'index_bytes')::bigint)
+    then
+        raise exception 'get_audit_storage_stats total_bytes mismatch';
+    end if;
+end;
+$$;
+
 \echo '=== CRM Audit verification OK ==='

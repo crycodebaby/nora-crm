@@ -61,8 +61,6 @@ declare email_hash text;
 declare gravatar_url text;
 declare gravatar_status int8;
 declare email_domain text;
-declare favicon_url text;
-declare domain_status int8;
 
 begin
     -- Try to fetch a gravatar image
@@ -88,8 +86,6 @@ CREATE OR REPLACE FUNCTION "public"."get_domain_favicon"("domain_name" "text") R
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
     AS $$
-declare domain_status int8;
-
 begin
     if exists (select from favicons_excluded_domains as fav where fav.domain = domain_name) then
         return null;
@@ -1092,7 +1088,7 @@ CREATE OR REPLACE FUNCTION nora_private.audit_company_changes(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-IMMUTABLE
+STABLE
 SET search_path = ''
 AS $$
 DECLARE
@@ -1133,7 +1129,7 @@ CREATE OR REPLACE FUNCTION nora_private.audit_contact_changes(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-IMMUTABLE
+STABLE
 SET search_path = ''
 AS $$
 DECLARE
@@ -1168,7 +1164,7 @@ CREATE OR REPLACE FUNCTION nora_private.audit_deal_changes(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-IMMUTABLE
+STABLE
 SET search_path = ''
 AS $$
 DECLARE
@@ -1207,7 +1203,7 @@ CREATE OR REPLACE FUNCTION nora_private.audit_task_changes(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-IMMUTABLE
+STABLE
 SET search_path = ''
 AS $$
 DECLARE
@@ -1855,7 +1851,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.get_audit_storage_stats()
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = ''
 AS $$

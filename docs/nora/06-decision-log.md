@@ -1062,3 +1062,23 @@ fälschlich Hotboard und ließ First-Run- sowie Bulk-Tag-Tests scheitern.
   (`<CRM disableTelemetry />`).
 - Der E2E-Build deaktiviert den PWA-Service-Worker; Produktion bleibt
   unverändert.
+
+## 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen
+
+### Kontext
+
+`supabase db lint` meldete 74 Warnungen ohne Fehler. Betroffen waren
+überdeklarierte Volatilitätsklassen und ungenutzte Locals.
+
+### Entscheidung
+
+- `nora_private.audit_*_changes`: IMMUTABLE → STABLE. Die Diff-Logik liest
+  keine Tabellen und ist semantisch deterministisch, aber plpgsql_check
+  stuft die plpgsql-Zuweisungen über Composite-Felder als STABLE ein.
+  Keine Funktionsindizes, Policies oder Planner-Pfade hängen an IMMUTABLE.
+- `public.get_audit_storage_stats`: STABLE → VOLATILE wegen
+  `pg_relation_size` / `pg_indexes_size`. Admin-RPC, selten aufgerufen.
+- `get_avatar_for_email` / `get_domain_favicon`: ungenutzte Variablen
+  entfernt; Verhalten unverändert.
+- Additive Migration nur; keine Remote-/Production-Migration in diesem
+  Schritt. Audit-Ausgabeform bleibt identisch.
