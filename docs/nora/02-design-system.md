@@ -323,7 +323,7 @@ Nicht eingeloggte Nutzer sehen unter `/` eine minimalistische Startseite (`NoraL
 
 | Element | Darstellung |
 |---------|-------------|
-| Betreiber oben links | Ergart Gruppe in `.nora-operator-brand` (dezenter blauer Rahmen) + Markengrafik aus `public/logos/logo_atomic_crm_*.svg` |
+| Betreiber oben links | Ergart Gruppe + Markengrafik aus `public/ergart/AE_logo_transparent.png` |
 | Produkt zentral | Nora-Monogramm (`nora-monogram-*.png`) + Headline „Nora CRM“ |
 | Subline | „Kunden- und Vorgangsverwaltung für die Ergart Gruppe“ |
 | Primäraktion | „Einloggen“ → `/login` (Nora-Rot, touchfreundlich) |

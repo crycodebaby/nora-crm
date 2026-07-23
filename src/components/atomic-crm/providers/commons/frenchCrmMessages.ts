@@ -457,10 +457,17 @@ export const frenchCrmMessages = {
       },
     },
     landing: {
-      subline: "Gestion clients et affaires pour Ergart Gruppe",
+      subline: "Accès collaborateurs du groupe Ergart",
       sign_in: "Se connecter",
-      sign_up: "S'inscrire",
-      back: "Retour à l'accueil",
+      sign_up: "Activer l'invitation",
+      back: "Retour à la connexion",
+    },
+    employee_access: {
+      title: "Accès collaborateurs du groupe Ergart",
+      subtitle: "Accès sécurisé aux espaces de travail numériques",
+      technical_by: "Développement technique",
+      invite_cta: "Vous avez reçu une invitation ?",
+      invite_only: "Accès uniquement sur invitation",
     },
     common: {
       activity: "Activité",

@@ -1,12 +1,20 @@
 import type { ConfigurationContextValue } from "./ConfigurationContext";
 
+/** Nora product mark — used inside the authenticated app */
 export const defaultDarkModeLogo = "./logos/nora-monogram-dark.png";
 export const defaultLightModeLogo = "./logos/nora-monogram-light.png";
 
-/** Betreiber-Marke (Ergart Gruppe) – Grafik aus public/logos */
-export const defaultOperatorDarkLogo = "./logos/logo_atomic_crm_dark.svg";
-export const defaultOperatorLightLogo = "./logos/logo_atomic_crm_light.svg";
+/** Betreiber-Marke (Ergart Gruppe) auf öffentlichen Flächen */
+export const defaultOperatorMark = "./ergart/AE_logo_transparent.png";
+export const defaultOperatorDarkLogo = "./ergart/AE_logo_transparent.png";
+export const defaultOperatorLightLogo = "./ergart/AE_logo_transparent.png";
 export const defaultOperatorName = "Ergart Gruppe";
+
+/** Technische Marke Smairys — nur dezent auf öffentlichen Flächen */
+export const defaultSmairysDarkLogo =
+  "./smairys/SchwarzLogo-SeitlicherText.png";
+export const defaultSmairysLightLogo =
+  "./smairys/Wei\u00df-Seitlich-Transparent.png";
 
 export const defaultCurrency = "EUR";
 

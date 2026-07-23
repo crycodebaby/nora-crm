@@ -430,6 +430,19 @@ export const germanCrmMessages = {
     action: {
       reset_password: "Passwort zurücksetzen",
     },
+    landing: {
+      subline: "Mitarbeiterzugang der Ergart Gruppe",
+      sign_in: "Anmelden",
+      sign_up: "Einladung aktivieren",
+      back: "Zurück zur Anmeldung",
+    },
+    employee_access: {
+      title: "Mitarbeiterzugang der Ergart Gruppe",
+      subtitle: "Sicherer Zugang zu den digitalen Arbeitsbereichen",
+      technical_by: "Technische Entwicklung",
+      invite_cta: "Einladung erhalten?",
+      invite_only: "Zugang nur per Einladung",
+    },
     auth: {
       first_name: "Vorname",
       last_name: "Nachname",
@@ -437,31 +450,26 @@ export const germanCrmMessages = {
       confirmation_required:
         "Bitte folgen Sie dem Link in der E-Mail, um Ihr Konto zu bestätigen.",
       recovery_email_sent:
-        "Wenn Sie registriert sind, erhalten Sie in Kürze eine E-Mail zum Zurücksetzen des Passworts.",
-      sign_in_failed: "Anmeldung fehlgeschlagen.",
+        "Wenn ein Zugang zu dieser Adresse existiert, erhalten Sie in Kürze eine E-Mail.",
+      sign_in_failed:
+        "Anmeldung fehlgeschlagen. Bitte prüfen Sie Ihre Angaben.",
       sign_in_google_workspace: "Mit Google Workspace anmelden",
       signup: {
         create_account: "Konto anlegen",
         create_first_user:
-          "Legen Sie das erste Benutzerkonto an, um die Einrichtung abzuschließen.",
+          "Der erste Administrator wird im Supabase-Dashboard angelegt.",
         creating: "Wird angelegt…",
         initial_user_created: "Erster Benutzer erfolgreich angelegt",
       },
       welcome_title: "Willkommen bei Nora CRM",
       nav: {
         aria_label: "Authentifizierung",
-        sign_in: "Einloggen",
-        sign_up: "Registrieren",
-        back_to_start: "Zur Startseite",
-        no_account_yet: "Noch kein Konto?",
+        sign_in: "Anmelden",
+        sign_up: "Einladung aktivieren",
+        back_to_start: "Zur Anmeldung",
+        no_account_yet: "Einladung erhalten?",
         already_have_account: "Schon ein Konto?",
       },
-    },
-    landing: {
-      subline: "Kunden- und Vorgangsverwaltung für die Ergart Gruppe",
-      sign_in: "Einloggen",
-      sign_up: "Registrieren",
-      back: "Zurück zur Startseite",
     },
     common: {
       activity: "Aktivität",

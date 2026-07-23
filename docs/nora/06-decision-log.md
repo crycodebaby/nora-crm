@@ -1063,6 +1063,32 @@ fälschlich Hotboard und ließ First-Run- sowie Bulk-Tag-Tests scheitern.
 - Der E2E-Build deaktiviert den PWA-Service-Worker; Produktion bleibt
   unverändert.
 
+## 2026-07-23 – Mitarbeiterzugang: öffentliches Redesign und Einladung
+
+### Kontext
+
+Die öffentliche Fläche zeigte Nora als Produktmarke und bot eine öffentliche
+Registrierung. Favicon-/Manifest-Einträge waren inkonsistent und teilweise
+ungültig.
+
+### Entscheidung
+
+- Öffentliche Fläche: Ergart + „Mitarbeiterzugang“ + dezentes Smairys;
+  Nora-Branding erst nach Anmeldung.
+- Keine öffentliche Registrierung; `/sign-up` ist Einladungs-Hinweisseite;
+  `dataProvider.signUp` wirft im Supabase-Modus.
+- Kanonisches Favicon-/Manifest-Paket unter `public/` + `site.webmanifest`
+  (`background_color`/`theme_color` `#2c2c2c`). VitePWA setzt `manifest: false`.
+- Modi: Anmelden, Einladung aktivieren, Passwort vergessen.
+- Onboarding nach Einladungslink: Passwort → Profil (Name) → Abschluss;
+  keine Rollenwahl durch den Benutzer.
+- HashRouter-Konflikt: Auth-Tokens weiter über `auth-callback.html`.
+- Admin-Einladung: Edge Function `users` nutzt `inviteUserByEmail` +
+  `set_sales_role_by_admin` + Audit `user.invited`. Redirect über `SITE_URL`
+  bzw. Fallback `https://nora.ergart.de/auth-callback.html`.
+- Kein Service-Role im Frontend/Vercel/`VITE_*`. Remote-Deploy und
+  Production-Migration nicht Teil dieses Commits.
+
 ## 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen
 
 ### Kontext

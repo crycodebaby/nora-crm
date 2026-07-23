@@ -124,10 +124,11 @@ export const getAuthProvider = (): AuthProvider => {
       ) {
         return;
       }
-      // Users are on the sign-up page, nothing to do
+      // Users are on invite activation / legacy sign-up redirect — allow through
       if (
         window.location.pathname === "/sign-up" ||
-        window.location.hash.includes("#/sign-up")
+        window.location.hash.includes("#/sign-up") ||
+        window.location.hash.includes("mode=einladung")
       ) {
         return;
       }
@@ -137,7 +138,8 @@ export const getAuthProvider = (): AuthProvider => {
       if (!isInitialized) {
         await getSupabaseClient().auth.signOut();
         throw {
-          redirectTo: "/sign-up",
+          // First admin is created in Supabase Dashboard — no public signup.
+          redirectTo: "/login?mode=anmelden",
           message: false,
         };
       }

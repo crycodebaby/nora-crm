@@ -104,31 +104,13 @@ const getDataProviderWithCustomMethods = () => {
       return baseDataProvider.getOne(resource, params);
     },
 
-    async signUp({ email, password, first_name, last_name }: SignUpData) {
-      const response = await getSupabaseClient().auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            first_name,
-            last_name,
-          },
-        },
-      });
-
-      if (!response.data?.user || response.error) {
-        console.error("signUp.error", response.error);
-        throw new Error(response?.error?.message || "Failed to create account");
-      }
-
-      // Update the is initialized cache
-      (getIsInitialized as any)._is_initialized_cache = true;
-
-      return {
-        id: response.data.user.id,
-        email,
-        password,
-      };
+    async signUp(
+      _data: SignUpData,
+    ): Promise<{ id: string; email: string; password: string }> {
+      // Public self-registration is disabled. Users are invited by admins only.
+      throw new Error(
+        "Öffentliche Registrierung ist deaktiviert. Bitte nutzen Sie Ihre Einladung.",
+      );
     },
     async salesCreate(body: SalesFormData) {
       const { data, error } = await getSupabaseClient().functions.invoke<{

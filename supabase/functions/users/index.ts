@@ -21,6 +21,39 @@ function resolveRole(
   return administrator ? "admin" : "viewer";
 }
 
+function resolveInviteRedirectTo(): string {
+  const siteUrl =
+    Deno.env.get("SITE_URL") ??
+    Deno.env.get("PUBLIC_SITE_URL") ??
+    "https://nora.ergart.de";
+  return `${siteUrl.replace(/\/$/, "")}/auth-callback.html`;
+}
+
+async function writeUserInviteAudit(args: {
+  actorSaleId: number;
+  inviteeEmail: string;
+  inviteeSaleId: number;
+  role: NoraRole;
+}) {
+  try {
+    await supabaseAdmin.rpc("insert_audit_event", {
+      p_event_type: "user.invited",
+      p_entity_type: "sales",
+      p_entity_id: crypto.randomUUID(),
+      p_metadata: {
+        actor_sale_id: args.actorSaleId,
+        invitee_sale_id: args.inviteeSaleId,
+        invitee_email: args.inviteeEmail,
+        role: args.role,
+      },
+    });
+  } catch (error) {
+    // Audit must not block invite delivery; log without secrets.
+    console.error("user.invite.audit_failed");
+    console.error(error);
+  }
+}
+
 async function setSaleRoleAndDisabled(
   saleId: number,
   role: NoraRole,
@@ -50,37 +83,6 @@ async function setSaleRoleAndDisabled(
   return sales;
 }
 
-async function createSale(
-  user_id: string,
-  data: {
-    email: string;
-    password: string;
-    first_name: string;
-    last_name: string;
-    disabled: boolean;
-    role: NoraRole;
-  },
-) {
-  const { data: sales, error: salesError } = await supabaseAdmin
-    .from("sales")
-    .insert({
-      email: data.email,
-      first_name: data.first_name,
-      last_name: data.last_name,
-      disabled: data.disabled,
-      role: data.role,
-      administrator: data.role === "admin",
-      user_id,
-    })
-    .select("*");
-
-  if (!sales?.length || salesError) {
-    console.error("Error creating user:", salesError);
-    throw salesError ?? new Error("Failed to create sale");
-  }
-  return sales.at(0);
-}
-
 async function updateSaleAvatar(user_id: string, avatar: string) {
   const { data: sales, error: salesError } = await supabaseAdmin
     .from("sales")
@@ -95,114 +97,116 @@ async function updateSaleAvatar(user_id: string, avatar: string) {
   return sales.at(0);
 }
 
-async function inviteUser(req: Request, currentUserSale: any) {
-  const {
+async function loadSaleByUserId(userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("sales")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+  return data;
+}
+
+async function resolveUserIdByEmail(email: string) {
+  const { data, error } = await supabaseAdmin.rpc("get_user_id_by_email", {
     email,
-    password,
-    first_name,
-    last_name,
-    disabled,
-    administrator,
-    role,
-  } = await req.json();
+  });
+  if (error || !data?.[0]?.id) {
+    return null;
+  }
+  return data[0].id as string;
+}
+
+/**
+ * Admin-only invite: inviteUserByEmail creates the auth user (no client password),
+ * handle_new_user creates the sales row, then role is set via secure RPC.
+ * Never accepts a caller-chosen password for invites.
+ */
+async function inviteUser(req: Request, currentUserSale: any) {
+  const { email, first_name, last_name, disabled, administrator, role } =
+    await req.json();
 
   if (!isAdminSale(currentUserSale)) {
     return createErrorResponse(401, "Not Authorized");
   }
 
   const resolvedRole = resolveRole(role, administrator);
+  const redirectTo = resolveInviteRedirectTo();
 
-  const { data, error: userError } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    user_metadata: { first_name, last_name },
-  });
-
-  let user = data?.user;
-
-  if (!user && userError?.code === "email_exists") {
-    const { data, error } = await supabaseAdmin.rpc("get_user_id_by_email", {
-      email,
+  const { data: inviteData, error: inviteError } =
+    await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      data: { first_name, last_name },
+      redirectTo,
     });
 
-    if (!data || error) {
-      console.error(
-        `Error inviting user: error=${error ?? "could not fetch users for email"}`,
-      );
-      return createErrorResponse(500, "Internal Server Error");
-    }
+  let userId = inviteData?.user?.id as string | undefined;
 
-    user = data[0];
-    try {
-      const { data: existingSale, error: salesError } = await supabaseAdmin
-        .from("sales")
-        .select("*")
-        .eq("user_id", user.id);
-      if (salesError) {
-        return createErrorResponse(salesError.status, salesError.message, {
-          code: salesError.code,
-        });
-      }
-      if (existingSale.length > 0) {
-        return createErrorResponse(
-          400,
-          "A sales for this email already exists",
-        );
-      }
+  if (inviteError) {
+    const code = (inviteError as { code?: string }).code;
+    const already =
+      code === "email_exists" ||
+      /already|exists/i.test(inviteError.message ?? "");
 
-      const sale = await createSale(user.id, {
-        email,
-        password,
-        first_name,
-        last_name,
-        disabled: disabled ?? false,
-        role: resolvedRole,
-      });
-
-      return new Response(
-        JSON.stringify({
-          data: sale,
-        }),
-        {
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        },
-      );
-    } catch (error) {
+    if (!already) {
+      console.error("Error inviting user");
       return createErrorResponse(
-        (error as any).status ?? 500,
-        (error as Error).message,
-        {
-          code: (error as any).code,
-        },
+        (inviteError as { status?: number }).status ?? 500,
+        "Invitation failed",
       );
     }
-  } else {
-    if (userError) {
-      console.error(`Error inviting user: user_error=${userError}`);
-      return createErrorResponse(userError.status, userError.message, {
-        code: userError.code,
-      });
-    }
-    if (!data?.user) {
-      console.error("Error inviting user: undefined user");
+
+    const existingId = await resolveUserIdByEmail(email);
+    if (!existingId) {
       return createErrorResponse(500, "Internal Server Error");
     }
-    const { error: emailError } =
-      await supabaseAdmin.auth.admin.inviteUserByEmail(email);
+    userId = existingId;
 
-    if (emailError) {
-      console.error(`Error inviting user, email_error=${emailError}`);
+    const existingSale = await loadSaleByUserId(existingId);
+    if (existingSale) {
+      return createErrorResponse(400, "A sales for this email already exists");
+    }
+
+    // Auth user exists without sales profile — create profile then set role.
+    const { error: insertError } = await supabaseAdmin.from("sales").insert({
+      email,
+      first_name,
+      last_name,
+      disabled: disabled ?? false,
+      role: resolvedRole,
+      administrator: resolvedRole === "admin",
+      user_id: existingId,
+    });
+    if (insertError) {
+      console.error("Error creating sale for existing auth user");
+      return createErrorResponse(500, "Internal Server Error");
+    }
+
+    // Re-send invite mail so the user can set a password.
+    const { error: resendError } =
+      await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        data: { first_name, last_name },
+        redirectTo,
+      });
+    if (resendError) {
+      console.error("Error resending invitation mail");
       return createErrorResponse(500, "Failed to send invitation mail");
     }
   }
 
-  try {
-    const { data: saleRow } = await supabaseAdmin
-      .from("sales")
-      .select("id")
-      .eq("user_id", user.id)
-      .single();
+  if (!userId) {
+    return createErrorResponse(500, "Internal Server Error");
+  }
 
+  try {
+    // Trigger may be briefly delayed after inviteUserByEmail.
+    let saleRow = await loadSaleByUserId(userId);
+    if (!saleRow) {
+      await new Promise((r) => setTimeout(r, 250));
+      saleRow = await loadSaleByUserId(userId);
+    }
     if (!saleRow) {
       return createErrorResponse(500, "Sales profile missing after invite");
     }
@@ -212,6 +216,13 @@ async function inviteUser(req: Request, currentUserSale: any) {
       resolvedRole,
       disabled ?? false,
     );
+
+    await writeUserInviteAudit({
+      actorSaleId: currentUserSale.id,
+      inviteeEmail: email,
+      inviteeSaleId: sale.id,
+      role: resolvedRole,
+    });
 
     return new Response(
       JSON.stringify({

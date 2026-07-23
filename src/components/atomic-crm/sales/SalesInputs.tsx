@@ -11,6 +11,7 @@ const roleChoices = [
   { id: "viewer", name: "Lesen" },
 ];
 
+/** Admin invite / edit fields. Role is never chosen by the invitee. */
 export function SalesInputs() {
   const { identity } = useGetIdentity();
   const record = useRecordContext<Sale>();
@@ -18,20 +19,41 @@ export function SalesInputs() {
 
   return (
     <div className="space-y-4 w-full">
-      <TextInput source="first_name" validate={required()} helperText={false} />
-      <TextInput source="last_name" validate={required()} helperText={false} />
+      <TextInput
+        source="first_name"
+        label="Vorname"
+        validate={required()}
+        helperText={false}
+      />
+      <TextInput
+        source="last_name"
+        label="Nachname"
+        validate={required()}
+        helperText={false}
+      />
       <TextInput
         source="email"
+        label="Geschäftliche E-Mail-Adresse"
         validate={[required(), email()]}
         helperText={false}
       />
       <SelectInput
         source="role"
+        label="Nora-Rolle"
         choices={roleChoices}
+        readOnly={isSelf}
+        helperText={
+          isSelf
+            ? "Die eigene Rolle kann nicht geändert werden."
+            : "Wird serverseitig gesetzt. Eingeladene Personen können die Rolle nicht selbst wählen."
+        }
+      />
+      <BooleanInput
+        source="disabled"
+        label="Zugang deaktiviert"
         readOnly={isSelf}
         helperText={false}
       />
-      <BooleanInput source="disabled" readOnly={isSelf} helperText={false} />
     </div>
   );
 }

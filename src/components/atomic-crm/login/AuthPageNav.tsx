@@ -3,21 +3,19 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 
 type AuthPageNavProps = {
-  variant: "login" | "signup";
-  /** Hide sign-up prompt when email/password auth is disabled */
+  variant: "login" | "invite";
+  /** Legacy prop — public registration is disabled; ignored. */
   showSignUp?: boolean;
-  /** Login keeps «Zur Startseite» above the form; sign-up shows it here */
   showBackToStart?: boolean;
 };
 
 /**
- * Secondary navigation on public auth screens (login / first-user sign-up).
- * Primary form submit stays Nora-red; these links are outline/ghost.
+ * Secondary navigation on public auth screens.
+ * Public self-registration is not offered.
  */
 export const AuthPageNav = ({
   variant,
-  showSignUp = true,
-  showBackToStart = variant === "signup",
+  showBackToStart = variant === "invite",
 }: AuthPageNavProps) => {
   const translate = useTranslate();
 
@@ -28,36 +26,32 @@ export const AuthPageNav = ({
         _: "Authentication navigation",
       })}
     >
-      {variant === "login" && showSignUp ? (
-        <>
-          <p className="text-sm text-center text-muted-foreground">
-            {translate("crm.auth.nav.no_account_yet")}
-          </p>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="nora-secondary-action nora-touch-target w-full border-border"
-          >
-            <Link to="/sign-up">{translate("crm.auth.nav.sign_up")}</Link>
-          </Button>
-        </>
+      {variant === "login" ? (
+        <Button
+          asChild
+          variant="outline"
+          size="lg"
+          className="nora-secondary-action nora-touch-target w-full border-border"
+        >
+          <Link to="/login?mode=einladung">
+            {translate("crm.auth.nav.activate_invite", {
+              _: "Einladung aktivieren",
+            })}
+          </Link>
+        </Button>
       ) : null}
 
-      {variant === "signup" ? (
-        <>
-          <p className="text-sm text-center text-muted-foreground">
-            {translate("crm.auth.nav.already_have_account")}
-          </p>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="nora-secondary-action nora-touch-target w-full border-border"
-          >
-            <Link to="/login">{translate("crm.auth.nav.sign_in")}</Link>
-          </Button>
-        </>
+      {variant === "invite" ? (
+        <Button
+          asChild
+          variant="outline"
+          size="lg"
+          className="nora-secondary-action nora-touch-target w-full border-border"
+        >
+          <Link to="/login?mode=anmelden">
+            {translate("crm.auth.nav.sign_in", { _: "Anmelden" })}
+          </Link>
+        </Button>
       ) : null}
 
       {showBackToStart ? (

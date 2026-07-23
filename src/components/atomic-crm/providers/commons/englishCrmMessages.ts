@@ -451,10 +451,17 @@ export const englishCrmMessages = {
       },
     },
     landing: {
-      subline: "Customer and deal management for Ergart Gruppe",
+      subline: "Employee access for Ergart Gruppe",
       sign_in: "Sign in",
-      sign_up: "Register",
-      back: "Back to start page",
+      sign_up: "Activate invitation",
+      back: "Back to sign in",
+    },
+    employee_access: {
+      title: "Employee access for Ergart Gruppe",
+      subtitle: "Secure access to digital workspaces",
+      technical_by: "Technical development",
+      invite_cta: "Received an invitation?",
+      invite_only: "Access by invitation only",
     },
     common: {
       activity: "Activity",

@@ -22,7 +22,7 @@ export function SalesCreate() {
     onSuccess: () => {
       notify("resources.sales.create.success", {
         messageArgs: {
-          _: "User created. They will soon receive an email to set their password.",
+          _: "Einladung gesendet. Die Person erhält eine E-Mail zur Aktivierung.",
         },
       });
       redirect("/sales");
@@ -49,7 +49,7 @@ export function SalesCreate() {
         <CardHeader>
           <CardTitle>
             {translate("resources.sales.create.title", {
-              _: "Create a new user",
+              _: "Mitarbeiter einladen",
             })}
           </CardTitle>
         </CardHeader>

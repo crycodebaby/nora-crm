@@ -1,15 +1,28 @@
 <!doctype html>
-<html lang="en" translate="no" class="notranslate">
+<html lang="de" translate="no" class="notranslate">
     <head>
         <meta charset="utf-8" />
         <meta
             name="viewport"
             content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no"
         />
-        <meta name="theme-color" content="#000000" />
+        <meta name="theme-color" content="#2c2c2c" />
         <meta name="google" content="notranslate" />
-        <link rel="manifest" href="./manifest.json" />
+        <meta name="apple-mobile-web-app-title" content="Nora CRM" />
+        <link
+            rel="icon"
+            type="image/png"
+            href="./favicon-96x96.png"
+            sizes="96x96"
+        />
+        <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
         <link rel="shortcut icon" href="./favicon.ico" />
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="./apple-touch-icon.png"
+        />
+        <link rel="manifest" href="./site.webmanifest" />
         <title>Nora CRM</title>
         <style>
             body {
@@ -28,10 +41,8 @@
                 bottom: 0;
                 left: 0;
                 right: 0;
-                background-color: #fafafa;
+                background-color: #f7f6f4;
             }
-
-            /* CSS Spinner from https://projects.lukehaas.me/css-loaders/ */
 
             .loader,
             .loader:before,
@@ -40,7 +51,7 @@
             }
 
             .loader {
-                color: #283593;
+                color: #2c2c2c;
                 font-size: 11px;
                 text-indent: -99999em;
                 margin: 55px auto;
@@ -62,7 +73,7 @@
             .loader:before {
                 width: 5.2em;
                 height: 10.2em;
-                background: #fafafa;
+                background: #f7f6f4;
                 border-radius: 10.2em 0 0 10.2em;
                 top: -0.1em;
                 left: -0.1em;
@@ -75,7 +86,7 @@
             .loader:after {
                 width: 5.2em;
                 height: 10.2em;
-                background: #fafafa;
+                background: #f7f6f4;
                 border-radius: 0 10.2em 10.2em 0;
                 top: -0.1em;
                 left: 5.1em;
@@ -83,6 +94,14 @@
                 transform-origin: 0px 5.1em;
                 -webkit-animation: load2 2s infinite ease;
                 animation: load2 2s infinite ease;
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+                .loader:before,
+                .loader:after {
+                    animation: none;
+                    -webkit-animation: none;
+                }
             }
 
             @-webkit-keyframes load2 {
@@ -130,12 +149,11 @@
         };
 
         function interceptAuthCallback() {
-                const hash = window.location.hash;
                 const {access_token, refresh_token, type} = getUrlParams();
-                window.location.href = `./#/auth-callback?access_token=${access_token}&refresh_token=${refresh_token}&type=${type}`;
+                // Move Supabase hash tokens into HashRouter query params.
+                window.location.href = `./#/auth-callback?access_token=${encodeURIComponent(access_token || '')}&refresh_token=${encodeURIComponent(refresh_token || '')}&type=${encodeURIComponent(type || '')}`;
         }
-    
-        // Call the function to intercept the auth callback
+
         interceptAuthCallback();
     </script>
 </html>
