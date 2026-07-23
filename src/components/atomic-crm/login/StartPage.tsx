@@ -133,14 +133,14 @@ const SignInPanel = ({
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center lg:text-left">
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <h2 className="text-2xl font-semibold tracking-tight text-[#111111]">
           {translate("ra.auth.sign_in", { _: "Anmelden" })}
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-[#3a3a3c] leading-relaxed">
           Melden Sie sich mit Ihrer geschäftlichen E-Mail-Adresse an.
         </p>
         {isNoraDemoMode ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-[#3a3a3c] leading-relaxed">
             {translate("crm.demo.login_hint")}
           </p>
         ) : null}
@@ -188,14 +188,14 @@ const SignInPanel = ({
         >
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline text-left nora-touch-target"
+            className="text-[#3a3a3c] hover:text-[#111111] underline-offset-4 hover:underline text-left nora-touch-target"
             onClick={() => onSwitch("passwort")}
           >
             Passwort vergessen
           </button>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline text-left nora-touch-target"
+            className="text-[#3a3a3c] hover:text-[#111111] underline-offset-4 hover:underline text-left nora-touch-target"
             onClick={() => onSwitch("einladung")}
           >
             Einladung erhalten?
@@ -243,10 +243,10 @@ const ForgotPasswordPanel = ({
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center lg:text-left">
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <h2 className="text-2xl font-semibold tracking-tight text-[#111111]">
           Passwort vergessen
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-[#3a3a3c] leading-relaxed">
           Geben Sie Ihre geschäftliche E-Mail-Adresse ein. Falls ein Zugang
           existiert, senden wir Ihnen einen Link zum Zurücksetzen.
         </p>
@@ -254,7 +254,7 @@ const ForgotPasswordPanel = ({
 
       {done ? (
         <div className="space-y-4" role="status">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-[#3a3a3c] leading-relaxed">
             Wenn ein Zugang zu dieser Adresse existiert, erhalten Sie in Kürze
             eine E-Mail.
           </p>
@@ -351,10 +351,10 @@ const InviteActivationPanel = ({
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center lg:text-left">
-        <h2 className="text-2xl font-semibold tracking-tight">
+        <h2 className="text-2xl font-semibold tracking-tight text-[#111111]">
           Einladung aktivieren
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-[#3a3a3c] leading-relaxed">
           Der sicherste Weg ist der Link in Ihrer Einladungs-E-Mail. Optional
           können Sie E-Mail-Adresse und Einmalcode aus der Einladung eingeben.
         </p>
@@ -384,14 +384,14 @@ const InviteActivationPanel = ({
         </Button>
       </Form>
 
-      <div className="space-y-2 text-sm text-muted-foreground">
+      <div className="space-y-2 text-sm text-[#3a3a3c]">
         <p>
           Keinen Code? Öffnen Sie den Link in Ihrer Einladungs-E-Mail – er führt
           Sie direkt zur Passwortvergabe.
         </p>
         <button
           type="button"
-          className="text-foreground underline-offset-4 hover:underline nora-touch-target"
+          className="text-[#111111] underline-offset-4 hover:underline nora-touch-target"
           onClick={() => onSwitch("anmelden")}
         >
           Zurück zur Anmeldung
