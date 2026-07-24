@@ -1063,6 +1063,24 @@ fälschlich Hotboard und ließ First-Run- sowie Bulk-Tag-Tests scheitern.
 - Der E2E-Build deaktiviert den PWA-Service-Worker; Produktion bleibt
   unverändert.
 
+## 2026-07-24 – Identity-Cache nach Profilnamensänderung
+
+### Kontext
+
+Nach erfolgreichem Speichern von Vor-/Nachname in `public.sales` zeigte das
+Benutzermenü weiterhin „Pending Pending“, weil `getIdentity()` den Local-
+Storage-Cache `RaStore.auth.current_sale` bevorzugte und `refetchIdentity()`
+diesen nicht invalidierte.
+
+### Entscheidung
+
+- Cache-API im Auth-Provider: `clearCurrentSaleCache`, `setCurrentSaleCache`,
+  `syncCurrentSaleCacheIfSelf`.
+- Nach Namens-/Avatar-/Rollenänderungen am eigenen Profil: zuerst Cache aus
+  DB-Rückgabe setzen, danach `refetchIdentity()`.
+- Kein Löschen von Session-Tokens oder anderen RaStore-Keys.
+- Admin-Edits fremder Benutzer aktualisieren den Identity-Cache nicht.
+
 ## 2026-07-23 – Mitarbeiterzugang: öffentliches Redesign und Einladung
 
 ### Kontext

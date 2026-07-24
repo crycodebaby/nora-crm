@@ -4,6 +4,7 @@ import {
   useCanAccess,
   useDataProvider,
   useEditController,
+  useGetIdentity,
   useNotify,
   useRecordContext,
   useRedirect,
@@ -16,6 +17,7 @@ import { SaveButton } from "@/components/admin/form";
 import { Card, CardContent } from "@/components/ui/card";
 
 import type { CrmDataProvider } from "../providers/types";
+import { syncCurrentSaleCacheIfSelf } from "../providers/supabase/authProvider";
 import type { Sale, SalesFormData } from "../types";
 import { SalesInputs } from "./SalesInputs";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
@@ -55,9 +57,10 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
   const notify = useNotify();
   const redirect = useRedirect();
   const translate = useTranslate();
+  const { identity, refetch: refetchIdentity } = useGetIdentity();
 
   const { mutate } = useMutation({
-    mutationKey: ["signup"],
+    mutationKey: ["sales-edit"],
     mutationFn: async (data: SalesFormData) => {
       if (!record) {
         throw new Error(
@@ -68,7 +71,11 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
       }
       return dataProvider.salesUpdate(record.id, data);
     },
-    onSuccess: () => {
+    onSuccess: (sale) => {
+      syncCurrentSaleCacheIfSelf(sale, identity?.id);
+      if (identity && String(sale.id) === String(identity.id)) {
+        void refetchIdentity();
+      }
       redirect("/sales");
       notify("resources.sales.edit.success", {
         messageArgs: {

@@ -34,6 +34,10 @@ import {
 import ImageEditorField from "../misc/ImageEditorField";
 import { normalizePersonName } from "../misc/personName";
 import type { CrmDataProvider } from "../providers/types";
+import {
+  setCurrentSaleCache,
+  syncCurrentSaleCacheIfSelf,
+} from "../providers/supabase/authProvider";
 import { getSupabaseClient } from "../providers/supabase/supabase";
 import type { Sale, SalesFormData } from "../types";
 
@@ -76,7 +80,9 @@ export const ProfilePage = () => {
           .from("sales")
           .update({ first_name, last_name })
           .eq("id", identity.id)
-          .select("*")
+          .select(
+            "id, first_name, last_name, avatar, administrator, role, disabled",
+          )
           .single();
         if (saleError || !sale) throw saleError ?? new Error("Update failed");
         return sale as Sale;
@@ -92,9 +98,10 @@ export const ProfilePage = () => {
         disabled: data.disabled,
       });
     },
-    onSuccess: () => {
-      refetchIdentity();
-      refetchUser();
+    onSuccess: (sale) => {
+      setCurrentSaleCache(sale);
+      void refetchIdentity();
+      void refetchUser();
       setEditMode(false);
       notify("crm.profile.updated", {
         messageArgs: {
@@ -176,7 +183,7 @@ const ProfileForm = ({
   });
 
   const { mutate: mutateSale } = useMutation({
-    mutationKey: ["signup"],
+    mutationKey: ["profile-avatar-update"],
     mutationFn: async (data: SalesFormData) => {
       if (!record) {
         throw new Error(
@@ -187,8 +194,9 @@ const ProfileForm = ({
       }
       return dataProvider.salesUpdate(record.id, data);
     },
-    onSuccess: () => {
-      refetch();
+    onSuccess: (sale) => {
+      syncCurrentSaleCacheIfSelf(sale, identity?.id);
+      void refetch();
       notify("crm.profile.updated", {
         messageArgs: {
           _: "Your profile has been updated",

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
 import { EmployeeAccessShell } from "@/components/atomic-crm/login/EmployeeAccessShell";
 import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
+import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
 
 interface PasswordFormData {
@@ -226,11 +227,18 @@ export const SetPasswordPage = () => {
       const userId = sessionData.user?.id;
       if (!userId) throw new Error("missing user");
 
-      const { error: saleError } = await client
+      const { data: sale, error: saleError } = await client
         .from("sales")
         .update({ first_name, last_name })
-        .eq("user_id", userId);
-      if (saleError) throw saleError;
+        .eq("user_id", userId)
+        .select(
+          "id, first_name, last_name, avatar, administrator, role, disabled",
+        )
+        .single();
+      if (saleError || !sale) throw saleError ?? new Error("missing sale");
+
+      // Keep header identity in sync once the user enters the app.
+      setCurrentSaleCache(sale);
 
       // Role is never writable from the client — omit intentionally.
       await client.auth.refreshSession();

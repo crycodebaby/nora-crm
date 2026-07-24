@@ -4,6 +4,68 @@ import { supabaseAuthProvider } from "ra-supabase-core";
 import { canAccess, resolveNoraRole } from "../commons/canAccess";
 import { getSupabaseClient } from "./supabase";
 
+/** Local-storage key for the signed-in sales profile used by getIdentity(). */
+export const CURRENT_SALE_CACHE_KEY = "RaStore.auth.current_sale";
+
+const IS_INITIALIZED_CACHE_KEY = "RaStore.auth.is_initialized";
+
+/** Shape stored for identity / canAccess (subset of public.sales). */
+export type CurrentSaleCache = {
+  id: number | string;
+  first_name: string;
+  last_name: string;
+  avatar?: { src?: string } | null;
+  administrator?: boolean;
+  role?: string;
+  disabled?: boolean;
+};
+
+function getLocalStorage(): Storage | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    return window.localStorage;
+  }
+  return null;
+}
+
+/** Clears only the cached sales identity — not session tokens or other RaStore keys. */
+export function clearCurrentSaleCache(): void {
+  getLocalStorage()?.removeItem(CURRENT_SALE_CACHE_KEY);
+}
+
+/**
+ * Writes the identity cache from a DB-backed sales row.
+ * Callers should pass the updated row returned from PostgREST / edge functions.
+ */
+export function setCurrentSaleCache(sale: CurrentSaleCache): void {
+  const storage = getLocalStorage();
+  if (!storage) return;
+  storage.setItem(
+    CURRENT_SALE_CACHE_KEY,
+    JSON.stringify({
+      id: sale.id,
+      first_name: sale.first_name,
+      last_name: sale.last_name,
+      avatar: sale.avatar ?? null,
+      administrator: sale.administrator,
+      role: sale.role,
+      disabled: sale.disabled,
+    }),
+  );
+}
+
+/**
+ * Updates the identity cache only when the changed sale is the signed-in user.
+ * Prevents admin edits of other users from overwriting the header identity.
+ */
+export function syncCurrentSaleCacheIfSelf(
+  sale: CurrentSaleCache,
+  currentSaleId: number | string | undefined | null,
+): void {
+  if (currentSaleId == null) return;
+  if (String(sale.id) !== String(currentSaleId)) return;
+  setCurrentSaleCache(sale);
+}
+
 const getBaseAuthProvider = () =>
   supabaseAuthProvider(getSupabaseClient(), {
     getIdentity: async () => {
@@ -21,18 +83,6 @@ const getBaseAuthProvider = () =>
       };
     },
   });
-
-// To speed up checks, we cache the initialization state
-// and the current sale in the local storage. They are cleared on logout.
-const IS_INITIALIZED_CACHE_KEY = "RaStore.auth.is_initialized";
-const CURRENT_SALE_CACHE_KEY = "RaStore.auth.current_sale";
-
-function getLocalStorage(): Storage | null {
-  if (typeof window !== "undefined" && window.localStorage) {
-    return window.localStorage;
-  }
-  return null;
-}
 
 export async function getIsInitialized() {
   const storage = getLocalStorage();
@@ -79,14 +129,14 @@ const getSale = async () => {
     return undefined;
   }
 
-  storage?.setItem(CURRENT_SALE_CACHE_KEY, JSON.stringify(dataSale));
+  setCurrentSaleCache(dataSale);
   return dataSale;
 };
 
-function clearCache() {
+function clearAuthBootstrapCaches() {
   const storage = getLocalStorage();
   storage?.removeItem(IS_INITIALIZED_CACHE_KEY);
-  storage?.removeItem(CURRENT_SALE_CACHE_KEY);
+  clearCurrentSaleCache();
 }
 
 export const getAuthProvider = (): AuthProvider => {
@@ -103,10 +153,12 @@ export const getAuthProvider = (): AuthProvider => {
         }
         return;
       }
+      // Drop stale identity before a new session is established.
+      clearCurrentSaleCache();
       return baseAuthProvider.login(params);
     },
     logout: async (params) => {
-      clearCache();
+      clearAuthBootstrapCaches();
       return baseAuthProvider.logout(params);
     },
     checkAuth: async (params) => {
@@ -147,7 +199,7 @@ export const getAuthProvider = (): AuthProvider => {
       const sale = await getSale();
       if (sale == null || sale.disabled) {
         await getSupabaseClient().auth.signOut();
-        clearCache();
+        clearAuthBootstrapCaches();
         throw {
           redirectTo: "/login",
           message: false,

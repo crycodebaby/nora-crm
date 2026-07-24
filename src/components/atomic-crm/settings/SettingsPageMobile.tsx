@@ -46,6 +46,10 @@ import MobileHeader from "../layout/MobileHeader";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import ImageEditorField from "../misc/ImageEditorField";
 import type { CrmDataProvider } from "../providers/types";
+import {
+  setCurrentSaleCache,
+  syncCurrentSaleCacheIfSelf,
+} from "../providers/supabase/authProvider";
 import { getSupabaseClient } from "../providers/supabase/supabase";
 import type { SalesFormData } from "../types";
 
@@ -179,13 +183,18 @@ const ProfileSection = () => {
           });
           if (metaError) throw metaError;
 
-          const { error: saleError } = await client
+          const { data: sale, error: saleError } = await client
             .from("sales")
             .update({ first_name, last_name })
-            .eq("id", identity.id);
-          if (saleError) throw saleError;
+            .eq("id", identity.id)
+            .select(
+              "id, first_name, last_name, avatar, administrator, role, disabled",
+            )
+            .single();
+          if (saleError || !sale) throw saleError ?? new Error("Update failed");
+          setCurrentSaleCache(sale);
         } else {
-          await dataProvider.salesUpdate(identity.id, {
+          const sale = await dataProvider.salesUpdate(identity.id, {
             first_name: data.first_name,
             last_name: data.last_name,
             email: data.email,
@@ -194,9 +203,10 @@ const ProfileSection = () => {
             disabled: data.disabled,
             [field]: value,
           } as SalesFormData);
+          syncCurrentSaleCacheIfSelf(sale, identity.id);
         }
-        refetchIdentity();
-        refetchUser();
+        await refetchIdentity();
+        await refetchUser();
         notify("crm.profile.updated", {
           messageArgs: { _: "Your profile has been updated" },
         });
@@ -221,11 +231,12 @@ const ProfileSection = () => {
 
   const handleAvatarUpdate = useCallback(
     async (values: SalesFormData) => {
-      if (!data) return;
+      if (!data || !identity) return;
       try {
-        await dataProvider.salesUpdate(data.id, values);
-        refetchIdentity();
-        refetchUser();
+        const sale = await dataProvider.salesUpdate(data.id, values);
+        syncCurrentSaleCacheIfSelf(sale, identity.id);
+        await refetchIdentity();
+        await refetchUser();
         notify("crm.profile.updated", {
           messageArgs: { _: "Your profile has been updated" },
         });
@@ -236,7 +247,7 @@ const ProfileSection = () => {
         });
       }
     },
-    [data, dataProvider, refetchIdentity, refetchUser, notify],
+    [data, identity, dataProvider, refetchIdentity, refetchUser, notify],
   );
 
   if (!identity || !data) return null;
