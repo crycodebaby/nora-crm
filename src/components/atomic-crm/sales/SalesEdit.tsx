@@ -69,7 +69,27 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
           }),
         );
       }
-      return dataProvider.salesUpdate(record.id, data);
+
+      // Send only changed fields — pure role edits must not rewrite names/email.
+      const patch: Partial<Omit<SalesFormData, "password">> = {};
+      if (data.first_name !== record.first_name) {
+        patch.first_name = data.first_name;
+      }
+      if (data.last_name !== record.last_name) {
+        patch.last_name = data.last_name;
+      }
+      if (data.email !== record.email) {
+        patch.email = data.email;
+      }
+      if (data.role !== record.role) {
+        patch.role = data.role;
+      }
+      if (data.disabled !== record.disabled) {
+        patch.disabled = data.disabled;
+      }
+      // Avatar is not part of SalesInputs; omit to avoid accidental clears.
+
+      return dataProvider.salesUpdate(record.id, patch);
     },
     onSuccess: (sale) => {
       syncCurrentSaleCacheIfSelf(sale, identity?.id);
@@ -79,15 +99,35 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
       redirect("/sales");
       notify("resources.sales.edit.success", {
         messageArgs: {
-          _: "User updated successfully",
+          _: "Benutzer erfolgreich aktualisiert",
         },
       });
     },
-    onError: () => {
+    onError: (error) => {
+      const message =
+        error instanceof Error ? error.message : String(error ?? "");
+      if (message === "role_update_forbidden") {
+        notify("resources.sales.edit.role_forbidden", {
+          type: "error",
+          messageArgs: {
+            _: "Sie sind nicht berechtigt, Benutzerrollen zu ändern.",
+          },
+        });
+        return;
+      }
+      if (message === "invalid_role" || message === "invalid_payload") {
+        notify("resources.sales.edit.role_failed", {
+          type: "error",
+          messageArgs: {
+            _: "Die Benutzerrolle konnte nicht geändert werden.",
+          },
+        });
+        return;
+      }
       notify("resources.sales.edit.error", {
         type: "error",
         messageArgs: {
-          _: "An error occurred. Please try again.",
+          _: "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
         },
       });
     },

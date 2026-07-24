@@ -358,6 +358,8 @@ export const germanCrmMessages = {
       },
       edit: {
         error: "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+        role_forbidden: "Sie sind nicht berechtigt, Benutzerrollen zu ändern.",
+        role_failed: "Die Benutzerrolle konnte nicht geändert werden.",
         record_not_found: "Datensatz nicht gefunden",
         success: "Benutzer erfolgreich aktualisiert",
         title: "%{name} bearbeiten",

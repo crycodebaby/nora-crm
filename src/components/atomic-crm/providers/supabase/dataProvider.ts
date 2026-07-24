@@ -160,14 +160,38 @@ const getDataProviderWithCustomMethods = () => {
       const { data: updatedData, error } =
         await getSupabaseClient().functions.invoke<{
           data: Sale;
+          error?: string;
+          message?: string;
         }>("users", {
           method: "PATCH",
           body,
         });
 
-      if (!updatedData || error) {
-        console.error("salesUpdate.error", error);
-        throw new Error("Failed to update account manager");
+      if (error || !updatedData?.data) {
+        const details = await (async () => {
+          try {
+            return (await error?.context?.json()) ?? {};
+          } catch {
+            return {};
+          }
+        })();
+        const code =
+          details?.error ??
+          details?.code ??
+          (error as { context?: { status?: number } })?.context?.status;
+        if (
+          code === "role_update_forbidden" ||
+          code === 403 ||
+          details?.status === 403
+        ) {
+          throw new Error("role_update_forbidden");
+        }
+        console.error("salesUpdate.error");
+        throw new Error(
+          typeof details?.error === "string"
+            ? details.error
+            : "sales_update_failed",
+        );
       }
 
       return updatedData.data;

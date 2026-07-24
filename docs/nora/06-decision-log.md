@@ -1063,6 +1063,32 @@ fälschlich Hotboard und ließ First-Run- sowie Bulk-Tag-Tests scheitern.
 - Der E2E-Build deaktiviert den PWA-Service-Worker; Produktion bleibt
   unverändert.
 
+## 2026-07-24 – Rollen-RPC: service_role Claims-Erkennung
+
+### Kontext
+
+Admin-Rollenwechsel (viewer → admin) schlug fehl mit SQLSTATE 42501
+`forbidden` in `set_sales_role_by_admin`, obwohl die Edge Function den
+Service-Role-Client nutzte. Auth-Admin-Updates liefen vorher noch mit 200.
+
+### Root Cause
+
+`set_sales_role_by_admin` prüfte nur `request.jwt.claim.role`. Aktuelle
+PostgREST-/supabase-js-Aufrufe setzen die Rolle unter
+`request.jwt.claims` (JSON). Die Legacy-GUC blieb leer → Fallback auf
+`nora_private.is_admin()` ohne sales-Profil der Service-Role → forbidden.
+
+Zusätzlich führte PATCH immer `updateUserById` aus, auch bei reiner
+Rollenänderung (Teilaktualisierungsrisiko).
+
+### Entscheidung
+
+- Neue additive Migration: `nora_private.safe_auth_role()` + RPC-Umstellung.
+- Edge Function: feldexplizite PATCH-Planung; role-only ohne Auth-Admin.
+- HTTP 42501 → 403 `role_update_forbidden`.
+- Frontend sendet nur geänderte Felder.
+- Kein Remote-Apply / kein Function-Deploy in diesem Commit.
+
 ## 2026-07-24 – Identity-Cache nach Profilnamensänderung
 
 ### Kontext

@@ -358,6 +358,9 @@ export const frenchCrmMessages = {
       },
       edit: {
         error: "Une erreur s'est produite. Veuillez réessayer.",
+        role_forbidden:
+          "Vous n'êtes pas autorisé à modifier les rôles utilisateur.",
+        role_failed: "Le rôle utilisateur n'a pas pu être modifié.",
         record_not_found: "Enregistrement introuvable",
         success: "Utilisateur mis à jour avec succès",
         title: "Modifier %{name}",

@@ -4,22 +4,15 @@ import { corsHeaders, OptionsMiddleware } from "../_shared/cors.ts";
 import { createErrorResponse } from "../_shared/utils.ts";
 import { AuthMiddleware, UserMiddleware } from "../_shared/authentication.ts";
 import { getUserSale } from "../_shared/getUserSale.ts";
-
-type NoraRole = "admin" | "office" | "viewer";
-
-function isAdminSale(sale: { role?: NoraRole; administrator?: boolean }) {
-  return sale.role === "admin" || sale.administrator === true;
-}
-
-function resolveRole(
-  role: NoraRole | undefined,
-  administrator: boolean | undefined,
-): NoraRole {
-  if (role === "admin" || role === "office" || role === "viewer") {
-    return role;
-  }
-  return administrator ? "admin" : "viewer";
-}
+import {
+  buildPatchPlan,
+  isAdminSale,
+  isNoraRole,
+  mapPostgresError,
+  needsAuthAdminUpdate,
+  type NoraRole,
+  type PatchPlan,
+} from "./patchHelpers.ts";
 
 function resolveInviteRedirectTo(): string {
   const siteUrl =
@@ -27,6 +20,14 @@ function resolveInviteRedirectTo(): string {
     Deno.env.get("PUBLIC_SITE_URL") ??
     "https://nora.ergart.de";
   return `${siteUrl.replace(/\/$/, "")}/auth-callback.html`;
+}
+
+function resolveInviteRole(
+  role: NoraRole | undefined,
+  administrator: boolean | undefined,
+): NoraRole {
+  if (isNoraRole(role)) return role;
+  return administrator ? "admin" : "viewer";
 }
 
 async function writeUserInviteAudit(args: {
@@ -47,17 +48,15 @@ async function writeUserInviteAudit(args: {
         role: args.role,
       },
     });
-  } catch (error) {
-    // Audit must not block invite delivery; log without secrets.
+  } catch {
     console.error("user.invite.audit_failed");
-    console.error(error);
   }
 }
 
 async function setSaleRoleAndDisabled(
   saleId: number,
   role: NoraRole,
-  disabled: boolean,
+  disabled: boolean | null,
 ) {
   const { error } = await supabaseAdmin.rpc("set_sales_role_by_admin", {
     p_sale_id: saleId,
@@ -66,7 +65,14 @@ async function setSaleRoleAndDisabled(
   });
 
   if (error) {
-    console.error("Error updating sale role:", error);
+    console.error(
+      JSON.stringify({
+        operation: "set_sales_role_by_admin",
+        stage: "rpc",
+        sqlstate: error.code ?? null,
+        error: error.message ?? "unknown",
+      }),
+    );
     throw error;
   }
 
@@ -83,7 +89,7 @@ async function setSaleRoleAndDisabled(
   return sales;
 }
 
-async function updateSaleAvatar(user_id: string, avatar: string) {
+async function updateSaleAvatar(user_id: string, avatar: unknown) {
   const { data: sales, error: salesError } = await supabaseAdmin
     .from("sales")
     .update({ avatar })
@@ -91,7 +97,6 @@ async function updateSaleAvatar(user_id: string, avatar: string) {
     .select("*");
 
   if (!sales?.length || salesError) {
-    console.error("Error updating user:", salesError);
     throw salesError ?? new Error("Failed to update sale");
   }
   return sales.at(0);
@@ -120,20 +125,33 @@ async function resolveUserIdByEmail(email: string) {
   return data[0].id as string;
 }
 
+async function reloadSale(salesId: number) {
+  const { data, error } = await supabaseAdmin
+    .from("sales")
+    .select("*")
+    .eq("id", salesId)
+    .single();
+  if (!data || error) {
+    throw error ?? new Error("reload_failed");
+  }
+  return data;
+}
+
 /**
  * Admin-only invite: inviteUserByEmail creates the auth user (no client password),
  * handle_new_user creates the sales row, then role is set via secure RPC.
- * Never accepts a caller-chosen password for invites.
  */
 async function inviteUser(req: Request, currentUserSale: any) {
   const { email, first_name, last_name, disabled, administrator, role } =
     await req.json();
 
   if (!isAdminSale(currentUserSale)) {
-    return createErrorResponse(401, "Not Authorized");
+    return createErrorResponse(403, "Not Authorized", {
+      error: "role_update_forbidden",
+    });
   }
 
-  const resolvedRole = resolveRole(role, administrator);
+  const resolvedRole = resolveInviteRole(role, administrator);
   const redirectTo = resolveInviteRedirectTo();
 
   const { data: inviteData, error: inviteError } =
@@ -152,24 +170,26 @@ async function inviteUser(req: Request, currentUserSale: any) {
 
     if (!already) {
       console.error("Error inviting user");
-      return createErrorResponse(
-        (inviteError as { status?: number }).status ?? 500,
-        "Invitation failed",
-      );
+      return createErrorResponse(500, "Invitation failed", {
+        error: "invite_failed",
+      });
     }
 
     const existingId = await resolveUserIdByEmail(email);
     if (!existingId) {
-      return createErrorResponse(500, "Internal Server Error");
+      return createErrorResponse(500, "Internal Server Error", {
+        error: "internal_error",
+      });
     }
     userId = existingId;
 
     const existingSale = await loadSaleByUserId(existingId);
     if (existingSale) {
-      return createErrorResponse(400, "A sales for this email already exists");
+      return createErrorResponse(409, "A sales for this email already exists", {
+        error: "already_exists",
+      });
     }
 
-    // Auth user exists without sales profile — create profile then set role.
     const { error: insertError } = await supabaseAdmin.from("sales").insert({
       email,
       first_name,
@@ -181,10 +201,11 @@ async function inviteUser(req: Request, currentUserSale: any) {
     });
     if (insertError) {
       console.error("Error creating sale for existing auth user");
-      return createErrorResponse(500, "Internal Server Error");
+      return createErrorResponse(500, "Internal Server Error", {
+        error: "internal_error",
+      });
     }
 
-    // Re-send invite mail so the user can set a password.
     const { error: resendError } =
       await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
         data: { first_name, last_name },
@@ -192,29 +213,34 @@ async function inviteUser(req: Request, currentUserSale: any) {
       });
     if (resendError) {
       console.error("Error resending invitation mail");
-      return createErrorResponse(500, "Failed to send invitation mail");
+      return createErrorResponse(500, "Failed to send invitation mail", {
+        error: "invite_mail_failed",
+      });
     }
   }
 
   if (!userId) {
-    return createErrorResponse(500, "Internal Server Error");
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
+    });
   }
 
   try {
-    // Trigger may be briefly delayed after inviteUserByEmail.
     let saleRow = await loadSaleByUserId(userId);
     if (!saleRow) {
       await new Promise((r) => setTimeout(r, 250));
       saleRow = await loadSaleByUserId(userId);
     }
     if (!saleRow) {
-      return createErrorResponse(500, "Sales profile missing after invite");
+      return createErrorResponse(500, "Sales profile missing after invite", {
+        error: "internal_error",
+      });
     }
 
     const sale = await setSaleRoleAndDisabled(
       saleRow.id,
       resolvedRole,
-      disabled ?? false,
+      typeof disabled === "boolean" ? disabled : null,
     );
 
     await writeUserInviteAudit({
@@ -224,143 +250,209 @@ async function inviteUser(req: Request, currentUserSale: any) {
       role: resolvedRole,
     });
 
-    return new Response(
-      JSON.stringify({
-        data: sale,
-      }),
-      {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      },
-    );
+    return new Response(JSON.stringify({ data: sale }), {
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   } catch (e) {
-    console.error("Error patching sale:", e);
-    return createErrorResponse(500, "Internal Server Error");
+    const mapped = mapPostgresError(e as { code?: string; message?: string });
+    return createErrorResponse(mapped.status, mapped.message, {
+      error: mapped.error,
+    });
   }
 }
 
-async function patchUser(req: Request, currentUserSale: any) {
-  const body = await req.json();
-  const {
-    sales_id,
-    email,
-    first_name,
-    last_name,
-    avatar,
-    administrator,
-    disabled,
-    role,
-  } = body;
+async function applyRolePatch(
+  plan: PatchPlan,
+  sale: { id: number; role: NoraRole; disabled?: boolean },
+) {
+  const nextRole = plan.wantsRole ? plan.role! : (sale.role as NoraRole);
+  const nextDisabled = plan.wantsDisabled
+    ? plan.disabled
+    : null; /* leave unchanged in RPC */
+  return setSaleRoleAndDisabled(sale.id, nextRole, nextDisabled);
+}
 
-  const { data: sale } = await supabaseAdmin
+async function patchUser(req: Request, currentUserSale: any) {
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return createErrorResponse(400, "Invalid JSON body", {
+      error: "invalid_payload",
+    });
+  }
+
+  const planned = buildPatchPlan(body);
+  if ("error" in planned) {
+    const status = planned.error === "invalid_role" ? 400 : 400;
+    return createErrorResponse(status, "Invalid request", {
+      error: planned.error,
+    });
+  }
+  const plan = planned;
+
+  const { data: sale, error: saleLoadError } = await supabaseAdmin
     .from("sales")
     .select("*")
-    .eq("id", sales_id)
+    .eq("id", plan.salesId)
     .single();
 
-  if (!sale) {
-    return createErrorResponse(404, "Not Found");
+  if (saleLoadError || !sale) {
+    return createErrorResponse(404, "Not Found", { error: "not_found" });
   }
 
-  if (!isAdminSale(currentUserSale) && currentUserSale.id !== sale.id) {
-    return createErrorResponse(401, "Not Authorized");
+  const isSelf = currentUserSale.id === sale.id;
+  const callerIsAdmin = isAdminSale(currentUserSale);
+
+  if (!callerIsAdmin && !isSelf) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "role_update_forbidden",
+    });
   }
 
-  const nextFirstName =
-    typeof first_name === "string" ? first_name.trim() : sale.first_name;
-  const nextLastName =
-    typeof last_name === "string" ? last_name.trim() : sale.last_name;
-
-  const authUpdate: {
-    email?: string;
-    ban_duration?: string;
-    user_metadata: { first_name: string; last_name: string };
-  } = {
-    user_metadata: {
-      first_name: nextFirstName,
-      last_name: nextLastName,
-    },
-  };
-
-  if (typeof email === "string" && email.trim() && email.trim() !== sale.email) {
-    authUpdate.email = email.trim();
+  if ((plan.wantsRole || plan.wantsDisabled) && !callerIsAdmin) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "role_update_forbidden",
+    });
   }
 
-  if (typeof disabled === "boolean") {
-    authUpdate.ban_duration = disabled ? "87600h" : "none";
-  }
-
-  const { data, error: userError } =
-    await supabaseAdmin.auth.admin.updateUserById(sale.user_id, authUpdate);
-
-  if (!data?.user || userError) {
-    console.error("Error patching user:", userError);
-    return createErrorResponse(500, "Internal Server Error");
-  }
-
-  // Persist names on sales explicitly (do not rely only on auth trigger).
-  // Email stays immutable on sales for direct updates — auth trigger syncs it.
-  const { error: saleUpdateError } = await supabaseAdmin
-    .from("sales")
-    .update({
-      first_name: nextFirstName,
-      last_name: nextLastName,
-    })
-    .eq("id", sales_id);
-
-  if (saleUpdateError) {
-    console.error("Error patching sale profile fields:", saleUpdateError);
-    return createErrorResponse(500, "Internal Server Error");
-  }
-
-  if (avatar) {
+  // Role / disabled only — no Auth Admin side effects.
+  if (
+    (plan.wantsRole || plan.wantsDisabled) &&
+    !plan.wantsName &&
+    !plan.wantsEmail &&
+    !plan.wantsAvatar
+  ) {
     try {
-      await updateSaleAvatar(data.user.id, avatar);
-    } catch (e) {
-      console.error("Error updating avatar:", e);
-      return createErrorResponse(500, "Internal Server Error");
-    }
-  }
-
-  // Only change role/disabled when the caller explicitly sent those fields.
-  // Profile name edits often omit role — never default that to viewer.
-  const shouldPatchPrivileges =
-    role !== undefined ||
-    administrator !== undefined ||
-    disabled !== undefined;
-
-  if (isAdminSale(currentUserSale) && shouldPatchPrivileges) {
-    try {
-      const resolvedRole = resolveRole(
-        role ?? sale.role,
-        administrator ?? sale.administrator,
-      );
-      const updatedSale = await setSaleRoleAndDisabled(
-        sales_id,
-        resolvedRole,
-        typeof disabled === "boolean" ? disabled : (sale.disabled ?? false),
-      );
-      return new Response(JSON.stringify({ data: updatedSale }), {
+      const updated = await applyRolePatch(plan, sale);
+      return new Response(JSON.stringify({ data: updated }), {
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     } catch (e) {
-      console.error("Error patching sale:", e);
-      return createErrorResponse(500, "Internal Server Error");
+      const mapped = mapPostgresError(e as { code?: string; message?: string });
+      return createErrorResponse(mapped.status, mapped.message, {
+        error: mapped.error,
+      });
     }
   }
 
-  const { data: new_sale, error: reloadError } = await supabaseAdmin
-    .from("sales")
-    .select("*")
-    .eq("id", sales_id)
-    .single();
+  // Profile fields (self or admin)
+  if (needsAuthAdminUpdate(plan) || plan.wantsAvatar) {
+    const nextFirstName =
+      plan.firstName !== null ? plan.firstName : sale.first_name;
+    const nextLastName =
+      plan.lastName !== null ? plan.lastName : sale.last_name;
 
-  if (!new_sale || reloadError) {
-    return createErrorResponse(500, "Internal Server Error");
+    if (plan.wantsName || plan.wantsEmail || plan.wantsDisabled) {
+      const authUpdate: {
+        email?: string;
+        ban_duration?: string;
+        user_metadata?: { first_name: string; last_name: string };
+      } = {};
+
+      if (plan.wantsName) {
+        authUpdate.user_metadata = {
+          first_name: nextFirstName,
+          last_name: nextLastName,
+        };
+      }
+
+      if (plan.wantsEmail && plan.email && plan.email !== sale.email) {
+        authUpdate.email = plan.email;
+      }
+
+      if (plan.wantsDisabled && typeof plan.disabled === "boolean") {
+        authUpdate.ban_duration = plan.disabled ? "87600h" : "none";
+      }
+
+      if (Object.keys(authUpdate).length > 0) {
+        const { data, error: userError } =
+          await supabaseAdmin.auth.admin.updateUserById(
+            sale.user_id,
+            authUpdate,
+          );
+
+        if (!data?.user || userError) {
+          console.error(
+            JSON.stringify({
+              operation: "updateUserById",
+              stage: "auth_admin",
+              error: "auth_update_failed",
+            }),
+          );
+          return createErrorResponse(500, "Internal Server Error", {
+            error: "internal_error",
+          });
+        }
+      }
+
+      if (plan.wantsName) {
+        const { error: saleUpdateError } = await supabaseAdmin
+          .from("sales")
+          .update({
+            first_name: nextFirstName,
+            last_name: nextLastName,
+          })
+          .eq("id", plan.salesId);
+
+        if (saleUpdateError) {
+          console.error(
+            JSON.stringify({
+              operation: "sales_name_update",
+              stage: "sales",
+              sqlstate: saleUpdateError.code ?? null,
+              error: "sale_update_failed",
+            }),
+          );
+          return createErrorResponse(500, "Internal Server Error", {
+            error: "internal_error",
+          });
+        }
+      }
+    }
+
+    if (plan.wantsAvatar) {
+      try {
+        await updateSaleAvatar(sale.user_id, plan.avatar);
+      } catch {
+        console.error(
+          JSON.stringify({
+            operation: "avatar_update",
+            stage: "sales",
+            error: "avatar_update_failed",
+          }),
+        );
+        return createErrorResponse(500, "Internal Server Error", {
+          error: "internal_error",
+        });
+      }
+    }
   }
 
-  return new Response(JSON.stringify({ data: new_sale }), {
-    headers: { "Content-Type": "application/json", ...corsHeaders },
-  });
+  if (plan.wantsRole || plan.wantsDisabled) {
+    try {
+      const updated = await applyRolePatch(plan, sale);
+      return new Response(JSON.stringify({ data: updated }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    } catch (e) {
+      const mapped = mapPostgresError(e as { code?: string; message?: string });
+      return createErrorResponse(mapped.status, mapped.message, {
+        error: mapped.error,
+      });
+    }
+  }
+
+  try {
+    const newSale = await reloadSale(plan.salesId);
+    return new Response(JSON.stringify({ data: newSale }), {
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  } catch {
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
+    });
+  }
 }
 
 Deno.serve(async (req: Request) =>
@@ -369,7 +461,9 @@ Deno.serve(async (req: Request) =>
       UserMiddleware(req, async (req, user) => {
         const currentUserSale = await getUserSale(user);
         if (!currentUserSale || currentUserSale.disabled) {
-          return createErrorResponse(401, "Unauthorized");
+          return createErrorResponse(401, "Unauthorized", {
+            error: "unauthorized",
+          });
         }
 
         if (req.method === "POST") {
@@ -380,7 +474,9 @@ Deno.serve(async (req: Request) =>
           return patchUser(req, currentUserSale);
         }
 
-        return createErrorResponse(405, "Method Not Allowed");
+        return createErrorResponse(405, "Method Not Allowed", {
+          error: "method_not_allowed",
+        });
       }),
     ),
   ),

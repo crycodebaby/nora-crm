@@ -951,6 +951,37 @@ BEGIN
 END;
 $$;
 
+-- Nora CRM: JWT role reader (legacy GUC + request.jwt.claims JSON)
+CREATE OR REPLACE FUNCTION nora_private.safe_auth_role()
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_role text;
+    v_claims text;
+BEGIN
+    v_role := nullif(current_setting('request.jwt.claim.role', true), '');
+
+    IF v_role IS NULL THEN
+        v_claims := nullif(current_setting('request.jwt.claims', true), '');
+
+        IF v_claims IS NOT NULL THEN
+            BEGIN
+                v_role := nullif(v_claims::jsonb ->> 'role', '');
+            EXCEPTION
+                WHEN invalid_text_representation THEN
+                    RETURN NULL;
+            END;
+        END IF;
+    END IF;
+
+    RETURN v_role;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.set_sales_role_by_admin(
     p_sale_id bigint,
     p_role text,
@@ -966,7 +997,7 @@ BEGIN
         RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
     END IF;
 
-    IF coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role' THEN
+    IF coalesce(nora_private.safe_auth_role(), '') <> 'service_role' THEN
         IF NOT nora_private.is_admin() THEN
             RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
         END IF;

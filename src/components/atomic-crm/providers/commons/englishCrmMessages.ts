@@ -352,6 +352,8 @@ export const englishCrmMessages = {
       },
       edit: {
         error: "An error occurred. Please try again.",
+        role_forbidden: "You are not allowed to change user roles.",
+        role_failed: "The user role could not be changed.",
         record_not_found: "Record not found",
         success: "User updated successfully",
         title: "Edit %{name}",
