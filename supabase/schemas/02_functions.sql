@@ -1061,6 +1061,56 @@ $$;
 
 ALTER FUNCTION nora_private.audit_json_field(jsonb, jsonb, text) OWNER TO postgres;
 
+CREATE OR REPLACE FUNCTION nora_private.current_operation_id()
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $$
+DECLARE
+    v_raw text;
+    v_headers jsonb;
+    v_uuid uuid;
+BEGIN
+    -- GUC wins over HTTP header
+    BEGIN
+        v_raw := nullif(btrim(current_setting('nora.operation_id', true)), '');
+    EXCEPTION
+        WHEN others THEN
+            v_raw := null;
+    END;
+
+    IF v_raw IS NULL THEN
+        BEGIN
+            v_headers := coalesce(
+                nullif(current_setting('request.headers', true), '')::jsonb,
+                '{}'::jsonb
+            );
+            v_raw := nullif(btrim(v_headers ->> 'x-nora-operation-id'), '');
+        EXCEPTION
+            WHEN others THEN
+                v_raw := null;
+        END;
+    END IF;
+
+    IF v_raw IS NULL THEN
+        RETURN null;
+    END IF;
+
+    BEGIN
+        v_uuid := v_raw::uuid;
+        RETURN lower(v_uuid::text);
+    EXCEPTION
+        WHEN invalid_text_representation THEN
+            RETURN null;
+        WHEN others THEN
+            RETURN null;
+    END;
+END;
+$$;
+
+ALTER FUNCTION nora_private.current_operation_id() OWNER TO postgres;
+
 CREATE OR REPLACE FUNCTION nora_private.write_audit_event(
     p_event_type text, p_entity_type text, p_entity_id uuid,
     p_company_id bigint DEFAULT null, p_contact_id bigint DEFAULT null, p_deal_id bigint DEFAULT null,
@@ -1079,6 +1129,7 @@ DECLARE
     v_id uuid := gen_random_uuid();
     v_actor record;
     v_meta jsonb := coalesce(p_metadata, '{}'::jsonb);
+    v_request_id text;
 BEGIN
     SELECT * INTO v_actor FROM nora_private.resolve_audit_actor() r LIMIT 1;
     IF p_changes IS NOT NULL AND p_changes <> '{}'::jsonb THEN
@@ -1090,17 +1141,23 @@ BEGIN
     IF p_case_number IS NOT NULL THEN
         v_meta := v_meta || jsonb_build_object('case_number', p_case_number);
     END IF;
+    BEGIN
+        v_request_id := nora_private.current_operation_id();
+    EXCEPTION
+        WHEN others THEN
+            v_request_id := null;
+    END;
     INSERT INTO public.audit_events (
         id, actor_id, actor_sales_id, actor_name_snapshot, actor_role_snapshot,
         source, retention_class, event_type, entity_type, entity_id,
         company_id, contact_id, deal_id, checklist_run_id, checklist_run_item_id,
-        task_id, note_id, old_data, new_data, metadata
+        task_id, note_id, old_data, new_data, metadata, request_id
     ) VALUES (
         v_id, v_actor.actor_auth_id, v_actor.actor_sales_id, v_actor.actor_name, v_actor.actor_role,
         coalesce(p_source, 'user'), coalesce(p_retention_class, 'crm_change'),
         p_event_type, p_entity_type, p_entity_id,
         p_company_id, p_contact_id, p_deal_id, p_checklist_run_id, p_checklist_run_item_id,
-        p_task_id, p_note_id, null, null, v_meta
+        p_task_id, p_note_id, null, null, v_meta, v_request_id
     );
     RETURN v_id;
 END;

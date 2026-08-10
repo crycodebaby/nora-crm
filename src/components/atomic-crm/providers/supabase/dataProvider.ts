@@ -30,6 +30,11 @@ import type {
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
+import { createOperationContext } from "../../operations/operationContext";
+import {
+  readOperationIdFromMeta,
+  withOperationIdParams,
+} from "../../operations/operationTransport";
 import { ATTACHMENTS_BUCKET } from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
@@ -102,6 +107,30 @@ const getDataProviderWithCustomMethods = () => {
       }
 
       return baseDataProvider.getOne(resource, params);
+    },
+
+    /**
+     * Foundation Wave 1 vertical slice: deal.update carries
+     * x-nora-operation-id via meta.headers for audit request_id correlation.
+     *
+     * If an Application Service already set a valid operation header, reuse it.
+     * Transport helpers never mint a replacement UUID.
+     */
+    async update(resource: string, params: any) {
+      if (resource === "deals") {
+        const existingId = readOperationIdFromMeta(params?.meta);
+        const context = createOperationContext({
+          operationType: "deal.update",
+          resourceType: "deals",
+          resourceId: params?.id,
+          ...(existingId ? { operationId: existingId } : {}),
+        });
+        return baseDataProvider.update(
+          resource,
+          withOperationIdParams(params, context),
+        );
+      }
+      return baseDataProvider.update(resource, params);
     },
 
     async signUp(

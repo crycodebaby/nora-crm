@@ -1169,3 +1169,45 @@ Rollenzurücksetzung auf `viewer`.
   entfernt; Verhalten unverändert.
 - Additive Migration nur; keine Remote-/Production-Migration in diesem
   Schritt. Audit-Ausgabeform bleibt identisch.
+
+## 2026-08-10 – Foundation Wave 1: Operation Correlation
+
+### Kontext
+
+Nora braucht eine nachvollziehbare Korrelation fachlich relevanter Schreiboperationen
+vom Frontend bis zum bestehenden `audit_events`-Verlauf — ohne Operations-Feedback-UI,
+Error Observatory, Archive Center oder Outbox.
+
+### Entscheidung
+
+- **operation_id** = clientseitig `crypto.randomUUID()`; Kurzform `OP-XXXX-XXXX` nur Anzeige später.
+- Ownership: ID einmal am fachlichen Einstieg minten; Transport-Helper nur weiterreichen.
+  Bereits gültiger `x-nora-operation-id` wird nicht still gegen eine neue UUID getauscht.
+  Ungültige ID → soft neu minten (kein Throw, kein Security-Merkmal).
+- Transport-Header: `x-nora-operation-id`.
+- PostgreSQL: `nora_private.current_operation_id()` (**INVOKER**, nur GUC-Lesen) liest zuerst
+  `nora.operation_id` (GUC), sonst `request.headers` → `x-nora-operation-id`;
+  ungültig/fehlend/kaputtes JSON → `NULL`, nie Abbruch.
+- `write_audit_event`: Signatur unverändert; `request_id` additiv; Correlation-Fehler → `NULL`.
+- Bestehende Spalte `audit_events.request_id` wird vom zentralen Writer befüllt — keine zweite Spalte.
+- Partial Index `audit_events_request_id_idx` (nicht unique).
+- Vertikaler Slice: `dataProvider.update("deals")` injiziert den Header (reused, wenn schon gesetzt).
+- RPC/Edge: wiederverwendbare Helper vorbereitet; keine breite Function-Migration.
+- Keine Auth-/RLS-Nutzung der operation_id.
+- Migration rückwärtskompatibel: altes Frontend ohne Header → `request_id = NULL`.
+
+### Verifikation
+
+- SQL-Test `supabase/tests/operation_correlation_verification.sql` (inkl. Header-Clear nach GUC).
+- HTTP-Diagnose: `scripts/verify-operation-header.mjs` (mit/ohne Header; production URL blockiert).
+- Bestehendes Nora-Muster `request.headers` bereits in Attachment-Trigger genutzt.
+
+### Nicht in dieser Welle
+
+Operations Feedback, Error Observatory, Archive Center, Domain Events/Outbox,
+Realtime-Aktionen anderer Nutzer, breite RPC/Edge-Umbauten.
+
+### Migration
+
+`20260810160000_nora_operation_correlation.sql` — lokal anwenden; **kein** Remote-Apply in diesem Commit.
+
