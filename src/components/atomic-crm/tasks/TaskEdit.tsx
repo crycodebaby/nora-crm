@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   EditBase,
   Form,
@@ -6,10 +7,12 @@ import {
   CanAccess,
   type Identifier,
 } from "ra-core";
+import { useFormContext, useFormState } from "react-hook-form";
 import { DeleteButton } from "@/components/admin/delete-button";
 import { SaveButton } from "@/components/admin/form";
 import {
   Dialog,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -17,7 +20,6 @@ import {
 
 import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import { NoraDialogContent } from "../misc/NoraDialogContent";
-import { useNoraDirtyDialog } from "../misc/useNoraDirtyDialog";
 import { TaskFormContent } from "./TaskFormContent";
 
 export const TaskEdit = ({
@@ -38,21 +40,19 @@ export const TaskEdit = ({
           id={taskId}
           resource="tasks"
           className="mt-0"
+          mutationMode="pessimistic"
           mutationOptions={{
             onSuccess: () => {
               close();
               notify("resources.tasks.updated", {
                 type: "info",
-                undoable: true,
               });
             },
           }}
           redirect={false}
         >
           <NoraAccessGuard resource="tasks" action="edit">
-            <Form className="contents">
-              <TaskEditDialogBody close={close} notify={notify} />
-            </Form>
+            <TaskEditDialogBody close={close} notify={notify} />
           </NoraAccessGuard>
         </EditBase>
       ) : null}
@@ -60,6 +60,11 @@ export const TaskEdit = ({
   );
 };
 
+/**
+ * Stabilization Gate 2b: Form must live INSIDE the Radix Dialog portal.
+ * Same root cause as DealEdit Gate 2 — Form outside portal left SaveButton
+ * with button.form === null so native submit never ran.
+ */
 const TaskEditDialogBody = ({
   close,
   notify,
@@ -68,20 +73,25 @@ const TaskEditDialogBody = ({
   notify: ReturnType<typeof useNotify>;
 }) => {
   const translate = useTranslate();
-  const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({
-    onClose: close,
-  });
+  const [isDirty, setIsDirty] = useState(false);
 
   return (
-    <>
-      <NoraDialogContent
-        open
-        onRequestClose={requestClose}
-        className="lg:max-w-xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
-      >
-        <DialogHeader>
-          <DialogTitle>{translate("resources.tasks.action.edit")}</DialogTitle>
-        </DialogHeader>
+    <NoraDialogContent
+      open
+      isDirty={isDirty}
+      onRequestClose={close}
+      className="lg:max-w-xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
+    >
+      <DialogHeader>
+        <DialogTitle>{translate("resources.tasks.action.edit")}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {translate("resources.tasks.edit_dialog.description", {
+            _: "Aufgabendaten bearbeiten und speichern.",
+          })}
+        </DialogDescription>
+      </DialogHeader>
+      <Form>
+        <FormDirtyBridge onDirtyChange={setIsDirty} />
         <TaskFormContent />
         <DialogFooter className="w-full sm:justify-between gap-4">
           <CanAccess resource="tasks" action="delete">
@@ -100,8 +110,35 @@ const TaskEditDialogBody = ({
           </CanAccess>
           <SaveButton label="ra.action.save" />
         </DialogFooter>
-      </NoraDialogContent>
-      {dirtyConfirmDialog}
-    </>
+      </Form>
+    </NoraDialogContent>
   );
+};
+
+/** Syncs RHF dirty state to NoraDialogContent (outside Form context). */
+const FormDirtyBridge = ({
+  onDirtyChange,
+}: {
+  onDirtyChange: (isDirty: boolean) => void;
+}) => {
+  const { isDirty, errors, isValid } = useFormState();
+  const { getValues } = useFormContext();
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => {
+    if (import.meta.env.MODE === "test") {
+      (
+        window as unknown as {
+          __noraTaskEditForm?: () => unknown;
+        }
+      ).__noraTaskEditForm = () => ({
+        values: getValues(),
+        errors,
+        isValid,
+        isDirty,
+      });
+    }
+  });
+  return null;
 };

@@ -2,6 +2,30 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-10 – Stabilization Gate 2b: TaskEdit Portal Form Owner
+
+### Kontext
+
+Gleicher Form-Ownership-Bug wie Gate 2 in `TaskEdit`: Form außerhalb des
+Radix-Portals → `button.form === null` → Speichern ohne Update.
+
+### Entscheidung
+
+- Dieselbe Struktur wie Gate 2 / `DealCreate`: `DialogPortal` →
+  `DialogContent` → `<form>` → Inputs + `SaveButton`.
+- `FormDirtyBridge` + sr-only `DialogDescription`.
+- `mutationMode="pessimistic"` (wie `DealEdit`): Dialog schließt nach Erfolg;
+  Undoable würde `dataProvider.update` verzögern und den Failure-Pfad im
+  Dialog unbrauchbar machen. Notify ohne `undoable` für Update-Success.
+- Keine CRM-weite Refaktorierung; Wave-1/2-Infrastruktur unverändert; kein DB-Change.
+- Tests: struktureller BEFORE/AFTER-Beweis (`button.form === null` vs. owner);
+  Integration klickt sichtbares „Speichern“ (Success + Failure).
+
+### Begründung
+
+Portal-Form-Owner wiederherstellen; pessimistisch speichern für Modal-Edit
+konsistent zu Gate 2.
+
 ## 2026-08-10 – Stabilization Gate 2: DealEdit Portal Form Owner
 
 ### Kontext
@@ -23,7 +47,7 @@ Verwerfen-Dialog erschien. Wave 3 Error Observatory wurde dafür geparkt
 - Accessibility: `DialogTitle` / `DialogDescription` (sr-only) ergänzt.
 - Integrationstest klickt echtes „Speichern“ und prüft `button.form` +
   `dataProvider.update`.
-- Andere Flächen: `TaskEdit` gleiches Anti-Pattern (Follow-up);
+- Andere Flächen: `TaskEdit` gleiches Anti-Pattern (Follow-up Gate 2b);
   Sheets nutzen bereits `SaveButton type="button"`.
 - Delete bleibt Hard-Delete (`NoraDeleteButton` → `DeleteButton`); Archive
   Center später.
