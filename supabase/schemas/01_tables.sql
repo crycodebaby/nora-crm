@@ -366,6 +366,11 @@ create index audit_events_task_created_idx
     on public.audit_events (task_id, created_at desc)
     where task_id is not null;
 
+-- Foundation Wave 1: operation correlation (non-unique — one op, many events)
+create index audit_events_request_id_idx
+    on public.audit_events (request_id)
+    where request_id is not null;
+
 alter table public.audit_events
     add constraint audit_events_source_check
         check (source in ('user', 'system', 'edge_function', 'migration', 'demo'));

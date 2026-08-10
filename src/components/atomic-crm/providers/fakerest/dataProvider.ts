@@ -31,6 +31,8 @@ import {
 } from "../../misc/numbering";
 import { performGlobalSearch } from "../../misc/globalSearch";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
+import { createOperationContext } from "../../operations/operationContext";
+import { withOperationIdParams } from "../../operations/operationTransport";
 import type {
   GetEntityAuditEventsParams,
   GetGlobalAuditEventsParams,
@@ -199,6 +201,21 @@ export const createDataProvider = ({
         return { data: all.slice(start, start + perPage), total: all.length };
       }
       return baseDataProvider.getList(resource, params);
+    },
+    // Wave 1 parity: same operation_id meta injection as Supabase (FakeRest ignores headers).
+    async update(resource: string, params: any) {
+      if (resource === "deals") {
+        const context = createOperationContext({
+          operationType: "deal.update",
+          resourceType: "deals",
+          resourceId: params?.id,
+        });
+        return baseDataProvider.update(
+          resource,
+          withOperationIdParams(params, context),
+        );
+      }
+      return baseDataProvider.update(resource, params);
     },
     unarchiveDeal: async (deal: Deal) => {
       // get all deals where stage is the same as the deal to unarchive

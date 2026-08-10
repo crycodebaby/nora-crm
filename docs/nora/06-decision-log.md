@@ -1169,3 +1169,40 @@ Rollenzurücksetzung auf `viewer`.
   entfernt; Verhalten unverändert.
 - Additive Migration nur; keine Remote-/Production-Migration in diesem
   Schritt. Audit-Ausgabeform bleibt identisch.
+
+## 2026-08-10 – Foundation Wave 1: Operation Correlation
+
+### Kontext
+
+Nora braucht eine nachvollziehbare Korrelation fachlich relevanter Schreiboperationen
+vom Frontend bis zum bestehenden `audit_events`-Verlauf — ohne Operations-Feedback-UI,
+Error Observatory, Archive Center oder Outbox.
+
+### Entscheidung
+
+- **operation_id** = clientseitig `crypto.randomUUID()`; Kurzform `OP-XXXX-XXXX` nur Anzeige später.
+- Transport-Header: `x-nora-operation-id`.
+- PostgreSQL: `nora_private.current_operation_id()` liest zuerst `nora.operation_id` (GUC),
+  sonst `request.headers` → `x-nora-operation-id`; ungültig/fehlend → `NULL`, nie Abbruch.
+- Bestehende Spalte `audit_events.request_id` wird vom zentralen Writer befüllt — keine zweite Spalte.
+- Partial Index `audit_events_request_id_idx` (nicht unique).
+- Vertikaler Slice: `dataProvider.update("deals")` injiziert den Header.
+- RPC/Edge: wiederverwendbare Helper vorbereitet; keine breite Function-Migration.
+- Keine Auth-/RLS-Nutzung der operation_id.
+
+### Verifikation
+
+- Lokaler Docker/Supabase war bei Implementierung **nicht** verfügbar.
+- SQL-Test `supabase/tests/operation_correlation_verification.sql` simuliert PostgREST-GUCs.
+- HTTP-Diagnose: `scripts/verify-operation-header.mjs` (lokal, production URL blockiert).
+- Bestehendes Nora-Muster `request.headers` bereits in Attachment-Trigger genutzt.
+
+### Nicht in dieser Welle
+
+Operations Feedback, Error Observatory, Archive Center, Domain Events/Outbox,
+Realtime-Aktionen anderer Nutzer, breite RPC/Edge-Umbauten.
+
+### Migration
+
+`20260810160000_nora_operation_correlation.sql` — lokal anwenden; **kein** Remote-Apply in diesem Commit.
+

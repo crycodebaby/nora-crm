@@ -258,6 +258,13 @@ grant execute on function nora_private.write_audit_event(
 grant execute on function nora_private.resolve_audit_actor() to postgres;
 grant execute on function nora_private.resolve_audit_actor() to nora_audit_writer;
 
+revoke all on function nora_private.current_operation_id() from public;
+revoke all on function nora_private.current_operation_id() from anon;
+revoke all on function nora_private.current_operation_id() from authenticated;
+revoke all on function nora_private.current_operation_id() from service_role;
+grant execute on function nora_private.current_operation_id() to postgres;
+grant execute on function nora_private.current_operation_id() to nora_audit_writer;
+
 revoke all on function public.insert_audit_event(
     text, text, uuid, bigint, bigint, bigint, uuid, uuid, jsonb, jsonb, jsonb
 ) from public;

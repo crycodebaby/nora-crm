@@ -130,6 +130,16 @@ Bei CRM-Audit (v0.3l / v0.3l.1) zusätzlich:
 - [ ] `npm run dev:demo` — Rollenmatrix manuell: Admin `/audit` + Akte; Office nur Akte; Viewer weder noch
 - [ ] Demo-Seed: synthetische Events mit `source = demo`, fiktive Personen
 
+Bei Operation Correlation (Foundation Wave 1) zusätzlich:
+
+- [ ] `nora_private.current_operation_id()` — nur UUID oder NULL; kein Auth/RLS-Effekt
+- [ ] `audit_events.request_id` über zentralen Writer befüllt; keine zweite Spalte
+- [ ] Partial Index `audit_events_request_id_idx` (nicht unique)
+- [ ] Vertikaler Slice: `deals` update sendet `x-nora-operation-id`
+- [ ] `supabase/tests/operation_correlation_verification.sql` lokal nach `db reset`
+- [ ] Optional HTTP: `node scripts/verify-operation-header.mjs` nur gegen lokal
+- [ ] Kein Remote-Migration-Apply / kein Function-Deploy ohne Freigabe
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

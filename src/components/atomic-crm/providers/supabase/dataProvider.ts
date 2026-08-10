@@ -30,6 +30,8 @@ import type {
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
+import { createOperationContext } from "../../operations/operationContext";
+import { withOperationIdParams } from "../../operations/operationTransport";
 import { ATTACHMENTS_BUCKET } from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
@@ -102,6 +104,25 @@ const getDataProviderWithCustomMethods = () => {
       }
 
       return baseDataProvider.getOne(resource, params);
+    },
+
+    /**
+     * Foundation Wave 1 vertical slice: deal.update carries
+     * x-nora-operation-id via meta.headers for audit request_id correlation.
+     */
+    async update(resource: string, params: any) {
+      if (resource === "deals") {
+        const context = createOperationContext({
+          operationType: "deal.update",
+          resourceType: "deals",
+          resourceId: params?.id,
+        });
+        return baseDataProvider.update(
+          resource,
+          withOperationIdParams(params, context),
+        );
+      }
+      return baseDataProvider.update(resource, params);
     },
 
     async signUp(
