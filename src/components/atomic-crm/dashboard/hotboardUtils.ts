@@ -6,14 +6,21 @@ import {
   isFollowUpOverdue,
   getFollowUpStatus,
 } from "../deals/dealUtils";
+import { resolveDealStageColumn } from "../deals/dealStageModel";
 import type { Deal } from "../types";
 
 export const HOTBOARD_DEAL_LIMIT = 5;
 
+/** Stages that map into “Angebot nachfassen” (canonical + legacy). */
 export const OFFER_FOLLOW_UP_STAGES = [
+  "quote_sent",
   "angebot-gesendet",
   "nachfassen",
 ] as const;
+
+function stageColumn(deal: Deal): string {
+  return resolveDealStageColumn(deal.stage);
+}
 
 export function getActiveDeals(deals: Deal[]): Deal[] {
   return deals.filter(
@@ -30,14 +37,19 @@ export function filterFollowUpDeals(deals: Deal[]): Deal[] {
 }
 
 export function filterNewInquiryDeals(deals: Deal[]): Deal[] {
-  return getActiveDeals(deals).filter((deal) => deal.stage === "neue-anfrage");
+  return getActiveDeals(deals).filter(
+    (deal) => stageColumn(deal) === "requested",
+  );
 }
 
+/** Legacy name kept for Hotboard focus — now means quote_sent bucket. */
 export function filterNachfassenDeals(deals: Deal[]): Deal[] {
-  return getActiveDeals(deals).filter((deal) => deal.stage === "nachfassen");
+  return getActiveDeals(deals).filter(
+    (deal) => stageColumn(deal) === "quote_sent",
+  );
 }
 
-export const FOCUS_BOARD_STAGES = ["neue-anfrage", "nachfassen"] as const;
+export const FOCUS_BOARD_STAGES = ["requested", "quote_sent"] as const;
 
 export type FocusBoardStage = (typeof FOCUS_BOARD_STAGES)[number];
 
@@ -45,7 +57,7 @@ export function filterDealsForFocusStage(
   deals: Deal[],
   stage: FocusBoardStage,
 ): Deal[] {
-  if (stage === "neue-anfrage") {
+  if (stage === "requested") {
     return filterNewInquiryDeals(deals);
   }
   return filterNachfassenDeals(deals);
@@ -99,7 +111,7 @@ export function prepareFocusColumnDeals(
 
 export function filterWaitingManufacturerDeals(deals: Deal[]): Deal[] {
   return getActiveDeals(deals).filter(
-    (deal) => deal.stage === "wartet-auf-hersteller",
+    (deal) => stageColumn(deal) === "in_production",
   );
 }
 
@@ -108,9 +120,7 @@ export function filterOfferFollowUpDeals(
   excludeIds: ReadonlySet<Identifier> = new Set(),
 ): Deal[] {
   return getActiveDeals(deals).filter(
-    (deal) =>
-      (OFFER_FOLLOW_UP_STAGES as readonly string[]).includes(deal.stage) &&
-      !excludeIds.has(deal.id),
+    (deal) => stageColumn(deal) === "quote_sent" && !excludeIds.has(deal.id),
   );
 }
 

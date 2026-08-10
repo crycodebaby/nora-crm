@@ -21,6 +21,7 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal, Sale } from "../types";
 
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
+import { DealStageSelector } from "./DealStageSelector";
 
 const saleOptionRenderer = (choice: Sale) =>
   `${choice.first_name} ${choice.last_name}`;
@@ -29,7 +30,7 @@ export const DealInputs = () => {
   const translate = useTranslate();
   const record = useRecordContext<Deal>();
 
-  const { dealStages, dealCategories } = useConfigurationContext();
+  const { dealCategories } = useConfigurationContext();
 
   return (
     <div className="flex flex-col gap-8">
@@ -79,15 +80,7 @@ export const DealInputs = () => {
       <div className="nora-form-section">
         <h6>{translate("resources.deals.field_categories.misc")}</h6>
 
-        <SelectInput
-          source="stage"
-          choices={dealStages}
-          optionText="label"
-          optionValue="value"
-          defaultValue="neue-anfrage"
-          helperText={false}
-          validate={required()}
-        />
+        <DealStageSelector asInput />
 
         <DateInput
           validate={required()}

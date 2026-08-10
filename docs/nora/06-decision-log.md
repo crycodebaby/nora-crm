@@ -2,6 +2,35 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-07-25 – Kanonische Vorgangsstatus (Phase 1)
+
+### Kontext
+
+Die bisherige 12-stufige Stage-Liste war zu granular und optisch kaum unterscheidbar.
+Kontakt-/Notiz-Temperatur (`noteStatuses`) darf nicht mit Vorgangsfortschritt vermischt werden.
+
+### Entscheidung
+
+Neue kanonische `dealStages` (Feld `deals.stage`):
+
+- `none` — Kein Status
+- `requested` — Angefragt
+- `quote_sent` — Angebot gesendet
+- `ordered` — Beauftragt
+- `in_production` — Bestellt / In Produktion
+- `on_site` — Baustelle in Arbeit
+- `completed` — Abgeschlossen
+
+Eigene UI-Komponenten: `DealStageSelector`, `DealStageBadge`, `DealStagePill`, `DealStageAuditValue`.
+Farben als CSS-Tokens (Light/Dark); Lila (`--nora-deal-stage-complaint`) reserviert für spätere Reklamationen.
+Legacy-Stages bleiben lesbar und werden in Kanban/Hotboard auf kanonische Spalten gemappt.
+`noteStatuses` unverändert; keine Kopplung Kontakt↔Vorgang.
+Auf Company/Contact nur abgeleiteter Hinweis (`PrimaryDealStageHint`).
+
+### Begründung
+
+Klare Domänentrennung, bessere Sichtbarkeit, Abwärtskompatibilität ohne Massen-Migration in dieser Phase.
+
 ## 2026-06-28 – Atomic CRM als Basis für Nora CRM
 
 ### Kontext

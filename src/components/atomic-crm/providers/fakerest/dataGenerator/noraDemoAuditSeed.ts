@@ -20,7 +20,7 @@ export const NORA_DEMO_AUDIT_EVENTS: AuditEvent[] = [
     deal_id: 0,
     metadata: {
       changes: {
-        stage: { old: "neue-anfrage", new: "angebot-gesendet" },
+        stage: { old: "requested", new: "angebot-gesendet" },
       },
       case_number: "2026-0001",
       customer_number: "K-2026-0001",

@@ -29,6 +29,7 @@ import {
 } from "./auditFormatters";
 import type { AuditEvent, EntityAuditEntityType } from "./auditTypes";
 import { useEntityAuditEvents } from "./useEntityAuditEvents";
+import { DealStageAuditValue } from "../deals/DealStageAuditValue";
 
 type EntityAuditHistoryProps = {
   entityType: EntityAuditEntityType;
@@ -249,13 +250,26 @@ const AuditChangeList = ({
             {formatAuditFieldLabel(field, formatContext)}
           </dt>
           <dd className="flex flex-wrap items-center gap-2 break-words">
-            <span className="text-muted-foreground line-through">
-              {formatAuditFieldValue(field, change.old, formatContext)}
-            </span>
-            <span aria-hidden>→</span>
-            <span>
-              {formatAuditFieldValue(field, change.new, formatContext)}
-            </span>
+            {field === "stage" ? (
+              <DealStageAuditValue
+                oldStage={
+                  typeof change.old === "string" ? change.old : null
+                }
+                newStage={
+                  typeof change.new === "string" ? change.new : null
+                }
+              />
+            ) : (
+              <>
+                <span className="text-muted-foreground line-through">
+                  {formatAuditFieldValue(field, change.old, formatContext)}
+                </span>
+                <span aria-hidden>→</span>
+                <span>
+                  {formatAuditFieldValue(field, change.new, formatContext)}
+                </span>
+              </>
+            )}
           </dd>
         </div>
       ))}

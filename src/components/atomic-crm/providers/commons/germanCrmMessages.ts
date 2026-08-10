@@ -210,6 +210,7 @@ export const germanCrmMessages = {
         sales_id: "Zuständig",
         case_number: "Vorgangsnummer",
       },
+      primary_stage_hint: "Aktiver Vorgangsstatus",
       action: {
         back_to_deal: "Zurück zum Vorgang",
         create: "Vorgang anlegen",

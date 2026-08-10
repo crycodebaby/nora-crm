@@ -26,7 +26,9 @@ import { ActivityLog } from "../activity/ActivityLog";
 import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { Avatar } from "../contacts/Avatar";
 import { TagsList } from "../contacts/TagsList";
-import { findDealLabel, formatDealAmount } from "../deals/dealUtils";
+import { formatDealAmount } from "../deals/dealUtils";
+import { DealStagePill } from "../deals/DealStagePill";
+import { PrimaryDealStageHint } from "../deals/PrimaryDealStageHint";
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
 import { MobileBackButton } from "../misc/MobileBackButton";
@@ -281,10 +283,13 @@ const DealsIterator = () => {
   const translate = useTranslate();
   const [locale = "en"] = useLocaleState();
   const { data: deals, error, isPending } = useListContext<Deal>();
-  const { dealStages, dealCategories, currency } = useConfigurationContext();
+  const { dealCategories, currency } = useConfigurationContext();
   if (isPending || error) return null;
   return (
     <div>
+      <div className="px-4 pt-3 pb-1">
+        <PrimaryDealStageHint scope="company" />
+      </div>
       <div>
         {deals.map((deal) => (
           <div key={deal.id} className="p-0 text-sm">
@@ -294,15 +299,17 @@ const DealsIterator = () => {
             >
               <div className="flex-1 min-w-0">
                 <div className="font-medium">{deal.name}</div>
-                <div className="text-sm text-muted-foreground">
-                  {findDealLabel(dealStages, deal.stage)},{" "}
-                  {formatDealAmount(deal.amount, currency, {
-                    notation: "compact",
-                    minimumSignificantDigits: 3,
-                  })}
-                  {deal.category
-                    ? `, ${dealCategories.find((c) => c.value === deal.category)?.label ?? deal.category}`
-                    : ""}
+                <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-2 mt-1">
+                  <DealStagePill stage={deal.stage} />
+                  <span>
+                    {formatDealAmount(deal.amount, currency, {
+                      notation: "compact",
+                      minimumSignificantDigits: 3,
+                    })}
+                    {deal.category
+                      ? `, ${dealCategories.find((c) => c.value === deal.category)?.label ?? deal.category}`
+                      : ""}
+                  </span>
                 </div>
               </div>
               <div className="text-right">

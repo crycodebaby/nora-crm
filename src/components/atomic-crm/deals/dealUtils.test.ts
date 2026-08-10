@@ -9,28 +9,33 @@ import { getVisibleDealStages, type DealsByStage } from "./stages";
 
 describe("findDealLabel", () => {
   const noraStages = [
-    { value: "neue-anfrage", label: "Neue Anfrage" },
-    { value: "anfrage", label: "Anfrage" },
-    { value: "abgeschlossen", label: "Abgeschlossen" },
+    { value: "none", label: "Kein Status" },
+    { value: "requested", label: "Angefragt" },
+    { value: "quote_sent", label: "Angebot gesendet" },
+    { value: "completed", label: "Abgeschlossen" },
   ];
 
   it("maps legacy Atomic stage values to German labels", () => {
-    expect(findDealLabel(noraStages, "opportunity")).toBe("Neue Anfrage");
-    expect(findDealLabel(noraStages, "proposal-sent")).toBe("Angebot gesendet");
+    expect(findDealLabel(noraStages, "opportunity")).toBe("Angefragt");
+    expect(findDealLabel(noraStages, "proposal-sent")).toBe(
+      "Angebot gesendet",
+    );
     expect(findDealLabel(noraStages, "won")).toBe("Angenommen");
     expect(findDealLabel(noraStages, "lost")).toBe("Abgelehnt");
-    expect(findDealLabel(noraStages, "delayed")).toBe("Verzögert");
+    expect(findDealLabel(noraStages, "delayed")).toBe(
+      "Bestellt / In Produktion",
+    );
   });
 
   it("keeps Nora-specific stage labels", () => {
-    expect(findDealLabel(noraStages, "neue-anfrage")).toBe("Neue Anfrage");
-    expect(findDealLabel(noraStages, "anfrage")).toBe("Neue Anfrage");
+    expect(findDealLabel(noraStages, "requested")).toBe("Angefragt");
+    expect(findDealLabel(noraStages, "neue-anfrage")).toBe("Angefragt");
     expect(findDealLabel(noraStages, "abgeschlossen")).toBe("Abgeschlossen");
   });
 
   it("translates legacy English labels still stored in configuration", () => {
     const legacyStages = [{ value: "opportunity", label: "Opportunity" }];
-    expect(findDealLabel(legacyStages, "opportunity")).toBe("Neue Anfrage");
+    expect(findDealLabel(legacyStages, "opportunity")).toBe("Angefragt");
   });
 });
 

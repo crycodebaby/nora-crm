@@ -97,6 +97,63 @@
   --nora-line-body: 1.55;
   --nora-line-readable: 1.65;
   --nora-touch-min: 2.75rem;
+
+  /* Deal stage (Vorgangsstatus) — light mode. Purple reserved for complaints. */
+  --nora-deal-stage-none: oklch(0.62 0.01 260);
+  --nora-deal-stage-none-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-none) 12%,
+    white
+  );
+  --nora-deal-stage-requested: oklch(0.55 0.14 250);
+  --nora-deal-stage-requested-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-requested) 14%,
+    white
+  );
+  --nora-deal-stage-quote_sent: oklch(0.72 0.14 95);
+  --nora-deal-stage-quote_sent-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-quote_sent) 16%,
+    white
+  );
+  --nora-deal-stage-ordered: oklch(0.68 0.16 55);
+  --nora-deal-stage-ordered-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-ordered) 15%,
+    white
+  );
+  --nora-deal-stage-in_production: oklch(0.65 0.18 350);
+  --nora-deal-stage-in_production-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-in_production) 14%,
+    white
+  );
+  --nora-deal-stage-on_site: oklch(0.58 0.2 25);
+  --nora-deal-stage-on_site-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-on_site) 12%,
+    white
+  );
+  --nora-deal-stage-completed: oklch(0.58 0.14 145);
+  --nora-deal-stage-completed-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-completed) 14%,
+    white
+  );
+  --nora-deal-stage-legacy: oklch(0.55 0.02 260);
+  --nora-deal-stage-legacy-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-legacy) 12%,
+    white
+  );
+  /* Reserved for future complaintStatuses — do not use for deals. */
+  --nora-deal-stage-complaint: oklch(0.55 0.18 300);
+  --nora-deal-stage-complaint-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-complaint) 14%,
+    white
+  );
 }
 
 .dark {
@@ -145,6 +202,61 @@
   --avatar-7: oklch(0.38 0.14 10);
   --avatar-8: oklch(0.4 0.11 80);
   --avatar-9: oklch(0.36 0.13 270);
+
+  --nora-deal-stage-none: oklch(0.72 0.01 260);
+  --nora-deal-stage-none-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-none) 18%,
+    transparent
+  );
+  --nora-deal-stage-requested: oklch(0.72 0.12 250);
+  --nora-deal-stage-requested-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-requested) 20%,
+    transparent
+  );
+  --nora-deal-stage-quote_sent: oklch(0.82 0.14 95);
+  --nora-deal-stage-quote_sent-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-quote_sent) 18%,
+    transparent
+  );
+  --nora-deal-stage-ordered: oklch(0.78 0.14 55);
+  --nora-deal-stage-ordered-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-ordered) 18%,
+    transparent
+  );
+  --nora-deal-stage-in_production: oklch(0.76 0.14 350);
+  --nora-deal-stage-in_production-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-in_production) 18%,
+    transparent
+  );
+  --nora-deal-stage-on_site: oklch(0.72 0.16 25);
+  --nora-deal-stage-on_site-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-on_site) 16%,
+    transparent
+  );
+  --nora-deal-stage-completed: oklch(0.74 0.12 145);
+  --nora-deal-stage-completed-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-completed) 18%,
+    transparent
+  );
+  --nora-deal-stage-legacy: oklch(0.7 0.02 260);
+  --nora-deal-stage-legacy-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-legacy) 16%,
+    transparent
+  );
+  --nora-deal-stage-complaint: oklch(0.72 0.14 300);
+  --nora-deal-stage-complaint-soft: color-mix(
+    in oklab,
+    var(--nora-deal-stage-complaint) 18%,
+    transparent
+  );
 }
 
 a,
@@ -307,6 +419,55 @@ input[type="time"] {
 
   .nora-deal-card-overdue {
     border-color: color-mix(in oklab, var(--nora-brand) 30%, var(--border));
+  }
+
+  /* Vorgangsstatus — domain-specific (not noteStatuses) */
+  .nora-deal-stage-dot {
+    display: inline-block;
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    background-color: var(--nora-deal-stage-color);
+  }
+
+  .nora-deal-stage-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: 100%;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--foreground);
+    background-color: var(--nora-deal-stage-soft);
+    border: 1px solid
+      color-mix(in oklab, var(--nora-deal-stage-color) 35%, transparent);
+  }
+
+  .nora-deal-stage-pill-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nora-deal-stage-accent {
+    border-left: 3px solid var(--nora-deal-stage-color);
+  }
+
+  .nora-deal-stage-surface {
+    background-color: var(--nora-deal-stage-soft);
+  }
+
+  .nora-deal-card-stage {
+    border-left: 3px solid var(--nora-deal-stage-color);
+  }
+
+  .nora-kanban-column-header.nora-deal-stage-accent {
+    padding-left: 0.75rem;
   }
 
   .nora-kanban-scroll {

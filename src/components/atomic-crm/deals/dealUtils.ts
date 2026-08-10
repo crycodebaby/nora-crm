@@ -1,53 +1,21 @@
 import { defaultCurrency } from "../root/defaultConfiguration";
-import type { DealStage } from "../types";
 import { formatNoraDate, formatNoraRelativeDay } from "../misc/noraDateTime";
 
-/** Visible German labels for legacy Atomic CRM stage values stored in the database. */
-export const LEGACY_ATOMIC_DEAL_STAGE_LABELS: Record<string, string> = {
-  opportunity: "Neue Anfrage",
-  "proposal-sent": "Angebot gesendet",
-  "in-negotiation": "In Klärung",
-  "in-negociation": "In Klärung",
-  won: "Angenommen",
-  lost: "Abgelehnt",
-  delayed: "Verzögert",
-  // Kurzformen aus früherer Nora-Konfiguration
-  anfrage: "Neue Anfrage",
-  angebot: "Angebot gesendet",
-  beauftragt: "Angenommen",
-  "in-arbeit": "In Kalkulation",
-  abgeschlossen: "Abgeschlossen",
-  abgelehnt: "Abgelehnt",
-};
-
-/** Fallback when legacy English labels are still stored in app configuration. */
-const LEGACY_ENGLISH_DEAL_STAGE_LABELS: Record<string, string> = {
-  Opportunity: "Neue Anfrage",
-  "Proposal Sent": "Angebot gesendet",
-  "In Negotiation": "In Klärung",
-  "In Negociation": "In Klärung",
-  Won: "Angenommen",
-  Lost: "Abgelehnt",
-  Delayed: "Verzögert",
-};
+export {
+  findDealLabel,
+  isDealTerminalStage,
+  localizeDealStages,
+  LEGACY_ATOMIC_DEAL_STAGE_LABELS,
+  normalizeDealStageValue,
+  resolveDealStageColumn,
+  getDealStageColorToken,
+  getDealStageCssVars,
+  ensureCanonicalDealStages,
+  DEAL_STAGE_DEFAULT,
+  DEAL_STAGE_NONE,
+} from "./dealStageModel";
 
 export const NORA_MONEY_LOCALE = "de-DE";
-
-export const findDealLabel = (
-  dealStages: DealStage[],
-  dealValue: string,
-): string | undefined => {
-  if (LEGACY_ATOMIC_DEAL_STAGE_LABELS[dealValue]) {
-    return LEGACY_ATOMIC_DEAL_STAGE_LABELS[dealValue];
-  }
-
-  const dealStage = dealStages.find((stage) => stage.value === dealValue);
-  if (!dealStage?.label) {
-    return undefined;
-  }
-
-  return LEGACY_ENGLISH_DEAL_STAGE_LABELS[dealStage.label] ?? dealStage.label;
-};
 
 export function formatDealAmount(
   amount: number,
@@ -80,25 +48,6 @@ const isoDateStringRegex = /^\d{4}-\d{2}-\d{2}$/;
 
 export function formatISODateString(dateString: string) {
   return formatNoraDate(dateString);
-}
-
-/** Apply German labels to legacy Atomic stages still present in stored configuration. */
-export const localizeDealStages = (dealStages: DealStage[]): DealStage[] =>
-  dealStages.map((stage) => ({
-    ...stage,
-    label: findDealLabel(dealStages, stage.value) ?? stage.label,
-  }));
-
-const TERMINAL_DEAL_STAGES = new Set([
-  "angenommen",
-  "abgelehnt",
-  "abgeschlossen",
-  "won",
-  "lost",
-]);
-
-export function isDealTerminalStage(stage: string): boolean {
-  return TERMINAL_DEAL_STAGES.has(stage);
 }
 
 export function parseISODateOnly(dateString: string): Date {

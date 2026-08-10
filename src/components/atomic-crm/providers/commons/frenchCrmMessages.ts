@@ -212,6 +212,7 @@ export const frenchCrmMessages = {
         sales_id: "Responsable",
         case_number: "Numéro de dossier",
       },
+      primary_stage_hint: "Statut de dossier actif",
       action: {
         back_to_deal: "Retour à l'affaire",
         create: "Créer une affaire",

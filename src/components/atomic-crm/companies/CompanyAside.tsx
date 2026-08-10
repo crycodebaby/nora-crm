@@ -20,6 +20,7 @@ import type { Company } from "../types";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
 import { sizes } from "./sizes";
 import { useGetSalesName } from "../sales/useGetSalesName";
+import { PrimaryDealStageHint } from "../deals/PrimaryDealStageHint";
 
 interface CompanyAsideProps {
   link?: string;
@@ -44,6 +45,14 @@ export const CompanyAside = ({ link = "edit" }: CompanyAsideProps) => {
       </div>
 
       <CompanyInfo record={record} />
+
+      <AsideSection
+        title={translate("resources.deals.primary_stage_hint", {
+          _: "Aktiver Vorgangsstatus",
+        })}
+      >
+        <PrimaryDealStageHint scope="company" />
+      </AsideSection>
 
       <AddressInfo record={record} />
 

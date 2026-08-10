@@ -52,12 +52,12 @@ describe("Nora Düsseldorf demo seed", () => {
   it("covers deal without order value", () => {
     const noAmount = db.deals.find((d) => d.amount === 0);
     expect(noAmount).toBeDefined();
-    expect(noAmount?.stage).toBe("wartet-auf-hersteller");
+    expect(noAmount?.stage).toBe("in_production");
   });
 
   it("covers overdue follow-up deal for hotboard", () => {
     const overdue = db.deals.find(
-      (d) => d.name.includes("Hotelzimmer") && d.stage === "nachfassen",
+      (d) => d.name.includes("Hotelzimmer") && d.stage === "quote_sent",
     );
     expect(overdue).toBeDefined();
     expect(
@@ -80,18 +80,13 @@ describe("Nora Düsseldorf demo seed", () => {
   it("uses only existing deal stages and categories", () => {
     const stages = new Set(db.deals.map((d) => d.stage));
     const allowedStages = [
-      "neue-anfrage",
-      "kontaktiert",
-      "termin-vereinbart",
-      "aufmass-geplant",
-      "aufmass-erledigt",
-      "in-kalkulation",
-      "wartet-auf-hersteller",
-      "angebot-gesendet",
-      "nachfassen",
-      "angenommen",
-      "abgelehnt",
-      "abgeschlossen",
+      "none",
+      "requested",
+      "quote_sent",
+      "ordered",
+      "in_production",
+      "on_site",
+      "completed",
     ];
     for (const stage of stages) {
       expect(allowedStages).toContain(stage);

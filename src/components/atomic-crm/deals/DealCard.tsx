@@ -13,6 +13,8 @@ import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraUrgencyBadge } from "../misc/NoraUrgencyBadge";
 import { getFollowUpStatus, isDealTerminalStage } from "./dealUtils";
+import { getDealStageCssVars } from "./dealStageModel";
+import { DealStagePill } from "./DealStagePill";
 
 export const DealCard = ({ deal, index }: { deal: Deal; index: number }) => {
   if (!deal) return null;
@@ -41,6 +43,7 @@ export const DealCardContent = ({
     deal && !isDealTerminalStage(deal.stage)
       ? getFollowUpStatus(deal.expected_closing_date)
       : null;
+  const stageVars = getDealStageCssVars(deal.stage);
   const handleClick = () => {
     redirect(
       noraCreatePath({ resource: "deals", type: "show", id: deal.id }),
@@ -64,21 +67,25 @@ export const DealCardContent = ({
       <RecordContextProvider value={deal}>
         <Card
           className={cn(
-            "nora-card nora-deal-card py-4 transition-all duration-200",
+            "nora-card nora-deal-card nora-deal-card-stage py-4 transition-all duration-200",
             followUpStatus === "overdue" && "nora-deal-card-overdue",
             followUpStatus === "today" && "nora-deal-card-today",
             snapshot?.isDragging
               ? "opacity-90 transform rotate-1 shadow-lg"
               : "hover:shadow-md",
           )}
+          style={stageVars}
         >
           <CardContent className="px-4 flex flex-col gap-2.5">
-            <BusinessNumber
-              value={deal.case_number}
-              kind="case"
-              size="sm"
-              variant="badge"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <BusinessNumber
+                value={deal.case_number}
+                kind="case"
+                size="sm"
+                variant="badge"
+              />
+              <DealStagePill stage={deal.stage} />
+            </div>
             <p className="nora-deal-card-title leading-snug line-clamp-2">
               {deal.name}
             </p>

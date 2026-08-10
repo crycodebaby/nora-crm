@@ -1,4 +1,8 @@
 import type { ConfigurationContextValue } from "./ConfigurationContext";
+import {
+  defaultDealPipelineStatuses,
+  defaultDealStages,
+} from "../deals/dealStageModel";
 
 /** Nora product mark — used inside the authenticated app */
 export const defaultDarkModeLogo = "./logos/nora-monogram-dark.png";
@@ -30,27 +34,8 @@ export const defaultCompanySectors = [
   { value: "sonstiges", label: "Sonstiges" },
 ];
 
-/** Nora Vorgangsstatus – technische IDs bleiben stabil, Labels sind deutsch. */
-export const defaultDealStages = [
-  { value: "neue-anfrage", label: "Neue Anfrage" },
-  { value: "kontaktiert", label: "Kontaktiert" },
-  { value: "termin-vereinbart", label: "Termin vereinbart" },
-  { value: "aufmass-geplant", label: "Aufmaß geplant" },
-  { value: "aufmass-erledigt", label: "Aufmaß erledigt" },
-  { value: "in-kalkulation", label: "In Kalkulation" },
-  { value: "wartet-auf-hersteller", label: "Wartet auf Hersteller" },
-  { value: "angebot-gesendet", label: "Angebot gesendet" },
-  { value: "nachfassen", label: "Rückmeldung ausstehend" },
-  { value: "angenommen", label: "Angenommen" },
-  { value: "abgelehnt", label: "Abgelehnt" },
-  { value: "abgeschlossen", label: "Abgeschlossen" },
-];
-
-export const defaultDealPipelineStatuses = [
-  "angenommen",
-  "abgelehnt",
-  "abgeschlossen",
-];
+/** Nora Vorgangsstatus (kanonisch) — siehe deals/dealStageModel.ts */
+export { defaultDealStages, defaultDealPipelineStatuses };
 
 export const defaultDealCategories = [
   { value: "hausmeisterdienst", label: "Hausmeisterdienst" },

@@ -3,7 +3,7 @@ import { useStore } from "ra-core";
 
 import type { DealStage, LabeledValue, NoteStatus } from "../types";
 import { defaultConfiguration } from "./defaultConfiguration";
-import { localizeDealStages } from "../deals/dealUtils";
+import { ensureCanonicalDealStages } from "../deals/dealStageModel";
 
 export const CONFIGURATION_STORE_KEY = "app.configuration";
 
@@ -34,7 +34,11 @@ export const useConfigurationContext = () => {
       merged.currency = defaultConfiguration.currency;
     }
 
-    merged.dealStages = localizeDealStages(merged.dealStages);
+    merged.dealStages = ensureCanonicalDealStages(merged.dealStages);
+    merged.dealPipelineStatuses =
+      merged.dealPipelineStatuses?.length > 0
+        ? merged.dealPipelineStatuses
+        : defaultConfiguration.dealPipelineStatuses;
 
     return merged;
   }, [config]);

@@ -33,7 +33,7 @@ const baseDeal = (overrides: Partial<Deal>): Deal =>
     company_id: 1,
     contact_ids: [],
     category: "fensterservice",
-    stage: "neue-anfrage",
+    stage: "requested",
     description: "",
     amount: 0,
     created_at: "2026-01-01T00:00:00Z",
@@ -47,16 +47,16 @@ const baseDeal = (overrides: Partial<Deal>): Deal =>
 
 describe("FOCUS_BOARD_STAGES", () => {
   it("keeps canonical status IDs", () => {
-    expect(FOCUS_BOARD_STAGES).toEqual(["neue-anfrage", "nachfassen"]);
+    expect(FOCUS_BOARD_STAGES).toEqual(["requested", "quote_sent"]);
   });
 });
 
 describe("filterNachfassenDeals", () => {
-  it("only includes nachfassen stage", () => {
+  it("only includes quote_sent bucket", () => {
     const deals = [
-      baseDeal({ id: 1, stage: "nachfassen" }),
-      baseDeal({ id: 2, stage: "angebot-gesendet" }),
-      baseDeal({ id: 3, stage: "neue-anfrage" }),
+      baseDeal({ id: 1, stage: "quote_sent" }),
+      baseDeal({ id: 2, stage: "ordered" }),
+      baseDeal({ id: 3, stage: "requested" }),
     ];
     expect(filterNachfassenDeals(deals).map((d) => d.id)).toEqual([1]);
   });
@@ -97,27 +97,27 @@ describe("prepareFocusColumnDeals", () => {
     const deals = Array.from({ length: 7 }, (_, index) =>
       baseDeal({
         id: index + 1,
-        stage: "neue-anfrage",
+        stage: "requested",
         created_at: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00Z`,
       }),
     );
-    const result = prepareFocusColumnDeals(deals, "neue-anfrage");
+    const result = prepareFocusColumnDeals(deals, "requested");
     expect(result.deals).toHaveLength(HOTBOARD_DEAL_LIMIT);
     expect(result.total).toBe(7);
     expect(result.remaining).toBe(2);
   });
 
-  it("filters nachfassen column separately from neue-anfrage", () => {
+  it("filters quote_sent column separately from requested", () => {
     const deals = [
-      baseDeal({ id: 1, stage: "neue-anfrage" }),
-      baseDeal({ id: 2, stage: "nachfassen" }),
-      baseDeal({ id: 3, stage: "angebot-gesendet" }),
+      baseDeal({ id: 1, stage: "requested" }),
+      baseDeal({ id: 2, stage: "quote_sent" }),
+      baseDeal({ id: 3, stage: "ordered" }),
     ];
     expect(
-      filterDealsForFocusStage(deals, "nachfassen").map((d) => d.id),
+      filterDealsForFocusStage(deals, "quote_sent").map((d) => d.id),
     ).toEqual([2]);
     expect(
-      prepareFocusColumnDeals(deals, "neue-anfrage").deals.map((d) => d.id),
+      prepareFocusColumnDeals(deals, "requested").deals.map((d) => d.id),
     ).toEqual([1]);
   });
 });

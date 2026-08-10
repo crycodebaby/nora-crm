@@ -76,8 +76,8 @@ export const Hotboard = () => {
   );
 
   const focusBoardCompanyIds = useMemo(() => {
-    const newInquiry = prepareFocusColumnDeals(deals ?? [], "neue-anfrage");
-    const nachfassen = prepareFocusColumnDeals(deals ?? [], "nachfassen");
+    const newInquiry = prepareFocusColumnDeals(deals ?? [], "requested");
+    const nachfassen = prepareFocusColumnDeals(deals ?? [], "quote_sent");
     return [
       ...new Set(
         [...newInquiry.deals, ...nachfassen.deals].map(

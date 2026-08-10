@@ -21,18 +21,15 @@ export const KANBAN_VIEW_CATEGORY: Record<
 };
 
 /**
- * Schlanker Fensterauftrag-Kanban (v0.3c) — Teilmenge von `defaultDealStages`.
- * S4a/S4b/S4c sind bewusst keine Status und erscheinen nicht als Spalten.
+ * Schlanker Fensterauftrag-Kanban — Teilmenge der kanonischen Vorgangsstatus.
  */
 export const FENSTERSERVICE_KANBAN_STAGE_IDS = [
-  "neue-anfrage",
-  "aufmass-geplant",
-  "aufmass-erledigt",
-  "angebot-gesendet",
-  "angenommen",
-  "wartet-auf-hersteller",
-  "termin-vereinbart",
-  "abgeschlossen",
+  "requested",
+  "quote_sent",
+  "ordered",
+  "in_production",
+  "on_site",
+  "completed",
 ] as const;
 
 export type FensterserviceKanbanStageId =
@@ -64,7 +61,7 @@ export function getPreferredStagesForKanbanView(
 
 /**
  * Visible Kanban columns for the active view.
- * Fensterservice: preferred 8 stages; orphan stages (e.g. `nachfassen`) appear only when they contain deals.
+ * Fensterservice: preferred stages; orphans only when they contain deals.
  */
 export function getVisibleStagesForKanbanView(
   view: DealKanbanCategoryView,
