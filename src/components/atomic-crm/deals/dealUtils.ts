@@ -70,7 +70,7 @@ export function sumDealAmounts(deals: { amount?: number | null }[]): number {
 }
 
 export function getRelativeTimeString(
-  dateString: string,
+  dateString: string | Date | number | null | undefined,
   locale = "de-DE",
 ): string {
   return formatNoraRelativeDay(dateString, locale);

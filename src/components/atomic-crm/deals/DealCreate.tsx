@@ -10,7 +10,7 @@ import {
 import { Create } from "@/components/admin/create";
 import { SaveButton } from "@/components/admin/form";
 import { FormToolbar } from "@/components/admin/simple-form";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import { noraCreatePath } from "../routing/noraRoutes";
 import type { Deal } from "../types";
@@ -76,6 +76,7 @@ export const DealCreate = ({ open }: { open: boolean }) => {
   return (
     <Dialog open={open} onOpenChange={() => handleClose()}>
       <DialogContent className="lg:max-w-4xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0">
+        <DialogTitle className="sr-only">Neuen Vorgang anlegen</DialogTitle>
         <Create resource="deals" mutationOptions={{ onSuccess }}>
           <Form
             defaultValues={{

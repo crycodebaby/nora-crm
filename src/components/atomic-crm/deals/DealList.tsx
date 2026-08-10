@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { InputProps } from "ra-core";
 import { useGetIdentity, useListContext, useTranslate } from "ra-core";
 import { matchPath, useLocation } from "react-router";
-import { matchesNoraSubPath } from "../routing/noraRoutes";
+import { matchesNoraSubPath, matchNoraEditPath } from "../routing/noraRoutes";
 import { AutocompleteInput } from "@/components/admin/autocomplete-input";
 import { ExportButton } from "@/components/admin/export-button";
 import { List } from "@/components/admin/list";
@@ -76,10 +76,7 @@ const DealLayout = () => {
   const matchShow =
     matchPath("/deals/:id/show", location.pathname) ??
     matchPath("/vorgaenge/:id/show", location.pathname);
-  const matchEditRaw =
-    matchPath("/deals/:id", location.pathname) ??
-    matchPath("/vorgaenge/:id", location.pathname);
-  const matchEdit = matchEditRaw && !matchShow ? matchEditRaw : null;
+  const matchEdit = matchNoraEditPath("deals", location.pathname);
 
   const { data, isPending, filterValues } = useListContext();
   const hasFilters = filterValues && Object.keys(filterValues).length > 0;
@@ -100,7 +97,7 @@ const DealLayout = () => {
       <DealListContent />
       <DealArchivedList />
       <DealCreate open={!!matchCreate} />
-      <DealEdit open={!!matchEdit && !matchCreate} id={matchEdit?.params.id} />
+      <DealEdit open={!!matchEdit} id={matchEdit?.params.id} />
       <DealShow open={!!matchShow} id={matchShow?.params.id} />
     </div>
   );

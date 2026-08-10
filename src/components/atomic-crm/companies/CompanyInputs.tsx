@@ -14,6 +14,7 @@ import type { Company, Sale } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
 import { sizes } from "./sizes";
+import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
 
 const isUrl = (url: string) => {
   if (!url) return;
@@ -169,14 +170,12 @@ const CompanyAdditionalInformationInputs = () => {
           />
         </SimpleFormIterator>
       </ArrayInput>
-      <ReferenceInput
-        source="sales_id"
-        reference="sales_directory"
-        filter={{
-          "disabled@neq": true,
-        }}
-      >
-        <SelectInput helperText={false} optionText={saleOptionRenderer} />
+      <ReferenceInput source="sales_id" {...SALES_DIRECTORY_REFERENCE_PROPS}>
+        <SelectInput
+          helperText={false}
+          optionText={saleOptionRenderer}
+          emptyText="—"
+        />
       </ReferenceInput>
     </div>
   );

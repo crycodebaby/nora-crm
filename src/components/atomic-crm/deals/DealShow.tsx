@@ -18,7 +18,7 @@ import { CanAccess } from "ra-core";
 import { ReferenceArrayField } from "@/components/admin/reference-array-field";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import { NoteCreate } from "../notes/NoteCreate";
 import { NotesIterator } from "../notes/NotesIterator";
@@ -41,10 +41,12 @@ import {
   getFollowUpStatus,
   isDealTerminalStage,
 } from "./dealUtils";
+import { isNoraRecordId } from "../routing/noraRoutes";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
   const { onCloseAutoFocus } = useDialogFocusReturn(open);
+  const canLoad = open && isNoraRecordId(id);
 
   const handleClose = () => {
     redirect("list", "deals");
@@ -52,7 +54,7 @@ export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
 
   return (
     <Dialog
-      open={open}
+      open={canLoad}
       onOpenChange={(next) => {
         if (!next) handleClose();
       }}
@@ -60,8 +62,10 @@ export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
       <DialogContent
         className="nora-deal-dialog"
         onCloseAutoFocus={onCloseAutoFocus}
+        aria-describedby={undefined}
       >
-        {id ? (
+        <DialogTitle className="sr-only">Vorgang</DialogTitle>
+        {canLoad ? (
           <ShowBase id={id}>
             <NoraShowBoundary>
               <DealShowContent />

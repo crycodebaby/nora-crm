@@ -2,6 +2,27 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-10 – Stabilization Gate 1: Deal Surface Recovery
+
+### Kontext
+
+Nach Wave-1-Production-Migration zeigten Vorgangsflächen unabhängige Frontend-Fehler
+(`sales_directory` 400, `deals?id=eq.create`, RelativeTimeFormat RangeError, schwaches
+Deal-Save-Feedback). Operation Correlation blieb unberührt.
+
+### Entscheidung
+
+- `formatNoraRelativeDay` defensiv (Fallback `—`); Archive-Grupierung mit ISO-Tageskey.
+- `sales_directory`-Filter `disabled@neq` entfernt (View filtert bereits `disabled=false`).
+- Create-Route darf nie als Deal-ID an `EditBase`/`ShowBase` gehen (`isNoraRecordId` /
+  `matchNoraEditPath`).
+- `DateInput` sync über `YYYY-MM-DD`-Regex; `DealEdit` restored `notify` nach Success.
+- Keine DB-Migration.
+
+### Begründung
+
+Root Causes waren Frontend/Application-Bugs, keine Schema-Lücken.
+
 ## 2026-06-28 – Atomic CRM als Basis für Nora CRM
 
 ### Kontext

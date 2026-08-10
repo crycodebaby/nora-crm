@@ -132,6 +132,8 @@ export const DateInput = (props: DateInputProps) => {
 
   // Update the input text when the user types in the input.
   // Also, update the react-hook-form value if the input value is a valid date string.
+  // Prefer YYYY-MM-DD regex over valueAsDate — some browsers leave valueAsDate null
+  // even for a complete date string, which previously blocked form sync / save.
   const handleChange = useEvent(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       if (onChange) {
@@ -143,19 +145,11 @@ export const DateInput = (props: DateInputProps) => {
       ) {
         return;
       }
-      const target = event.target;
-      const newValue = target.value;
-      const isNewValueValid =
-        newValue === "" ||
-        (target.valueAsDate != null &&
-          !isNaN(new Date(target.valueAsDate).getTime()));
+      const newValue = event.target.value;
+      const isNewValueValid = newValue === "" || dateRegex.test(newValue);
 
-      // Some browsers will return null for an invalid date
-      // so we only change react-hook-form value if it's not null.
-      // The input reset is handled in the onBlur event handler
-      if (newValue !== "" && newValue != null && isNewValueValid) {
+      if (isNewValueValid) {
         field.onChange(newValue);
-        // Track the fact that the next react-hook-form state change was triggered by the input itself
         wasLastChangedByInput.current = true;
       }
     },
@@ -177,14 +171,12 @@ export const DateInput = (props: DateInputProps) => {
 
     const newValue = localInputRef.current.value;
     // To ensure users can clear the input, we check its value on blur
-    // and submit it to react-hook-form
-    const isNewValueValid =
-      newValue === "" ||
-      (localInputRef.current.valueAsDate != null &&
-        !isNaN(new Date(localInputRef.current.valueAsDate).getTime()));
+    // and submit it to react-hook-form. Regex avoids valueAsDate null traps.
+    const isNewValueValid = newValue === "" || dateRegex.test(newValue);
 
     if (isNewValueValid && field.value !== newValue) {
-      field.onChange(newValue ?? "");
+      field.onChange(newValue);
+      wasLastChangedByInput.current = true;
     }
 
     if (onBlurFromField) {

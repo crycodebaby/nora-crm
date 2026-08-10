@@ -6,11 +6,31 @@ import {
 } from "ra-core";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import type { Deal } from "../types";
 import { DealCardContent } from "./DealCard";
 import { getRelativeTimeString } from "./dealUtils";
+
+const toArchiveDayKey = (archivedAt: Deal["archived_at"]): string | null => {
+  if (archivedAt == null || archivedAt === "") {
+    return null;
+  }
+  const parsed = new Date(archivedAt);
+  if (!Number.isFinite(parsed.getTime())) {
+    return null;
+  }
+  // Local YYYY-MM-DD — safe for formatNoraRelativeDay / RelativeTimeFormat
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export const DealArchivedList = () => {
   const translate = useTranslate();
@@ -39,10 +59,13 @@ export const DealArchivedList = () => {
 
   if (!identity || isPending || !total || !archivedLists) return null;
 
-  // Group archived lists by date
+  // Group archived lists by ISO date-only key (never toDateString())
   const archivedListsByDate: { [date: string]: Deal[] } = archivedLists.reduce(
     (acc, deal) => {
-      const date = new Date(deal.archived_at).toDateString();
+      const date = toArchiveDayKey(deal.archived_at);
+      if (!date) {
+        return acc;
+      }
       if (!acc[date]) {
         acc[date] = [];
       }
@@ -66,6 +89,9 @@ export const DealArchivedList = () => {
           <DialogTitle>
             {translate("resources.deals.archived.list_title")}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {translate("resources.deals.archived.view")}
+          </DialogDescription>
           <div className="flex flex-col gap-8">
             {Object.entries(archivedListsByDate).map(([date, deals]) => (
               <div key={date} className="flex flex-col gap-4">

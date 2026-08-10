@@ -21,6 +21,7 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal, Sale } from "../types";
 
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
+import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
 
 const saleOptionRenderer = (choice: Sale) =>
   `${choice.first_name} ${choice.last_name}`;
@@ -105,12 +106,13 @@ export const DealInputs = () => {
 
         <ReferenceInput
           source="sales_id"
-          reference="sales_directory"
-          filter={{
-            "disabled@neq": true,
-          }}
+          {...SALES_DIRECTORY_REFERENCE_PROPS}
         >
-          <SelectInput helperText={false} optionText={saleOptionRenderer} />
+          <SelectInput
+            helperText={false}
+            optionText={saleOptionRenderer}
+            emptyText="—"
+          />
         </ReferenceInput>
       </div>
     </div>

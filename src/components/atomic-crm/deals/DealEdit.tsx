@@ -2,12 +2,13 @@ import {
   EditBase,
   Form,
   useEditContext,
+  useNotify,
   useRecordContext,
   useRedirect,
   useTranslate,
 } from "ra-core";
 import { Link } from "react-router";
-import { noraCreatePath } from "../routing/noraRoutes";
+import { isNoraRecordId, noraCreatePath } from "../routing/noraRoutes";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -24,6 +25,8 @@ import { DealInputs } from "./DealInputs";
 
 export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
+  const notify = useNotify();
+  const canLoad = open && isNoraRecordId(id);
 
   const handleClose = () => {
     redirect(
@@ -36,13 +39,17 @@ export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
   };
 
   return (
-    <Dialog open={open}>
-      {id ? (
+    <Dialog open={open && canLoad}>
+      {canLoad ? (
         <EditBase
           id={id}
           mutationMode="pessimistic"
           mutationOptions={{
             onSuccess: () => {
+              notify("ra.notification.updated", {
+                type: "info",
+                messageArgs: { smart_count: 1 },
+              });
               redirect(
                 noraCreatePath({
                   resource: "deals",

@@ -106,3 +106,40 @@ export const matchesNoraSubPath = (
     matchPath(`/${slug}/${subPath}`, pathname) != null
   );
 };
+
+/**
+ * True when `id` is a real record id — never the create route segment.
+ * Prevents getOne("deals", { id: "create" }) from dialog edit/show mounts.
+ */
+export const isNoraRecordId = (
+  id: string | number | undefined | null,
+): id is string | number => {
+  if (id == null) return false;
+  const value = String(id).trim();
+  if (!value) return false;
+  return value.toLowerCase() !== "create";
+};
+
+/** Match edit routes while excluding create and show. */
+export const matchNoraEditPath = (
+  resource: NoraRoutableResource,
+  pathname: string,
+) => {
+  if (matchesNoraSubPath(resource, "create", pathname)) {
+    return null;
+  }
+  const slug = NORA_RESOURCE_PATHS[resource];
+  const showMatch =
+    matchPath(`/${resource}/:id/show`, pathname) ??
+    matchPath(`/${slug}/:id/show`, pathname);
+  if (showMatch) {
+    return null;
+  }
+  const editMatch =
+    matchPath(`/${resource}/:id`, pathname) ??
+    matchPath(`/${slug}/:id`, pathname);
+  if (!editMatch || !isNoraRecordId(editMatch.params.id)) {
+    return null;
+  }
+  return editMatch;
+};
