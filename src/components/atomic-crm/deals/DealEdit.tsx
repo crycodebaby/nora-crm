@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   EditBase,
   Form,
@@ -7,11 +8,16 @@ import {
   useRedirect,
   useTranslate,
 } from "ra-core";
+import { useFormContext, useFormState } from "react-hook-form";
 import { Link } from "react-router";
 import { isNoraRecordId, noraCreatePath } from "../routing/noraRoutes";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { FormToolbar } from "../layout/FormToolbar";
 import { CompanyAvatar } from "../companies/CompanyAvatar";
@@ -20,7 +26,6 @@ import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import { NoraDeleteButton } from "../misc/NoraAccessActions";
 import { NoraDialogContent } from "../misc/NoraDialogContent";
-import { useNoraDirtyDialog } from "../misc/useNoraDirtyDialog";
 import { OPERATION_CATALOG } from "../operations/operationCatalog";
 import { DealInputs } from "./DealInputs";
 
@@ -75,30 +80,74 @@ export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
 const DealEditDialog = ({ onClose }: { onClose: () => void }) => {
   return (
     <NoraAccessGuard resource="deals" action="edit">
-      <Form className="contents">
-        <DealEditDialogBody onClose={onClose} />
-      </Form>
+      <DealEditDialogBody onClose={onClose} />
     </NoraAccessGuard>
   );
 };
 
+/**
+ * Stabilization Gate 2: Form must live INSIDE the Radix Dialog portal.
+ * Previously Form wrapped NoraDialogContent with className="contents", so the
+ * visible SaveButton (type=submit) had no HTML form owner and native submit
+ * never ran — while RHF still tracked isDirty across the portal.
+ */
 const DealEditDialogBody = ({ onClose }: { onClose: () => void }) => {
-  const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({ onClose });
+  const translate = useTranslate();
+  const [isDirty, setIsDirty] = useState(false);
 
   return (
-    <>
-      <NoraDialogContent
-        open
-        onRequestClose={requestClose}
-        className="lg:max-w-4xl p-4 overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
-      >
+    <NoraDialogContent
+      open
+      isDirty={isDirty}
+      onRequestClose={onClose}
+      className="lg:max-w-4xl p-4 overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
+    >
+      <DialogTitle className="sr-only">
+        {translate("resources.deals.action.edit", {
+          _: "Vorgang bearbeiten",
+        })}
+      </DialogTitle>
+      <DialogDescription className="sr-only">
+        {translate("resources.deals.edit_dialog.description", {
+          _: "Vorgangsdaten bearbeiten und speichern.",
+        })}
+      </DialogDescription>
+      <Form>
+        <FormDirtyBridge onDirtyChange={setIsDirty} />
         <EditHeader />
         <DealInputs />
         <FormToolbar />
-      </NoraDialogContent>
-      {dirtyConfirmDialog}
-    </>
+      </Form>
+    </NoraDialogContent>
   );
+};
+
+/** Syncs RHF dirty state to NoraDialogContent (outside Form context). */
+const FormDirtyBridge = ({
+  onDirtyChange,
+}: {
+  onDirtyChange: (isDirty: boolean) => void;
+}) => {
+  const { isDirty, errors, isValid } = useFormState();
+  const { getValues } = useFormContext();
+  useEffect(() => {
+    onDirtyChange(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => {
+    if (import.meta.env.MODE === "test") {
+      (
+        window as unknown as {
+          __noraDealEditForm?: () => unknown;
+        }
+      ).__noraDealEditForm = () => ({
+        values: getValues(),
+        errors,
+        isValid,
+        isDirty,
+      });
+    }
+  });
+  return null;
 };
 
 function EditHeader() {

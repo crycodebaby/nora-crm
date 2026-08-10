@@ -2,6 +2,45 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-10 – Stabilization Gate 2: DealEdit Portal Form Owner
+
+### Kontext
+
+Produktion: Speichern im Vorgang-Bearbeiten-Dialog reagierte nicht (kein Update,
+kein Console-Error), obwohl das Formular dirty wurde und der
+Verwerfen-Dialog erschien. Wave 3 Error Observatory wurde dafür geparkt
+(`wip-wave3-error-observatory-before-stabilization-gate2`).
+
+### Entscheidung
+
+- **Produktionsursache (nachgewiesen):** `<Form className="contents">`
+  **außerhalb** des Radix `DialogPortal` → sichtbarer
+  `SaveButton type="submit"` mit `button.form === null` → kein natives Submit;
+  RHF-Context blieb über den Portal-Baum trotzdem aktiv (`isDirty` true).
+- Fix **A**: `Form` physisch **innerhalb** von `NoraDialogContent` /
+  `DialogContent` rendern (wie bereits bei `DealCreate`). Dirty-Close über
+  `FormDirtyBridge` + `NoraDialogContent isDirty`.
+- Accessibility: `DialogTitle` / `DialogDescription` (sr-only) ergänzt.
+- Integrationstest klickt echtes „Speichern“ und prüft `button.form` +
+  `dataProvider.update`.
+- Andere Flächen: `TaskEdit` gleiches Anti-Pattern (Follow-up);
+  Sheets nutzen bereits `SaveButton type="button"`.
+- Delete bleibt Hard-Delete (`NoraDeleteButton` → `DeleteButton`); Archive
+  Center später.
+
+### Hinweis Test-Harness (nicht Produktion)
+
+Ein zwischenzeitlich beobachtetes „Form-ready Race“ (Speichern vor voll
+geladenem EditBase/References → RHF-Validierungstoast im Browser-Test) betraf
+**ausschließlich** das Vitest-Harness Timing. Es war **nicht** die
+Produktionsursache; Produktion war `button.form === null` durch
+Portal/Form-DOM-Trennung.
+
+### Begründung
+
+Native Form-Semantik im Portal wiederherstellen ist robuster als Button-Typ-
+Workarounds und entspricht dem bereits korrekten Create-Dialog.
+
 ## 2026-08-10 – Foundation Wave 2: Operation Manager + Catalog
 
 ### Kontext
