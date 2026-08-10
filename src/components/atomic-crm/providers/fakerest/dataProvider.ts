@@ -32,6 +32,7 @@ import {
 import { performGlobalSearch } from "../../misc/globalSearch";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
+import { executeDealUpdate } from "../../operations/executeDealUpdate";
 import {
   readOperationIdFromMeta,
   withOperationIdParams,
@@ -205,19 +206,24 @@ export const createDataProvider = ({
       }
       return baseDataProvider.getList(resource, params);
     },
-    // Wave 1 parity: same operation_id meta injection as Supabase (FakeRest ignores headers).
+    // Wave 2: deal.update via Operation Manager; Wave 1 header transport unchanged.
     async update(resource: string, params: any) {
       if (resource === "deals") {
         const existingId = readOperationIdFromMeta(params?.meta);
-        const context = createOperationContext({
-          operationType: "deal.update",
-          resourceType: "deals",
-          resourceId: params?.id,
-          ...(existingId ? { operationId: existingId } : {}),
-        });
-        return baseDataProvider.update(
-          resource,
-          withOperationIdParams(params, context),
+        if (existingId) {
+          const context = createOperationContext({
+            operationType: "deal.update",
+            resourceType: "deals",
+            resourceId: params?.id,
+            operationId: existingId,
+          });
+          return baseDataProvider.update(
+            resource,
+            withOperationIdParams(params, context),
+          );
+        }
+        return executeDealUpdate(params, (res, nextParams) =>
+          baseDataProvider.update(res, nextParams as any),
         );
       }
       return baseDataProvider.update(resource, params);

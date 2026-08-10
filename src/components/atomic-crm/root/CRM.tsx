@@ -62,6 +62,7 @@ import { ContactShow } from "../contacts/ContactShow.tsx";
 import { CompanyShow } from "../companies/CompanyShow.tsx";
 import { NoteShowPage } from "../notes/NoteShowPage.tsx";
 import { useNoraResourceAliasRoutes } from "../routing/NoraResourceAliasRoutes";
+import { OperationProvider } from "../operations/OperationProvider";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -224,16 +225,18 @@ export const CRM = ({
   const ResponsiveAdmin = isMobile ? MobileAdmin : DesktopAdmin;
 
   return (
-    <ResponsiveAdmin
-      dataProvider={dataProvider}
-      authProvider={wrappedAuthProvider}
-      i18nProvider={i18nProvider}
-      store={store}
-      loginPage={StartPage}
-      requireAuth
-      disableTelemetry
-      {...rest}
-    />
+    <OperationProvider>
+      <ResponsiveAdmin
+        dataProvider={dataProvider}
+        authProvider={wrappedAuthProvider}
+        i18nProvider={i18nProvider}
+        store={store}
+        loginPage={StartPage}
+        requireAuth
+        disableTelemetry
+        {...rest}
+      />
+    </OperationProvider>
   );
 };
 

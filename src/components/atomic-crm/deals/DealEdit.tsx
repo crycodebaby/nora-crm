@@ -21,6 +21,7 @@ import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import { NoraDeleteButton } from "../misc/NoraAccessActions";
 import { NoraDialogContent } from "../misc/NoraDialogContent";
 import { useNoraDirtyDialog } from "../misc/useNoraDirtyDialog";
+import { OPERATION_CATALOG } from "../operations/operationCatalog";
 import { DealInputs } from "./DealInputs";
 
 export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
@@ -46,9 +47,9 @@ export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
           mutationMode="pessimistic"
           mutationOptions={{
             onSuccess: () => {
-              notify("ra.notification.updated", {
+              // Existing notify restored; copy from Operation Catalog (no Feedback UI yet).
+              notify(OPERATION_CATALOG["deal.update"].successMessage, {
                 type: "info",
-                messageArgs: { smart_count: 1 },
               });
               redirect(
                 noraCreatePath({

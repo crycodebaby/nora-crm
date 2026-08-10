@@ -2,6 +2,38 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-10 – Foundation Wave 2: Operation Manager + Catalog
+
+### Kontext
+
+Wave 1 korreliert `operation_id` bis `audit_events.request_id`. Nora braucht
+zusätzlich einen zentralen Laufzeit-Manager für fachliche Operationen
+(pending/success/error), ohne Feedback-UI und ohne Persistenz.
+
+### Entscheidung
+
+- **Operation Catalog** (typed): zunächst `deal.update`, `deal.assign`,
+  `customer.update`, `contact.update` mit DE-Messages.
+- **Operation Manager** (in-memory): `execute(definition, input, handler)` —
+  mint/reuse `operationId`, pending → success|error, Exceptions weiterreichen.
+  Voll funktionsfähig **ohne** React/`OperationProvider` (process singleton).
+  Provider bindet denselben Singleton — erzeugt keine zweite Instanz.
+- React: `OperationProvider` + `useOperationManager` / `useOperations`
+  (`useSyncExternalStore`, stabile Snapshot-Referenz).
+- Vertikaler Slice: `dataProvider.update("deals")` → Manager → Wave-1-Header.
+  Vorhandene Meta-Header → kein verschachtelter Manager-Aufruf.
+- **deal.assign**: nur Catalog; Form-Save mit `sales_id` bleibt ein `deal.update`
+  (keine künstliche zweite Mutation).
+- Fehlerbezug: `runtimeErrorId` (ephemer, session-only) — **nicht** serverseitig
+  gespeichert bis Error Observatory.
+- Retention: success 8s, error 60s, pending nie auto-drop, max 50.
+- Keine DB-Tabelle, kein Feedback-UI, kein Error Observatory.
+
+### Begründung
+
+Manager ist Eigentümer der Operation-ID am Einstieg; Transport bleibt Wave 1.
+Feedback/Observatory können später auf denselben In-Memory-State aufsetzen.
+
 ## 2026-08-10 – Stabilization Gate 1: Deal Surface Recovery
 
 ### Kontext

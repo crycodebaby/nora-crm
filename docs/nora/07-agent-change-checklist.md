@@ -142,6 +142,22 @@ Bei Operation Correlation (Foundation Wave 1) zusätzlich:
 - [ ] Kein Remote-Migration-Apply / kein Function-Deploy ohne Freigabe
 - [ ] Altes Frontend ohne Header bleibt kompatibel (`request_id` NULL)
 
+Bei Operation Manager + Catalog (Foundation Wave 2) zusätzlich:
+
+- [ ] Catalog typisiert; keine Fake-Systemschritte in Messages
+- [ ] Manager: pending → success|error; Exceptions nicht schlucken
+- [ ] Manager ohne React voll funktionsfähig (Singleton)
+- [ ] OperationProvider erzeugt keine zweite konkurrierende Instanz
+- [ ] Operation-ID Ownership: Manager Einstieg; Transport nur weiterreichen
+- [ ] In-memory only (kein DB/localStorage/Realtime)
+- [ ] `runtimeErrorId` nur session-ephemer (kein Server-Lookup bis Observatory)
+- [ ] `deal.update` Slice über Manager + Wave-1-Header
+- [ ] `deal.assign` nur Catalog, nicht als zweite Mutation erzwingen
+- [ ] `OperationProvider` in CRM; `useSyncExternalStore` für Listen
+- [ ] Retention: success kurz, error länger, pending nie auto-drop
+- [ ] Unit-Tests Manager A–M + Snapshot/Timer/Singleton + Wave-1 Regression
+- [ ] Keine Feedback-UI / kein Error Observatory in dieser Wave
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

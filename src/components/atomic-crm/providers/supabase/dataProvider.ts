@@ -31,6 +31,7 @@ import type { ConfigurationContextValue } from "../../root/ConfigurationContext"
 import { performGlobalSearch } from "../../misc/globalSearch";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
+import { executeDealUpdate } from "../../operations/executeDealUpdate";
 import {
   readOperationIdFromMeta,
   withOperationIdParams,
@@ -110,24 +111,27 @@ const getDataProviderWithCustomMethods = () => {
     },
 
     /**
-     * Foundation Wave 1 vertical slice: deal.update carries
-     * x-nora-operation-id via meta.headers for audit request_id correlation.
-     *
-     * If an Application Service already set a valid operation header, reuse it.
-     * Transport helpers never mint a replacement UUID.
+     * Foundation Wave 2: deal.update enters Operation Manager (owns operation_id),
+     * then Wave 1 transport attaches x-nora-operation-id for audit correlation.
+     * If meta already carries a valid operation id, transport-only (no nested op).
      */
     async update(resource: string, params: any) {
       if (resource === "deals") {
         const existingId = readOperationIdFromMeta(params?.meta);
-        const context = createOperationContext({
-          operationType: "deal.update",
-          resourceType: "deals",
-          resourceId: params?.id,
-          ...(existingId ? { operationId: existingId } : {}),
-        });
-        return baseDataProvider.update(
-          resource,
-          withOperationIdParams(params, context),
+        if (existingId) {
+          const context = createOperationContext({
+            operationType: "deal.update",
+            resourceType: "deals",
+            resourceId: params?.id,
+            operationId: existingId,
+          });
+          return baseDataProvider.update(
+            resource,
+            withOperationIdParams(params, context),
+          );
+        }
+        return executeDealUpdate(params, (res, nextParams) =>
+          baseDataProvider.update(res, nextParams as any),
         );
       }
       return baseDataProvider.update(resource, params);
