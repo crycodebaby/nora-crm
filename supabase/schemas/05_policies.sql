@@ -121,3 +121,7 @@ create policy "Google calendar events delete calendar writer" on public.google_c
 
 create policy "Google calendar events update calendar linker" on public.google_calendar_events for update to nora_calendar_linker using (true) with check (true);
 create policy "Google calendar events read calendar linker" on public.google_calendar_events for select to nora_calendar_linker using (true);
+
+-- Foundation Wave 3: Error Observatory
+alter table public.operation_errors enable row level security;
+create policy "Operation errors read admin only" on public.operation_errors for select to authenticated using (nora_private.is_admin());

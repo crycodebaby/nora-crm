@@ -34,8 +34,14 @@ export default defineConfig(({ mode }) => ({
       manifest: false, // Use public/site.webmanifest from index.html
     }),
   ],
-  define:
-    process.env.NODE_ENV === "production" && process.env.VITE_SUPABASE_URL
+  define: {
+    "import.meta.env.VITE_NORA_FRONTEND_VERSION": JSON.stringify(
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+        process.env.VITE_NORA_FRONTEND_VERSION ||
+        process.env.GITHUB_SHA ||
+        "dev",
+    ),
+    ...(process.env.NODE_ENV === "production" && process.env.VITE_SUPABASE_URL
       ? {
           "import.meta.env.VITE_IS_DEMO": JSON.stringify(
             process.env.VITE_IS_DEMO,
@@ -53,7 +59,8 @@ export default defineConfig(({ mode }) => ({
             process.env.VITE_ATTACHMENTS_BUCKET,
           ),
         }
-      : undefined,
+      : {}),
+  },
   base: "./",
   esbuild: {
     keepNames: true,

@@ -11,11 +11,13 @@ import {
   type OperationManager,
 } from "./operationManager";
 import { OPERATION_RETENTION } from "./operationModel";
+import { setDefaultOperationErrorRecorder } from "./errorObservatory";
 import { withOperationIdParams } from "./operationTransport";
 
 describe("OperationManager without React", () => {
   afterEach(() => {
     resetDefaultOperationManagerForTests();
+    setDefaultOperationErrorRecorder(null);
     vi.useRealTimers();
   });
 
@@ -75,6 +77,7 @@ describe("OperationManager lifecycle", () => {
 
   afterEach(() => {
     manager.resetForTests();
+    setDefaultOperationErrorRecorder(null);
     vi.useRealTimers();
   });
 
@@ -124,6 +127,8 @@ describe("OperationManager lifecycle", () => {
     expect(op.status).toBe("error");
     expect(op.safeErrorCode).toBe("permission_denied");
     expect(op.runtimeErrorId).toBeTruthy();
+    expect(op.persistentErrorId).toBeUndefined();
+    expect(op.publicErrorRef).toBeUndefined();
     expect(op).not.toHaveProperty("errorId");
   });
 
@@ -468,6 +473,7 @@ describe("Timer / cleanup", () => {
 describe("deal.update vertical slice", () => {
   afterEach(() => {
     resetDefaultOperationManagerForTests();
+    setDefaultOperationErrorRecorder(null);
   });
 
   it("K: Manager operationId = Wave-1 x-nora-operation-id (single mutation)", async () => {

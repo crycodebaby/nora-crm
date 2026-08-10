@@ -33,12 +33,21 @@ import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
 import {
+  createSupabaseOperationErrorRecorder,
+  setDefaultOperationErrorRecorder,
+} from "../../operations/errorObservatory";
+import {
   readOperationIdFromMeta,
   withOperationIdParams,
 } from "../../operations/operationTransport";
 import { ATTACHMENTS_BUCKET } from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
+
+// Wave 3: wire Error Observatory once for the Supabase provider process.
+setDefaultOperationErrorRecorder(
+  createSupabaseOperationErrorRecorder(() => getSupabaseClient()),
+);
 
 const getBaseDataProvider = () =>
   supabaseDataProvider({

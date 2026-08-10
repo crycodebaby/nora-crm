@@ -476,3 +476,74 @@ create table nora_private.google_oauth_states (
     expires_at timestamptz not null,
     created_at timestamptz not null default now()
 );
+
+-- Foundation Wave 3: Error Observatory (failed operations; not audit_events)
+create table public.operation_errors (
+    id uuid primary key default gen_random_uuid(),
+    public_ref text not null,
+    operation_id uuid not null,
+    operation_type text not null,
+    resource_type text,
+    resource_id text,
+    actor_user_id uuid not null,
+    source text not null,
+    safe_error_code text,
+    technical_error_code text,
+    technical_context jsonb not null default '{}'::jsonb,
+    frontend_version text,
+    occurred_at timestamptz not null default now(),
+    reported_by_user_at timestamptz,
+    reported_by_user_id uuid,
+    resolved_at timestamptz,
+    resolved_by uuid,
+    resolution_note text,
+    constraint operation_errors_public_ref_format_check
+        check (public_ref ~ '^NORA-E[0-9A-HJKMNP-TV-Z]{8}$'),
+    constraint operation_errors_source_check
+        check (source in ('frontend', 'edge_function', 'system')),
+    constraint operation_errors_operation_type_check
+        check (
+            char_length(operation_type) between 1 and 64
+            and operation_type ~ '^[a-z][a-z0-9_.]*$'
+        ),
+    constraint operation_errors_resource_type_check
+        check (
+            resource_type is null
+            or (
+                char_length(resource_type) between 1 and 64
+                and resource_type ~ '^[a-z][a-z0-9_]*$'
+            )
+        ),
+    constraint operation_errors_resource_id_len_check
+        check (resource_id is null or char_length(resource_id) <= 64),
+    constraint operation_errors_safe_error_code_len_check
+        check (safe_error_code is null or char_length(safe_error_code) <= 64),
+    constraint operation_errors_technical_error_code_len_check
+        check (
+            technical_error_code is null
+            or char_length(technical_error_code) <= 64
+        ),
+    constraint operation_errors_frontend_version_len_check
+        check (frontend_version is null or char_length(frontend_version) <= 64),
+    constraint operation_errors_resolution_note_len_check
+        check (resolution_note is null or char_length(resolution_note) <= 500),
+    constraint operation_errors_technical_context_object_check
+        check (jsonb_typeof(technical_context) = 'object')
+);
+
+create unique index operation_errors_public_ref_uidx
+    on public.operation_errors (public_ref);
+
+create unique index operation_errors_operation_id_uidx
+    on public.operation_errors (operation_id);
+
+create index operation_errors_occurred_at_idx
+    on public.operation_errors (occurred_at desc);
+
+create index operation_errors_actor_occurred_idx
+    on public.operation_errors (actor_user_id, occurred_at desc)
+    where actor_user_id is not null;
+
+create index operation_errors_unresolved_idx
+    on public.operation_errors (occurred_at desc)
+    where resolved_at is null;

@@ -4,8 +4,16 @@ import { render } from "vitest-browser-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StoryWrapper } from "@/test/StoryWrapper";
+import {
+  setDefaultOperationErrorRecorder,
+  type OperationErrorPersistInput,
+  type OperationErrorPersistResult,
+} from "../operations/errorObservatory";
 import { executeDealUpdate } from "../operations/executeDealUpdate";
-import { resetDefaultOperationManagerForTests } from "../operations/operationManager";
+import {
+  getDefaultOperationManager,
+  resetDefaultOperationManagerForTests,
+} from "../operations/operationManager";
 import { NORA_OPERATION_ID_HEADER } from "../operations/operationContext";
 import type { Deal } from "../types";
 import { DealEdit } from "./DealEdit";
@@ -120,16 +128,30 @@ const renderDealEdit = async (
   expect(saveButton!.form!.contains(saveButton!)).toBe(true);
 };
 
-describe("DealEdit portal form save (Stabilization Gate 2)", () => {
+describe("DealEdit portal form save (Stabilization Gate 2 + Wave 3)", () => {
   beforeEach(() => {
     resetDefaultOperationManagerForTests();
+    // CRM imports supabase provider (side-effect wires default recorder).
+    // Isolate FakeRest portal tests from real Supabase RPC.
+    setDefaultOperationErrorRecorder(null);
   });
 
   afterEach(() => {
     resetDefaultOperationManagerForTests();
+    setDefaultOperationErrorRecorder(null);
   });
 
   it("clicks visible Speichern and updates expected_closing_date once", async () => {
+    const recordError = vi.fn<
+      (
+        input: OperationErrorPersistInput,
+      ) => Promise<OperationErrorPersistResult>
+    >(async () => ({
+      errorId: "should-not-call",
+      publicRef: "NORA-E00000000",
+    }));
+    setDefaultOperationErrorRecorder(recordError);
+
     const update = vi.fn(
       async (
         _resource: string,
@@ -171,6 +193,14 @@ describe("DealEdit portal form save (Stabilization Gate 2)", () => {
     ).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
+
+    // Wave 3: one managed deal.update → success; no Error Observatory row/attempt.
+    const ops = getDefaultOperationManager().getOperations();
+    expect(ops).toHaveLength(1);
+    expect(ops[0].operationType).toBe("deal.update");
+    expect(ops[0].status).toBe("success");
+    expect(ops[0].persistentErrorId).toBeUndefined();
+    expect(recordError).not.toHaveBeenCalled();
   });
 
   it("clicks Speichern for description change", async () => {
@@ -207,6 +237,16 @@ describe("DealEdit portal form save (Stabilization Gate 2)", () => {
   });
 
   it("keeps React Admin error path when update rejects", async () => {
+    const recordError = vi.fn<
+      (
+        input: OperationErrorPersistInput,
+      ) => Promise<OperationErrorPersistResult>
+    >(async () => ({
+      errorId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      publicRef: "NORA-E7K4M2PD",
+    }));
+    setDefaultOperationErrorRecorder(recordError);
+
     const serverError = { status: 500, message: "boom" };
     const update = vi.fn(async () => {
       throw serverError;
@@ -220,12 +260,29 @@ describe("DealEdit portal form save (Stabilization Gate 2)", () => {
     await expect
       .poll(() => getFormSpy()?.values.description === "Fehlerpfad")
       .toBe(true);
+    await expect.poll(() => getFormSpy()?.isDirty === true).toBe(true);
 
     await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
 
     await expect.poll(() => update.mock.calls.length).toBe(1);
+    await expect.poll(() => recordError.mock.calls.length).toBe(1);
+
+    await expect
+      .poll(() => {
+        const op = getDefaultOperationManager().getOperations()[0];
+        return (
+          op?.status === "error" &&
+          op.persistentErrorId === "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" &&
+          op.publicErrorRef === "NORA-E7K4M2PD"
+        );
+      })
+      .toBe(true);
+
+    const op = getDefaultOperationManager().getOperations()[0];
+    expect(op.operationType).toBe("deal.update");
 
     await expect.element(description).toHaveValue("Fehlerpfad");
+    await expect.poll(() => getFormSpy()?.isDirty === true).toBe(true);
 
     await expect
       .poll(

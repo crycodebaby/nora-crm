@@ -158,6 +158,23 @@ Bei Operation Manager + Catalog (Foundation Wave 2) zusätzlich:
 - [ ] Unit-Tests Manager A–M + Snapshot/Timer/Singleton + Wave-1 Regression
 - [ ] Keine Feedback-UI / kein Error Observatory in dieser Wave
 
+Bei Error Observatory Core (Foundation Wave 3) zusätzlich:
+
+- [ ] `operation_errors` additiv; getrennt von `audit_events`
+- [ ] Keine Client-INSERT; nur `record_operation_error` / `report_operation_error`
+- [ ] Actor ausschließlich `safe_auth_uid()` — `operation_id` nie Auth
+- [ ] `public_ref` serverseitig UNIQUE (`NORA-E…`)
+- [ ] `technical_context` Allowlist; keine Bodies/Secrets/PII
+- [ ] Soft resource refs (kein FK auf Business-Tabellen)
+- [ ] Dedupe per `operation_id`; neue Attempts unterscheidbar
+- [ ] RLS: kein freier Browse; Admin SELECT; Report nur eigener Actor
+- [ ] `deal.update` Fehler → best-effort Record in eigener Transaktion
+- [ ] Observatory-Ausfall ersetzt Business-Exception nicht
+- [ ] `runtimeErrorId` ≠ `persistentErrorId` / `publicErrorRef`
+- [ ] `supabase/tests/error_observatory_verification.sql` nach `db reset`
+- [ ] Unit-Tests A–H + Kontakttermin-Regression
+- [ ] Keine Feedback-UI / keine Outbox / kein Remote-Apply ohne Freigabe
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

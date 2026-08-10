@@ -16,6 +16,11 @@ import {
   type OperationType,
 } from "./operationContext";
 import {
+  getDefaultOperationErrorRecorder,
+  recordOperationErrorBestEffort,
+  type OperationErrorRecorder,
+} from "./errorObservatory";
+import {
   OPERATION_RETENTION,
   type OperationRecord,
   type OperationStatus,
@@ -54,8 +59,24 @@ export const createOperationManager = (options?: {
   successTtlMs?: number;
   errorTtlMs?: number;
   maxOperations?: number;
+  /**
+   * Optional Error Observatory recorder. When omitted, uses the process-wide
+   * default (Supabase-wired in production; null in FakeRest/tests unless set).
+   * Pass `null` explicitly to disable recording for a manager instance.
+   */
+  recordError?: OperationErrorRecorder | null;
 }): OperationManager => {
-  const retention = { ...OPERATION_RETENTION, ...options };
+  const retention = {
+    successTtlMs: options?.successTtlMs ?? OPERATION_RETENTION.successTtlMs,
+    errorTtlMs: options?.errorTtlMs ?? OPERATION_RETENTION.errorTtlMs,
+    maxOperations: options?.maxOperations ?? OPERATION_RETENTION.maxOperations,
+  };
+  const resolveRecorder = (): OperationErrorRecorder | null => {
+    if (options && "recordError" in options) {
+      return options.recordError ?? null;
+    }
+    return getDefaultOperationErrorRecorder();
+  };
   const operations = new Map<string, OperationRecord>();
   const listeners = new Set<() => void>();
   const timers: InternalTimers = new Map();
@@ -135,34 +156,76 @@ export const createOperationManager = (options?: {
   };
 
   /**
-   * Mark error state without letting bookkeeping failures mask the
-   * original business exception that will be rethrown.
+   * Mark error state immediately, then best-effort Observatory persist.
+   * Recorder enrichment is intentionally non-blocking so a hung RPC cannot
+   * delay propagation of the original business exception to React Admin.
    */
-  const markErrorSafely = (pending: OperationRecord, error: unknown) => {
+  const markErrorSafely = (
+    pending: OperationRecord,
+    error: unknown,
+  ): void => {
+    let runtimeErrorId = createOperationId();
+    let safeErrorCode = "unknown";
     try {
       const normalized = normalizeCrmError(error);
+      safeErrorCode = normalized.kind;
       setRecord({
         ...pending,
         status: "error",
         finishedAt: nowIso(),
-        safeErrorCode: normalized.kind,
-        runtimeErrorId: createOperationId(),
+        safeErrorCode,
+        runtimeErrorId,
       });
       scheduleCleanup(pending.operationId, "error");
     } catch {
       try {
+        runtimeErrorId = createOperationId();
         setRecord({
           ...pending,
           status: "error",
           finishedAt: nowIso(),
           safeErrorCode: "unknown",
-          runtimeErrorId: createOperationId(),
+          runtimeErrorId,
         });
         scheduleCleanup(pending.operationId, "error");
       } catch {
         // Bookkeeping must never replace the business throw below.
+        return;
       }
     }
+
+    const operationId = pending.operationId;
+    void (async () => {
+      try {
+        const persisted = await recordOperationErrorBestEffort(
+          {
+            operationId,
+            operationType: pending.operationType,
+            resourceType: pending.resourceType,
+            resourceId: pending.resourceId,
+            safeErrorCode,
+            error,
+            source: "frontend",
+          },
+          resolveRecorder(),
+        );
+        if (!persisted) {
+          return;
+        }
+        const current = operations.get(operationId);
+        // Safe if cleaned up or status changed — never resurrect a finished op.
+        if (!current || current.status !== "error") {
+          return;
+        }
+        setRecord({
+          ...current,
+          persistentErrorId: persisted.errorId,
+          publicErrorRef: persisted.publicRef,
+        });
+      } catch {
+        // Observatory outage must never replace or swallow the business error.
+      }
+    })();
   };
 
   const execute = async <T>(

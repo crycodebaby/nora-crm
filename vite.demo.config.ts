@@ -25,6 +25,11 @@ export default defineConfig({
   ],
   define: {
     "import.meta.env.VITE_IS_DEMO": JSON.stringify("true"),
+    "import.meta.env.VITE_NORA_FRONTEND_VERSION": JSON.stringify(
+      process.env.VERCEL_GIT_COMMIT_SHA ||
+        process.env.VITE_NORA_FRONTEND_VERSION ||
+        "demo",
+    ),
     "import.meta.env.VITE_SUPABASE_URL": JSON.stringify(
       process.env.VITE_SUPABASE_URL ?? "https://demo.example.org",
     ),

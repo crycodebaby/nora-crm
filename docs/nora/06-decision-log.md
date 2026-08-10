@@ -2,6 +2,45 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-10 – Foundation Wave 3: Error Observatory Core
+
+### Kontext
+
+Wave 2 liefert `runtimeErrorId` nur session-ephemer. Nora braucht dauerhafte,
+sichere technische Fehlerbeobachtung getrennt vom Business-Audit.
+Stabilization Gate 2/2b (DealEdit/TaskEdit Portal Form Owner) lag dazwischen
+und bleibt unverändert.
+
+### Entscheidung
+
+- Neue Tabelle `public.operation_errors` (nicht `audit_events`).
+- Soft-Referenzen (`resource_id` text, keine FK auf deals/companies) —
+  Fehler überlebt Archiv/Löschung.
+- `operation_id uuid NOT NULL` + UNIQUE: jeder persistierte Fehler korreliert
+  zu genau einem Manager-`execute()`-Versuch. Keine nullable „generic JS“-Pfade
+  in dieser Welle.
+- `actor_user_id uuid NOT NULL` ausschließlich aus `safe_auth_uid()`;
+  unauthentifiziert → Exception, keine anonymen Rows.
+- `public_ref` serverseitig: `NORA-E` + 8 Crockford-Zeichen, UNIQUE, Retry bei
+  Kollision (kein Overwrite).
+- Keine Client-INSERTs; Writes nur via `record_operation_error` /
+  `report_operation_error` (SECURITY DEFINER, `search_path=''`).
+  EXECUTE: `REVOKE` von PUBLIC/anon, `GRANT` nur authenticated (+ service_role).
+- `technical_context` Allowlist (Keys + Values): `http_status`, `postgrest_code`,
+  `sqlstate`, `edge_function`.
+- `report_operation_error`: nur eigener Actor; idempotent; bei beiden
+  Identifiern müssen sie dieselbe Row treffen (kein loses OR).
+- Vertikaler Slice: `deal.update` Fehler → Manager error sofort → best-effort
+  Record **non-blocking** → `persistentErrorId` / `publicErrorRef` nach Enrichment.
+  Observatory-Ausfall ersetzt niemals den Business-Fehler und blockiert ihn nicht.
+- Frontend-Version: `VITE_NORA_FRONTEND_VERSION` aus Vercel/Git SHA.
+- Keine Feedback-UI, keine Outbox, keine Auto-Retention-Löschung.
+
+### Begründung
+
+Audit = erfolgreiche Änderungen; Observatory = fehlgeschlagene fachliche
+Operationen. Trennung verhindert Vermischung von Compliance- und Diagnose-Daten.
+
 ## 2026-08-10 – Stabilization Gate 2b: TaskEdit Portal Form Owner
 
 ### Kontext

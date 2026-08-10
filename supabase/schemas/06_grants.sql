@@ -391,3 +391,32 @@ grant all on table public.google_calendar_events to service_role;
 
 grant select, insert, update on table public.google_calendar_connections to nora_calendar_writer;
 grant select, insert, update, delete on table public.google_calendar_events to nora_calendar_writer;
+
+-- Foundation Wave 3: Error Observatory
+revoke all on table public.operation_errors from public;
+revoke all on table public.operation_errors from anon;
+revoke all on table public.operation_errors from authenticated;
+grant select on table public.operation_errors to authenticated;
+grant all on table public.operation_errors to service_role;
+
+revoke all on function nora_private.generate_operation_error_public_ref() from public;
+revoke all on function nora_private.generate_operation_error_public_ref() from anon;
+revoke all on function nora_private.generate_operation_error_public_ref() from authenticated;
+revoke all on function nora_private.generate_operation_error_public_ref() from service_role;
+grant execute on function nora_private.generate_operation_error_public_ref() to postgres;
+
+revoke all on function nora_private.sanitize_operation_error_context(jsonb) from public;
+revoke all on function nora_private.sanitize_operation_error_context(jsonb) from anon;
+revoke all on function nora_private.sanitize_operation_error_context(jsonb) from authenticated;
+revoke all on function nora_private.sanitize_operation_error_context(jsonb) from service_role;
+grant execute on function nora_private.sanitize_operation_error_context(jsonb) to postgres;
+
+revoke all on function public.record_operation_error(text, uuid, text, text, text, text, text, jsonb, text) from public;
+revoke all on function public.record_operation_error(text, uuid, text, text, text, text, text, jsonb, text) from anon;
+grant execute on function public.record_operation_error(text, uuid, text, text, text, text, text, jsonb, text) to authenticated;
+grant execute on function public.record_operation_error(text, uuid, text, text, text, text, text, jsonb, text) to service_role;
+
+revoke all on function public.report_operation_error(uuid, text) from public;
+revoke all on function public.report_operation_error(uuid, text) from anon;
+grant execute on function public.report_operation_error(uuid, text) to authenticated;
+grant execute on function public.report_operation_error(uuid, text) to service_role;

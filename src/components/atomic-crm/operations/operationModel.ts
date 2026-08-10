@@ -20,10 +20,13 @@ export type OperationRecord = {
   safeErrorCode?: string;
   /**
    * Runtime-only ephemeral error reference for this browser session.
-   * NOT persisted server-side until Error Observatory exists.
-   * Never treat as an IT ticket / DB lookup key.
+   * NOT a server lookup key. Distinct from persistentErrorId / publicErrorRef.
    */
   runtimeErrorId?: string;
+  /** Server UUID from operation_errors.id after successful Observatory record. */
+  persistentErrorId?: string;
+  /** Human IT reference (NORA-E…) from operation_errors.public_ref. */
+  publicErrorRef?: string;
   /** Reserved for real multi-step flows later. */
   step?: string;
 };
@@ -32,7 +35,7 @@ export type OperationRecord = {
 export const OPERATION_RETENTION = {
   /** Success ops stay briefly for future Feedback UI inspection. */
   successTtlMs: 8_000,
-  /** Errors stay longer for debugging before Error Observatory. */
+  /** Errors stay longer for Feedback / IT-report UI. */
   errorTtlMs: 60_000,
   /** Hard cap on stored finished+pending records. */
   maxOperations: 50,
