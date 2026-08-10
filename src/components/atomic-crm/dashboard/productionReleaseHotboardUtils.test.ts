@@ -47,7 +47,7 @@ const deal = (overrides: Partial<Deal>): Deal =>
     company_id: 10,
     contact_ids: [],
     category: "fensterservice",
-    stage: "angebot-gesendet",
+    stage: "quote_sent",
     description: "",
     amount: 0,
     created_at: "2026-01-01T00:00:00Z",

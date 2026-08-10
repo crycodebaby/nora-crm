@@ -784,7 +784,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 1,
     contact_ids: [3],
     category: "fensterservice",
-    stage: "neue-anfrage",
+    stage: "requested",
     description:
       "Fenstergriff im Wohnzimmer dreht durch. Kunde bittet um Rückruf und Besichtigung.",
     amountEur: 650,
@@ -798,7 +798,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 0,
     contact_ids: [0],
     category: "reparatur",
-    stage: "kontaktiert",
+    stage: "requested",
     description:
       "Haustür im MFH Bilk fällt nicht zuverlässig ins Schloss. Mieter melden Zugluft.",
     amountEur: 1850,
@@ -812,7 +812,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 12,
     contact_ids: [18],
     category: "fensterservice",
-    stage: "termin-vereinbart",
+    stage: "on_site",
     description:
       "Balkontür in Ratingen schließt nicht. Besichtigung am Freitag vereinbart.",
     amountEur: 1450,
@@ -826,7 +826,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 3,
     contact_ids: [6],
     category: "fensterservice",
-    stage: "aufmass-geplant",
+    stage: "in_production",
     description:
       "Altes Kellerfenster in Kaarst soll ersetzt werden. Aufmaß und Fotos erforderlich.",
     amountEur: 8000,
@@ -840,7 +840,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 5,
     contact_ids: [9],
     category: "wartung",
-    stage: "aufmass-erledigt",
+    stage: "in_production",
     description:
       "Jährliche Wartung der Showroom-Fenster im Autohaus Rheinpark.",
     amountEur: 2400,
@@ -854,7 +854,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 19,
     contact_ids: [25],
     category: "fensterservice",
-    stage: "in-kalkulation",
+    stage: "ordered",
     description:
       "Kellerfenster in Neuss undicht. Kalkulation für Austausch läuft.",
     amountEur: 1650,
@@ -868,7 +868,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 8,
     contact_ids: [14],
     category: "fensterservice",
-    stage: "wartet-auf-hersteller",
+    stage: "in_production",
     description:
       "Beschlagtyp laut Foto unklar. Hersteller soll Verfügbarkeit prüfen — ohne Auftragswert.",
     amountEur: 0,
@@ -882,7 +882,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 14,
     contact_ids: [20],
     category: "fensterservice",
-    stage: "angebot-gesendet",
+    stage: "quote_sent",
     description:
       "Angebot für Fensterbeschläge an Immobilien Weber gesendet. Nachfassung offen.",
     amountEur: 3600,
@@ -896,7 +896,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 7,
     contact_ids: [13],
     category: "fensterservice",
-    stage: "nachfassen",
+    stage: "quote_sent",
     description:
       "Angebot telefonisch besprochen. Rückmeldung steht aus — Nachfassdatum überfällig.",
     amountEur: 9300,
@@ -910,7 +910,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 9,
     contact_ids: [15],
     category: "hausmeisterdienst",
-    stage: "angenommen",
+    stage: "ordered",
     description: "Türschließer am Nebeneingang prüfen und einstellen.",
     amountEur: 450,
     createdDaysAgo: 10,
@@ -923,7 +923,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 10,
     contact_ids: [16],
     category: "fensterservice",
-    stage: "abgelehnt",
+    stage: "none",
     description: "Angebot wegen Budget verschoben.",
     amountEur: 5900,
     createdDaysAgo: 14,
@@ -936,7 +936,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 11,
     contact_ids: [17],
     category: "fensterservice",
-    stage: "abgeschlossen",
+    stage: "completed",
     description:
       "Treppenhausfenster eingestellt, Griff befestigt, Fotodokumentation erledigt.",
     amountEur: 2100,
@@ -950,7 +950,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 0,
     contact_ids: [1],
     category: "fensterservice",
-    stage: "neue-anfrage",
+    stage: "requested",
     description:
       "Mieter meldet klemmendes Fenster. Verwaltung muss Freigabe geben.",
     amountEur: 890,
@@ -964,7 +964,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 16,
     contact_ids: [22],
     category: "hausmeisterdienst",
-    stage: "kontaktiert",
+    stage: "requested",
     description:
       "Treppenhausbeleuchtung in Seniorenresidenz prüfen — kein Fensterservice, keine Checkliste.",
     amountEur: 680,
@@ -978,7 +978,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 14,
     contact_ids: [20],
     category: "hausmeisterdienst",
-    stage: "termin-vereinbart",
+    stage: "on_site",
     description: "Kleinreparaturen und Fensterkontrolle vor Wohnungsübergabe.",
     amountEur: 1250,
     createdDaysAgo: 11,
@@ -991,7 +991,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 10,
     contact_ids: [16],
     category: "hausmeisterdienst",
-    stage: "aufmass-geplant",
+    stage: "in_production",
     description: "Monatliche Sichtkontrolle im Lager Dormagen.",
     amountEur: 2400,
     createdDaysAgo: 9,
@@ -1004,7 +1004,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 2,
     contact_ids: [5],
     category: "fensterservice",
-    stage: "in-kalkulation",
+    stage: "ordered",
     description:
       "Neue Haustür für Praxis — Fensterservice mit späterer Produktionsfreigabe.",
     amountEur: 14200,
@@ -1018,7 +1018,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 1,
     contact_ids: [3],
     category: "fensterservice",
-    stage: "angenommen",
+    stage: "ordered",
     description:
       "Fenstergriff-Reparatur angenommen — Montagetermin koordinieren.",
     amountEur: 650,
@@ -1032,7 +1032,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 4,
     contact_ids: [8],
     category: "reparatur",
-    stage: "angebot-gesendet",
+    stage: "quote_sent",
     description:
       "Schaufenstergriff klemmt beim Abschließen. Angebot versendet.",
     amountEur: 750,
@@ -1046,7 +1046,7 @@ export const DUesseldorf_DEAL_SEEDS: DealSeed[] = [
     company_id: 6,
     contact_ids: [11],
     category: "fensterservice",
-    stage: "aufmass-erledigt",
+    stage: "in_production",
     description:
       "Balkontür in Eigentumswohnung zieht. Dichtungen und Beschlag prüfen.",
     amountEur: 1850,

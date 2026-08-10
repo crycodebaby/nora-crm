@@ -207,6 +207,7 @@ export const englishCrmMessages = {
         sales_id: "Assigned to",
         case_number: "Case number",
       },
+      primary_stage_hint: "Active deal stage",
       action: {
         back_to_deal: "Back to deal",
         create: "Create deal",

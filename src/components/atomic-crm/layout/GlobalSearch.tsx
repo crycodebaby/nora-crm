@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-import { findDealLabel } from "../deals/dealUtils";
+import { DealStagePill } from "../deals/DealStagePill";
 import {
   canSearchQuery,
   getContactPrimaryEmail,
@@ -71,7 +71,7 @@ export const GlobalSearch = ({
   const translate = useTranslate();
   const dataProvider = useDataProvider<CrmDataProvider>();
   const redirect = useRedirect();
-  const { dealStages, dealCategories } = useConfigurationContext();
+  const { dealCategories } = useConfigurationContext();
   const inputId =
     variant === "mobile"
       ? GLOBAL_SEARCH_MOBILE_INPUT_ID
@@ -156,7 +156,6 @@ export const GlobalSearch = ({
       onRetry={() => refetch()}
       searchEnabled={searchEnabled}
       query={debouncedQuery}
-      dealStages={dealStages}
       dealCategories={dealCategories}
       onSelect={handleSelect}
     />
@@ -250,7 +249,6 @@ const SearchResults = ({
   onRetry,
   searchEnabled,
   query,
-  dealStages,
   dealCategories,
   onSelect,
 }: {
@@ -260,7 +258,6 @@ const SearchResults = ({
   onRetry: () => void;
   searchEnabled: boolean;
   query: string;
-  dealStages: { value: string; label: string }[];
   dealCategories: { value: string; label: string }[];
   onSelect: (
     resource: "companies" | "contacts" | "deals",
@@ -320,7 +317,6 @@ const SearchResults = ({
   return (
     <GroupedResults
       result={result}
-      dealStages={dealStages}
       dealCategories={dealCategories}
       onSelect={onSelect}
     />
@@ -329,12 +325,10 @@ const SearchResults = ({
 
 const GroupedResults = ({
   result,
-  dealStages,
   dealCategories,
   onSelect,
 }: {
   result: GlobalSearchGroupedHit;
-  dealStages: { value: string; label: string }[];
   dealCategories: { value: string; label: string }[];
   onSelect: (
     resource: "companies" | "contacts" | "deals",
@@ -395,10 +389,9 @@ const GroupedResults = ({
                 className="nora-touch-target flex flex-col items-start gap-0.5 py-3"
               >
                 <span className="nora-list-title text-sm">{deal.name}</span>
-                <span className="nora-muted text-xs">
+                <span className="nora-muted text-xs flex flex-wrap items-center gap-1.5">
                   {deal.case_number}
-                  {" · "}
-                  {findDealLabel(dealStages, deal.stage) ?? deal.stage}
+                  <DealStagePill stage={deal.stage} />
                   {deal.category
                     ? ` · ${
                         dealCategories.find((c) => c.value === deal.category)

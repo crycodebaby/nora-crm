@@ -3,8 +3,10 @@ import { useTranslate } from "ra-core";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
-import { findDealLabel, formatDealAmount, sumDealAmounts } from "./dealUtils";
+import { formatDealAmount, sumDealAmounts } from "./dealUtils";
+import { getDealStageCssVars } from "./dealStageModel";
 import { DealCard } from "./DealCard";
+import { DealStageBadge } from "./DealStageBadge";
 
 export const DealColumn = ({
   stage,
@@ -14,16 +16,19 @@ export const DealColumn = ({
   deals: Deal[];
 }) => {
   const totalAmount = sumDealAmounts(deals);
-  const { dealStages, currency } = useConfigurationContext();
+  const { currency } = useConfigurationContext();
   const translate = useTranslate();
-  const stageLabel = findDealLabel(dealStages, stage);
+  const stageVars = getDealStageCssVars(stage);
 
   return (
     <div className="nora-kanban-column flex flex-col shrink-0">
-      <header className="nora-kanban-column-header shrink-0">
+      <header
+        className="nora-kanban-column-header shrink-0 nora-deal-stage-accent"
+        style={stageVars}
+      >
         <div className="flex items-start justify-between gap-3">
           <h3 className="nora-kanban-column-title text-left flex-1 min-w-0">
-            {stageLabel}
+            <DealStageBadge stage={stage} />
           </h3>
           <span
             className="nora-kanban-column-count shrink-0"

@@ -35,12 +35,14 @@ import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import {
-  findDealLabel,
   formatDealAmount,
   formatISODateString,
   getFollowUpStatus,
   isDealTerminalStage,
 } from "./dealUtils";
+import { getDealStageCssVars } from "./dealStageModel";
+import { DealStageBadge } from "./DealStageBadge";
+import { DealStagePill } from "./DealStagePill";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
@@ -75,7 +77,7 @@ export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
 
 const DealShowContent = () => {
   const translate = useTranslate();
-  const { dealStages, dealCategories, currency } = useConfigurationContext();
+  const { dealCategories, currency } = useConfigurationContext();
   const record = useRecordContext<Deal>();
   const salesName = useGetSalesName(record?.sales_id);
   if (!record) return null;
@@ -83,24 +85,30 @@ const DealShowContent = () => {
   const categoryLabel =
     dealCategories.find((c) => c.value === record.category)?.label ??
     record.category;
-  const stageLabel = findDealLabel(dealStages, record.stage);
   const showFollowUp = !isDealTerminalStage(record.stage);
   const followUpStatus = showFollowUp
     ? getFollowUpStatus(record.expected_closing_date)
     : null;
+  const stageVars = getDealStageCssVars(record.stage);
 
   return (
     <div className="nora-detail-scroll flex flex-col min-h-0 flex-1">
       {record.archived_at ? <ArchivedTitle /> : null}
 
-      <header className="nora-deal-dialog-header shrink-0">
+      <header
+        className="nora-deal-dialog-header shrink-0 nora-deal-stage-accent nora-deal-stage-surface"
+        style={stageVars}
+      >
         <div className="min-w-0 flex-1 space-y-2">
-          <BusinessNumber
-            value={record.case_number}
-            kind="case"
-            size="lg"
-            variant="badge"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <BusinessNumber
+              value={record.case_number}
+              kind="case"
+              size="lg"
+              variant="badge"
+            />
+            <DealStagePill stage={record.stage} />
+          </div>
           <h2 className="nora-deal-dialog-title">{record.name}</h2>
           <p className="nora-deal-dialog-customer">
             <ReferenceField
@@ -148,10 +156,9 @@ const DealShowContent = () => {
             title={translate("resources.deals.sections.overview")}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <DealFact
-                label={translate("resources.deals.fields.stage")}
-                value={stageLabel}
-              />
+              <DealFact label={translate("resources.deals.fields.stage")}>
+                <DealStageBadge stage={record.stage} />
+              </DealFact>
               {record.category ? (
                 <DealFact
                   label={translate("resources.deals.fields.category")}

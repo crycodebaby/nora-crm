@@ -1,30 +1,33 @@
 import type { ConfigurationContextValue } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
+import { resolveDealStageColumn } from "./dealStageModel";
 
-export type DealsByStage = Record<Deal["stage"], Deal[]>;
+export type DealsByStage = Record<string, Deal[]>;
 
 export const getDealsByStage = (
   unorderedDeals: Deal[],
   dealStages: ConfigurationContextValue["dealStages"],
 ) => {
   if (!dealStages) return {};
-  const dealsByStage: Record<Deal["stage"], Deal[]> = unorderedDeals.reduce(
-    (acc, deal) => {
-      // if deal has a stage that does not exist in configuration, assign it to the first stage
-      const stage = dealStages.find((s) => s.value === deal.stage)
-        ? deal.stage
-        : dealStages[0].value;
-      acc[stage].push(deal);
-      return acc;
-    },
-    dealStages.reduce(
-      (obj, stage) => ({ ...obj, [stage.value]: [] }),
-      {} as Record<Deal["stage"], Deal[]>,
-    ),
+  const dealsByStage: DealsByStage = dealStages.reduce(
+    (obj, stage) => ({ ...obj, [stage.value]: [] }),
+    {} as DealsByStage,
   );
-  // order each column by index
+
+  for (const deal of unorderedDeals) {
+    const column = resolveDealStageColumn(deal.stage);
+    const stage = dealStages.find((s) => s.value === column)
+      ? column
+      : dealStages[0]?.value;
+    if (!stage) continue;
+    if (!dealsByStage[stage]) {
+      dealsByStage[stage] = [];
+    }
+    dealsByStage[stage].push(deal);
+  }
+
   dealStages.forEach((stage) => {
-    dealsByStage[stage.value] = dealsByStage[stage.value].sort(
+    dealsByStage[stage.value] = (dealsByStage[stage.value] ?? []).sort(
       (recordA: Deal, recordB: Deal) => recordA.index - recordB.index,
     );
   });

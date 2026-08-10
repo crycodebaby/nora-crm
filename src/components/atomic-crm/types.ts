@@ -228,7 +228,10 @@ export interface LabeledValue {
   label: string;
 }
 
-export type DealStage = LabeledValue;
+export type DealStage = LabeledValue & {
+  /** CSS token key under --nora-deal-stage-* (deals only, never noteStatuses). */
+  colorToken?: string;
+};
 
 export interface NoteStatus extends LabeledValue {
   color: string;

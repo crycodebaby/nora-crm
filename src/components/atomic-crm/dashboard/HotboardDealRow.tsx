@@ -1,10 +1,9 @@
 import { useRedirect, useTranslate } from "ra-core";
 
 import { DealFollowUpBadge } from "../deals/DealFollowUpBadge";
-import { findDealLabel } from "../deals/dealUtils";
+import { DealStagePill } from "../deals/DealStagePill";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { noraCreatePath } from "../routing/noraRoutes";
-import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 
 type HotboardDealRowProps = {
@@ -18,7 +17,6 @@ export const HotboardDealRow = ({
 }: HotboardDealRowProps) => {
   const translate = useTranslate();
   const redirect = useRedirect();
-  const { dealStages } = useConfigurationContext();
 
   const openDeal = () => {
     redirect(
@@ -30,8 +28,6 @@ export const HotboardDealRow = ({
     );
   };
 
-  const stageLabel = findDealLabel(dealStages, deal.stage);
-
   return (
     <button
       type="button"
@@ -39,14 +35,23 @@ export const HotboardDealRow = ({
       className="w-full text-left px-4 py-3.5 hover:bg-muted/60 transition-colors nora-touch-target flex flex-col gap-1.5"
       aria-label={`${translate("crm.dashboard.hotboard.open_directly")}: ${deal.name}`}
     >
-      <BusinessNumber value={deal.case_number} kind="case" size="md" />
-      <span className="nora-list-title text-base leading-snug">
-        {deal.name}
-      </span>
-      <span className="nora-muted text-xs">
-        {[companyName, stageLabel].filter(Boolean).join(" · ")}
-      </span>
-      <DealFollowUpBadge dateString={deal.expected_closing_date} />
+      <div className="flex items-center gap-2 min-w-0">
+        <BusinessNumber
+          value={deal.case_number}
+          kind="case"
+          size="sm"
+          variant="badge"
+        />
+        <span className="font-medium truncate">{deal.name}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        {companyName ? <span className="truncate">{companyName}</span> : null}
+        <DealStagePill stage={deal.stage} />
+        <DealFollowUpBadge
+          dateString={deal.expected_closing_date}
+          variant="inline"
+        />
+      </div>
     </button>
   );
 };

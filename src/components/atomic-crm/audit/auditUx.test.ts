@@ -65,7 +65,10 @@ describe("parseAuditChanges", () => {
 });
 
 describe("formatAuditFieldValue", () => {
-  const dealStages = [{ value: "neue-anfrage", label: "Neue Anfrage" }];
+  const dealStages = [
+    { value: "requested", label: "Angefragt" },
+    { value: "quote_sent", label: "Angebot gesendet" },
+  ];
 
   it("formats amounts as EUR de-DE", () => {
     expect(
@@ -75,7 +78,10 @@ describe("formatAuditFieldValue", () => {
 
   it("maps stage values via dealUtils labels", () => {
     expect(formatAuditFieldValue("stage", "opportunity", { dealStages })).toBe(
-      "Neue Anfrage",
+      "Angefragt",
+    );
+    expect(formatAuditFieldValue("stage", "requested", { dealStages })).toBe(
+      "Angefragt",
     );
   });
 

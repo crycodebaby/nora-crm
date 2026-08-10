@@ -15,6 +15,7 @@ import { AsideSection } from "../misc/AsideSection";
 import type { Contact } from "../types";
 import { ContactMergeButton } from "./ContactMergeButton";
 import { ExportVCardButton } from "./ExportVCardButton";
+import { PrimaryDealStageHint } from "../deals/PrimaryDealStageHint";
 
 export const ContactAside = ({ link = "edit" }: { link?: "edit" | "show" }) => {
   const record = useRecordContext<Contact>();
@@ -40,6 +41,14 @@ export const ContactAside = ({ link = "edit" }: { link?: "edit" | "show" }) => {
           <ContactStatusSelector />
         </AsideSection>
       </NoraWriteAccess>
+
+      <AsideSection
+        title={translate("resources.deals.primary_stage_hint", {
+          _: "Aktiver Vorgangsstatus",
+        })}
+      >
+        <PrimaryDealStageHint scope="contact" />
+      </AsideSection>
 
       <AsideSection
         title={translate("resources.contacts.field_categories.personal_info")}

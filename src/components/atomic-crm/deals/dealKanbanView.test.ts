@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Deal } from "../types";
+import { defaultDealStages } from "./dealStageModel";
 import {
   filterDealsByKanbanView,
   FENSTERSERVICE_KANBAN_STAGE_IDS,
@@ -8,13 +9,7 @@ import {
 } from "./dealKanbanView";
 import { getDealsByStage } from "./stages";
 
-const dealStages = [
-  { value: "neue-anfrage", label: "Neue Anfrage" },
-  { value: "kontaktiert", label: "Kontaktiert" },
-  { value: "aufmass-geplant", label: "Aufmaß geplant" },
-  { value: "nachfassen", label: "Rückmeldung ausstehend" },
-  { value: "abgeschlossen", label: "Abgeschlossen" },
-];
+const dealStages = defaultDealStages;
 
 const baseDeal = {
   id: 1,
@@ -40,7 +35,7 @@ describe("filterDealsByKanbanView", () => {
 
 describe("getVisibleStagesForKanbanView", () => {
   it("uses all stages for the default view", () => {
-    const deals = [{ ...baseDeal, stage: "neue-anfrage" }] as Deal[];
+    const deals = [{ ...baseDeal, stage: "requested" }] as Deal[];
     const byStage = getDealsByStage(deals, dealStages);
 
     const visible = getVisibleStagesForKanbanView(
@@ -50,12 +45,18 @@ describe("getVisibleStagesForKanbanView", () => {
       false,
     );
 
-    expect(visible.map((s) => s.value)).toEqual(["neue-anfrage"]);
+    expect(visible.map((s) => s.value)).toEqual(["requested"]);
+  });
+
+  it("buckets legacy stages into canonical columns", () => {
+    const deals = [{ ...baseDeal, stage: "neue-anfrage" }] as Deal[];
+    const byStage = getDealsByStage(deals, dealStages);
+    expect(byStage.requested).toHaveLength(1);
   });
 
   it("limits fensterservice to preferred stages when showing all", () => {
     const deals = [
-      { ...baseDeal, stage: "kontaktiert", category: "fensterservice" },
+      { ...baseDeal, stage: "requested", category: "fensterservice" },
     ] as Deal[];
     const byStage = getDealsByStage(deals, dealStages);
 
@@ -66,17 +67,15 @@ describe("getVisibleStagesForKanbanView", () => {
       true,
     );
 
-    expect(visible.map((s) => s.value)).toEqual(
-      FENSTERSERVICE_KANBAN_STAGE_IDS.filter((id) =>
-        dealStages.some((s) => s.value === id),
-      ),
-    );
-    expect(visible.some((s) => s.value === "kontaktiert")).toBe(false);
+    expect(visible.map((s) => s.value)).toEqual([
+      ...FENSTERSERVICE_KANBAN_STAGE_IDS,
+    ]);
+    expect(visible.some((s) => s.value === "none")).toBe(false);
   });
 
   it("shows orphan stages with deals in fensterservice view", () => {
     const deals = [
-      { ...baseDeal, stage: "nachfassen", category: "fensterservice" },
+      { ...baseDeal, stage: "none", category: "fensterservice" },
     ] as Deal[];
     const byStage = getDealsByStage(deals, dealStages);
 
@@ -87,6 +86,6 @@ describe("getVisibleStagesForKanbanView", () => {
       false,
     );
 
-    expect(visible.map((s) => s.value)).toEqual(["nachfassen"]);
+    expect(visible.map((s) => s.value)).toEqual(["none"]);
   });
 });

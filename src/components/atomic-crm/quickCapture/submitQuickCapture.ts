@@ -122,7 +122,7 @@ export async function submitQuickCapture(
         company_id: companyId,
         contact_ids: [contactId],
         category: input.dealCategory,
-        stage: "neue-anfrage",
+        stage: "requested",
         description,
         amount: 0,
         expected_closing_date: input.followUpDate,

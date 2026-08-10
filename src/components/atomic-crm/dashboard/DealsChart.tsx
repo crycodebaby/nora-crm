@@ -8,8 +8,8 @@ import { findDealLabel, formatDealAmount } from "../deals/dealUtils";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 
-const WON_STAGES = ["won", "angenommen", "abgeschlossen"];
-const LOST_STAGES = ["lost", "abgelehnt"];
+const WON_STAGES = ["completed", "abgeschlossen", "won", "angenommen"];
+const LOST_STAGES = ["abgelehnt", "lost"];
 
 const multiplier: Record<string, number> = {
   opportunity: 0.2,
@@ -17,6 +17,13 @@ const multiplier: Record<string, number> = {
   "in-negociation": 0.8,
   delayed: 0.3,
   "neue-anfrage": 0.15,
+  none: 0.1,
+  requested: 0.2,
+  quote_sent: 0.5,
+  ordered: 0.75,
+  in_production: 0.85,
+  on_site: 0.9,
+  completed: 1,
   kontaktiert: 0.25,
   "termin-vereinbart": 0.35,
   "aufmass-geplant": 0.45,
@@ -38,7 +45,7 @@ const threeMonthsAgo = new Date(
 export const DealsChart = memo(() => {
   const translate = useTranslate();
   const { dealStages, currency } = useConfigurationContext();
-  const wonLabel = findDealLabel(dealStages, "angenommen") ?? "Angenommen";
+  const wonLabel = findDealLabel(dealStages, "completed") ?? "Abgeschlossen";
   const lostLabel = findDealLabel(dealStages, "abgelehnt") ?? "Abgelehnt";
 
   const { data, isPending } = useGetList<Deal>("deals", {
