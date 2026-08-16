@@ -150,9 +150,13 @@ describe("Error Observatory client", () => {
     const serverError = { status: 503, message: "upstream" };
 
     const rejected = await manager
-      .execute(OPERATION_CATALOG["deal.update"], { resourceId: 8 }, async () => {
-        throw serverError;
-      })
+      .execute(
+        OPERATION_CATALOG["deal.update"],
+        { resourceId: 8 },
+        async () => {
+          throw serverError;
+        },
+      )
       .then(
         () => null,
         (err) => err,
@@ -169,8 +173,7 @@ describe("Error Observatory client", () => {
     });
     await expect
       .poll(
-        () =>
-          manager.getOperations()[0].publicErrorRef === "NORA-EHUNGWAIT",
+        () => manager.getOperations()[0].publicErrorRef === "NORA-EHUNGWAIT",
       )
       .toBe(true);
   });
@@ -272,15 +275,13 @@ describe("Error Observatory client", () => {
   });
 
   it("supabase recorder maps RPC payload and soft-fails", async () => {
-    const rpc = vi.fn(
-      async (_fn: string, _args?: Record<string, unknown>) => ({
-        data: {
-          error_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-          public_ref: "NORA-EABCDEFGH",
-        },
-        error: null,
-      }),
-    );
+    const rpc = vi.fn(async (_fn: string, _args?: Record<string, unknown>) => ({
+      data: {
+        error_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        public_ref: "NORA-EABCDEFGH",
+      },
+      error: null,
+    }));
     const recorder = createSupabaseOperationErrorRecorder(() => ({ rpc }));
     const result = await recorder({
       operationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",

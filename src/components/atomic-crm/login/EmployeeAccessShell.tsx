@@ -27,8 +27,7 @@ export const EmployeeAccessShell = ({ children }: EmployeeAccessShellProps) => {
           className="relative hidden lg:flex flex-col px-16 py-16 text-white"
           aria-label="Markenbereich"
           style={{
-            background:
-              "linear-gradient(180deg, #111111 0%, #0a0a0a 100%)",
+            background: "linear-gradient(180deg, #111111 0%, #0a0a0a 100%)",
           }}
         >
           <div className="relative z-10 flex min-h-0 flex-1 flex-col justify-between">

@@ -188,3 +188,15 @@ jobs:
 
             - name: 🔨 Build
               run: npm run build
+
+            - name: 📦 Bundle-Budget
+              run: node ./scripts/check-bundle-budget.mjs
+
+            - name: 📊 Bundle-Statistik sichern
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: bundle-stats-${{ github.run_id }}
+                  path: dist/stats.html
+                  if-no-files-found: warn
+                  retention-days: 7

@@ -547,3 +547,64 @@ create index operation_errors_actor_occurred_idx
 create index operation_errors_unresolved_idx
     on public.operation_errors (occurred_at desc)
     where resolved_at is null;
+
+-- Kernindizes für den geerbten Atomic-CRM-Datenbestand (siehe Migration
+-- 20260815120000_nora_core_indexes.sql). Deckt die heißen Filter- und
+-- Sortierpfade von Kanban, Hotboard, Aufgaben und Aktivitätsliste ab.
+create index deals_stage_index_active_idx
+    on public.deals (stage, "index")
+    where archived_at is null;
+
+create index deals_expected_closing_active_idx
+    on public.deals (expected_closing_date)
+    where archived_at is null;
+
+create index deals_sales_id_idx
+    on public.deals (sales_id)
+    where sales_id is not null;
+
+create index deals_archived_at_idx
+    on public.deals (archived_at)
+    where archived_at is not null;
+
+create index deals_created_at_idx
+    on public.deals (created_at desc);
+
+create index tasks_contact_id_idx
+    on public.tasks (contact_id);
+
+create index tasks_due_date_open_idx
+    on public.tasks (due_date)
+    where done_date is null;
+
+create index tasks_sales_id_idx
+    on public.tasks (sales_id)
+    where sales_id is not null;
+
+create index contacts_sales_id_idx
+    on public.contacts (sales_id)
+    where sales_id is not null;
+
+create index contacts_first_seen_idx
+    on public.contacts (first_seen desc);
+
+create index companies_sales_id_idx
+    on public.companies (sales_id)
+    where sales_id is not null;
+
+create index companies_created_at_idx
+    on public.companies (created_at desc);
+
+create index contact_notes_date_idx
+    on public.contact_notes (date desc);
+
+create index deal_notes_date_idx
+    on public.deal_notes (date desc);
+
+create index contact_notes_sales_id_idx
+    on public.contact_notes (sales_id)
+    where sales_id is not null;
+
+create index deal_notes_sales_id_idx
+    on public.deal_notes (sales_id)
+    where sales_id is not null;

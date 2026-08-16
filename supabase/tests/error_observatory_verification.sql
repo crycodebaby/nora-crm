@@ -53,7 +53,17 @@ begin
         values ('EO', p_role, p_email, p_user_id, p_role, (p_role = 'admin'), false);
     exception
         when unique_violation then
-            null;
+            -- on_auth_user_created already provisioned a sales row (role
+            -- decided by resolve_first_signup_role, not necessarily p_role)
+            -- for this user_id via the auth.users insert above. Without this
+            -- correction the row silently keeps its auto-assigned role and
+            -- every later is_admin()/has_role() check in this suite would
+            -- reflect that role instead of the one this test asked for.
+            perform nora_private.apply_sales_role_change(
+                (select id from public.sales where user_id = p_user_id),
+                p_role,
+                false
+            );
     end;
 end;
 $$;

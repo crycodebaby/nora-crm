@@ -1366,3 +1366,114 @@ Realtime-Aktionen anderer Nutzer, breite RPC/Edge-Umbauten.
 
 `20260810160000_nora_operation_correlation.sql` — lokal anwenden; **kein** Remote-Apply in diesem Commit.
 
+
+## 2026-08-15 – Kernindizes und Bundle-Budget
+
+### Kontext
+
+Nora soll produktiv eingesetzt werden. Zwei Messbefunde standen dem entgegen:
+
+**Index-Asymmetrie.** Die Nora-eigenen Tabellen sind sorgfältig indiziert
+(`audit_events` 9 Indizes, `operation_errors` 5, `checklist_*` und
+`google_calendar_*` je 3–4). Der von Atomic CRM geerbte Kern hatte dagegen
+nur Primärschlüssel und zwei Fremdschlüsselindizes: `deals` und `contacts`
+je `company_id`, `companies` und `tasks` gar nichts. Ungedeckt waren damit
+genau die heißen Pfade — `deals.stage` (jeder Kanban-Aufbau und jeder Drop),
+`deals.expected_closing_date` (Hotboard, Nachfassen), `tasks.due_date`
+(`TasksListByDueDate` mit `perPage: 1000`) sowie `tasks.contact_id`: ein
+Fremdschlüssel ohne Index, wodurch jedes Löschen eines Kontakts wegen
+`on delete cascade` einen Seq-Scan über `tasks` auslöst.
+
+**Kein Code-Splitting.** In `src/` existiert kein einziges `React.lazy`; alle
+Seiten werden in `CRM.tsx` statisch importiert. Zusätzlich fehlten
+Vendor-Chunks, wodurch jedes Deployment den gesamten Browser-Cache
+invalidiert, auch bei einer einzigen geänderten Zeile Anwendungscode.
+
+### Entscheidung
+
+- **Kernindizes** additiv per Migration `20260815120000_nora_core_indexes.sql`.
+  Ausschließlich `create index if not exists`, keine Tabellen-, Policy- oder
+  Funktionsänderung. Wo die Abfrage es hergibt, partielle bzw.
+  zusammengesetzte Indizes statt Einzelspalten — `deals (stage, "index")
+  where archived_at is null` deckt Kanban-Filter und -Sortierung gemeinsam ab.
+- **Kein `CONCURRENTLY`.** Die Supabase-CLI umschließt Migrationen mit einer
+  Transaktion, in der `create index concurrently` nicht zulässig ist. Bei der
+  aktuellen Datenmenge liegt die Sperrdauer im Millisekundenbereich. Ab etwa
+  100.000 Zeilen je Tabelle wäre eine separate, nicht transaktionale
+  Migration nötig.
+- **`supabase/schemas/01_tables.sql` mitgeführt.** Die Indizes stehen
+  zusätzlich in der deklarativen Schema-Datei, damit Migrationen und Schema
+  nicht auseinanderlaufen.
+- **`sourcemap: false`** statt `"hidden"`. `"hidden"` erzeugt weiterhin
+  `.map`-Dateien im Deploy-Ordner und entfernt nur die
+  `//# sourceMappingURL`-Referenz — die Dateien bleiben unter ihrem
+  bekannten Pfad (`*.js.map`) abrufbar und schützen den Quelltext nicht
+  zuverlässig. Solange Nora keine private Sourcemap-Übertragung an ein
+  Error-Monitoring besitzt, dürfen Produktions-Sourcemaps gar nicht erzeugt
+  werden. `false` unterdrückt die Erzeugung vollständig.
+- **`manualChunks` in Funktionsform**, nicht als Objekt. Die Objektform
+  bricht den Build, wenn eine gelistete Abhängigkeit nicht im Modulgraph
+  liegt; die Funktionsform ignoriert sie. Gruppen: `react`, `admin`,
+  `charts`, `markdown`, `transfer`, `dnd`.
+- **Bundle-Budget als CI-Gate** (`scripts/check-bundle-budget.mjs`),
+  angehängt an den bestehenden Build-Job statt als eigener Job — spart einen
+  zweiten `npm ci` und Build. `dist/stats.html` wird als Artefakt gesichert.
+- **`visualizer({ open })` korrigiert:** GitHub Actions setzt `CI=true`, nicht
+  `NODE_ENV=CI`. Die alte Bedingung hätte im Headless-Runner einen Browser
+  zu öffnen versucht.
+
+### Bewusst nicht in dieser Welle
+
+**Code-Splitting per `React.lazy`.** Bei der Vorbereitung zeigte sich, dass
+`Header.tsx` die Seitenkomponenten `ImportPage`, `AuditPage`,
+`GoogleCalendarAdminPage` und `ChangelogPage` statisch importiert, um an
+deren statisches `.path` zu gelangen (ebenso `SettingsPageMobile.tsx` für
+`ChangelogPage.path`). Ein `React.lazy` allein in `CRM.tsx` würde diese
+Chunks über den Header wieder ins Hauptbundle ziehen — die Wirkung wäre
+null.
+
+Sauberer Weg: Pfadkonstanten in eigene Module ziehen (wie bei
+`auditPagePath.ts` und `googleCalendarAdminPath.ts` bereits vorhanden),
+`Page.path = KONSTANTE` zur Rückwärtskompatibilität beibehalten, `Header.tsx`
+und `SettingsPageMobile.tsx` auf die Konstanten umstellen, erst dann in
+`CRM.tsx` lazy laden. Betrifft acht Dateien und gehört in einen eigenen
+Commit mit laufendem `typecheck`.
+
+Ebenfalls nicht enthalten: Dashboard-Snapshot-RPC, `deal.reorder` als RPC,
+Operations-Resolver, Request-Zähler, `operation_metrics`.
+
+### Verifikation
+
+- `supabase/tests/core_indexes_verification.sql` — prüft die Existenz aller
+  16 Indizes und schlägt zusätzlich fehl, sobald ein Fremdschlüssel auf einer
+  Kerntabelle wieder ohne führenden Index angelegt wird.
+- `npm run typecheck` und `npm run build` — grün, lokal nachvollzogen
+  (2026-08-15).
+- `node ./scripts/check-bundle-budget.mjs` — kalibriert (2026-08-15) anhand
+  eines echten Produktions-Builds: Entry-Chunk gemessen 955 kB → Budget 1050
+  kB (~10 % Headroom), Gesamt gemessen 2321 kB → Budget 2600 kB (~12 %
+  Headroom). Die zuvor geschätzten Werte (900 / 3500 kB) hätten den
+  aktuellen Build am Entry-Budget scheitern lassen.
+
+### Nachtrag Review — zwei übersehene Fremdschlüssel
+
+Die erste Fassung der Migration deckte 14 Indizes ab und hätte die eigene
+Verifikation nicht bestanden: `contact_notes.sales_id`
+(`contactNotes_sales_id_fkey`, **ON UPDATE CASCADE ON DELETE CASCADE**) und
+`deal_notes.sales_id` (`dealNotes_sales_id_fkey`) waren weiterhin ohne Index.
+Das ist exakt die Falle, wegen der die Migration überhaupt geschrieben wurde —
+nur an Benutzern statt an Kontakten: das Löschen eines `sales`-Datensatzes
+hätte einen Seq-Scan über `contact_notes` ausgelöst. Beide Indizes ergänzt
+(partiell `where sales_id is not null`, ausreichend für FK-Prüfungen, da dort
+nie nach NULL gesucht wird).
+
+Zusätzlich im Verifikationsskript: der Tabellenabgleich lief über
+`conrelid::regclass::text`. Dessen Textform hängt vom `search_path` ab — ohne
+`public` darin hätte die `IN`-Liste nie getroffen und der Test wäre
+stillschweigend grün gewesen. Jetzt über `pg_class.relname` +
+`relnamespace`.
+
+### Migration
+
+`20260815120000_nora_core_indexes.sql` — lokal anwenden; **kein** Remote-Apply
+in diesem Commit.

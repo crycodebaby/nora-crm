@@ -12,7 +12,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     tailwindcss(),
     visualizer({
-      open: process.env.NODE_ENV !== "CI",
+      // GitHub Actions setzt CI=true, nicht NODE_ENV=CI — sonst versucht
+      // der Visualizer im Headless-Runner einen Browser zu oeffnen.
+      open: !process.env.CI,
       filename: "./dist/stats.html",
     }),
     createHtmlPlugin({
@@ -66,7 +68,47 @@ export default defineConfig(({ mode }) => ({
     keepNames: true,
   },
   build: {
-    sourcemap: true,
+    // false: Solange Nora keine private Sourcemap-Uebertragung an ein
+    // Error-Monitoring besitzt, duerfen Produktions-Sourcemaps nicht erzeugt
+    // werden. "hidden" erzeugt weiterhin .map-Dateien im Deploy-Ordner, die
+    // ueber ihre bekannten Pfade abrufbar waeren.
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Vendor-Trennung: React und ra-core aendern sich selten und bleiben
+        // ueber Deploys hinweg im Browser-Cache. Ein Nora-Release invalidiert
+        // dann nur noch den Anwendungs-Chunk statt des gesamten Bundles.
+        //
+        // Funktionsform statt Objektform: eine hier gelistete, aber nicht
+        // importierte Abhaengigkeit bricht so nicht den Build.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            /[\\/]node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(
+              id,
+            )
+          )
+            return "react";
+          if (
+            /[\\/]node_modules[\\/](ra-core|ra-supabase-core|ra-i18n-polyglot|@tanstack)[\\/]/.test(
+              id,
+            )
+          )
+            return "admin";
+          if (/[\\/]node_modules[\\/]@nivo[\\/]/.test(id)) return "charts";
+          if (/[\\/]node_modules[\\/](marked|dompurify)[\\/]/.test(id))
+            return "markdown";
+          if (
+            /[\\/]node_modules[\\/](papaparse|jsonexport|react-cropper|cropperjs|react-dropzone)[\\/]/.test(
+              id,
+            )
+          )
+            return "transfer";
+          if (/[\\/]node_modules[\\/]@hello-pangea[\\/]/.test(id)) return "dnd";
+          return undefined;
+        },
+      },
+    },
   },
   resolve: {
     preserveSymlinks: true,

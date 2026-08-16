@@ -75,10 +75,7 @@ const TaskEditHost = ({
 const renderHost = async (
   update: ReturnType<
     typeof vi.fn<
-      (
-        resource: string,
-        params: UpdateParams<Task>,
-      ) => Promise<{ data: Task }>
+      (resource: string, params: UpdateParams<Task>) => Promise<{ data: Task }>
     >
   >,
   options?: { onClose?: () => void; unmountOnClose?: boolean },
@@ -112,7 +109,9 @@ const renderHost = async (
 
 const clickDialogClose = async () => {
   // Exact "Close" — not DeleteButton and not toast "Close toast".
-  await userEvent.click(page.getByRole("button", { name: "Close", exact: true }));
+  await userEvent.click(
+    page.getByRole("button", { name: "Close", exact: true }),
+  );
 };
 
 /**
@@ -164,7 +163,9 @@ describe("TaskEdit FormDirtyBridge single source of truth (Gate 2b pre-push)", (
     await userEvent.fill(textField, "Geändert");
 
     await waitForDirtyMirror();
-    await expect.poll(() => getFormSpy()?.values.text === "Geändert").toBe(true);
+    await expect
+      .poll(() => getFormSpy()?.values.text === "Geändert")
+      .toBe(true);
 
     await clickDialogClose();
     await expectDiscardConfirmVisible();
@@ -213,7 +214,9 @@ describe("TaskEdit FormDirtyBridge single source of truth (Gate 2b pre-push)", (
     await userEvent.fill(textField, "Gespeichert");
     await waitForDirtyMirror();
 
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
     await expect.poll(() => update.mock.calls.length).toBe(1);
 
     // While server pending: still dirty — bridge must not fake clean.
@@ -244,7 +247,9 @@ describe("TaskEdit FormDirtyBridge single source of truth (Gate 2b pre-push)", (
     await userEvent.fill(textField, "Fehlerpfad");
     await waitForDirtyMirror();
 
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
     await expect.poll(() => update.mock.calls.length).toBe(1);
 
     await expect.element(textField).toHaveValue("Fehlerpfad");
