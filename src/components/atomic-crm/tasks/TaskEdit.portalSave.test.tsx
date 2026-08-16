@@ -35,10 +35,7 @@ const getFormSpy = () =>
 const renderTaskEdit = async (
   update: ReturnType<
     typeof vi.fn<
-      (
-        resource: string,
-        params: UpdateParams<Task>,
-      ) => Promise<{ data: Task }>
+      (resource: string, params: UpdateParams<Task>) => Promise<{ data: Task }>
     >
   >,
 ) => {
@@ -94,7 +91,9 @@ describe("TaskEdit portal form save (Stabilization Gate 2b)", () => {
       .toBe(true);
     await expect.poll(() => getFormSpy()?.isValid === true).toBe(true);
 
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
 
     await expect.poll(() => update.mock.calls.length).toBe(1);
     expect(update.mock.calls[0]?.[0]).toBe("tasks");
@@ -119,7 +118,9 @@ describe("TaskEdit portal form save (Stabilization Gate 2b)", () => {
       .toBe(true);
     await expect.poll(() => getFormSpy()?.isValid === true).toBe(true);
 
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
 
     await expect.poll(() => update.mock.calls.length).toBe(1);
     await expect.element(textField).toHaveValue("Fehlerpfad");

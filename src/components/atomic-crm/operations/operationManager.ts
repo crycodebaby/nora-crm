@@ -160,10 +160,7 @@ export const createOperationManager = (options?: {
    * Recorder enrichment is intentionally non-blocking so a hung RPC cannot
    * delay propagation of the original business exception to React Admin.
    */
-  const markErrorSafely = (
-    pending: OperationRecord,
-    error: unknown,
-  ): void => {
+  const markErrorSafely = (pending: OperationRecord, error: unknown): void => {
     let runtimeErrorId = createOperationId();
     let safeErrorCode = "unknown";
     try {

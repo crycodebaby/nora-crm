@@ -180,7 +180,9 @@ describe("DealEdit portal form save (Stabilization Gate 2 + Wave 3)", () => {
       .toBe(true);
 
     // Click the actual visible Save control — do NOT call submit handlers directly.
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
 
     await expect.poll(() => update.mock.calls.length).toBe(1);
 
@@ -228,7 +230,9 @@ describe("DealEdit portal form save (Stabilization Gate 2 + Wave 3)", () => {
       .poll(() => getFormSpy()?.values.description === "Neue Beschreibung")
       .toBe(true);
 
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
 
     await expect.poll(() => update.mock.calls.length).toBe(1);
     expect(update.mock.calls[0]?.[1]?.data).toMatchObject({
@@ -262,7 +266,9 @@ describe("DealEdit portal form save (Stabilization Gate 2 + Wave 3)", () => {
       .toBe(true);
     await expect.poll(() => getFormSpy()?.isDirty === true).toBe(true);
 
-    await userEvent.click(page.getByRole("button", { name: /Speichern|Save/i }));
+    await userEvent.click(
+      page.getByRole("button", { name: /Speichern|Save/i }),
+    );
 
     await expect.poll(() => update.mock.calls.length).toBe(1);
     await expect.poll(() => recordError.mock.calls.length).toBe(1);

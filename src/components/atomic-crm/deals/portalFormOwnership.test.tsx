@@ -8,11 +8,7 @@ import type { FormEvent } from "react";
 import { render } from "vitest-browser-react";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 describe("Radix portal vs HTML form ownership", () => {
   it("BROKEN pattern: form outside portal → submit button has no form owner", async () => {
@@ -23,10 +19,7 @@ describe("Radix portal vs HTML form ownership", () => {
     await render(
       <Dialog open>
         <form id="outer-form" className="contents" onSubmit={onSubmit}>
-          <DialogContent
-            showClose={false}
-            aria-describedby={undefined}
-          >
+          <DialogContent showClose={false} aria-describedby={undefined}>
             <DialogTitle className="sr-only">Test</DialogTitle>
             <input name="note" defaultValue="x" />
             <button type="submit">Speichern</button>

@@ -6,10 +6,7 @@
  */
 
 import { normalizeCrmError } from "../misc/normalizeCrmError";
-import type {
-  OperationResourceType,
-  OperationType,
-} from "./operationContext";
+import type { OperationResourceType, OperationType } from "./operationContext";
 import { getNoraFrontendVersion } from "./frontendVersion";
 
 export type OperationErrorPersistInput = {
@@ -54,7 +51,8 @@ export const TECHNICAL_CONTEXT_ALLOWLIST = [
 
 export type TechnicalContextKey = (typeof TECHNICAL_CONTEXT_ALLOWLIST)[number];
 
-const SECRETISH = /(bearer|authorization|password|refresh_token|service_role|eyJ)/i;
+const SECRETISH =
+  /(bearer|authorization|password|refresh_token|service_role|eyJ)/i;
 
 const extractTechnicalErrorCode = (error: unknown): string | undefined => {
   if (!error || typeof error !== "object") return undefined;
@@ -128,8 +126,7 @@ export const createSupabaseOperationErrorRecorder = (
         p_safe_error_code: input.safeErrorCode ?? null,
         p_technical_error_code: extractTechnicalErrorCode(input.error) ?? null,
         p_technical_context: technicalContext,
-        p_frontend_version:
-          input.frontendVersion ?? getNoraFrontendVersion(),
+        p_frontend_version: input.frontendVersion ?? getNoraFrontendVersion(),
       });
 
       if (error || !data || typeof data !== "object") {

@@ -13,11 +13,7 @@ import { Link } from "react-router";
 import { isNoraRecordId, noraCreatePath } from "../routing/noraRoutes";
 import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 import { FormToolbar } from "../layout/FormToolbar";
 import { CompanyAvatar } from "../companies/CompanyAvatar";

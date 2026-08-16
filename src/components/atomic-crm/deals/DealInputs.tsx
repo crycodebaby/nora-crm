@@ -104,10 +104,7 @@ export const DealInputs = () => {
           validate={required()}
         />
 
-        <ReferenceInput
-          source="sales_id"
-          {...SALES_DIRECTORY_REFERENCE_PROPS}
-        >
+        <ReferenceInput source="sales_id" {...SALES_DIRECTORY_REFERENCE_PROPS}>
           <SelectInput
             helperText={false}
             optionText={saleOptionRenderer}
