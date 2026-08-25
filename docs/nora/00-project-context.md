@@ -39,7 +39,15 @@ Nora v0.1 ist noch nicht:
 - Field-Service-System mit Monteurplanung
 - Hersteller-/Lieferantenmodul
 - GoBD-Archiv
-- Produktives System mit echten Kundendaten
+
+**Historische Zieldefinition, seit 2026-08-25 überholt:** „Produktives System
+mit echten Kundendaten" stand ursprünglich hier als Nicht-Ziel. Seit der
+Customer & Contact Workflow Wave läuft Nora produktiv unter `nora.ergart.de`
+gegen die Supabase-Produktionsdatenbank `nora-crm-prod` mit realen
+Kundendaten (verifiziert 2026-08-25, siehe `06-decision-log.md` und
+`16-current-state.md`). Die Zeile bleibt hier stehen, um die ursprüngliche
+v0.1-Zielsetzung nachvollziehbar zu halten, ist aber **keine aktuelle
+Aussage mehr**.
 
 ## Wichtige fachliche Begriffe
 

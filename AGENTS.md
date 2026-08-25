@@ -6,16 +6,18 @@ Diese Datei ist der verpflichtende Einstiegspunkt für KI-Agenten, die an Nora C
 
 Bevor Code geändert wird, muss der Agent diese Datei und die referenzierten Dokumente lesen:
 
-1. `docs/nora/00-project-context.md`
-2. `docs/nora/01-domain-model.md`
-3. `docs/nora/02-design-system.md`
-4. `docs/nora/03-data-model-guardrails.md`
-5. `docs/nora/04-routing-i18n.md`
-6. `docs/nora/05-demo-data-guidelines.md`
-7. `docs/nora/06-decision-log.md`
-8. `docs/nora/07-agent-change-checklist.md`
-9. `docs/nora/11-google-calendar-rbac.md`
-10. `docs/nora/12-role-ux-acceptance.md` (Rollen-UX-Abnahmeprotokoll)
+1. `docs/nora/16-current-state.md` (schnelle Orientierung — was ist aktuell live, welche Waves sind abgeschlossen)
+2. `docs/nora/00-project-context.md`
+3. `docs/nora/01-domain-model.md`
+4. `docs/nora/02-design-system.md`
+5. `docs/nora/03-data-model-guardrails.md`
+6. `docs/nora/04-routing-i18n.md`
+7. `docs/nora/05-demo-data-guidelines.md`
+8. `docs/nora/06-decision-log.md`
+9. `docs/nora/07-agent-change-checklist.md`
+10. `docs/nora/11-google-calendar-rbac.md`
+11. `docs/nora/12-role-ux-acceptance.md` (Rollen-UX-Abnahmeprotokoll)
+12. `docs/nora/17-known-issues-and-planned-waves.md` (offene Bugs, geplante Waves)
 
 Wenn eine Änderung fachliche Entscheidungen berührt, muss der Agent `docs/nora/06-decision-log.md` ergänzen oder einen neuen Decision-Eintrag vorschlagen.
 

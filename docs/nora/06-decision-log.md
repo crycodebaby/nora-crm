@@ -100,6 +100,134 @@ Schnellerfassung bekannte Teilzustand-Falle (Kunde angelegt, Kontakt-Erstellung
 schlägt fehl). Das generische Link-Modell vermeidet eine LinkedIn-Sonderrolle,
 ohne Bestandsdaten zu verlieren.
 
+### Alternativen / verworfene Ansätze
+
+- **Neumodellierung als `party`/`person`/`organization`** (generisches CRM-Partei-Modell,
+  bei dem Kunde und Ansprechpartner dieselbe zugrunde liegende Entität wären):
+  verworfen. `companies` und `contacts` bleiben getrennte Tabellen. Ein
+  großer Umbau hätte DataProvider, RLS, Audit-Trigger, Nummernvergabe,
+  Checklisten-FKs und sämtliche bestehende UI gleichzeitig angefasst — außer
+  Verhältnis zum tatsächlichen fachlichen Bedarf (einmalige Personendaten-
+  Erfassung), der sich additiv über `customer_kind` + eine Anlage-RPC lösen
+  ließ. Entspricht der bestehenden Leitlinie „keine Resource-Namen blind
+  umbenennen" (`03-data-model-guardrails.md`).
+- **Selbstständige als eigene dritte `customer_kind`-Ausprägung** (statt
+  `business`): verworfen. Fachlich verhalten sich Selbstständige wie
+  Unternehmen (eigene Kundenakte, eigene Geschäftskontaktdaten, optional
+  eigene Person als Ansprechpartner) — eine dritte Ausprägung hätte in JEDEM
+  UI-Verzweigungspunkt (`CompanyInputs`, `CustomerContactCaptureInputs`,
+  `buildCustomerCreatePayload`) dieselbe Business-Logik wie `business` noch
+  einmal abgebildet, ohne fachlichen Mehrwert. Der „Unternehmer ist selbst
+  Ansprechpartner"-Modus mit „Angaben übernehmen" deckt den Anwendungsfall
+  innerhalb von `business` ab.
+- **Hauptansprechpartner als Flag direkt am Kunden** (`companies.primary_contact_id`
+  statt `contacts.is_primary`): verworfen zugunsten des Felds auf `contacts`.
+  Ein FK von `companies` auf `contacts` hätte einen zirkulären FK-Zyklus mit
+  `contacts.company_id` erzeugt und wäre beim Löschen/Entkoppeln eines
+  Kontakts fehleranfälliger als ein Flag mit Partial Unique Index.
+
+### Folgearbeiten (nicht Teil dieser Wave)
+
+Siehe `17-known-issues-and-planned-waves.md`: Schnellerfassung auf
+`create_customer_with_contact` umstellen, Legacy-Spalten-Cleanup nach
+Übergangszeit, Aufgabenmodell-Vereinheitlichung (separate, noch nicht
+designte Domain-Wave — kein Zusammenhang mit dieser Entscheidung, aber
+gleicher Live-Test-Zyklus deckte den Bedarf auf).
+
+## 2026-08-25 – Erste lokale Postgres-Verifikation der Customer & Contact Workflow Migration
+
+### Kontext
+
+Die Customer & Contact Workflow Wave wurde zunächst ohne lokal verfügbares
+Docker entwickelt (Migration nur gelesen, nicht ausgeführt). Nach
+Docker-Verfügbarkeit wurde `npx supabase db reset --local` erstmals gegen
+echtes Postgres ausgeführt.
+
+### Befund und Fix
+
+`20260825120000_customer_contact_workflow.sql` schlug beim ersten Reset fehl:
+
+```
+ERROR: cannot change name of view column "email_fts" to "links_jsonb" (SQLSTATE 42P16)
+```
+
+**Ursache:** `create or replace view` erlaubt ausschließlich das Anhängen
+neuer Spalten **ans Ende** der `select`-Liste — nicht das Einfügen an
+beliebiger Position. Die neuen Spalten `links_jsonb`/`is_primary` für
+`contacts_summary` waren vor den berechneten Spalten `email_fts`/`phone_fts`
+eingefügt, wodurch Postgres deren Position verschob und dies als
+Spaltenumbenennung interpretierte.
+
+**Fix:** Neue View-Spalten strikt ans Ende der `select`-Liste verschoben
+(in Migration und `supabase/schemas/03_views.sql`). Nach dem Fix lief
+`db reset --local` fehlerfrei durch.
+
+**Regel für künftige Änderungen:** Beim Erweitern von `companies_summary`
+oder `contacts_summary` (oder jeder anderen View) neue Spalten **immer**
+ans Ende der `select`-Liste anhängen, nie dazwischen einfügen — sonst
+schlägt `create or replace view` mit genau diesem Fehler fehl.
+
+### Verifikation
+
+Nach dem Fix: kompletter `db reset --local` erfolgreich; neuer
+SQL-Verifikationstest `supabase/tests/customer_contact_workflow_verification.sql`
+ergänzt und grün (Schema-Form, RPC-Grants `anon` ausgeschlossen, Unternehmen +
+neuer/bestehender Kontakt, Privatperson, Hauptansprechpartner-Wechsel,
+DB-seitige Ablehnung eines zweiten Hauptansprechpartners, ungültiger
+`customer_kind`, `viewer`-Rolle von der RPC selbst abgelehnt). `npm run
+typecheck`, `npx vitest run` (434 Tests) und `npm run build` liefen
+zusätzlich erfolgreich.
+
+## 2026-08-25 – Customer & Contact Workflow Migration auf Produktion angewendet
+
+### Kontext
+
+Nach Abschluss der Customer & Contact Workflow Wave (siehe oben) und nach
+Verfügbarkeit von Docker wurde die Migration erstmals lokal gegen echtes
+Postgres verifiziert (siehe Eintrag unten) und anschließend — auf
+ausdrückliche Anweisung — gegen die Produktionsdatenbank angewendet.
+
+### Ablauf und Verifikation (read-only Prüfung gegen `nora-crm-prod`,
+Supabase-Projekt `kixxroxtfzbcbzctohex`)
+
+- `git push` löste einen Merge-Konflikt mit `origin/main` aus: PR #1
+  (`chore/foundation-performance-hardening`, Commit `774a6c46`) hatte
+  zwischenzeitlich dieselbe fehlende `nora_core_indexes`-Migration bereits
+  korrekt committed (siehe Eintrag „Repo/Produktions-Drift … unabhängig
+  bestätigt" oben). Per Rebase aufgelöst, autoritative Version übernommen.
+- `20260825120000_customer_contact_workflow.sql` per Supabase-MCP
+  `apply_migration` gegen `nora-crm-prod` angewendet.
+- **Migration-Bookkeeping-Drift beim Apply erkannt und korrigiert:** Die
+  MCP-Aktion trug die Migration zunächst mit dem Anwendungszeitstempel
+  (`20260825120416`) statt dem Dateiname-Zeitstempel (`20260825120000`) in
+  `supabase_migrations.schema_migrations` ein — hätte exakt dieselbe
+  Drift-Falle wie `nora_core_indexes` reproduziert. Per `UPDATE` auf den
+  korrekten Zeitstempel korrigiert; diese Korrektur selbst erzeugte einen
+  weiteren Bookkeeping-Eintrag (`20260825120612`), dafür wurde eine leere
+  Migrationsdatei `20260825120612_nora_migration_bookkeeping_cleanup.sql`
+  im Repo nachgezogen, damit lokale und Produktions-Historie wieder
+  deckungsgleich sind.
+- Nach Abschluss read-only verifiziert: Migrationshistorie auf Prod
+  identisch zu `supabase/migrations/`; `companies.customer_kind` /
+  `links_jsonb` / `email_jsonb` / `phone_jsonb`, `contacts.is_primary` /
+  `links_jsonb`, RPCs `create_customer_with_contact` / `set_primary_contact`
+  vorhanden.
+- Frontend: Vercel-Projekt `nora-crm` (Domain `nora.ergart.de`) deployte
+  automatisch nach `git push`; Deployment `dpl_hJp4Bn4tuSaDP4nLGevLd5hNT6No`,
+  Commit `e3f18f7f`, Status READY, Target production — verifiziert per
+  Vercel-MCP.
+- Produktionsdaten sind zum Prüfzeitpunkt real (14 Kunden, 16 Kontakte, 6
+  Vorgänge, 3 Nutzer) — keine Testdaten wurden auf Prod angelegt; die
+  verhaltensbasierte RPC-Verifikation mit Fake-Nutzern lief ausschließlich
+  lokal gegen das Docker-Postgres.
+
+### Begründung
+
+Explizite Nutzeranweisung nach vorheriger Risikobewertung (Datenmenge,
+Bestandsdatenkompatibilität, RLS-/RPC-Voraussetzungen bereits vorhanden).
+Read-only-Verifikation vor und nach jedem Schritt verhindert, dass ein
+stiller Fehlschlag unbemerkt bleibt.
+
 ## 2026-08-10 – Foundation Wave 3: Error Observatory Core
 
 ### Kontext
