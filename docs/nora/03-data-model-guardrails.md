@@ -130,6 +130,30 @@ Nur bei belegtem Bedarf:
 | `saved_text_snippets` | wiederverwendbare Textbausteine — **implementiert** (v0.3d2) |
 | `audit_events` | zentrale append-only Audit-Log-Tabelle — **implementiert** (v0.3d2) |
 | `workflow_type` | `general` vs. `window_order` — falls `category` nicht reicht |
+| `companies.customer_kind` | Unternehmen/Selbstständig vs. Privatperson — **implementiert** (Customer & Contact Workflow Wave, 2026-08-25) |
+| `contacts.is_primary` | Hauptansprechpartner, max. 1 pro Kunde (Partial Unique Index) — **implementiert** |
+| `companies.links_jsonb` / `contacts.links_jsonb` | generisches Link-Modell (Website, LinkedIn, …) — **implementiert**, ersetzt LinkedIn-only-Validierung |
+| `companies.email_jsonb` / `companies.phone_jsonb` | mehrere Firmen-Kontaktmethoden mit Typ — **implementiert** |
+| `create_customer_with_contact` (RPC) | atomare Kunde+Ansprechpartner-Anlage — **implementiert** |
+| `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert** |
+
+### Falle 28: Privatperson-Namensfeld doppelt vorhalten
+
+Falsch:
+
+```text
+companies.name als zweites Pflichtfeld neben contact_first_name/contact_last_name
+bei der Privatperson-Anlage abfragen
+```
+
+Richtig:
+
+```text
+companies.name wird beim Anlegen einer Privatperson aus Vor-/Nachname abgeleitet
+(buildCustomerCreatePayload.ts); das Kundenname-Feld ist im Create-Formular für
+customer_kind = individual ausgeblendet. Im Edit-Formular bleibt companies.name
+die einzige führende Quelle (kein virtuelles Vor-/Nachname-Feld dort).
+```
 
 **Veraltet / ersetzt durch 10:**
 

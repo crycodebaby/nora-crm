@@ -1,6 +1,8 @@
 import { Mars, NonBinary, Venus } from "lucide-react";
 
 import type { Company, Contact, ContactGender } from "../types";
+import { translateContactMethodTypeLabel } from "../misc/contactMethodTypes";
+import { cleanLinksJsonb } from "../misc/linksModel";
 
 export const defaultEmailJsonb = [{ email: null, type: null }];
 export const defaultPhoneJsonb = [{ number: null, type: null }];
@@ -14,6 +16,7 @@ const cleanContactArrayFields = (data: Contact) => {
     ...data,
     phone_jsonb: cleanedPhoneJsonb.length > 0 ? cleanedPhoneJsonb : null,
     email_jsonb: cleanedEmailJsonb.length > 0 ? cleanedEmailJsonb : null,
+    links_jsonb: cleanLinksJsonb(data.links_jsonb),
   };
 };
 
@@ -34,12 +37,6 @@ export const contactGenderDefaultLabels: Record<string, string> = {
   male: "He/Him",
   female: "She/Her",
   nonbinary: "They/Them",
-};
-
-const personalInfoTypeMap: Record<string, string> = {
-  Work: "work",
-  Home: "home",
-  Other: "other",
 };
 
 export const contactGender: ContactGender[] = [
@@ -68,16 +65,8 @@ export const translateContactGenderLabel = (
     _: contactGenderDefaultLabels[gender.value] ?? gender.label,
   });
 
-export const translatePersonalInfoTypeLabel = (
-  type: string,
-  translate: TranslateFn,
-) =>
-  translate(
-    `resources.contacts.inputs.personal_info_types.${personalInfoTypeMap[type] ?? type.toLowerCase()}`,
-    {
-      _: type,
-    },
-  );
+/** @deprecated use translateContactMethodTypeLabel from misc/contactMethodTypes.ts */
+export const translatePersonalInfoTypeLabel = translateContactMethodTypeLabel;
 
 /**
  * Folds a long line according to vCard specification (max 75 chars per line)
@@ -150,10 +139,15 @@ export function exportToVCard(
     });
   }
 
-  // LinkedIn URL
-  if (contact.linkedin_url) {
-    lines.push(`URL:${contact.linkedin_url}`);
-  }
+  // Links (Website, LinkedIn, ...) — falls back to legacy linkedin_url for older data
+  const links = contact.links_jsonb?.length
+    ? contact.links_jsonb
+    : contact.linkedin_url
+      ? [{ url: contact.linkedin_url, type: "linkedin" as const }]
+      : [];
+  links.forEach((link) => {
+    lines.push(`URL:${link.url}`);
+  });
 
   // Background/Note
   if (contact.background) {

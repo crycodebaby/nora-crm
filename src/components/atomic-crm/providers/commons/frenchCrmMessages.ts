@@ -25,6 +25,12 @@ export const frenchCrmMessages = {
         context_links: "URLs de contexte",
         sales_id: "Responsable de compte",
         customer_number: "Numéro client",
+        customer_kind: "Type de client",
+        email: "E-mail",
+        email_jsonb: "Adresses e-mail",
+        phone_jsonb: "Numéros de téléphone",
+        links_jsonb: "Liens",
+        link_url: "URL",
       },
       empty: {
         description: "Il semble que la liste de vos entreprises soit vide.",
@@ -36,6 +42,34 @@ export const frenchCrmMessages = {
         additional_info: "Informations supplémentaires",
         address: "Adresse",
         context: "Contexte",
+        contact_person: "Contact principal",
+        person: "Informations personnelles",
+      },
+      inputs: {
+        customer_kind: {
+          business: "Entreprise / Indépendant",
+          individual: "Particulier",
+        },
+        link_types: {
+          website: "Site web",
+          linkedin: "LinkedIn",
+          instagram: "Instagram",
+          facebook: "Facebook",
+          google: "Google",
+          portal: "Portail",
+          other: "Autre",
+        },
+        contact_capture: {
+          new: "Nouveau contact",
+          self: "Le dirigeant est aussi le contact",
+          existing: "Associer un contact existant",
+          none: "Aucun contact",
+          existing_contact: "Choisir un contact",
+          take_over: "Reprendre les informations",
+        },
+      },
+      notifications: {
+        created: "Client créé.",
       },
       action: {
         create: "Créer une entreprise",
@@ -88,9 +122,16 @@ export const frenchCrmMessages = {
         phone_jsonb: "Numéros de téléphone",
         phone_number: "Numéro de téléphone",
         linkedin_url: "URL LinkedIn",
+        links_jsonb: "Liens",
+        link_url: "URL",
         background: "Informations de contexte",
         has_newsletter: "Abonné à la newsletter",
         sales_id: "Responsable de compte",
+        is_primary: "Contact principal",
+      },
+      helper: {
+        is_primary:
+          "Contacté en premier par téléphone/e-mail. Un seul par client.",
       },
       action: {
         add: "Ajouter un contact",
@@ -143,6 +184,9 @@ export const frenchCrmMessages = {
           work: "Pro",
           home: "Perso",
           other: "Autre",
+          mobile: "Mobile",
+          central: "Standard",
+          direct: "Direct",
         },
       },
       list: {
@@ -916,6 +960,8 @@ export const frenchCrmMessages = {
     validation: {
       invalid_url: "Doit être une URL valide",
       invalid_linkedin_url: "L'URL doit provenir de linkedin.com",
+      invalid_email: "Doit être une adresse e-mail valide",
+      company_name_required: "Veuillez indiquer un nom de client ou de personne.",
     },
     access: {
       read_only_mode: "Mode lecture seule",

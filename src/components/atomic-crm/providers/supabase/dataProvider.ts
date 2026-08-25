@@ -33,6 +33,12 @@ import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
 import {
+  executeCreateCustomerWithContact,
+  type CreateCustomerWithContactParams,
+  type CreateCustomerWithContactResult,
+} from "../../operations/executeCreateCustomerWithContact";
+import { executeSetPrimaryContact } from "../../operations/executeSetPrimaryContact";
+import {
   createSupabaseOperationErrorRecorder,
   setDefaultOperationErrorRecorder,
 } from "../../operations/errorObservatory";
@@ -297,6 +303,18 @@ const getDataProviderWithCustomMethods = () => {
       }
 
       return data;
+    },
+    async createCustomerWithContact(
+      params: CreateCustomerWithContactParams,
+    ): Promise<CreateCustomerWithContactResult> {
+      return executeCreateCustomerWithContact(params, (fn, args) =>
+        getSupabaseClient().rpc(fn, args as any),
+      );
+    },
+    async setPrimaryContact(contactId: Identifier): Promise<void> {
+      return executeSetPrimaryContact(contactId, (fn, args) =>
+        getSupabaseClient().rpc(fn, args as any),
+      );
     },
     async startChecklistRunFromTemplate(
       args: StartChecklistRunFromTemplateArgs,

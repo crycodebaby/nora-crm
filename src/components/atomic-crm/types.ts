@@ -59,13 +59,45 @@ export type Sale = {
   password?: string;
 } & Pick<RaRecord, "id">;
 
+/**
+ * Kundenart – treibt den Create-/Edit-Formularmodus:
+ * "business" deckt Unternehmen, Selbstständige, Hausverwaltungen etc. ab,
+ * "individual" ist die Privatperson als Kunde.
+ * Siehe docs/nora/06-decision-log.md (Customer & Contact Workflow Wave).
+ */
+export type CustomerKind = "business" | "individual";
+
+/**
+ * Generalisiertes Link-Modell für companies.links_jsonb / contacts.links_jsonb.
+ * Ersetzt die LinkedIn-only-Validierung; linkedin_url/website/context_links
+ * bleiben als deprecated Legacy-Spalten bestehen (Datenerhalt), sind aber
+ * nicht mehr die UI-Quelle.
+ */
+export type LinkType =
+  | "website"
+  | "linkedin"
+  | "instagram"
+  | "facebook"
+  | "google"
+  | "portal"
+  | "other";
+
+export type LinkAndType = {
+  url: string;
+  type: LinkType;
+  label?: string;
+};
+
 export type Company = {
   name: string;
   logo: RAFile;
   sector: string;
   size: 1 | 10 | 50 | 250 | 500;
+  /** @deprecated UI-Quelle ist links_jsonb (type "linkedin"). Feld bleibt für Bestandsdaten. */
   linkedin_url: string;
+  /** @deprecated UI-Quelle ist links_jsonb (type "website"). Feld bleibt für Bestandsdaten. */
   website: string;
+  /** @deprecated UI-Quelle ist phone_jsonb (type "Central"). Feld bleibt für Bestandsdaten. */
   phone_number: string;
   address: string;
   zipcode: string;
@@ -77,10 +109,15 @@ export type Company = {
   revenue: string;
   tax_identifier: string;
   country: string;
+  /** @deprecated UI-Quelle ist links_jsonb (type "other"). Feld bleibt für Bestandsdaten. */
   context_links?: string[];
   nb_contacts?: number;
   nb_deals?: number;
   customer_number: string;
+  customer_kind: CustomerKind;
+  links_jsonb: LinkAndType[];
+  email_jsonb: EmailAndType[];
+  phone_jsonb: PhoneNumberAndType[];
 } & Pick<RaRecord, "id">;
 
 export type EmailAndType = {
@@ -90,7 +127,7 @@ export type EmailAndType = {
 
 export type PhoneNumberAndType = {
   number: string;
-  type: "Work" | "Home" | "Other";
+  type: "Work" | "Home" | "Other" | "Mobile" | "Central" | "Direct";
 };
 
 export type Contact = {
@@ -100,6 +137,7 @@ export type Contact = {
   company_id?: Identifier | null;
   email_jsonb: EmailAndType[];
   avatar?: Partial<RAFile>;
+  /** @deprecated UI-Quelle ist links_jsonb (type "linkedin"). Feld bleibt für Bestandsdaten. */
   linkedin_url?: string | null;
   first_seen: string;
   last_seen: string;
@@ -110,6 +148,9 @@ export type Contact = {
   status: string;
   background: string;
   phone_jsonb: PhoneNumberAndType[];
+  links_jsonb: LinkAndType[];
+  /** Hauptansprechpartner des zugeordneten Kunden — max. 1 pro company_id (DB-Constraint). */
+  is_primary: boolean;
   nb_tasks?: number;
   company_name?: string;
 } & Pick<RaRecord, "id">;

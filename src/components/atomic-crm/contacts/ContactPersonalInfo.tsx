@@ -4,13 +4,14 @@ import { ArrayField } from "@/components/admin/array-field";
 import { SingleFieldList } from "@/components/admin/single-field-list";
 import { TextField } from "@/components/admin/text-field";
 import { EmailField } from "@/components/admin/email-field";
-import { Mail, Phone, Linkedin, Check } from "lucide-react";
+import { Mail, Phone, Link as LinkIcon, Check } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   contactGender,
   translateContactGenderLabel,
   translatePersonalInfoTypeLabel,
 } from "./contactModel";
+import { translateLinkTypeLabel } from "../misc/linksModel";
 import type { Contact } from "../types";
 
 export const ContactPersonalInfo = () => {
@@ -33,9 +34,28 @@ export const ContactPersonalInfo = () => {
         </p>
       )}
 
-      {record.linkedin_url && (
+      {(record.links_jsonb ?? []).map((link, index) => (
         <PersonalInfoRow
-          icon={<Linkedin className="w-4 h-4 text-muted-foreground" />}
+          key={`link-${index}`}
+          icon={<LinkIcon className="w-4 h-4 text-muted-foreground" />}
+          primary={
+            <a
+              className="underline hover:no-underline text-sm text-muted-foreground"
+              href={
+                link.url.startsWith("http") ? link.url : `https://${link.url}`
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              title={link.url}
+            >
+              {translateLinkTypeLabel(link.type, translate)}
+            </a>
+          }
+        />
+      ))}
+      {record.links_jsonb?.length === 0 && record.linkedin_url && (
+        <PersonalInfoRow
+          icon={<LinkIcon className="w-4 h-4 text-muted-foreground" />}
           primary={
             <a
               className="underline hover:no-underline text-sm text-muted-foreground"

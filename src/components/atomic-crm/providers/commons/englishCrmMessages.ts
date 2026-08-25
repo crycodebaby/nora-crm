@@ -23,6 +23,12 @@ export const englishCrmMessages = {
         context_links: "Context links",
         sales_id: "Account manager",
         customer_number: "Customer number",
+        customer_kind: "Customer type",
+        email: "Email",
+        email_jsonb: "Email addresses",
+        phone_jsonb: "Phone numbers",
+        links_jsonb: "Links",
+        link_url: "URL",
       },
       empty: {
         description: "It seems your company list is empty.",
@@ -34,6 +40,34 @@ export const englishCrmMessages = {
         additional_info: "Additional information",
         address: "Address",
         context: "Context",
+        contact_person: "Contact person",
+        person: "Personal details",
+      },
+      inputs: {
+        customer_kind: {
+          business: "Business / Self-employed",
+          individual: "Private customer",
+        },
+        link_types: {
+          website: "Website",
+          linkedin: "LinkedIn",
+          instagram: "Instagram",
+          facebook: "Facebook",
+          google: "Google",
+          portal: "Portal",
+          other: "Other",
+        },
+        contact_capture: {
+          new: "New contact",
+          self: "Owner is also the contact",
+          existing: "Assign existing contact",
+          none: "No contact",
+          existing_contact: "Select contact",
+          take_over: "Copy details",
+        },
+      },
+      notifications: {
+        created: "Customer created.",
       },
       action: {
         create: "Create Company",
@@ -85,9 +119,16 @@ export const englishCrmMessages = {
         phone_jsonb: "Phone numbers",
         phone_number: "Phone number",
         linkedin_url: "LinkedIn URL",
+        links_jsonb: "Links",
+        link_url: "URL",
         background: "Background info (bio, how you met, etc)",
         has_newsletter: "Has newsletter",
         sales_id: "Account manager",
+        is_primary: "Primary contact",
+      },
+      helper: {
+        is_primary:
+          "Contacted first for calls/emails. Only one per customer.",
       },
       action: {
         add: "Add contact",
@@ -139,6 +180,9 @@ export const englishCrmMessages = {
           work: "Work",
           home: "Home",
           other: "Other",
+          mobile: "Mobile",
+          central: "Main line",
+          direct: "Direct",
         },
       },
       list: {
@@ -905,6 +949,8 @@ export const englishCrmMessages = {
     validation: {
       invalid_url: "Must be a valid URL",
       invalid_linkedin_url: "URL must be from linkedin.com",
+      invalid_email: "Must be a valid email address",
+      company_name_required: "Please enter a customer or person name.",
     },
     access: {
       read_only_mode: "Read-only mode",

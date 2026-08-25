@@ -7,7 +7,7 @@ import {
   useNotify,
 } from "ra-core";
 import type { FocusEvent, ClipboardEventHandler } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { BooleanInput } from "@/components/admin/boolean-input";
@@ -18,17 +18,18 @@ import { SelectInput } from "@/components/admin/select-input";
 import { ArrayInput } from "@/components/admin/array-input";
 import { SimpleFormIterator } from "@/components/admin/simple-form-iterator";
 
-import { isLinkedinUrl } from "../misc/isLinkedInUrl";
+import { getContactMethodTypeChoices } from "../misc/contactMethodTypes";
+import {
+  getLinkTypeChoices,
+  isValidUrl,
+  DEFAULT_LINK_TYPE,
+} from "../misc/linksModel";
 import { StatusSelector } from "../notes";
 import type { Sale, Contact } from "../types";
 import { Avatar } from "./Avatar";
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
 import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
-import {
-  contactGender,
-  translateContactGenderLabel,
-  translatePersonalInfoTypeLabel,
-} from "./contactModel.ts";
+import { contactGender, translateContactGenderLabel } from "./contactModel.ts";
 
 export const ContactInputs = () => {
   const isMobile = useIsMobile();
@@ -79,6 +80,7 @@ const ContactIdentityInputs = () => {
 
 const ContactPositionInputs = () => {
   const translate = useTranslate();
+  const companyId = useWatch({ name: "company_id" });
   return (
     <div className="nora-form-section">
       <h6>{translate("resources.contacts.field_categories.position")}</h6>
@@ -86,6 +88,12 @@ const ContactPositionInputs = () => {
       <ReferenceInput source="company_id" reference="companies" perPage={10}>
         <AutocompleteCompanyInput label="resources.contacts.fields.company_id" />
       </ReferenceInput>
+      {companyId ? (
+        <BooleanInput
+          source="is_primary"
+          helperText="resources.contacts.helper.is_primary"
+        />
+      ) : null}
     </div>
   );
 };
@@ -93,20 +101,8 @@ const ContactPositionInputs = () => {
 const ContactPersonalInformationInputs = () => {
   const translate = useTranslate();
   const { getValues, setValue } = useFormContext();
-  const personalInfoTypes = [
-    {
-      id: "Work",
-      name: translatePersonalInfoTypeLabel("Work", translate),
-    },
-    {
-      id: "Home",
-      name: translatePersonalInfoTypeLabel("Home", translate),
-    },
-    {
-      id: "Other",
-      name: translatePersonalInfoTypeLabel("Other", translate),
-    },
-  ];
+  const personalInfoTypes = getContactMethodTypeChoices(translate);
+  const linkTypes = getLinkTypeChoices(translate);
 
   // set first and last name based on email
   const handleEmailChange = (email: string) => {
@@ -185,16 +181,39 @@ const ContactPersonalInformationInputs = () => {
             label={false}
             optionText="name"
             choices={personalInfoTypes}
-            defaultValue="Work"
+            defaultValue="Mobile"
             className="w-24 min-w-24"
           />
         </SimpleFormIterator>
       </ArrayInput>
-      <TextInput
-        source="linkedin_url"
-        helperText={false}
-        validate={isLinkedinUrl}
-      />
+      <ArrayInput source="links_jsonb" helperText={false}>
+        <SimpleFormIterator
+          inline
+          disableReordering
+          disableClear
+          className="[&>ul>li]:border-b-0 [&>ul>li]:pb-0"
+        >
+          <TextInput
+            source="url"
+            className="w-full"
+            helperText={false}
+            label={false}
+            placeholder={translate("resources.contacts.fields.link_url", {
+              _: "URL",
+            })}
+            validate={isValidUrl}
+          />
+          <SelectInput
+            source="type"
+            helperText={false}
+            label={false}
+            optionText="name"
+            choices={linkTypes}
+            defaultValue={DEFAULT_LINK_TYPE}
+            className="w-28 min-w-28"
+          />
+        </SimpleFormIterator>
+      </ArrayInput>
     </div>
   );
 };

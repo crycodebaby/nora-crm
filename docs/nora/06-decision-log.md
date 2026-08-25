@@ -2,6 +2,104 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-25 – Repo/Produktions-Drift bei `nora_core_indexes` unabhängig bestätigt
+
+### Kontext
+
+Beim lokalen Testen der Customer & Contact Workflow Wave (`npx supabase db reset --local` gegen ein frisch verfügbares Docker) wurde read-only gegen `nora-crm-prod` festgestellt, dass Migration `20260815120000_nora_core_indexes` dort bereits angewendet ist, aber zu diesem Zeitpunkt lokal weder als Migrationsdatei noch im `main`-Branch vorlag. Aus den tatsächlichen Index-Definitionen auf Prod wurde eine Rekonstruktion vorbereitet.
+
+### Auflösung
+
+Beim anschließenden `git push` stellte sich heraus, dass die Migration bereits **korrekt und vollständiger** über PR #1 (`chore/foundation-performance-hardening`, Commit `774a6c46`) in `main` gelandet war — siehe „2026-08-15 – Kernindizes und Bundle-Budget" unten. Die eigene Rekonstruktion wurde beim Rebase verworfen, die autoritative Version aus PR #1 übernommen; doppelte Index-Deklarationen in `supabase/schemas/01_tables.sql` (durch den vorübergehenden Parallelstand entstanden) wurden bereinigt.
+
+### Begründung
+
+Zwei unabhängige Diagnosen desselben Drifts bestätigen den Befund, aber nur eine Version darf ins Repo — Duplikate in der deklarativen Schema-Datei hätten `create index` ohne `if not exists` zum Scheitern gebracht.
+
+## 2026-08-25 – Customer & Contact Workflow Wave
+
+### Kontext
+
+Kunden- und Ansprechpartner-Erfassung war uneinheitlich: `/kunden/create` nutzte
+reines `CreateBase` (kein atomarer Kunde+Ansprechpartner-Write), es gab kein
+Konzept für Hauptansprechpartner, keine Unterscheidung Unternehmen/Selbstständig
+vs. Privatperson, `companies` hatte nur ein einzelnes `phone_number`-Feld und
+keine E-Mail, und die LinkedIn-Validierung akzeptierte ausschließlich
+`linkedin.com`-URLs.
+
+### Entscheidung
+
+- **Kundenart:** neue Spalte `companies.customer_kind` (`business` | `individual`,
+  CHECK-Constraint). Treibt Formularmodus in `CompanyInputs`
+  (`/kunden/create` und `/kunden/:id/edit` teilen sich diese Komponente).
+  Ersetzt **nicht** `sector` — `sector` bleibt die lose Kundentyp-Klassifikation
+  (Hausverwaltung, Gewerbe, …), `customer_kind` ist die grundlegende binäre
+  Unterscheidung, die die UI-Verzweigung treibt (Falle 3 aus `03-data-model-guardrails.md`
+  bleibt beachtet: keine Doppelklassifikation über Tags).
+- **Hauptansprechpartner:** neue Spalte `contacts.is_primary boolean`. Max. 1 pro
+  `company_id` über Partial Unique Index `uq_contacts_one_primary_per_company`
+  (DB-Ebene, nicht nur UI). Atomarer Wechsel über RPC `set_primary_contact`
+  (unsetzt alten, setzt neuen in einer Transaktion).
+- **Links generalisiert:** neue Spalten `companies.links_jsonb` /
+  `contacts.links_jsonb` (`{url, type, label?}`, `type` ∈ website/linkedin/
+  instagram/facebook/google/portal/other). Ersetzt die LinkedIn-only-Validierung
+  (`isLinkedInUrl.ts`, entfernt) als UI-Quelle. **Bestandsdaten nicht verloren:**
+  `linkedin_url` (companies + contacts), `companies.website`,
+  `companies.context_links` werden per Migration in `links_jsonb` kopiert; die
+  alten Spalten bleiben als deprecated Legacy-Felder in der DB bestehen
+  (Cleanup-Kandidat für eine spätere Welle, siehe Abschnitt „Offene Punkte" im
+  Abschlussbericht).
+- **Firmen-Kontaktmethoden:** neue Spalten `companies.email_jsonb` /
+  `companies.phone_jsonb` — gleiche Struktur wie `contacts.email_jsonb` /
+  `contacts.phone_jsonb` (Typen erweitert um `Mobile`/`Central`/`Direct`,
+  vorhandene `Work`/`Home`/`Other`-Werte bleiben gültig). `companies.phone_number`
+  bleibt als deprecated Spiegel bestehen, wird per Migration in `phone_jsonb`
+  (Typ „Central") kopiert.
+- **Atomare Operation statt Frontend-Copy/Paste:** neue RPC
+  `create_customer_with_contact(p_company jsonb, p_contact jsonb, p_existing_contact_id bigint)`
+  — SECURITY DEFINER, `can_write()`-gated, ein DB-Write für Kunde + optional
+  neuer/bestehender Ansprechpartner (als Hauptansprechpartner markiert). Kein
+  Teilzustand bei Fehler (ein Postgres-Funktionskörper = eine Transaktion).
+  `customer_number`/`case_number` bleiben serverseitig vergeben (bestehende
+  Trigger, unverändert). Audit läuft automatisch über die bestehenden
+  `audit_company_row`/`audit_contact_row`-INSERT-Trigger — keine manuellen
+  Audit-Writes in der RPC nötig.
+- **Referenzimplementierung `/kunden/create`:** `CustomerCreateForm.tsx` ersetzt
+  `CreateBase` durch `Form` mit eigenem `onSubmit`, der
+  `dataProvider.createCustomerWithContact(...)` aufruft (Operation Manager +
+  Error Observatory über `customer.createWithContact` im Operation Catalog,
+  analog `deal.update`). Ansprechpartner-Erfassung über vier Modi: kein / neu /
+  Unternehmer ist selbst Ansprechpartner (mit „Angaben übernehmen"-Button,
+  kopiert Firmen-Kontaktdaten in die Ansprechpartner-Felder) / bestehenden
+  zuordnen. Bei Privatperson entfällt der Modus-Wähler: `CompanyInputs` blendet
+  das Pflichtfeld „Kundenname" im Create-Modus aus (`buildCustomerCreatePayload`
+  leitet den Namen aus Vor-/Nachname ab), Edit-Modus zeigt es weiterhin
+  (dort ist `companies.name` die einzige Quelle, keine virtuellen
+  Vor-/Nachname-Felder).
+- **`/kunden/:id/edit` und `/kontakte/*` teilen dieselben Bausteine:**
+  `CompanyInputs` (Create + Edit), `misc/linksModel.ts` (Link-Typen, generische
+  URL-Validierung, Cleanup), `misc/contactMethodTypes.ts` (E-Mail-/Telefon-Typen,
+  von Companies und Contacts genutzt) — keine dreifache Implementierung.
+- **Operation Catalog erweitert** um `customer.createWithContact` und
+  `contact.setPrimary` (analog bestehender `deal.update`-Vertical-Slice);
+  RPC-Aufrufe tragen `x-nora-operation-id` über `.setHeader()` (Supabase-Client),
+  FakeRest-Demo-Implementierung nutzt denselben Operation Manager ohne
+  RPC-Header-Mechanik.
+- **Schnellerfassung (Quick Capture) unverändert in dieser Welle** — bleibt bei
+  sequentiellen Creates (v0.3e-Stand); Umstellung auf dieselbe RPC ist als
+  Folge-Welle dokumentiert (siehe Abschlussbericht, „Offene Punkte").
+
+### Begründung
+
+Ein Kunde ist entweder ein Unternehmen/Selbstständiger oder eine Privatperson —
+diese Unterscheidung bestimmt, welche Felder eine Büromitarbeiterin sieht und ob
+Personendaten einmal oder zweimal erfasst werden müssen. Ein DB-Constraint für
+„max. 1 Hauptansprechpartner" verhindert inkonsistente Zustände unabhängig vom
+Frontend. Eine RPC statt mehrerer Client-Creates verhindert die aus der
+Schnellerfassung bekannte Teilzustand-Falle (Kunde angelegt, Kontakt-Erstellung
+schlägt fehl). Das generische Link-Modell vermeidet eine LinkedIn-Sonderrolle,
+ohne Bestandsdaten zu verlieren.
+
 ## 2026-08-10 – Foundation Wave 3: Error Observatory Core
 
 ### Kontext

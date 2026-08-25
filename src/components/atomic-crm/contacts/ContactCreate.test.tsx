@@ -121,7 +121,7 @@ describe("ContactCreate", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           email_jsonb: [{ email: "ada@example.com", type: "Work" }],
-          phone_jsonb: [{ number: "+1234567890", type: "Work" }],
+          phone_jsonb: [{ number: "+1234567890", type: "Mobile" }],
         }),
       }),
     );

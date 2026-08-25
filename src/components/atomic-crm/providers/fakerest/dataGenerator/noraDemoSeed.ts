@@ -59,6 +59,12 @@ export const generateNoraCompanies = (): Required<Company>[] => {
     revenue: "—",
     tax_identifier: "",
     context_links: [],
+    customer_kind: "business" as const,
+    links_jsonb: [],
+    email_jsonb: [],
+    phone_jsonb: seed.phone_number
+      ? [{ number: seed.phone_number, type: "Central" as const }]
+      : [],
   }));
 
   return assignCustomerNumbers(companies) as Required<Company>[];
@@ -69,6 +75,15 @@ export const generateNoraContacts = (
 ): Required<Contact>[] => {
   const companyById = new Map(companies.map((c) => [c.id, c]));
   const seen = subDays(new Date(), 14).toISOString();
+  const firstContactIdByCompany = new Map<number, number>();
+  for (const seed of DUesseldorf_CONTACT_SEEDS) {
+    if (
+      seed.company_id != null &&
+      !firstContactIdByCompany.has(seed.company_id)
+    ) {
+      firstContactIdByCompany.set(seed.company_id, seed.id);
+    }
+  }
 
   return DUesseldorf_CONTACT_SEEDS.map((seed) => {
     const company = companyById.get(seed.company_id);
@@ -94,6 +109,8 @@ export const generateNoraContacts = (
       sales_id: NORA_DEMO_SALES_ID,
       nb_tasks: 0,
       linkedin_url: null,
+      links_jsonb: [],
+      is_primary: firstContactIdByCompany.get(seed.company_id) === seed.id,
     };
   });
 };

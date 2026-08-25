@@ -228,8 +228,13 @@ const ContactsIterator = () => {
                 <Avatar />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-medium">
+                <div className="font-medium flex items-center gap-2">
                   {`${contact.first_name} ${contact.last_name}`}
+                  {contact.is_primary && (
+                    <span className="text-xs font-normal border rounded-full px-2 py-0.5 text-primary border-primary/40">
+                      {translate("resources.contacts.fields.is_primary")}
+                    </span>
+                  )}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {contact.title}

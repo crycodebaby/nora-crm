@@ -33,6 +33,12 @@ import { performGlobalSearch } from "../../misc/globalSearch";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
+import { OPERATION_CATALOG } from "../../operations/operationCatalog";
+import { getDefaultOperationManager } from "../../operations/operationManager";
+import type {
+  CreateCustomerWithContactParams,
+  CreateCustomerWithContactResult,
+} from "../../operations/executeCreateCustomerWithContact";
 import {
   readOperationIdFromMeta,
   withOperationIdParams,
@@ -341,6 +347,79 @@ export const createDataProvider = ({
     },
     mergeContacts: async (sourceId: Identifier, targetId: Identifier) => {
       return mergeContacts(sourceId, targetId, baseDataProvider);
+    },
+    createCustomerWithContact: async (
+      params: CreateCustomerWithContactParams,
+    ): Promise<CreateCustomerWithContactResult> =>
+      getDefaultOperationManager().execute(
+        OPERATION_CATALOG["customer.createWithContact"],
+        {},
+        async () => {
+          // dataProvider (lifecycle-wrapped), not baseDataProvider — first_seen/
+          // last_seen/customer_number/nb_contacts defaults must run.
+          const { data: company } = await dataProvider.create("companies", {
+            data: params.company,
+          });
+
+          let contactId: number | null = null;
+          if (params.existingContactId != null) {
+            const { data: existing } = await dataProvider.getOne("contacts", {
+              id: params.existingContactId,
+            });
+            await dataProvider.update("contacts", {
+              id: params.existingContactId,
+              data: { company_id: company.id, is_primary: true },
+              previousData: existing,
+            });
+            contactId = Number(params.existingContactId);
+          } else if (params.contact) {
+            const { data: contact } = await dataProvider.create("contacts", {
+              data: {
+                ...params.contact,
+                company_id: company.id,
+                is_primary: true,
+              },
+            });
+            contactId = contact.id;
+          }
+
+          return { company_id: company.id, contact_id: contactId };
+        },
+      ),
+    setPrimaryContact: async (contactId: Identifier): Promise<void> => {
+      await getDefaultOperationManager().execute(
+        OPERATION_CATALOG["contact.setPrimary"],
+        { resourceId: contactId },
+        async () => {
+          const { data: contact } = await dataProvider.getOne("contacts", {
+            id: contactId,
+          });
+          if (contact.company_id == null) {
+            throw new Error("contact has no company");
+          }
+          const { data: siblings } = await dataProvider.getList("contacts", {
+            filter: { company_id: contact.company_id },
+            pagination: { page: 1, perPage: 1000 },
+            sort: { field: "id", order: "ASC" },
+          });
+          await Promise.all(
+            siblings
+              .filter((c: Contact) => c.id !== contact.id && (c as any).is_primary)
+              .map((c: Contact) =>
+                dataProvider.update("contacts", {
+                  id: c.id,
+                  data: { is_primary: false },
+                  previousData: c,
+                }),
+              ),
+          );
+          await dataProvider.update("contacts", {
+            id: contact.id,
+            data: { is_primary: true },
+            previousData: contact,
+          });
+        },
+      );
     },
     startChecklistRunFromTemplate: async (
       _args: StartChecklistRunFromTemplateArgs,

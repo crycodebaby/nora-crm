@@ -1205,6 +1205,14 @@ BEGIN
     IF part IS NOT NULL THEN v := v || jsonb_build_object('country', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.description), to_jsonb(p_new.description), 'description');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('description', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.customer_kind), to_jsonb(p_new.customer_kind), 'customer_kind');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('customer_kind', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.links_jsonb), to_jsonb(p_new.links_jsonb), 'links_jsonb');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('links_jsonb', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.email_jsonb), to_jsonb(p_new.email_jsonb), 'email_jsonb');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('email_jsonb', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.phone_jsonb), to_jsonb(p_new.phone_jsonb), 'phone_jsonb');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('phone_jsonb', part); END IF;
     RETURN v;
 END;
 $$;
@@ -1240,6 +1248,10 @@ BEGIN
     IF part IS NOT NULL THEN v := v || jsonb_build_object('sales_id', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.status), to_jsonb(p_new.status), 'status');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('status', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.is_primary), to_jsonb(p_new.is_primary), 'is_primary');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('is_primary', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.links_jsonb), to_jsonb(p_new.links_jsonb), 'links_jsonb');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('links_jsonb', part); END IF;
     RETURN v;
 END;
 $$;
@@ -2419,3 +2431,153 @@ revoke all on function public.report_operation_error(uuid, text) from public;
 revoke all on function public.report_operation_error(uuid, text) from anon;
 grant execute on function public.report_operation_error(uuid, text) to authenticated;
 grant execute on function public.report_operation_error(uuid, text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Customer & Contact Workflow Wave (2026-08-25)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_customer_with_contact(
+    p_company jsonb,
+    p_contact jsonb default null,
+    p_existing_contact_id bigint default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_company_id bigint;
+    v_contact_id bigint;
+    v_name text;
+begin
+    if nora_private.safe_auth_uid() is null then
+        raise exception 'not authenticated' using errcode = '28000';
+    end if;
+    if not nora_private.can_write() then
+        raise exception 'insufficient privileges' using errcode = '42501';
+    end if;
+    if p_company is null then
+        raise exception 'p_company required' using errcode = '22023';
+    end if;
+    if p_contact is not null and p_existing_contact_id is not null then
+        raise exception 'p_contact and p_existing_contact_id are mutually exclusive' using errcode = '22023';
+    end if;
+
+    v_name := nullif(btrim(coalesce(p_company->>'name', '')), '');
+    if v_name is null then
+        raise exception 'company name required' using errcode = '22023';
+    end if;
+
+    insert into public.companies (
+        name, customer_kind, sector, size, address, zipcode, city, state_abbr, country,
+        description, revenue, tax_identifier, sales_id, links_jsonb, email_jsonb, phone_jsonb
+    ) values (
+        v_name,
+        coalesce(nullif(p_company->>'customer_kind', ''), 'business'),
+        nullif(p_company->>'sector', ''),
+        nullif(p_company->>'size', '')::smallint,
+        nullif(p_company->>'address', ''),
+        nullif(p_company->>'zipcode', ''),
+        nullif(p_company->>'city', ''),
+        nullif(p_company->>'state_abbr', ''),
+        nullif(p_company->>'country', ''),
+        nullif(p_company->>'description', ''),
+        nullif(p_company->>'revenue', ''),
+        nullif(p_company->>'tax_identifier', ''),
+        nullif(p_company->>'sales_id', '')::bigint,
+        coalesce(p_company->'links_jsonb', '[]'::jsonb),
+        coalesce(p_company->'email_jsonb', '[]'::jsonb),
+        coalesce(p_company->'phone_jsonb', '[]'::jsonb)
+    )
+    returning id into v_company_id;
+
+    if p_existing_contact_id is not null then
+        update public.contacts
+        set company_id = v_company_id,
+            is_primary = true
+        where id = p_existing_contact_id
+        returning id into v_contact_id;
+
+        if v_contact_id is null then
+            raise exception 'existing contact not found: %', p_existing_contact_id using errcode = 'P0002';
+        end if;
+    elsif p_contact is not null then
+        insert into public.contacts (
+            first_name, last_name, gender, title, background, company_id, sales_id,
+            is_primary, email_jsonb, phone_jsonb, links_jsonb
+        ) values (
+            nullif(p_contact->>'first_name', ''),
+            nullif(p_contact->>'last_name', ''),
+            nullif(p_contact->>'gender', ''),
+            nullif(p_contact->>'title', ''),
+            nullif(p_contact->>'background', ''),
+            v_company_id,
+            nullif(p_contact->>'sales_id', '')::bigint,
+            true,
+            coalesce(p_contact->'email_jsonb', '[]'::jsonb),
+            coalesce(p_contact->'phone_jsonb', '[]'::jsonb),
+            coalesce(p_contact->'links_jsonb', '[]'::jsonb)
+        )
+        returning id into v_contact_id;
+    end if;
+
+    return jsonb_build_object('company_id', v_company_id, 'contact_id', v_contact_id);
+end;
+$$;
+
+alter function public.create_customer_with_contact(jsonb, jsonb, bigint) owner to postgres;
+
+comment on function public.create_customer_with_contact(jsonb, jsonb, bigint) is
+    'Atomically creates a company and (optionally) a new or existing primary contact. Actor from safe_auth_uid(); requires can_write() (office/admin).';
+
+revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint) from public;
+revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint) from anon;
+grant execute on function public.create_customer_with_contact(jsonb, jsonb, bigint) to authenticated;
+grant execute on function public.create_customer_with_contact(jsonb, jsonb, bigint) to service_role;
+
+create or replace function public.set_primary_contact(p_contact_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_company_id bigint;
+begin
+    if nora_private.safe_auth_uid() is null then
+        raise exception 'not authenticated' using errcode = '28000';
+    end if;
+    if not nora_private.can_write() then
+        raise exception 'insufficient privileges' using errcode = '42501';
+    end if;
+
+    select company_id into v_company_id from public.contacts where id = p_contact_id;
+    if not found then
+        raise exception 'contact not found: %', p_contact_id using errcode = 'P0002';
+    end if;
+    if v_company_id is null then
+        raise exception 'contact has no company: %', p_contact_id using errcode = '22023';
+    end if;
+
+    update public.contacts
+    set is_primary = false
+    where company_id = v_company_id
+      and is_primary
+      and id <> p_contact_id;
+
+    update public.contacts
+    set is_primary = true
+    where id = p_contact_id;
+end;
+$$;
+
+alter function public.set_primary_contact(bigint) owner to postgres;
+
+comment on function public.set_primary_contact(bigint) is
+    'Atomically makes p_contact_id the sole Hauptansprechpartner of its company. Requires can_write() (office/admin).';
+
+revoke all on function public.set_primary_contact(bigint) from public;
+revoke all on function public.set_primary_contact(bigint) from anon;
+grant execute on function public.set_primary_contact(bigint) to authenticated;
+grant execute on function public.set_primary_contact(bigint) to service_role;

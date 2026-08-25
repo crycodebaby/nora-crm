@@ -25,6 +25,12 @@ export const germanCrmMessages = {
         context_links: "Kontextlinks",
         sales_id: "Zuständige Person",
         customer_number: "Kundennummer",
+        customer_kind: "Kundenart",
+        email: "E-Mail",
+        email_jsonb: "E-Mail-Adressen",
+        phone_jsonb: "Telefonnummern",
+        links_jsonb: "Links",
+        link_url: "Adresse",
       },
       empty: {
         description: "Ihre Kundenliste ist noch leer.",
@@ -36,6 +42,34 @@ export const germanCrmMessages = {
         additional_info: "Zusätzliche Informationen",
         address: "Adresse",
         context: "Kontext",
+        contact_person: "Ansprechpartner",
+        person: "Persönliche Angaben",
+      },
+      inputs: {
+        customer_kind: {
+          business: "Unternehmen / Selbstständig",
+          individual: "Privatperson",
+        },
+        link_types: {
+          website: "Website",
+          linkedin: "LinkedIn",
+          instagram: "Instagram",
+          facebook: "Facebook",
+          google: "Google",
+          portal: "Portal",
+          other: "Sonstiges",
+        },
+        contact_capture: {
+          new: "Neuer Ansprechpartner",
+          self: "Unternehmer ist selbst Ansprechpartner",
+          existing: "Bestehenden Ansprechpartner zuordnen",
+          none: "Kein Ansprechpartner",
+          existing_contact: "Ansprechpartner auswählen",
+          take_over: "Angaben übernehmen",
+        },
+      },
+      notifications: {
+        created: "Kunde wurde angelegt.",
       },
       action: {
         create: "Kunden anlegen",
@@ -87,9 +121,16 @@ export const germanCrmMessages = {
         phone_jsonb: "Telefonnummern",
         phone_number: "Telefonnummer",
         linkedin_url: "LinkedIn-Adresse",
+        links_jsonb: "Links",
+        link_url: "Adresse",
         background: "Hintergrund (Biografie, Kennenlernen usw.)",
         has_newsletter: "Newsletter abonniert",
         sales_id: "Zuständige Person",
+        is_primary: "Hauptansprechpartner",
+      },
+      helper: {
+        is_primary:
+          "Wird bei Telefon/E-Mail zuerst kontaktiert. Nur einer je Kunde.",
       },
       action: {
         add: "Kontakt hinzufügen",
@@ -141,6 +182,9 @@ export const germanCrmMessages = {
           work: "Geschäftlich",
           home: "Privat",
           other: "Sonstiges",
+          mobile: "Mobil",
+          central: "Zentrale",
+          direct: "Direkt",
         },
       },
       list: {
@@ -915,6 +959,8 @@ export const germanCrmMessages = {
     validation: {
       invalid_url: "Muss eine gültige Adresse sein",
       invalid_linkedin_url: "Die Adresse muss von linkedin.com stammen",
+      invalid_email: "Muss eine gültige E-Mail-Adresse sein",
+      company_name_required: "Bitte Kundenname bzw. Namen der Person angeben.",
     },
     access: {
       read_only_mode: "Lesemodus",

@@ -162,6 +162,18 @@ Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administr
 
 Checklisten-Ereignisse (`checklist.*`) und CRM-Kernänderungen (Kunde, Kontakt, Vorgang, Aufgabe, Notiz, Benutzerrecht) nutzen dieselbe Tabelle — siehe `13-crm-audit-retention.md`.
 
+## Kunden-/Ansprechpartner-Erfassung (Customer & Contact Workflow Wave, 2026-08-25)
+
+| Fachlich | Technisch | Hinweis |
+|---|---|---|
+| Kundenart | `companies.customer_kind` (`business`\|`individual`) | Treibt Formularmodus in `/kunden/create` und `/kunden/:id/edit` |
+| Hauptansprechpartner | `contacts.is_primary` | Max. 1 pro `company_id` (Partial Unique Index); Wechsel über RPC `set_primary_contact` |
+| Links (Website/LinkedIn/…) | `companies.links_jsonb` / `contacts.links_jsonb` | Ersetzt LinkedIn-only-Validierung; `linkedin_url`/`website`/`context_links` bleiben deprecated Legacy-Spalten |
+| Firmen-E-Mail/-Telefon | `companies.email_jsonb` / `companies.phone_jsonb` | Gleiche Struktur wie bei `contacts`; `phone_number` bleibt deprecated |
+| Atomare Kundenanlage | RPC `create_customer_with_contact` | Kunde + optional neuer/bestehender Hauptansprechpartner in einer Transaktion |
+
+Vollständige Entscheidung: `06-decision-log.md` (2026-08-25).
+
 ## Erweiterungen geplant (Welle 7b)
 
 | Fachlich | Technisch (Ziel) | Status |

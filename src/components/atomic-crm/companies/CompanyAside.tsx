@@ -1,4 +1,4 @@
-import { Globe, Linkedin, Phone } from "lucide-react";
+import { Globe, Link as LinkIcon, Mail, Phone } from "lucide-react";
 import {
   useGetIdentity,
   useLocaleState,
@@ -7,7 +7,6 @@ import {
 } from "ra-core";
 import { ShowButton } from "@/components/admin/show-button";
 import { TextField } from "@/components/admin/text-field";
-import { UrlField } from "@/components/admin/url-field";
 import { SelectField } from "@/components/admin/select-field";
 
 import { NoraDeleteButton, NoraEditButton } from "../misc/NoraAccessActions";
@@ -20,6 +19,8 @@ import type { Company } from "../types";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
 import { sizes } from "./sizes";
 import { useGetSalesName } from "../sales/useGetSalesName";
+import { translateContactMethodTypeLabel } from "../misc/contactMethodTypes";
+import { translateLinkTypeLabel } from "../misc/linksModel";
 
 interface CompanyAsideProps {
   link?: string;
@@ -66,7 +67,21 @@ export const CompanyAside = ({ link = "edit" }: CompanyAsideProps) => {
 
 export const CompanyInfo = ({ record }: { record: Company }) => {
   const translate = useTranslate();
-  if (!record.website && !record.linkedin_url && !record.phone_number) {
+  const emails = record.email_jsonb ?? [];
+  const phones = record.phone_jsonb ?? [];
+  const links = record.links_jsonb ?? [];
+  const hasLegacyOnly =
+    emails.length === 0 &&
+    phones.length === 0 &&
+    links.length === 0 &&
+    (record.website || record.linkedin_url || record.phone_number);
+
+  if (
+    emails.length === 0 &&
+    phones.length === 0 &&
+    links.length === 0 &&
+    !hasLegacyOnly
+  ) {
     return null;
   }
 
@@ -74,38 +89,84 @@ export const CompanyInfo = ({ record }: { record: Company }) => {
     <AsideSection
       title={translate("resources.companies.field_categories.contact")}
     >
-      {record.website && (
-        <div className="flex flex-row items-center gap-1 min-h-[24px]">
-          <Globe className="w-4 h-4" />
-          <UrlField
-            source="website"
-            target="_blank"
-            rel="noopener"
-            content={record.website
-              .replace("http://", "")
-              .replace("https://", "")}
-          />
-        </div>
-      )}
-      {record.linkedin_url && (
-        <div className="flex flex-row items-center gap-1 min-h-[24px]">
-          <Linkedin className="w-4 h-4" />
+      {emails.map((entry, index) => (
+        <div
+          key={`email-${index}`}
+          className="flex flex-row items-center gap-1 min-h-[24px]"
+        >
+          <Mail className="w-4 h-4 shrink-0" />
           <a
             className="underline hover:no-underline"
-            href={record.linkedin_url}
+            href={`mailto:${entry.email}`}
+          >
+            {entry.email}
+          </a>
+          <span className="text-xs text-muted-foreground">
+            ({translateContactMethodTypeLabel(entry.type, translate)})
+          </span>
+        </div>
+      ))}
+      {phones.map((entry, index) => (
+        <div
+          key={`phone-${index}`}
+          className="flex flex-row items-center gap-1 min-h-[24px]"
+        >
+          <Phone className="w-4 h-4 shrink-0" />
+          <span>{entry.number}</span>
+          <span className="text-xs text-muted-foreground">
+            ({translateContactMethodTypeLabel(entry.type, translate)})
+          </span>
+        </div>
+      ))}
+      {links.map((entry, index) => (
+        <div
+          key={`link-${index}`}
+          className="flex flex-row items-center gap-1 min-h-[24px]"
+        >
+          {entry.type === "website" ? (
+            <Globe className="w-4 h-4 shrink-0" />
+          ) : (
+            <LinkIcon className="w-4 h-4 shrink-0" />
+          )}
+          <a
+            className="underline hover:no-underline truncate"
+            href={
+              entry.url.startsWith("http") ? entry.url : `https://${entry.url}`
+            }
             target="_blank"
             rel="noopener noreferrer"
-            title={record.linkedin_url}
+            title={entry.url}
           >
-            LinkedIn
+            {translateLinkTypeLabel(entry.type, translate)}
           </a>
         </div>
-      )}
-      {record.phone_number && (
-        <div className="flex flex-row items-center gap-1 min-h-[24px]">
-          <Phone className="w-4 h-4" />
-          <TextField source="phone_number" />
-        </div>
+      ))}
+      {hasLegacyOnly && (
+        <>
+          {record.website && (
+            <div className="flex flex-row items-center gap-1 min-h-[24px]">
+              <Globe className="w-4 h-4 shrink-0" />
+              <a
+                className="underline hover:no-underline"
+                href={
+                  record.website.startsWith("http")
+                    ? record.website
+                    : `https://${record.website}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {record.website.replace(/^https?:\/\//, "")}
+              </a>
+            </div>
+          )}
+          {record.phone_number && (
+            <div className="flex flex-row items-center gap-1 min-h-[24px]">
+              <Phone className="w-4 h-4 shrink-0" />
+              <TextField source="phone_number" />
+            </div>
+          )}
+        </>
       )}
     </AsideSection>
   );
@@ -193,15 +254,10 @@ export const AdditionalInfo = ({ record }: { record: Company }) => {
     !record.customer_number &&
     !record.created_at &&
     !record.sales_id &&
-    !record.description &&
-    !record.context_links
+    !record.description
   ) {
     return null;
   }
-  const getBaseURL = (url: string) => {
-    const urlObject = new URL(url.startsWith("http") ? url : `https://${url}`);
-    return urlObject.hostname;
-  };
 
   return (
     <AsideSection
@@ -215,24 +271,6 @@ export const AdditionalInfo = ({ record }: { record: Company }) => {
       ) : null}
       {record.description && (
         <p className="text-sm  mb-1">{record.description}</p>
-      )}
-      {record.context_links && (
-        <div className="flex flex-col">
-          {record.context_links.map((link, index) =>
-            link ? (
-              <a
-                key={index}
-                className="text-sm underline hover:no-underline mb-1"
-                href={link.startsWith("http") ? link : `https://${link}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={link}
-              >
-                {getBaseURL(link)}
-              </a>
-            ) : null,
-          )}
-        </div>
       )}
       {record.sales_id !== null && (
         <div className="inline-flex text-sm text-muted-foreground mb-1">

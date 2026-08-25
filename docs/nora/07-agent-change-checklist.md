@@ -175,6 +175,18 @@ Bei Error Observatory Core (Foundation Wave 3) zusätzlich:
 - [ ] Unit-Tests A–H + Kontakttermin-Regression
 - [ ] Keine Feedback-UI / keine Outbox / kein Remote-Apply ohne Freigabe
 
+Bei Customer & Contact Workflow Wave (2026-08-25) zusätzlich:
+
+- [ ] `companies.customer_kind` treibt Formularmodus — keine Business-Felder (Branche/Größe/Umsatz/Steuernummer) für `individual`
+- [ ] `contacts.is_primary` — max. 1 pro `company_id` (Partial Unique Index bleibt Autorität, nicht nur UI)
+- [ ] Kunde+Ansprechpartner-Anlage nur über RPC `create_customer_with_contact` — kein sequentielles Client-Create in `/kunden/create`
+- [ ] Hauptansprechpartner-Wechsel nur über RPC `set_primary_contact`
+- [ ] `links_jsonb` ersetzt LinkedIn-only-Validierung als UI-Quelle; `linkedin_url`/`website`/`context_links`/`phone_number` bleiben deprecated, nicht gelöscht
+- [ ] `companies_summary` / `contacts_summary` Views enthalten die neuen Spalten (sonst sieht Supabase-Mode sie nicht, obwohl die Basistabelle sie hat)
+- [ ] FakeRest-Demo nutzt den lifecycle-gewrappten `dataProvider`, nicht `baseDataProvider`, in `createCustomerWithContact`/`setPrimaryContact` (sonst fehlen `first_seen`/`customer_number`/`nb_contacts`-Defaults)
+- [ ] `npx supabase db reset --local` nach Migration (nicht in diesem Sandbox-Environment ausführbar — siehe Abschlussbericht)
+- [ ] `npm run typecheck` / `npm run build` / `npm run dev:demo` — Kunden-/Privatperson-Anlage manuell im Browser geprüft
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

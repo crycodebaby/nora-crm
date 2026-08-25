@@ -24,7 +24,9 @@ export type CatalogOperationType =
   | "deal.update"
   | "deal.assign"
   | "customer.update"
-  | "contact.update";
+  | "customer.createWithContact"
+  | "contact.update"
+  | "contact.setPrimary";
 
 export const OPERATION_CATALOG: {
   readonly [K in CatalogOperationType]: OperationCatalogEntry & {
@@ -58,6 +60,20 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Kontakt wird gespeichert …",
     successMessage: "Kontakt wurde gespeichert.",
     errorMessage: "Kontakt konnte nicht gespeichert werden.",
+  },
+  "customer.createWithContact": {
+    operationType: "customer.createWithContact",
+    resourceType: "companies",
+    pendingMessage: "Kunde wird angelegt …",
+    successMessage: "Kunde wurde angelegt.",
+    errorMessage: "Kunde konnte nicht angelegt werden.",
+  },
+  "contact.setPrimary": {
+    operationType: "contact.setPrimary",
+    resourceType: "contacts",
+    pendingMessage: "Hauptansprechpartner wird geändert …",
+    successMessage: "Hauptansprechpartner wurde geändert.",
+    errorMessage: "Hauptansprechpartner konnte nicht geändert werden.",
   },
 } as const;
 

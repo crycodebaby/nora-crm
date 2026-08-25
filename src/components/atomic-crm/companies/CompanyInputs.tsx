@@ -1,36 +1,42 @@
 import { required, useRecordContext, useTranslate } from "ra-core";
+import { useWatch } from "react-hook-form";
 import { ReferenceInput } from "@/components/admin/reference-input";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
+import { RadioButtonGroupInput } from "@/components/admin/radio-button-group-input";
 import { ArrayInput } from "@/components/admin/array-input";
 import { SimpleFormIterator } from "@/components/admin/simple-form-iterator";
 import { Separator } from "@/components/ui/separator";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import ImageEditorField from "../misc/ImageEditorField";
-import { isLinkedinUrl } from "../misc/isLinkedInUrl";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Sale } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
 import { sizes } from "./sizes";
 import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
-
-const isUrl = (url: string) => {
-  if (!url) return;
-  const UrlRegex = new RegExp(
-    /^(http:\/\/www\.|https:\/\/www\.|http:\/\/|https:\/\/)?[a-z0-9]+([-.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/i,
-  );
-  if (!UrlRegex.test(url)) {
-    return {
-      message: "crm.validation.invalid_url",
-      args: { _: "Must be a valid URL" },
-    };
-  }
-};
+import {
+  getContactMethodTypeChoices,
+  DEFAULT_COMPANY_PHONE_TYPE,
+  DEFAULT_COMPANY_EMAIL_TYPE,
+} from "../misc/contactMethodTypes";
+import {
+  getLinkTypeChoices,
+  isValidUrl,
+  DEFAULT_LINK_TYPE,
+} from "../misc/linksModel";
+import { customerKindChoices } from "./customerKind";
 
 export const CompanyInputs = () => {
   const isMobile = useIsMobile();
+  const record = useRecordContext<Company>();
+  // Business-only fields (Branche, Größe, Umsatz, Steuernummer) sind für eine
+  // Privatperson fachlich irrelevant — siehe AGENTS-Auftrag Abschnitt 8.
+  const customerKind = useWatch({
+    name: "customer_kind",
+    defaultValue: record?.customer_kind ?? "business",
+  });
 
   return (
     <div className="flex flex-col gap-5 p-1">
@@ -38,7 +44,7 @@ export const CompanyInputs = () => {
       <div className={`flex gap-8 ${isMobile ? "flex-col" : "flex-row"}`}>
         <div className="flex flex-col gap-8 flex-1">
           <CompanyContactInputs />
-          <CompanyContextInputs />
+          {customerKind === "individual" ? null : <CompanyContextInputs />}
         </div>
         <Separator orientation={isMobile ? "horizontal" : "vertical"} />
         <div className="flex flex-col gap-8 flex-1">
@@ -53,39 +59,64 @@ export const CompanyInputs = () => {
 const CompanyDisplayInputs = () => {
   const translate = useTranslate();
   const record = useRecordContext<Company>();
+  const customerKind = useWatch({
+    name: "customer_kind",
+    defaultValue: record?.customer_kind ?? "business",
+  });
+  // Beim Neuanlegen einer Privatperson wird der Kundenname aus Vor-/Nachname
+  // abgeleitet (siehe CustomerCreateForm) — kein doppeltes Pflichtfeld.
+  // Beim Bearbeiten bleibt companies.name die eigenständige, führende Quelle.
+  const nameIsDerived = !record && customerKind === "individual";
   return (
     <div className="flex flex-col gap-2 flex-1">
-      <div className="flex gap-4 flex-1 flex-row">
-        <ImageEditorField
-          source="logo"
-          type="avatar"
-          width={60}
-          height={60}
-          emptyText={record?.name.charAt(0)}
-          linkPosition="bottom"
-        />
-        <TextInput
-          source="name"
-          className="w-full h-fit"
-          validate={required()}
-          helperText={false}
-          placeholder={translate("resources.companies.fields.name", {
-            _: "Company name",
-          })}
-        />
-      </div>
+      {nameIsDerived ? null : (
+        <div className="flex gap-4 flex-1 flex-row">
+          <ImageEditorField
+            source="logo"
+            type="avatar"
+            width={60}
+            height={60}
+            emptyText={record?.name.charAt(0)}
+            linkPosition="bottom"
+          />
+          <TextInput
+            source="name"
+            className="w-full h-fit"
+            validate={required()}
+            helperText={false}
+            placeholder={translate("resources.companies.fields.name", {
+              _: "Company name",
+            })}
+          />
+        </div>
+      )}
       {record?.customer_number ? (
         <p className="text-sm text-muted-foreground">
           {translate("resources.companies.fields.customer_number")}:{" "}
           <BusinessNumber value={record.customer_number} />
         </p>
       ) : null}
+      <RadioButtonGroupInput
+        source="customer_kind"
+        label="resources.companies.fields.customer_kind"
+        row
+        choices={customerKindChoices}
+        optionText={(choice) =>
+          translate(choice.label, { _: choice.defaultLabel })
+        }
+        translateChoice={false}
+        optionValue="value"
+        helperText={false}
+        defaultValue="business"
+      />
     </div>
   );
 };
 
 const CompanyContactInputs = () => {
   const translate = useTranslate();
+  const emailTypes = getContactMethodTypeChoices(translate);
+  const linkTypes = getLinkTypeChoices(translate);
   return (
     <div className="nora-form-section">
       <h6>
@@ -93,15 +124,100 @@ const CompanyContactInputs = () => {
           _: "Company info",
         })}
       </h6>
-      <TextInput source="website" helperText={false} validate={isUrl} />
-      <TextInput
-        source="linkedin_url"
-        helperText={false}
-        validate={isLinkedinUrl}
-      />
-      <TextInput source="phone_number" helperText={false} />
+      <ArrayInput source="email_jsonb" helperText={false}>
+        <SimpleFormIterator
+          inline
+          disableReordering
+          disableClear
+          className="[&>ul>li]:border-b-0 [&>ul>li]:pb-0"
+        >
+          <TextInput
+            source="email"
+            className="w-full"
+            helperText={false}
+            label={false}
+            placeholder={translate("resources.companies.fields.email", {
+              _: "E-Mail",
+            })}
+            validate={isEmailField}
+          />
+          <SelectInput
+            source="type"
+            helperText={false}
+            label={false}
+            optionText="name"
+            choices={emailTypes}
+            defaultValue={DEFAULT_COMPANY_EMAIL_TYPE}
+            className="w-28 min-w-28"
+          />
+        </SimpleFormIterator>
+      </ArrayInput>
+      <ArrayInput source="phone_jsonb" helperText={false}>
+        <SimpleFormIterator
+          inline
+          disableReordering
+          disableClear
+          className="[&>ul>li]:border-b-0 [&>ul>li]:pb-0"
+        >
+          <TextInput
+            source="number"
+            className="w-full"
+            helperText={false}
+            label={false}
+            placeholder={translate("resources.companies.fields.phone_number")}
+          />
+          <SelectInput
+            source="type"
+            helperText={false}
+            label={false}
+            optionText="name"
+            choices={emailTypes}
+            defaultValue={DEFAULT_COMPANY_PHONE_TYPE}
+            className="w-28 min-w-28"
+          />
+        </SimpleFormIterator>
+      </ArrayInput>
+      <ArrayInput source="links_jsonb" helperText={false}>
+        <SimpleFormIterator
+          inline
+          disableReordering
+          disableClear
+          className="[&>ul>li]:border-b-0 [&>ul>li]:pb-0"
+        >
+          <TextInput
+            source="url"
+            className="w-full"
+            helperText={false}
+            label={false}
+            placeholder={translate("resources.companies.fields.link_url", {
+              _: "URL",
+            })}
+            validate={isValidUrl}
+          />
+          <SelectInput
+            source="type"
+            helperText={false}
+            label={false}
+            optionText="name"
+            choices={linkTypes}
+            defaultValue={DEFAULT_LINK_TYPE}
+            className="w-28 min-w-28"
+          />
+        </SimpleFormIterator>
+      </ArrayInput>
     </div>
   );
+};
+
+const isEmailField = (value: string) => {
+  if (!value) return undefined;
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!EMAIL_REGEX.test(value)) {
+    return {
+      message: "crm.validation.invalid_email",
+      args: { _: "Must be a valid email" },
+    };
+  }
 };
 
 const CompanyContextInputs = () => {
@@ -160,16 +276,6 @@ const CompanyAdditionalInformationInputs = () => {
         })}
       </h6>
       <TextInput source="description" multiline helperText={false} />
-      <ArrayInput source="context_links" helperText={false}>
-        <SimpleFormIterator disableReordering fullWidth getItemLabel={false}>
-          <TextInput
-            source=""
-            label={false}
-            helperText={false}
-            validate={isUrl}
-          />
-        </SimpleFormIterator>
-      </ArrayInput>
       <ReferenceInput source="sales_id" {...SALES_DIRECTORY_REFERENCE_PROPS}>
         <SelectInput
           helperText={false}
