@@ -25,7 +25,8 @@ Nach der Änderung:
 - [ ] bei Demo-Daten: `npm run dev:demo`
 - [ ] manuelle Prüfung relevanter Seiten
 - [ ] bei Kanban/Detail: Zoom 125 %/150 %, Hell/Dunkel, Maus + Trackpad
-- [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung
+- [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung — neuer Eintrag auch im Index am Anfang von `06-decision-log.md` verlinkt
+- [ ] Themen-Tabelle in `16-current-state.md` §9 aktualisiert, falls ein neues Thema/Dokument betroffen ist (sonst findet die nächste Session es nicht gezielt und liest unnötig viel)
 - [ ] Commit-Nachricht klar formuliert
 
 Bei Nummern-/DB-Änderungen zusätzlich:
