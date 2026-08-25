@@ -118,11 +118,12 @@ Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassun
 |---|---|
 | Projektziel, Nicht-Ziele | `00-project-context.md` |
 | Domänenmodell, Kundenart, Hauptansprechpartner | `01-domain-model.md` |
+| **Aufgaben/Tasks, `tasks.company_id`, historischer Kundenkontext** | `01-domain-model.md` (Modell) + `03-data-model-guardrails.md` Falle 7/7a (Fallen) + `06-decision-log.md` „Unified Tasks Wave" (Begründung) |
 | Design/UI-Regeln | `02-design-system.md` |
 | Datenmodell-Fallen, Guardrails | `03-data-model-guardrails.md` |
-| Routing, i18n, deutsche URLs | `04-routing-i18n.md` |
+| Routing, i18n, deutsche URLs, **bekanntes Fehlermuster englische Ur-Code-Pfade** | `04-routing-i18n.md` |
 | Demo-Daten (FakeRest) | `05-demo-data-guidelines.md` |
-| **Alle fachlichen/architektonischen Entscheidungen inkl. Begründung** | `06-decision-log.md` |
+| **Alle fachlichen/architektonischen Entscheidungen inkl. Begründung** — Datei hat einen Index am Anfang, nicht komplett lesen, gezielt springen | `06-decision-log.md` |
 | Checkliste vor/während/nach Code-Änderungen | `07-agent-change-checklist.md` |
 | Nummernvergabe, globale Suche | `08-numbering-and-global-search.md` |
 | Fensterauftrag-Workflow | `09-window-order-workflow.md` |
@@ -133,6 +134,8 @@ Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassun
 | Google-Kalender-Implementierung (read-only) | `14-google-calendar-readonly-implementation.md` |
 | **Dieser Überblick** | `16-current-state.md` |
 | **Offene Bugs, geplante Waves im Detail** | `17-known-issues-and-planned-waves.md` |
+
+Hinweis: Die Nummer `15` existiert nicht (keine `15-*.md` in der Git-Historie gefunden) — keine bewusste Reservierung, einfach eine Lücke. Bei der nächsten neuen Kern-Doku kann `15` vergeben werden, statt eine Lücke offenzulassen.
 
 ## 10. Truth Hierarchy
 

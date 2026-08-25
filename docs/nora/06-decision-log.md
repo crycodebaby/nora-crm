@@ -2,6 +2,80 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## Index (chronologisch neueste zuerst)
+
+Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine bestimmte Entscheidung relevant ist — gezielt per Anker springen oder im Editor nach dem Titeltext suchen (Anker sind Best-Effort-Slugs; falls ein Link im jeweiligen Viewer nicht funktioniert, stattdessen nach dem Titeltext suchen).
+
+| Entscheidung | Anker |
+|---|---|
+| 2026-08-25 – Unified Tasks Wave | [Springen](#2026-08-25-unified-tasks-wave) |
+| 2026-08-25 – Repo/Produktions-Drift bei `nora_core_indexes` unabhängig bestätigt | [Springen](#2026-08-25-repoproduktions-drift-bei-nora_core_indexes-unabhängig-bestätigt) |
+| 2026-08-25 – Customer & Contact Workflow Wave | [Springen](#2026-08-25-customer-contact-workflow-wave) |
+| 2026-08-25 – Erste lokale Postgres-Verifikation der Customer & Contact Workflow Migration | [Springen](#2026-08-25-erste-lokale-postgres-verifikation-der-customer-contact-workflow-migration) |
+| 2026-08-25 – Customer & Contact Workflow Migration auf Produktion angewendet | [Springen](#2026-08-25-customer-contact-workflow-migration-auf-produktion-angewendet) |
+| 2026-08-10 – Foundation Wave 3: Error Observatory Core | [Springen](#2026-08-10-foundation-wave-3-error-observatory-core) |
+| 2026-08-10 – Stabilization Gate 2b: TaskEdit Portal Form Owner | [Springen](#2026-08-10-stabilization-gate-2b-taskedit-portal-form-owner) |
+| 2026-08-10 – Stabilization Gate 2: DealEdit Portal Form Owner | [Springen](#2026-08-10-stabilization-gate-2-dealedit-portal-form-owner) |
+| 2026-08-10 – Foundation Wave 2: Operation Manager + Catalog | [Springen](#2026-08-10-foundation-wave-2-operation-manager-catalog) |
+| 2026-08-10 – Stabilization Gate 1: Deal Surface Recovery | [Springen](#2026-08-10-stabilization-gate-1-deal-surface-recovery) |
+| 2026-06-28 – Atomic CRM als Basis für Nora CRM | [Springen](#2026-06-28-atomic-crm-als-basis-für-nora-crm) |
+| 2026-06-28 – Interne Resource-Namen bleiben stabil | [Springen](#2026-06-28-interne-resource-namen-bleiben-stabil) |
+| 2026-06-28 – Deals werden sichtbar zu Vorgängen | [Springen](#2026-06-28-deals-werden-sichtbar-zu-vorgängen) |
+| 2026-06-28 – Nora-Brandfarbe | [Springen](#2026-06-28-nora-brandfarbe) |
+| 2026-06-28 – EUR und de-DE | [Springen](#2026-06-28-eur-und-de-de) |
+| 2026-06-28 – Demo-Daten sind synthetisch | [Springen](#2026-06-28-demo-daten-sind-synthetisch) |
+| 2026-06-28 – Welle 4: Typografie und comfortable density | [Springen](#2026-06-28-welle-4-typografie-und-comfortable-density) |
+| 2026-06-28 – Welle 5: Vorgangsworkflow ohne DB-Änderung | [Springen](#2026-06-28-welle-5-vorgangsworkflow-ohne-db-änderung) |
+| 2026-06-28 – Welle 6a: Öffentliche Startseite | [Springen](#2026-06-28-welle-6a-öffentliche-startseite) |
+| 2026-06-28 – Welle 6a-Polish: Auth-Navigation | [Springen](#2026-06-28-welle-6a-polish-auth-navigation) |
+| 2026-06-28 – Vorgänge-Kanban aufräumen (Kanban-Polish) | [Springen](#2026-06-28-vorgänge-kanban-aufräumen-kanban-polish) |
+| 2026-06-28 – Welle 6b: Kundennummern, Vorgangsnummern, globale Suche (Spezifikation) | [Springen](#2026-06-28-welle-6b-kundennummern-vorgangsnummern-globale-suche-spezifikation) |
+| 2026-06-28 – Welle 6c: Kundennummern und Vorgangsnummern implementiert | [Springen](#2026-06-28-welle-6c-kundennummern-und-vorgangsnummern-implementiert) |
+| 2026-06-28 – Welle 6c-QA: Datenbank-Audit Nummern | [Springen](#2026-06-28-welle-6c-qa-datenbank-audit-nummern) |
+| 2026-06-28 – Welle 6c-Hardening: Nummern-API absichern | [Springen](#2026-06-28-welle-6c-hardening-nummern-api-absichern) |
+| 2026-06-28 – Welle 7a: Fensterauftrag-Prozess spezifiziert | [Springen](#2026-06-28-welle-7a-fensterauftrag-prozess-spezifiziert) |
+| 2026-06-28 – Welle 6d: Globale Suche im Header | [Springen](#2026-06-28-welle-6d-globale-suche-im-header) |
+| 2026-06-28 – v0.3b: Hotboard / operative Startübersicht | [Springen](#2026-06-28-v03b-hotboard-operative-startübersicht) |
+| 2026-06-28 – v0.3c: Fenster-Kanban-Filter | [Springen](#2026-06-28-v03c-fenster-kanban-filter) |
+| 2026-06-28 – Welle 7b: Checklisten-, Textbaustein- und Audit-Datenmodell spezifiziert | [Springen](#2026-06-28-welle-7b-checklisten--textbaustein--und-audit-datenmodell-spezifiziert) |
+| 2026-06-28 – v0.3d2: Datenbankmigration Checklisten, Textbausteine, Audit | [Springen](#2026-06-28-v03d2-datenbankmigration-checklisten-textbausteine-audit) |
+| 2026-06-28 – v0.3d3: Checklisten-Run-Start absichern | [Springen](#2026-06-28-v03d3-checklisten-run-start-absichern) |
+| 2026-06-28 – v0.3d4: Checklisten-UI im Vorgangsdetail | [Springen](#2026-06-28-v03d4-checklisten-ui-im-vorgangsdetail) |
+| 2026-06-28 – v0.3d5: Hotboard „Produktionsfreigaben offen“ | [Springen](#2026-06-28-v03d5-hotboard-produktionsfreigaben-offen) |
+| 2026-06-28 – v0.3e: Schnellerfassung / Eingangszentrale | [Springen](#2026-06-28-v03e-schnellerfassung-eingangszentrale) |
+| 2026-06-28 – v0.3f: Intelligente Dubletten-Vorschläge | [Springen](#2026-06-28-v03f-intelligente-dubletten-vorschläge) |
+| 2026-07-14 – v0.3f: Realistische Demo- und UX-Testdaten | [Springen](#2026-07-14-v03f-realistische-demo--und-ux-testdaten) |
+| 2026-07-14 – UX-Polish: Kontakte-Suche und globale Suche | [Springen](#2026-07-14-ux-polish-kontakte-suche-und-globale-suche) |
+| 2026-07-14 – v0.3g: Schnellerfassung UX-Überarbeitung | [Springen](#2026-07-14-v03g-schnellerfassung-ux-überarbeitung) |
+| 2026-07-14 – v0.3h: Kundenliste und Vorgänge-Kanban responsiver | [Springen](#2026-07-14-v03h-kundenliste-und-vorgänge-kanban-responsiver) |
+| 2026-07-14 – v0.3i: Kanban und Vorgangsakte barrierearm | [Springen](#2026-07-14-v03i-kanban-und-vorgangsakte-barrierearm) |
+| 2026-07-14 – Demo-Auftragswerte korrigiert | [Springen](#2026-07-14-demo-auftragswerte-korrigiert) |
+| 2026-07-14 – v0.4a: Google-Kalender-Architektur und Nora-Rollenmodell spezifiziert | [Springen](#2026-07-14-v04a-google-kalender-architektur-und-nora-rollenmodell-spezifiziert) |
+| 2026-07-14 – v0.4b: RBAC- und RLS-Härtung | [Springen](#2026-07-14-v04b-rbac--und-rls-härtung) |
+| 2026-07-14 – v0.3j: Hotboard-Arbeitsboard (Fokusboard) | [Springen](#2026-07-14-v03j-hotboard-arbeitsboard-fokusboard) |
+| 2026-07-14 – v0.4b.1: RBAC-Migrations- und Function-Hardening | [Springen](#2026-07-14-v04b1-rbac-migrations--und-function-hardening) |
+| 2026-07-14 – v0.4b.2: RBAC-Abschluss (Capability, Parallel-Admin, sales_directory) | [Springen](#2026-07-14-v04b2-rbac-abschluss-capability-parallel-admin-sales_directory) |
+| 2026-07-14 – Demo-Seed: `amountCents` → `amountEur` | [Springen](#2026-07-14-demo-seed-amountcents-amounteur) |
+| 2026-07-14 – v0.3k: Rollenbewusste UX, Ladezustände und Fehlertoleranz | [Springen](#2026-07-14-v03k-rollenbewusste-ux-ladezustände-und-fehlertoleranz) |
+| 2026-07-14 – v0.3k.1: Rollen-UX-Abnahme und Dialog-Polish | [Springen](#2026-07-14-v03k1-rollen-ux-abnahme-und-dialog-polish) |
+| 2026-07-14 – v0.3k.2: Demo-Rollensimulation und abschließende Rollen-UX-Abnahme | [Springen](#2026-07-14-v03k2-demo-rollensimulation-und-abschließende-rollen-ux-abnahme) |
+| 2026-07-15 – v0.3l: Vollständiger CRM-Audit-Verlauf | [Springen](#2026-07-15-v03l-vollständiger-crm-audit-verlauf) |
+| 2026-07-15 – v0.3l.1: CRM-Audit-Abschluss (Schema-Sync, Tests, Abnahme) | [Springen](#2026-07-15-v03l1-crm-audit-abschluss-schema-sync-tests-abnahme) |
+| 2026-07-16 – v0.4c.1: Google-Kalender Read-only Grundlage | [Springen](#2026-07-16-v04c1-google-kalender-read-only-grundlage) |
+| 2026-07-16 – v0.4c.2: Google OAuth, Token-Verschlüsselung, manueller Sync | [Springen](#2026-07-16-v04c2-google-oauth-token-verschlüsselung-manueller-sync) |
+| 2026-07-17 – v0.4c.2c: Release-Gates und Deployment-Bereinigung | [Springen](#2026-07-17-v04c2c-release-gates-und-deployment-bereinigung) |
+| 2026-07-17 – v0.4c.2c: E2E-Bootstrap und Profilzugriff | [Springen](#2026-07-17-v04c2c-e2e-bootstrap-und-profilzugriff) |
+| 2026-07-17 – v0.4c.2c: E2E-Auth-Assertions und First-Run-Dashboard | [Springen](#2026-07-17-v04c2c-e2e-auth-assertions-und-first-run-dashboard) |
+| 2026-07-24 – Rollen-RPC: service_role Claims-Erkennung | [Springen](#2026-07-24-rollen-rpc-service_role-claims-erkennung) |
+| 2026-07-24 – Identity-Cache nach Profilnamensänderung | [Springen](#2026-07-24-identity-cache-nach-profilnamensänderung) |
+| 2026-07-23 – Mitarbeiterzugang: öffentliches Redesign und Einladung | [Springen](#2026-07-23-mitarbeiterzugang-öffentliches-redesign-und-einladung) |
+| 2026-07-23 – Profil-Update: Pending-Default und Rollen-Seiteneffekt | [Springen](#2026-07-23-profil-update-pending-default-und-rollen-seiteneffekt) |
+| 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
+| 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
+| 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
 ## 2026-08-25 – Unified Tasks Wave
 
 ### Kontext
