@@ -58,10 +58,45 @@ import { authProvider as defaultAuthProvider } from "./authProvider";
 import generateData from "./dataGenerator";
 import type { Db } from "./dataGenerator/types";
 import { withSupabaseFilterAdapter } from "./internal/supabaseAdapter";
+import { isTaskContextCheckSkipped } from "./internal/taskContextCheck";
 
 const TASK_MARKED_AS_DONE = "TASK_MARKED_AS_DONE";
 const TASK_MARKED_AS_UNDONE = "TASK_MARKED_AS_UNDONE";
 const TASK_DONE_NOT_CHANGED = "TASK_DONE_NOT_CHANGED";
+
+/**
+ * Mirrors nora_private.enforce_task_company_context() (see
+ * supabase/migrations/*_unified_tasks_wave.sql): when a task's contact_id
+ * is set, derive company_id from the contact's current company if not
+ * given, or reject a company_id that doesn't match it. A task must always
+ * end up with a company_id or a contact_id.
+ */
+const deriveTaskCompanyContext = async (
+  data: Partial<Task>,
+  dataProvider: DataProvider,
+): Promise<Partial<Pick<Task, "company_id">>> => {
+  if (data.contact_id != null) {
+    const { data: contact } = await dataProvider.getOne("contacts", {
+      id: data.contact_id,
+    });
+    if (contact?.company_id != null) {
+      if (data.company_id == null) {
+        return { company_id: contact.company_id };
+      }
+      if (data.company_id !== contact.company_id) {
+        throw new Error(
+          "tasks.company_id does not match the company of the selected contact",
+        );
+      }
+    }
+  }
+
+  if (data.company_id == null && data.contact_id == null) {
+    throw new Error("A task must have a company_id or a contact_id");
+  }
+
+  return {};
+};
 
 const processCompanyLogo = async (params: any) => {
   let logo = params.data.logo;
@@ -633,21 +668,59 @@ export const createDataProvider = ({
           const newParams = await processContactAvatar(params);
           return fetchAndUpdateCompanyData(newParams, dataProvider);
         },
-        afterDelete: async (result) => {
+        afterDelete: async (result, dataProvider) => {
           if (result.data.company_id != null) {
             await updateCompany(result.data.company_id, (company) => ({
               nb_contacts: (company.nb_contacts ?? 1) - 1,
             }));
           }
 
+          // Mirrors nora_private.delete_contact_only_tasks() +
+          // tasks_contact_id_fkey ON DELETE SET NULL: tasks that also carry
+          // a company_id survive with contact_id cleared; tasks that only
+          // had this (now-deleted) contact are removed, same as before.
+          const { data: orphanedTasks } = await dataProvider.getList<Task>(
+            "tasks",
+            {
+              pagination: { page: 1, perPage: 1000 },
+              sort: { field: "id", order: "ASC" },
+              filter: { contact_id: result.data.id },
+            },
+          );
+          await Promise.all(
+            (orphanedTasks ?? []).map((task) =>
+              task.company_id != null
+                ? dataProvider.update("tasks", {
+                    id: task.id,
+                    data: { contact_id: null },
+                    previousData: task,
+                  })
+                : dataProvider.delete("tasks", {
+                    id: task.id,
+                    previousData: task,
+                  }),
+            ),
+          );
+
           return result;
         },
       } satisfies ResourceCallbacks<Contact>,
       {
         resource: "tasks",
+        beforeCreate: async (params, dataProvider) => {
+          const derived = await deriveTaskCompanyContext(
+            params.data,
+            dataProvider,
+          );
+          return {
+            ...params,
+            data: { ...params.data, ...derived },
+          };
+        },
         afterCreate: async (result, dataProvider) => {
           // update the task count in the related contact
           const { contact_id } = result.data;
+          if (contact_id == null) return result;
           const { data: contact } = await dataProvider.getOne("contacts", {
             id: contact_id,
           });
@@ -660,7 +733,7 @@ export const createDataProvider = ({
           });
           return result;
         },
-        beforeUpdate: async (params) => {
+        beforeUpdate: async (params, dataProvider) => {
           const { data, previousData } = params;
           if (previousData.done_date !== data.done_date) {
             taskUpdateType = data.done_date
@@ -669,11 +742,46 @@ export const createDataProvider = ({
           } else {
             taskUpdateType = TASK_DONE_NOT_CHANGED;
           }
-          return params;
+
+          // Historical context is only (re-)validated/derived when the
+          // task's own contact_id/company_id is actually being changed —
+          // never on a routine field-only update (text/due_date/done_date/
+          // type/sales_id), and never on a partial update that doesn't
+          // touch either field at all (e.g. "postpone", "mark done").
+          // Mirrors nora_private.enforce_task_company_context().
+          if (isTaskContextCheckSkipped()) {
+            return params;
+          }
+          const contactIdTouched =
+            "contact_id" in data &&
+            (data.contact_id ?? null) !== (previousData.contact_id ?? null);
+          const companyIdTouched =
+            "company_id" in data &&
+            (data.company_id ?? null) !== (previousData.company_id ?? null);
+          if (!contactIdTouched && !companyIdTouched) {
+            return params;
+          }
+
+          const effectiveData = {
+            ...data,
+            contact_id:
+              "contact_id" in data ? data.contact_id : previousData.contact_id,
+            company_id:
+              "company_id" in data ? data.company_id : previousData.company_id,
+          };
+          const derived = await deriveTaskCompanyContext(
+            effectiveData,
+            dataProvider,
+          );
+          return {
+            ...params,
+            data: { ...data, ...derived },
+          };
         },
         afterUpdate: async (result, dataProvider) => {
           // update the contact: if the task is done, decrement the nb tasks, otherwise increment it
           const { contact_id } = result.data;
+          if (contact_id == null) return result;
           const { data: contact } = await dataProvider.getOne("contacts", {
             id: contact_id,
           });
@@ -694,6 +802,7 @@ export const createDataProvider = ({
         afterDelete: async (result, dataProvider) => {
           // update the task count in the related contact
           const { contact_id } = result.data;
+          if (contact_id == null) return result;
           const { data: contact } = await dataProvider.getOne("contacts", {
             id: contact_id,
           });

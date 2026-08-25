@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-08-25 (nach Customer & Contact Workflow Wave + Foundation Performance/Index-Härtung, PR #1).
+Stand: 2026-08-25 (nach Unified Tasks Wave, Live-UX-Fixes-Wave, Customer & Contact Workflow Wave + Foundation Performance/Index-Härtung, PR #1).
 
 Dieses Dokument ist eine **schnelle Orientierung**, kein Ersatz für die referenzierten Dokumente. Es verlinkt, statt Inhalte zu duplizieren.
 
@@ -15,7 +15,7 @@ Nora CRM ist eine angepasste Kunden- und Vorgangsverwaltung für einen deutschen
 | Kunde | `companies` | Unternehmen/Selbstständig (`customer_kind = business`) oder Privatperson (`customer_kind = individual`) |
 | Ansprechpartner | `contacts` | natürliche Person, optional `company_id`; max. 1 `is_primary = true` pro Kunde |
 | Vorgang | `deals` | Anfrage/Auftrag/Angebot |
-| Aufgabe | `tasks` | aktuell an `contact_id` gebunden, **kein** Kundenkontext (siehe Abschnitt 7) |
+| Aufgabe | `tasks` | `contact_id` und `company_id` beide nullable, mindestens eines gesetzt (CHECK). `company_id` ist der **historisch stabile** Kundenkontext — wird bei Erstellung/Kontextänderung serverseitig aus `contact_id` abgeleitet, aber nie automatisch nachgeführt, wenn der Kontakt später den Kunden wechselt (siehe Unified Tasks Wave, Decision Log) |
 | Notiz | `contact_notes` / `deal_notes` | |
 | Markierung | `tags` | |
 
@@ -53,6 +53,8 @@ Chronologisch, Details im Decision Log (`06-decision-log.md`):
 9. Foundation Wave 1–3: Operation Correlation, Operation Manager + Catalog, Error Observatory Core
 10. Foundation Performance/Index-Härtung (PR #1, 2026-08-15/16): fehlende FK-/Hot-Path-Indizes auf `deals`/`tasks`/`contacts`/`companies`/`contact_notes`/`deal_notes`, Vite Code-Splitting + Bundle-Budget-CI-Gate — siehe Decision Log "2026-08-15 – Kernindizes und Bundle-Budget"
 11. **Customer & Contact Workflow Wave** (2026-08-25) — siehe Abschnitt 5
+12. **Live-UX-Fixes-Wave** (2026-08-25): Kunden-Show Tab-Routing-Bug behoben, Kunden-Autocomplete-Create-UX verbessert — siehe Abschnitt 7
+13. **Unified Tasks Wave** (2026-08-25): `tasks.company_id`, historisch stabiler Kundenkontext, „Aufgaben"-Tab auf der Kundenakte — siehe Abschnitt 5a und Decision Log "2026-08-25 – Unified Tasks Wave". **Nur lokal verifiziert, noch nicht auf Production angewendet** (siehe Abschnitt 6).
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
@@ -70,14 +72,28 @@ Vollständige Entscheidung: Decision Log "2026-08-25 – Customer & Contact Work
 
 **Nicht Teil dieser Wave:** Schnellerfassung nutzt weiterhin sequentielle Creates (siehe Abschnitt 6).
 
+## 5a. Unified Tasks Wave — was ist tatsächlich implementiert
+
+Vollständige Entscheidung: Decision Log "2026-08-25 – Unified Tasks Wave".
+
+- `tasks.company_id` (nullable) zusätzlich zu jetzt ebenfalls nullable `tasks.contact_id`. CHECK-Constraint `tasks_company_or_contact_check`: mindestens eines muss gesetzt sein.
+- **Historisch stabiler Kundenkontext:** `company_id` wird beim Erstellen bzw. bei bewusster Kontextänderung serverseitig aus `contacts.company_id` abgeleitet/validiert (`nora_private.enforce_task_company_context()`, BEFORE-INSERT/UPDATE-Trigger auf `tasks`) — greift **nicht** bei reinen Feld-Updates (Text/Fälligkeit/Erledigt). Wechselt der Kontakt später den Kunden, bleibt `task.company_id` unverändert.
+- **Delete-Semantik:** `tasks.contact_id`-FK jetzt `ON DELETE SET NULL` (war `CASCADE`); neuer Trigger `nora_private.delete_contact_only_tasks()` (BEFORE DELETE auf `contacts`) löscht vorab nur die Aufgaben, die sonst ohne Kundenkontext verwaist wären. `tasks.company_id`-FK bleibt `ON DELETE CASCADE`.
+- `merge_contacts` überspringt die neue Kontext-Validierung bei der Massenumhängung von Aufgaben (Session-Flag `nora.skip_task_context_check`, FakeRest-Äquivalent in `taskContextCheck.ts`).
+- Audit (`audit_task_changes`/`audit_task_row`) erfasst `company_id` und liest den Kontext direkt aus der Aufgabe, nicht mehr live über den Kontakt.
+- UI: „Aufgaben"-Tab auf `/kunden/:id/show` (Desktop) über `CompanyTasksList.tsx`; „+ Aufgabe" auf der Kundenakte schlägt den Hauptansprechpartner vor (entfernbar, nur Kontakte dieses Kunden). `Task.tsx` zeigt eine dezente Notiz, wenn der historische Kundenkontext vom heutigen Kontakt-Kunden abweicht.
+- Neuer SQL-Verifikationstest: `supabase/tests/task_customer_context_verification.sql`.
+
+**Nicht Teil dieser Wave:** `deal_id` an `tasks` (bewusst ausgeschlossen); Company-seitige `nb_tasks`-Zählung/Badge auf dem Tab-Label (nur Kontakte/Vorgänge haben Zähler, Aufgaben-Tab ist ein einfaches Label).
+
 ## 6. Was ist aktuell live?
 
-Verifiziert am 2026-08-25 in dieser Session (read-only Prüfung gegen `nora-crm-prod`, Vercel-Deployment-Status):
+Verifiziert am 2026-08-25 in dieser Session (read-only Prüfung gegen `nora-crm-prod`, Vercel-Deployment-Status) — **vor** der Unified Tasks Wave:
 
-- **Datenbank** (`nora-crm-prod`, Supabase-Projekt `kixxroxtfzbcbzctohex`): Migrationshistorie deckt sich mit `supabase/migrations/` bis einschließlich `20260825120612_nora_migration_bookkeeping_cleanup.sql`. Enthält die Customer & Contact Workflow Wave vollständig (Spalten, Constraint, Unique-Index, RPCs, Views).
-- **Frontend** (Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`): Deployment `dpl_hJp4Bn4tuSaDP4nLGevLd5hNT6No`, Commit `e3f18f7f`, Status READY, Target production.
+- **Datenbank** (`nora-crm-prod`, Supabase-Projekt `kixxroxtfzbcbzctohex`): Migrationshistorie deckt sich mit `supabase/migrations/` bis einschließlich `20260825120612_nora_migration_bookkeeping_cleanup.sql`. Enthält die Customer & Contact Workflow Wave vollständig (Spalten, Constraint, Unique-Index, RPCs, Views). **Enthält die Unified Tasks Wave noch nicht** — Migration `20260825190000_unified_tasks_wave.sql` ist nur lokal angewendet, kein Production-Apply in dieser Session.
+- **Frontend** (Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`): Deployment `dpl_hJp4Bn4tuSaDP4nLGevLd5hNT6No`, Commit `e3f18f7f`, Status READY, Target production. Enthält weder die Live-UX-Fixes-Wave noch die Unified Tasks Wave.
 - **Produktionsdaten sind real**, nicht synthetisch: zum Prüfzeitpunkt 14 Kunden, 16 Kontakte, 6 Vorgänge, 3 Nutzer. Die Aussage „Nora ist noch kein Produktivsystem mit echten Kundendaten" (`00-project-context.md`, historisches Nicht-Ziel für v0.1) **stimmt nicht mehr** — als historische Zieldefinition markiert, siehe dort.
-- Git: `origin/main` bei Commit `e3f18f7f` (Repo `crycodebaby/nora-crm`).
+- Git: `origin/main` bei Commit `e19e307f` (Live-UX-Fixes-Wave committed & gepusht; Unified Tasks Wave lokal, noch nicht gepusht).
 
 Diese Fakten wurden per read-only MCP-Abfragen gegen die echte Produktionsdatenbank und das echte Vercel-Projekt verifiziert, nicht angenommen.
 
@@ -91,9 +107,10 @@ Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassun
 
 ## 8. Welche nächsten Domain-Waves sind geplant?
 
-1. **Aufgabenmodell vereinheitlichen** (`PLANNED DOMAIN WAVE`, noch nicht designed) — `tasks.contact_id` ist die einzige Bindung; eine Aufgabe mit sowohl Kunden- als auch Ansprechpartner-Kontext erscheint aktuell nicht auf der Kundenakte. Ziel: eine Aufgabe existiert genau einmal, sichtbar in Kunden- **und** Kontaktakte, ohne Duplizierung. Keine Schemaentscheidung bisher getroffen — siehe `17-known-issues-and-planned-waves.md`.
+1. **Unified Tasks Wave auf Production anwenden** — Migration und Frontend sind lokal vollständig implementiert und verifiziert (Abschnitt 5a), aber noch nicht auf `nora-crm-prod` migriert/deployed. Nächster kontrollierter Schritt, keine automatische Freigabe.
 2. **Schnellerfassung auf `create_customer_with_contact` umstellen** — aktuell sequentielle Client-Creates (Teilzustand-Risiko wie vor dieser Wave bei `/kunden/create`).
 3. Legacy-Spalten-Cleanup (`linkedin_url`, `website`, `context_links`, `companies.phone_number`) nach ausreichender Übergangszeit.
+4. Mobile „Aufgaben"-Bereich auf der Kundenakte (die Unified Tasks Wave hat den Tab nur für Desktop `CompanyShow` gebaut, mobile `CompanyShowContentMobile` hat aktuell keine Tab-Struktur).
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 

@@ -84,7 +84,11 @@ export const HotboardOpenTasks = ({ className }: { className?: string }) => {
               key={task.id}
               task={task}
               taskTypes={taskTypes}
-              contact={contactById.get(task.contact_id)}
+              contact={
+                task.contact_id != null
+                  ? contactById.get(task.contact_id)
+                  : undefined
+              }
             />
           ))
         ) : (
@@ -117,17 +121,33 @@ const HotboardTaskRow = ({
     : null;
 
   const openContact = () => {
-    redirect(
-      noraCreatePath({
-        resource: "contacts",
-        type: "show",
-        id: task.contact_id,
-      }),
-      undefined,
-      undefined,
-      undefined,
-      { _scrollToTop: false },
-    );
+    if (task.contact_id != null) {
+      redirect(
+        noraCreatePath({
+          resource: "contacts",
+          type: "show",
+          id: task.contact_id,
+        }),
+        undefined,
+        undefined,
+        undefined,
+        { _scrollToTop: false },
+      );
+      return;
+    }
+    if (task.company_id != null) {
+      redirect(
+        noraCreatePath({
+          resource: "companies",
+          type: "show",
+          id: task.company_id,
+        }),
+        undefined,
+        undefined,
+        undefined,
+        { _scrollToTop: false },
+      );
+    }
   };
 
   return (

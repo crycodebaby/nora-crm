@@ -448,6 +448,8 @@ export const englishCrmMessages = {
         with_pending: "With pending tasks",
       },
       regarding_contact: "(Re: %{name})",
+      historical_contact_company: "– now at %{company}",
+      historical_contact_unassigned: "– now unassigned",
       updated: "Task updated",
     },
     tags: {

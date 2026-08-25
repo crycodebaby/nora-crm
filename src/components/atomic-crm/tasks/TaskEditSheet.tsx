@@ -25,6 +25,11 @@ export const TaskEditSheet = ({
         <ReferenceField
           source="contact_id"
           reference="contacts"
+          empty={
+            <span className="text-xl font-semibold truncate pr-10">
+              {translate("resources.tasks.sheet.edit")}
+            </span>
+          }
           render={({ referenceRecord }) => (
             <span className="text-xl font-semibold truncate pr-10">
               {referenceRecord

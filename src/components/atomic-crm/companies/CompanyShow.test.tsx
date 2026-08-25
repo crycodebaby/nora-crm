@@ -72,3 +72,69 @@ describe("CompanyShow tab routing (Nora /kunden alias)", () => {
     await expect.element(historyTab).toHaveAttribute("aria-selected", "true");
   });
 });
+
+// Unified Tasks Wave: the customer record must show every task with
+// task.company_id = this customer — with or without a contact — in a single
+// list, without duplicating the task that also appears on the contact.
+describe("CompanyShow Aufgaben tab (Unified Tasks Wave)", () => {
+  beforeAll(() => {
+    page.viewport(1600, 1200);
+  });
+
+  it("shows company-only and company+contact tasks on the customer's Aufgaben tab", async () => {
+    const company = buildCompany({ id: 3, nb_contacts: 1 });
+    const contact = buildContact({
+      id: 30,
+      company_id: 3,
+      company_name: company.name,
+      first_name: "Freddie",
+      last_name: "Krüger",
+      is_primary: true,
+    });
+
+    const screen = await render(
+      <StoryWrapper
+        initialEntries={["/kunden/3/show/tasks"]}
+        data={{
+          companies: [company],
+          contacts: [contact],
+          tasks: [
+            {
+              id: 100,
+              text: "Rechnung prüfen",
+              type: "none",
+              due_date: new Date().toISOString(),
+              done_date: null,
+              company_id: 3,
+              contact_id: null,
+              sales_id: 0,
+            },
+            {
+              id: 101,
+              text: "Angebot mit Freddie nachfassen",
+              type: "none",
+              due_date: new Date().toISOString(),
+              done_date: null,
+              company_id: 3,
+              contact_id: 30,
+              sales_id: 0,
+            },
+          ] as any,
+        }}
+      >
+        <div />
+      </StoryWrapper>,
+    );
+
+    await expect.element(screen.getByText("Rechnung prüfen")).toBeVisible();
+    await expect
+      .element(screen.getByText("Angebot mit Freddie nachfassen"))
+      .toBeVisible();
+
+    // Exactly one row per task — no duplication of the company+contact task.
+    const matches = await screen
+      .getByText("Angebot mit Freddie nachfassen")
+      .all();
+    expect(matches).toHaveLength(1);
+  });
+});

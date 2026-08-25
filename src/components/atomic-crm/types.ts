@@ -199,7 +199,13 @@ export type Tag = {
 };
 
 export type Task = {
-  contact_id: Identifier;
+  /** Historical contact context — nullable, a task may be company-only. */
+  contact_id?: Identifier | null;
+  /** Historical customer context — nullable, a task may be contact-only.
+   * At least one of company_id/contact_id is always set (DB CHECK constraint).
+   * Set once (derived server-side from contact_id's company, or explicit)
+   * and never re-synced automatically if the contact later changes company. */
+  company_id?: Identifier | null;
   type: string;
   text: string;
   due_date: string;

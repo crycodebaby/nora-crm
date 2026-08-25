@@ -56,7 +56,13 @@ Aktuell ist **`expected_closing_date`** der führende Ort für „Nächstes Nach
 
 ### Falle 7: Aufgaben direkt am Vorgang ohne Ansprechpartner
 
-`tasks` haben **`contact_id`**, nicht `deal_id`. Aufgaben aus der Vorgangsansicht müssen über verknüpfte Ansprechpartner laufen — nicht so tun, als gäbe es eine direkte Vorgangs-Aufgaben-Relation in der DB.
+`tasks` haben weiterhin **kein** `deal_id`. Aufgaben aus der Vorgangsansicht (`DealTasksSection.tsx`) laufen weiterhin über verknüpfte Ansprechpartner (`deal.contact_ids`) — nicht so tun, als gäbe es eine direkte Vorgangs-Aufgaben-Relation in der DB. `deal_id` an `tasks` war und ist explizit **nicht** Teil der Unified Tasks Wave (siehe Decision Log „2026-08-25 – Unified Tasks Wave").
+
+Seit der Unified Tasks Wave (2026-08-25) hat `tasks` zusätzlich **`company_id`** (nullable, historisch stabiler Kundenkontext — siehe Falle 7a) — `contact_id` ist jetzt ebenfalls nullable, nicht mehr die einzige Bindung.
+
+### Falle 7a: `tasks.company_id` als live abgeleiteten Wert behandeln
+
+`tasks.company_id` ist **kein** berechnetes Feld und wird **nicht** automatisch nachgeführt, wenn sich `contacts.company_id` später ändert. Es ist der historische Kundenkontext zum Zeitpunkt der Aufgabenerstellung bzw. letzten bewussten Kontextänderung (serverseitig via `nora_private.enforce_task_company_context()` gesetzt). Falsch: `task.company_id` in Code/UI als „aktueller Kunde des verknüpften Kontakts" interpretieren — dafür ist `contact.company_id` (live) zuständig, nicht `task.company_id` (historisch). Eine Abweichung zwischen beiden ist ein normaler, erwarteter Zustand, kein Datenfehler.
 
 ### Falle 8: Kundennummer als Tag oder in Notizen
 

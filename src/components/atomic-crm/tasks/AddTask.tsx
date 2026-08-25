@@ -34,12 +34,20 @@ export const AddTask = ({
   selectContact,
   display = "chip",
   contactId,
+  companyId,
+  companyName,
   defaultTaskType,
   defaultTaskText,
 }: {
   selectContact?: boolean;
   display?: "chip" | "icon";
   contactId?: Identifier;
+  /** Creates a task scoped to this customer. Shows an optional contact
+   * picker limited to the customer's own contacts instead of taking the
+   * contact from record context (record context here would be the company,
+   * not a contact). */
+  companyId?: Identifier;
+  companyName?: string;
   defaultTaskType?: string;
   defaultTaskText?: string;
 }) => {
@@ -49,7 +57,10 @@ export const AddTask = ({
   const notify = useNotify();
   const translate = useTranslate();
   const contact = useRecordContext();
-  const resolvedContactId = contactId ?? contact?.id;
+  // In company-scoped mode, never fall back to ambient record context for a
+  // contact id — that context is the company record, not a contact.
+  const resolvedContactId =
+    companyId != null ? contactId : (contactId ?? contact?.id);
   const [open, setOpen] = useState(false);
   const handleOpen = () => {
     setOpen(true);
@@ -58,16 +69,19 @@ export const AddTask = ({
 
   const handleSuccess = async (data: any) => {
     setOpen(false);
-    const contact = await dataProvider.getOne("contacts", {
-      id: data.contact_id,
-    });
-    if (!contact.data) return;
 
-    await update("contacts", {
-      id: contact.data.id,
-      data: { last_seen: new Date().toISOString() },
-      previousData: contact.data,
-    });
+    if (data.contact_id != null) {
+      const contact = await dataProvider.getOne("contacts", {
+        id: data.contact_id,
+      });
+      if (contact.data) {
+        await update("contacts", {
+          id: contact.data.id,
+          data: { last_seen: new Date().toISOString() },
+          previousData: contact.data,
+        });
+      }
+    }
 
     notify("resources.tasks.added");
   };
@@ -114,6 +128,7 @@ export const AddTask = ({
           type: defaultTaskType ?? "rueckruf",
           text: defaultTaskText ?? "",
           contact_id: resolvedContactId,
+          company_id: companyId,
           due_date: new Date().toISOString(),
           sales_id: identity.id,
         }}
@@ -128,15 +143,22 @@ export const AddTask = ({
                     ? translate("resources.tasks.dialog.create_type", {
                         type: defaultTaskText,
                       })
-                    : contact && !selectContact
-                      ? translate("resources.tasks.dialog.create_for", {
-                          name: getContactRepresentation(contact),
-                        })
-                      : translate("resources.tasks.dialog.create")}
+                    : companyId != null
+                      ? companyName
+                        ? translate("resources.tasks.dialog.create_for", {
+                            name: companyName,
+                          })
+                        : translate("resources.tasks.dialog.create")
+                      : contact && !selectContact
+                        ? translate("resources.tasks.dialog.create_for", {
+                            name: getContactRepresentation(contact),
+                          })
+                        : translate("resources.tasks.dialog.create")}
                 </DialogTitle>
               </DialogHeader>
               <TaskFormContent
                 selectContact={selectContact && !resolvedContactId}
+                companyId={companyId}
                 defaultTaskType={defaultTaskType}
               />
               <DialogFooter className="w-full justify-end">

@@ -147,6 +147,15 @@ create or replace trigger audit_task_row_trigger
     after insert or update or delete on public.tasks
     for each row execute function public.audit_task_row();
 
+-- Nora CRM: Unified Tasks Wave — historical company context
+create or replace trigger enforce_task_company_context_trigger
+    before insert or update on public.tasks
+    for each row execute function nora_private.enforce_task_company_context();
+
+create or replace trigger delete_contact_only_tasks_before_contact_delete_trigger
+    before delete on public.contacts
+    for each row execute function nora_private.delete_contact_only_tasks();
+
 create or replace trigger audit_contact_note_row_trigger
     after insert or update or delete on public.contact_notes
     for each row execute function public.audit_contact_note_row();

@@ -70,19 +70,11 @@ Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show`: Klick auf Tab 
 
 ### 4. Aufgabenmodell vereinheitlichen (Kunde + Ansprechpartner)
 
-**Status: PLANNED DOMAIN WAVE — noch nicht designed, keine Schemaentscheidung getroffen**
+**Status: RESOLVED / VERIFIED (2026-08-25, Unified Tasks Wave) — lokal implementiert, noch nicht auf Production**
 
-**Problem** (Live-Beispiel 2026-08-25): Kunde „Traum und Horror UG" hat Ansprechpartner „Freddie Krüger". Aufgaben zu Freddie erscheinen auf der Kontaktakte, aber es gibt keine entsprechende kundenbezogene Aufgabenliste auf der Kundenakte — obwohl `deals.company_id` existiert, hängen `tasks` ausschließlich an `contact_id` (siehe `03-data-model-guardrails.md`, Falle 7).
+**Problem war** (Live-Beispiel 2026-08-25): Kunde „Traum und Horror UG" hat Ansprechpartner „Freddie Krüger". Aufgaben zu Freddie erschienen auf der Kontaktakte, aber es gab keine entsprechende kundenbezogene Aufgabenliste auf der Kundenakte — `tasks` hing ausschließlich an `contact_id` (siehe `03-data-model-guardrails.md`, Falle 7 — dort ebenfalls aktualisiert).
 
-**Fachliches Zielbild:**
-
-- Eine Aufgabe soll **genau einmal** existieren, z. B. „Freddie wegen Angebot zurückrufen" mit Kontext Kunde (Traum und Horror UG) **und** Ansprechpartner (Freddie Krüger) — sichtbar in beiden Akten, ein Erledigt-Status überall.
-- Eine Aufgabe soll auch **nur** im Kundenkontext existieren können (z. B. „Rechnung prüfen"), ohne konkreten Ansprechpartner.
-- Keine duplizierten Aufgaben-Datensätze für denselben Sachverhalt.
-
-**Mögliche technische Richtung** (nicht beschlossen): Erweiterung von `tasks` um einen optionalen Kundenkontext (z. B. `company_id`), sodass eine Aufgabe wahlweise `contact_id`, `company_id` oder beides trägt. Erfordert Analyse: Auswirkung auf `TasksListByDueDate`, Hotboard „Offene Aufgaben", RLS, bestehende Task-Erstellungspfade (`TaskCreateSheet`, Kontaktdetail).
-
-**Nicht entscheiden, solange nicht analysiert und freigegeben** — dies ist eine Notiz für die nächste Design-Runde, keine Migrationsvorgabe.
+**Umgesetzt:** `tasks.company_id` (nullable, historisch stabiler Kundenkontext, serverseitig via Trigger `nora_private.enforce_task_company_context()` abgeleitet/validiert), `tasks.contact_id` jetzt ebenfalls nullable, CHECK-Constraint für „mindestens eines von beiden". „Aufgaben"-Tab auf `/kunden/:id/show`. Vollständige Entscheidung inkl. historischer Semantik: Decision Log „2026-08-25 – Unified Tasks Wave". Migration lokal gegen echtes Postgres verifiziert (`supabase/tests/task_customer_context_verification.sql`), Browser-Szenarien live durchgespielt — siehe dort für Details. **Noch nicht auf `nora-crm-prod` migriert/deployed.**
 
 ---
 

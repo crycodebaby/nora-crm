@@ -1,6 +1,7 @@
 import type { Identifier, DataProvider } from "ra-core";
 
 import type { Contact, Task, Deal, ContactNote } from "../../types";
+import { withTaskContextCheckSkipped } from "../fakerest/internal/taskContextCheck";
 
 /**
  * Merge one contact (loser) into another contact (winner).
@@ -40,14 +41,20 @@ export const mergeContacts = async (
     },
   );
 
-  const taskUpdates =
-    loserTasks?.map((task) =>
-      dataProvider.update("tasks", {
-        id: task.id,
-        data: { contact_id: winnerId },
-        previousData: task,
-      }),
-    ) || [];
+  // Reassigning tasks during a merge is identity consolidation, not a user
+  // picking a different contact for a task — it must not re-derive/validate
+  // tasks.company_id against the winner's current company.
+  await withTaskContextCheckSkipped(() =>
+    Promise.all(
+      loserTasks?.map((task) =>
+        dataProvider.update("tasks", {
+          id: task.id,
+          data: { contact_id: winnerId },
+          previousData: task,
+        }),
+      ) || [],
+    ),
+  );
 
   // 2. Reassign all notes from loser to winner
   const { data: loserNotes } = await dataProvider.getManyReference<ContactNote>(
@@ -139,13 +146,8 @@ export const mergeContacts = async (
     previousData: winnerContact,
   });
 
-  // Execute all updates
-  await Promise.all([
-    ...taskUpdates,
-    ...noteUpdates,
-    ...dealUpdates,
-    winnerUpdate,
-  ]);
+  // Execute remaining updates (tasks were already reassigned above)
+  await Promise.all([...noteUpdates, ...dealUpdates, winnerUpdate]);
 
   // 5. Delete the loser contact
   await dataProvider.delete<Contact>("contacts", {

@@ -455,6 +455,8 @@ export const germanCrmMessages = {
         with_pending: "Mit offenen Aufgaben",
       },
       regarding_contact: "(zu %{name})",
+      historical_contact_company: "– heute bei %{company}",
+      historical_contact_unassigned: "– heute ohne Kunden",
       updated: "Aufgabe aktualisiert",
     },
     tags: {

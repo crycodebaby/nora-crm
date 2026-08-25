@@ -455,6 +455,8 @@ export const frenchCrmMessages = {
         with_pending: "Avec des tâches en attente",
       },
       regarding_contact: "(Concernant : %{name})",
+      historical_contact_company: "– aujourd'hui chez %{company}",
+      historical_contact_unassigned: "– aujourd'hui sans client",
       updated: "Tâche mise à jour",
     },
     tags: {

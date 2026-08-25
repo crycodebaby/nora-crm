@@ -68,7 +68,8 @@ Diese Werte beschreiben den Arbeitsstand und nicht klassische Sales-Stages.
 - Kein Herstellerstatus am Vorgang (Status „Wartet auf Hersteller“ ist ein Vorgangsstatus, kein Hersteller-Feld)
 - Kein separates Nachfassdatum — **`expected_closing_date`** wird fachlich als „Nächstes Nachfassdatum“ genutzt
 - **`sales_id`** am Vorgang = fachlich „Zuständig“ (Benutzer aus `sales`)
-- Aufgaben hängen an **`contact_id`**, nicht direkt an `deal_id` — Aufgaben zum Vorgang laufen über die verknüpften Ansprechpartner
+- Aufgaben hängen **nicht** direkt an `deal_id` — Aufgaben zum Vorgang laufen weiterhin über die verknüpften Ansprechpartner (`deal.contact_ids`)
+- Seit der Unified Tasks Wave (2026-08-25): `tasks` hat sowohl `contact_id` als auch `company_id` (beide nullable, mindestens eines gesetzt). `company_id` ist der **historisch stabile** Kundenkontext einer Aufgabe — wird bei Erstellung/Kontextänderung serverseitig aus `contact_id` abgeleitet, aber **nie** automatisch nachgeführt, wenn der Kontakt später den Kunden wechselt. Details: Decision Log „2026-08-25 – Unified Tasks Wave", `03-data-model-guardrails.md` Falle 7a.
 
 ## Nachfassen (Welle 5)
 

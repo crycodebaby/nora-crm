@@ -2,6 +2,28 @@
 
 Dieses Dokument hält relevante Entscheidungen fest. Neue Entscheidungen müssen mit Datum, Kontext, Entscheidung und Begründung ergänzt werden.
 
+## 2026-08-25 – Unified Tasks Wave
+
+### Kontext
+
+Aufgaben (`tasks`) hingen bisher ausschließlich an `contact_id` (`NOT NULL`). Dadurch gab es keine kundenbezogene Aufgabenübersicht auf der Kundenakte, und eine reine Kundenaufgabe ohne Ansprechpartner (z. B. „Rechnung prüfen") war nicht abbildbar. Details der Analyse: `17-known-issues-and-planned-waves.md` (vorherige Fassung, jetzt umgesetzt).
+
+### Entscheidung
+
+- **Zieldatenmodell:** `tasks.company_id` (nullable) zusätzlich zu weiterhin vorhandenem, jetzt nullable `tasks.contact_id`. CHECK-Constraint `tasks_company_or_contact_check`: mindestens eines von beiden muss gesetzt sein. Variante A aus der vorherigen Analyse — keine parallele `task_links`-Architektur.
+- **Historische Semantik (zentrale Produktentscheidung):** `tasks.company_id` ist der Kundenkontext einer Aufgabe **zum Zeitpunkt ihrer Erstellung bzw. letzten bewussten Kontextänderung** und wird **nicht automatisch nachgeführt**, wenn der verknüpfte Kontakt später einem anderen Kunden zugeordnet wird. Begründung: Nora legt Wert auf nachvollziehbare Kundenhistorie — der Kontext einer Aufgabe soll dokumentieren, für welchen Kunden und mit welchem damaligen Ansprechpartner sie entstanden ist, auch wenn sich die heutige Zuordnung geändert hat. Kein Trigger/Cascade-Update synchronisiert `tasks.company_id` bei einem späteren `contacts.company_id`-Wechsel.
+- **Serverseitige Durchsetzung:** BEFORE-INSERT-OR-UPDATE-Trigger `nora_private.enforce_task_company_context()` auf `tasks` — ein Trigger statt einer neuen RPC, weil Task-Create/-Update bereits über normale `dataProvider.create`/`update`-Pfade läuft (kein bestehendes Task-RPC-Muster wie bei `create_customer_with_contact`). Der Trigger greift nur, wenn `contact_id`/`company_id` tatsächlich gesetzt oder geändert werden — nie bei einem reinen Feld-Update (Text/Fälligkeit/Erledigt/Zuständigkeit). Bei gesetztem `contact_id` wird `company_id` serverseitig aus `contacts.company_id` abgeleitet (falls nicht angegeben) oder validiert (Client darf keine inkonsistente Kombination erzeugen).
+- **Delete-Semantik:** `tasks.contact_id` FK von `ON DELETE CASCADE` auf `ON DELETE SET NULL` geändert — eine Aufgabe mit Kundenkontext darf einen gelöschten Kontakt überleben. Ein neuer `BEFORE DELETE`-Trigger auf `contacts` (`nora_private.delete_contact_only_tasks()`) löscht vorab genau die Aufgaben, die sonst nach dem `SET NULL` gegen den CHECK-Constraint verstoßen würden (reine Kontakt-Aufgaben ohne Kundenkontext) — bewahrt das bisherige Cascade-Verhalten für diesen Fall. `tasks.company_id` FK bleibt `ON DELETE CASCADE` (konsistent mit `contacts`/`deals`).
+- **`merge_contacts`:** Die Massenumhängung von Aufgaben beim Contact-Merge (`UPDATE tasks SET contact_id = winner_id ...`) ist Identitätskonsolidierung, kein bewusster Kontextwechsel durch eine Mitarbeiterin — sie überspringt die Kontext-Validierung explizit über die Session-Variable `nora.skip_task_context_check` (Muster analog zu `nora.operation_id`). FakeRest bildet dasselbe über ein Modul-Flag (`taskContextCheck.ts`) nach.
+- **Audit:** `audit_task_changes` erfasst jetzt auch `company_id`-Änderungen; `audit_task_row` liest den Kundenkontext direkt aus `tasks.company_id` statt ihn live über `contacts.company_id` zu joinen (spiegelt die historische Aufgabe, nicht die heutige Kontakt-Zuordnung).
+- **UI:** Neuer Tab „Aufgaben" auf `/kunden/:id/show` (Desktop), zeigt alle Aufgaben mit `company_id = aktueller Kunde` unabhängig vom Kontakt. „+ Aufgabe" auf der Kundenakte schlägt den Hauptansprechpartner vor (entfernbar, änderbar, nur Kontakte dieses Kunden). Wenn der historische `task.company_id` vom heutigen `contact.company_id` abweicht, zeigt `Task.tsx` eine dezente Zusatzinfo („– heute bei %{company}" / „– heute ohne Kunden") statt eines Fehlers.
+
+### Verifiziert
+
+- `supabase/tests/task_customer_context_verification.sql`: Schema, Backfill, alle Kombinationen (Kunde+Kontakt / nur Kunde / nur Kontakt / weder noch / falsche Kombination), historische Semantik über Contact-Wechsel, Contact-/Company-Delete-Semantik, `merge_contacts`, Rollen (viewer/office/admin) — grün gegen `npx supabase db reset --local`.
+- Vollständige Vitest-Suite (Unit + FakeRest + Browser/Component) grün; `npm run typecheck`/`npm run build` grün.
+- Live-Browser-Verifikation gegen echtes lokales Postgres (Szenarien 1–4 aus dem Auftrag): Kunde+Hauptansprechpartner-Aufgabe erscheint auf beiden Akten und ist dort synchron erledigt; reine Kundenaufgabe ohne künstlichen Kontakt; Aufgabe für unzugeordneten Kontakt; historische Stabilität nach Kontaktwechsel inkl. sichtbarer „heute bei anderem Kunden"-Notiz und weiterhin funktionierendem Erledigt-Toggle.
+
 ## 2026-08-25 – Repo/Produktions-Drift bei `nora_core_indexes` unabhängig bestätigt
 
 ### Kontext

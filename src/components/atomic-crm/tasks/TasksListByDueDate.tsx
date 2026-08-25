@@ -22,16 +22,21 @@ import {
 
 export const TasksListByDueDate = ({
   filterByContact,
+  filterByCompany,
   emptyPlaceholder,
   pendingPlaceholder,
 }: {
   filterByContact?: Identifier;
+  /** Customer-scoped task list (Kundenakte "Aufgaben" tab): shows every
+   * task with this company_id, whether or not it also has a contact. */
+  filterByCompany?: Identifier;
   emptyPlaceholder?: React.ReactNode;
   pendingPlaceholder?: React.ReactNode;
 }) => {
   const { identity } = useGetIdentity();
   const isMobile = useIsMobile();
   const translate = useTranslate();
+  const hasScope = filterByContact != null || filterByCompany != null;
 
   const { data: tasks, isPending } = useGetList(
     "tasks",
@@ -41,10 +46,12 @@ export const TasksListByDueDate = ({
       filter: {
         ...(filterByContact != null
           ? { contact_id: filterByContact }
-          : { sales_id: identity?.id }),
+          : filterByCompany != null
+            ? { company_id: filterByCompany }
+            : { sales_id: identity?.id }),
       },
     },
-    { enabled: filterByContact != null ? true : !!identity },
+    { enabled: hasScope ? true : !!identity },
   );
 
   const showContact = filterByContact == null;
@@ -119,7 +126,7 @@ export const TasksListByDueDate = ({
         showContact={showContact}
         isMobile={isMobile}
       />
-      {(!filterByContact || (filterByContact && isBeforeFriday())) && (
+      {(!hasScope || isBeforeFriday()) && (
         <TaskListFilter
           tasks={dueThisWeekTasks}
           title={translate("resources.tasks.filters.this_week")}

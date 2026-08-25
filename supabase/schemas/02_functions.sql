@@ -287,8 +287,14 @@ BEGIN
     RAISE EXCEPTION 'Contact not found';
   END IF;
 
-  -- 1. Reassign tasks from loser to winner
+  -- 1. Reassign tasks from loser to winner. This is identity consolidation
+  --    (the two rows represent the same real contact), not a user picking a
+  --    different contact for a task — so it must not re-validate/derive
+  --    tasks.company_id against the winner's current company. A task's
+  --    historical company context survives the merge unchanged.
+  PERFORM set_config('nora.skip_task_context_check', 'true', true);
   UPDATE tasks SET contact_id = winner_id WHERE contact_id = loser_id;
+  PERFORM set_config('nora.skip_task_context_check', '', true);
 
   -- 2. Reassign contact notes from loser to winner
   UPDATE contact_notes SET contact_id = winner_id WHERE contact_id = loser_id;
@@ -1318,6 +1324,8 @@ BEGIN
     IF part IS NOT NULL THEN v := v || jsonb_build_object('done_date', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.contact_id), to_jsonb(p_new.contact_id), 'contact_id');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('contact_id', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.company_id), to_jsonb(p_new.company_id), 'company_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('company_id', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.sales_id), to_jsonb(p_new.sales_id), 'sales_id');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('sales_id', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.type), to_jsonb(p_new.type), 'type');
@@ -1584,17 +1592,13 @@ AS $$
 DECLARE
     v_changes jsonb;
     v_event text;
-    v_company_id bigint;
-    v_deal_id bigint;
-    v_cn text;
 BEGIN
     IF tg_op = 'INSERT' THEN
-        SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = new.contact_id;
         PERFORM nora_private.write_audit_event(
             p_event_type := 'task.created',
             p_entity_type := 'task',
             p_entity_id := public.nora_entity_uuid('task', new.id),
-            p_company_id := v_company_id,
+            p_company_id := new.company_id,
             p_contact_id := new.contact_id,
             p_task_id := new.id
         );
@@ -1615,12 +1619,11 @@ BEGIN
             RETURN new;
         END IF;
 
-        SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = new.contact_id;
         PERFORM nora_private.write_audit_event(
             p_event_type := v_event,
             p_entity_type := 'task',
             p_entity_id := public.nora_entity_uuid('task', new.id),
-            p_company_id := v_company_id,
+            p_company_id := new.company_id,
             p_contact_id := new.contact_id,
             p_task_id := new.id,
             p_changes := CASE WHEN v_event = 'task.updated' THEN v_changes ELSE null END
@@ -1629,12 +1632,11 @@ BEGIN
     END IF;
 
     IF tg_op = 'DELETE' THEN
-        SELECT ct.company_id INTO v_company_id FROM public.contacts ct WHERE ct.id = old.contact_id;
         PERFORM nora_private.write_audit_event(
             p_event_type := 'task.deleted',
             p_entity_type := 'task',
             p_entity_id := public.nora_entity_uuid('task', old.id),
-            p_company_id := v_company_id,
+            p_company_id := old.company_id,
             p_contact_id := old.contact_id,
             p_task_id := old.id,
             p_retention_class := 'security'
@@ -1647,6 +1649,85 @@ END;
 $$;
 
 ALTER FUNCTION public.audit_task_row() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.enforce_task_company_context()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+    v_contact_company_id bigint;
+BEGIN
+    -- Routine field-only update (text/due_date/done_date/type/sales_id):
+    -- the task's context is untouched, so its historical company_id must
+    -- not be re-validated against the contact's *current* company.
+    IF tg_op = 'UPDATE'
+       AND new.contact_id IS NOT DISTINCT FROM old.contact_id
+       AND new.company_id IS NOT DISTINCT FROM old.company_id
+    THEN
+        RETURN new;
+    END IF;
+
+    -- Bulk identity-consolidation paths (contact merge) opt out explicitly;
+    -- see merge_contacts().
+    IF coalesce(nullif(current_setting('nora.skip_task_context_check', true), ''), 'false') = 'true' THEN
+        RETURN new;
+    END IF;
+
+    IF new.contact_id IS NOT NULL THEN
+        SELECT company_id INTO v_contact_company_id
+        FROM public.contacts
+        WHERE id = new.contact_id;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'tasks.contact_id % does not reference an existing contact', new.contact_id
+                USING ERRCODE = '23503';
+        END IF;
+
+        IF v_contact_company_id IS NOT NULL THEN
+            IF new.company_id IS NULL THEN
+                new.company_id := v_contact_company_id;
+            ELSIF new.company_id IS DISTINCT FROM v_contact_company_id THEN
+                RAISE EXCEPTION 'tasks.company_id (%) does not match the company of contact % (%)',
+                    new.company_id, new.contact_id, v_contact_company_id
+                    USING ERRCODE = '23514';
+            END IF;
+        END IF;
+    END IF;
+
+    IF new.company_id IS NULL AND new.contact_id IS NULL THEN
+        RAISE EXCEPTION 'a task must have a company_id or a contact_id'
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN new;
+END;
+$$;
+
+COMMENT ON FUNCTION nora_private.enforce_task_company_context() IS
+    'Derives/validates tasks.company_id from the (server-loaded) contact.company_id whenever a task''s contact_id/company_id is set or changed. Skipped for routine field-only updates and for the explicit merge_contacts() bulk reassignment (nora.skip_task_context_check).';
+
+CREATE OR REPLACE FUNCTION nora_private.delete_contact_only_tasks()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    -- Runs before the contact row (and the FK's ON DELETE SET NULL action)
+    -- so that tasks with no company context are removed the same way a
+    -- CASCADE would have removed them, while tasks that also carry a
+    -- company_id survive with contact_id set to NULL by the FK action.
+    DELETE FROM public.tasks
+    WHERE contact_id = old.id
+      AND company_id IS NULL;
+
+    RETURN old;
+END;
+$$;
+
+COMMENT ON FUNCTION nora_private.delete_contact_only_tasks() IS
+    'Before a contact is deleted, deletes its tasks that have no company_id (would otherwise violate tasks_company_or_contact_check once contact_id is set to NULL by the FK action). Tasks with a company_id survive and keep that historical context.';
 
 CREATE OR REPLACE FUNCTION public.audit_contact_note_row()
 RETURNS trigger

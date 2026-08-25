@@ -45,6 +45,7 @@ import {
   ContextInfo,
 } from "./CompanyAside";
 import { CompanyAvatar } from "./CompanyAvatar";
+import { CompanyTasksList } from "./CompanyTasksList";
 
 export const CompanyShow = () => {
   const isMobile = useIsMobile();
@@ -133,7 +134,13 @@ const CompanyShowContent = () => {
               </div>
             </div>
             <Tabs defaultValue={currentTab} onValueChange={handleTabChange}>
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList
+                className={
+                  record.nb_deals
+                    ? "grid w-full grid-cols-5"
+                    : "grid w-full grid-cols-4"
+                }
+              >
                 <TabsTrigger value="activity">
                   {translate("crm.common.activity")}
                 </TabsTrigger>
@@ -146,6 +153,9 @@ const CompanyShowContent = () => {
                     : translate("resources.companies.nb_contacts", {
                         smart_count: record.nb_contacts ?? 0,
                       })}
+                </TabsTrigger>
+                <TabsTrigger value="tasks">
+                  {translate("resources.tasks.name", { smart_count: 2 })}
                 </TabsTrigger>
                 {record.nb_deals ? (
                   <TabsTrigger value="deals">
@@ -164,6 +174,9 @@ const CompanyShowContent = () => {
                   entityId={Number(record.id)}
                   embedded
                 />
+              </TabsContent>
+              <TabsContent value="tasks" className="pt-2">
+                <CompanyTasksList />
               </TabsContent>
               <TabsContent value="contacts">
                 {record.nb_contacts ? (

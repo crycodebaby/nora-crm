@@ -128,18 +128,39 @@ export const Task = ({
               {showContact && (
                 <ReferenceField<TData, Contact>
                   source="contact_id"
-                  reference="contacts"
+                  reference="contacts_summary"
                   record={task}
                   link="show"
                   className="inline text-sm text-muted-foreground"
                   render={({ referenceRecord }) => {
                     if (!referenceRecord) return null;
+                    // The task's own company_id is its historical customer
+                    // context, set once and never re-synced — it may no
+                    // longer match the contact's *current* company if the
+                    // contact was reassigned since. That is expected, not
+                    // an error; show it as a quiet note, not a warning.
+                    const isHistoricalMismatch =
+                      task.company_id != null &&
+                      referenceRecord.company_id !== task.company_id;
                     return (
                       <>
                         {" "}
                         {translate("resources.tasks.regarding_contact", {
                           name: getContactRepresentation(referenceRecord),
                         })}
+                        {isHistoricalMismatch && (
+                          <span className="italic">
+                            {" "}
+                            {referenceRecord.company_name
+                              ? translate(
+                                  "resources.tasks.historical_contact_company",
+                                  { company: referenceRecord.company_name },
+                                )
+                              : translate(
+                                  "resources.tasks.historical_contact_unassigned",
+                                )}
+                          </span>
+                        )}
                       </>
                     );
                   }}
