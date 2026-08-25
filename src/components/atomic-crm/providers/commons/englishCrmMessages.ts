@@ -90,8 +90,8 @@ export const englishCrmMessages = {
       },
       autocomplete: {
         create_error: "An error occurred while creating the company",
-        create_item: "Create %{item}",
-        create_label: "Start typing to create a new company",
+        create_item: 'Create new company "%{item}"',
+        create_label: "Create new company",
       },
       filters: {
         customer_type: "Customer type",

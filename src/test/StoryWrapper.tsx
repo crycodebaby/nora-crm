@@ -8,6 +8,7 @@ import { createDataProvider } from "@/components/atomic-crm/providers/fakerest";
 import { DEFAULT_USER } from "@/components/atomic-crm/providers/fakerest/authProvider";
 import type { Db } from "@/components/atomic-crm/providers/fakerest/dataGenerator/types";
 import type {
+  Company,
   Contact,
   Sale,
   SalesDirectory,
@@ -91,6 +92,36 @@ export const buildContact = (overrides: Partial<Contact> = {}): Contact => ({
   title: "CTO",
   ...overrides,
 });
+
+// Build a valid company record with sensible defaults to keep tests and stories terse.
+export const buildCompany = (overrides: Partial<Company> = {}): Company =>
+  ({
+    id: 1,
+    name: "Traum und Horror UG",
+    customer_kind: "business",
+    customer_number: "K-0001",
+    sector: "",
+    size: 1,
+    linkedin_url: "",
+    website: "",
+    phone_number: "",
+    address: "",
+    zipcode: "",
+    city: "",
+    state_abbr: "",
+    sales_id: baseSale.id,
+    created_at: "2025-01-01T09:00:00.000Z",
+    description: "",
+    revenue: "",
+    tax_identifier: "",
+    country: "",
+    nb_contacts: 0,
+    nb_deals: 0,
+    links_jsonb: [],
+    email_jsonb: [],
+    phone_jsonb: [],
+    ...overrides,
+  }) as Company;
 
 export const StoryWrapper = ({
   children,

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as React from "react";
 import { isValidElement, useCallback } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import {
   FormControl,
@@ -200,11 +201,6 @@ export const AutocompleteInput = (
     (create || onCreate) && (filterValue !== "" || createLabel)
       ? getCreateItem(filterValue)
       : null;
-  let finalChoices = allChoices;
-
-  if (createItem) {
-    finalChoices = [...finalChoices, createItem];
-  }
 
   return (
     <>
@@ -258,33 +254,19 @@ export const AutocompleteInput = (
                 <CommandList ref={listRef}>
                   <CommandEmpty>No matching item found.</CommandEmpty>
                   <CommandGroup>
-                    {finalChoices.map((choice) => {
-                      const isCreateItem =
-                        !!createItem && choice?.id === createItem.id;
-                      const disabled = getOptionDisabled(choice);
-
-                      const choiceText = getChoiceText(
-                        isCreateItem ? createItem : choice,
-                      );
+                    {allChoices.map((choice) => {
+                      const choiceText = getChoiceText(choice);
 
                       return (
                         <CommandItem
                           key={getChoiceValue(choice)}
-                          value={
-                            isCreateItem
-                              ? // if it's the create option, include the filter value so it is shown in the command input
-                                // characters before and after the filter value are required
-                                // to show the option when the filter value starts or ends with a space
-                                `?${filterValue}?`
-                              : getChoiceValue(choice)
-                          }
+                          value={getChoiceValue(choice)}
                           keywords={
-                            isCreateItem || isValidElement(choiceText)
+                            isValidElement(choiceText)
                               ? undefined
                               : [choiceText]
                           }
                           onSelect={() => handleChangeWithCreateSupport(choice)}
-                          disabled={disabled}
                         >
                           <Check
                             className={cn(
@@ -299,6 +281,27 @@ export const AutocompleteInput = (
                       );
                     })}
                   </CommandGroup>
+                  {createItem && (
+                    <>
+                      {allChoices.length > 0 && <CommandSeparator />}
+                      <CommandGroup>
+                        <CommandItem
+                          key={getChoiceValue(createItem)}
+                          // Include the filter value so the option is shown
+                          // even when the filter starts/ends with a space.
+                          value={`?${filterValue}?`}
+                          onSelect={() =>
+                            handleChangeWithCreateSupport(createItem)
+                          }
+                          disabled={getOptionDisabled(createItem)}
+                          className="text-primary font-medium data-[selected=true]:text-primary"
+                        >
+                          <Plus className="mr-2 h-4 w-4 shrink-0" />
+                          {getChoiceText(createItem)}
+                        </CommandItem>
+                      </CommandGroup>
+                    </>
+                  )}
                 </CommandList>
               </Command>
             </PopoverContent>

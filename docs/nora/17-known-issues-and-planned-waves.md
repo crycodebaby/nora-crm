@@ -2,7 +2,7 @@
 
 Übersicht: `16-current-state.md`. Dieses Dokument enthält die Details zu offenen Bugs, Live-Feedback und geplanten Domain-Waves. Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
-Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `BUG, Ursache vermutet` · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP`.
+Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `BUG, Ursache vermutet` · `RESOLVED / VERIFIED` (behoben, mit Test und Live-Prüfung abgesichert) · `VERIFIED NOT REPRODUCIBLE / ALREADY RESOLVED` (Meldung im aktuellen Code/Live nicht reproduzierbar, keine Änderung nötig) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP`.
 
 ---
 
@@ -10,30 +10,28 @@ Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (g
 
 ### 1. Kunden-Autocomplete: „neuen Kunden anlegen" nicht eindeutig als Aktion erkennbar
 
-**Status: OPEN**
+**Status: RESOLVED / VERIFIED (2026-08-25)**
 
-Betroffen: `/kontakte/create`, Kunden-Autocomplete-Feld (`AutocompleteCompanyInput.tsx`).
+Betroffen war: `/kontakte/create`, Kunden-Autocomplete-Feld (`AutocompleteCompanyInput.tsx`), über die gemeinsame Basiskomponente `src/components/admin/autocomplete-input.tsx`.
 
-Aktueller Text (`resources.companies.autocomplete.create_label`, alle drei Message-Kataloge):
+**Ursache:** Die Create-Option wurde im selben `CommandGroup` wie die normalen Sucheergebnisse gerendert, mit demselben (nur leeren) Check-Icon-Platzhalter — visuell nicht von echten Treffern unterscheidbar.
 
-> „Tippen Sie, um einen neuen Kunden anzulegen"
+**Fix:**
 
-Live-Feedback 2026-08-25: Der Hinweistext ist nicht eindeutig genug von normalen Sucheergebnissen abgesetzt und wird als Aktion leicht übersehen.
+- `autocomplete-input.tsx`: Die Create-Option wird jetzt in einer eigenen `CommandGroup`, getrennt durch `CommandSeparator`, mit einem `Plus`-Icon statt des (leeren) Such-Checks gerendert. Betrifft generisch jede Autocomplete-Instanz mit `create`/`onCreate` (aktuell nur die Kunden-Suche), keine neue Parallelkomponente.
+- Message-Kataloge (`germanCrmMessages.ts`, `englishCrmMessages.ts`, `frenchCrmMessages.ts`): `resources.companies.autocomplete.create_item` zeigt jetzt den Suchtext in einer eindeutigen Aktionsformulierung, z. B. Deutsch: „Neuen Kunden „%{item}" anlegen".
+- Tastaturbedienung/Accessibility unverändert (cmdk behandelt mehrere `CommandGroup`s weiterhin als eine durchlaufende Liste; `role="option"` bleibt erhalten).
 
-**Gewünschte UX:**
+**Verifiziert:**
 
-- deutlich als Aktion erkennbar
-- visuell vom Sucheergebnis getrennt
-- Plus-Symbol o. ä.
-- Formulierung z. B.: „Neuen Kunden „<Suchtext>" anlegen"
-
-**Nicht umgesetzt in dieser Session** — reine Copy-/Layout-Änderung an `AutocompleteCompanyInput.tsx` und den drei Message-Katalogen, kein Datenmodellbezug.
+- Neuer Test `src/components/atomic-crm/companies/AutocompleteCompanyInput.test.tsx` (2 Tests: Create-Option sichtbar mit erwartetem Label; Auswahl der Create-Option legt den Kunden tatsächlich an und setzt `company_id`).
+- Live im Browser auf `/#/kontakte/create`: Eingabe „Traum und Horror UG" zeigt unten in der Liste, abgesetzt durch Trennlinie: „+ Neuen Kunden „Traum und Horror UG" anlegen".
 
 ---
 
 ### 2. LinkedIn-Feld auf `/kontakte/create`
 
-**Status: NEEDS RE-VERIFICATION** (im aktuellen Code nicht reproduzierbar)
+**Status: VERIFIED NOT REPRODUCIBLE / ALREADY RESOLVED (2026-08-25)**
 
 Live-Feedback 2026-08-25: Trotz des neuen generischen Links-Modells sei auf `/kontakte/create` weiterhin ein sichtbares Feld „LinkedIn-Adresse" vorhanden.
 
@@ -43,40 +41,28 @@ Live-Feedback 2026-08-25: Trotz des neuen generischen Links-Modells sei auf `/ko
 - `useContactImport.tsx` — CSV-Spaltenname beim Import, kein UI-Formularfeld
 - Message-Kataloge — verwaiste `linkedin_url`-Labels für die deprecated DB-Spalte, nicht zwingend im UI gerendert
 
-**Nächster Schritt:** Vor jeder Code-Änderung live auf `nora.ergart.de/#/kontakte/create` neu prüfen (ggf. Deploy-Timing oder Browser-Cache zum Meldezeitpunkt). Falls das Feld dort tatsächlich noch erscheint, widerspricht das dem hier dokumentierten Codestand — dann hat Code-Wahrheit Vorrang vor dieser Notiz, und die Ursache muss neu untersucht werden (z. B. alter Service-Worker/PWA-Cache beim Melder).
+**Live-Verifikation (2026-08-25, `npm run dev:demo`, `/#/kontakte/create`):** Seite enthält an keiner Stelle den Text „LinkedIn" (per Skript geprüft). Feld war zu diesem Zeitpunkt bereits nicht mehr vorhanden — vermutlich alter Deploy-Stand oder Browser-/Service-Worker-Cache beim ursprünglichen Melder. **Keine Code-Änderung vorgenommen.**
 
 ---
 
 ### 3. Kunden-Show: Tabs „Änderungsverlauf"/„Kontakte" springen zurück
 
-**Status: BUG, Ursache vermutet, nicht gefixt**
+**Status: RESOLVED / VERIFIED (2026-08-25)**
 
-Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show` (Browser-Test in dieser Session): Klick auf Tab „Kontakte" oder „Änderungsverlauf" navigiert kurz, zeigt aber weiterhin den Inhalt des Tabs „Aktivität"; der aktive Tab-Zustand kehrt sichtbar dorthin zurück.
+Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show`: Klick auf Tab „Kontakte" oder „Änderungsverlauf" navigiert kurz, zeigt aber weiterhin den Inhalt des Tabs „Aktivität"; der aktive Tab-Zustand kehrt sichtbar dorthin zurück.
 
-**Vermutete Ursache** (Code-Analyse, nicht verifiziert durch Fix/Test):
+**Root Cause (verifiziert, nicht mehr nur vermutet):** `CompanyShow` wird über `useNoraResourceAliasRoutes` (`routing/NoraResourceAliasRoutes.tsx`) ausschließlich unter der deutschen Alias-Route `kunden/*` → `:id/show/*` gemountet. Dieselbe Routenliste registriert daneben `companies/*` → `<LegacyPathRedirect from="companies">`, das jede `/companies/...`-URL sofort per `<Navigate replace>` auf `/kunden/...` zurückschreibt.
 
-`CompanyShowContent` (`CompanyShow.tsx`) ermittelt den aktiven Tab über:
+`CompanyShowContent` (`CompanyShow.tsx`) navigierte bei Tab-Wechsel jedoch explizit auf den **englischen, internen** Pfad (`navigate(`/companies/${id}/show/${value}`)`) und ermittelte den aktiven Tab über `useMatch("/companies/:id/show/:tab")`. Der `LegacyPathRedirect`, der für exakt dieselbe Zielroute registriert ist, schrieb die URL sofort auf `/kunden/...` zurück — danach matchte `useMatch("/companies/...")` nicht mehr, `currentTab` fiel auf `"activity"` zurück, obwohl die URL korrekt den Ziel-Tab enthielt. Der Effekt war nur bei Nicht-Standard-Tabs sichtbar, weil der Default-Tab ohnehin `"activity"` ist.
 
-```ts
-const tabMatch = useMatch("/companies/:id/show/:tab");
-const currentTab = tabMatch?.params?.tab || "activity";
-```
+**Fix (`CompanyShow.tsx`):** Navigation und Tab-Erkennung verwenden jetzt ausschließlich den kanonischen deutschen Pfad — `useMatch("/kunden/:id/show/:tab")` und `navigate()` über `noraCreatePath({ resource: "companies", type: "show", id })`. Der `LegacyPathRedirect`-Mechanismus wird für diese interne Navigation nicht mehr durchlaufen; kein Redirect-Suppression-Hack, kein Timing/Delay.
 
-und navigiert bei Tab-Wechsel explizit auf den **englischen, internen** Pfad:
+**Weitere Show-Komponenten geprüft:** `ContactShow.tsx` hat keinen `useMatch`-basierten Tab-Mechanismus (kein Bug). `DealShow.tsx` ist dialogbasiert ohne URL-Tab-Routing (kein Bug). Kein weiterer Fix nötig.
 
-```ts
-navigate(`/companies/${record?.id}/show/${value}`);
-```
+**Verifiziert:**
 
-Die sichtbare/aliasierte Route ist aber deutsch (`/kunden/...`, siehe `routing/noraRoutes.ts`, `NORA_RESOURCE_PATHS`, `translateLegacyPathname`). Hypothese: Nach der Navigation zu `/companies/...` greift der Legacy-Redirect-Mechanismus und schreibt die URL auf `/kunden/...` um. `useMatch("/companies/:id/show/:tab")` matcht danach nicht mehr (falsches Pattern), `currentTab` fällt auf `"activity"` zurück, obwohl die URL korrekt den Ziel-Tab enthält.
-
-**Mögliche Fixrichtungen** (nicht bewertet/entschieden):
-
-- `useMatch` zusätzlich (oder stattdessen) gegen das deutsche Pfadmuster `/kunden/:id/show/:tab` prüfen
-- `navigate()` direkt auf den deutschen Pfad statt den englischen ausführen lassen
-- Redirect-Mechanismus so anpassen, dass er den Tab-Teil des Pfads erhält, statt nur `id`/`show` zu behandeln
-
-**Nicht in dieser Session untersucht:** ob derselbe Mechanismus auch `ContactShow`/`DealShow`-Tabs betrifft (falls diese ein ähnliches `useMatch`-Pattern verwenden).
+- Neuer Regressionstest `src/components/atomic-crm/companies/CompanyShow.test.tsx` (2 Tests: Kontakte-Tab und Änderungsverlauf-Tab bleiben nach Klick aktiv, geprüft gegen den echten React-Router-Baum via `StoryWrapper`). Test schlägt nachweislich fehl gegen den alten Code (verifiziert per `git stash`) und ist grün gegen den Fix.
+- Live im Browser (`npm run dev:demo`, `/#/kunden/1/show`, Kunde „Familie Krüger"): Klick auf „1 Kontakt" → URL wird stabil `#/kunden/1/show/contacts`, Tab bleibt aktiv, kein Rücksprung. Klick auf „Änderungsverlauf" → `#/kunden/1/show/history`, ebenfalls stabil.
 
 ---
 

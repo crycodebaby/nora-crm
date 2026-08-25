@@ -36,6 +36,7 @@ import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Contact, Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
+import { noraCreatePath } from "../routing/noraRoutes";
 import {
   AdditionalInfo,
   AddressInfo,
@@ -99,17 +100,22 @@ const CompanyShowContent = () => {
   const { record } = useShowContext<Company>();
   const navigate = useNavigate();
 
-  // Get tab from URL or default to "activity"
-  const tabMatch = useMatch("/companies/:id/show/:tab");
+  // CompanyShow is mounted under the German Nora alias route
+  // (/kunden/:id/show/*, see NoraResourceAliasRoutes.tsx). Navigating to the
+  // legacy English /companies/... path here would be caught by the
+  // LegacyPathRedirect route and rewritten back to /kunden/..., which this
+  // useMatch would then fail to match — so both must use the German path.
+  const tabMatch = useMatch("/kunden/:id/show/:tab");
   const currentTab = tabMatch?.params?.tab || "activity";
 
   const handleTabChange = (value: string) => {
     if (value === currentTab) return;
-    if (value === "activity") {
-      navigate(`/companies/${record?.id}/show`);
-      return;
-    }
-    navigate(`/companies/${record?.id}/show/${value}`);
+    const showPath = noraCreatePath({
+      resource: "companies",
+      type: "show",
+      id: record?.id,
+    });
+    navigate(value === "activity" ? showPath : `${showPath}/${value}`);
   };
 
   if (!record) return null;

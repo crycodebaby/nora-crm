@@ -96,8 +96,8 @@ export const germanCrmMessages = {
       },
       autocomplete: {
         create_error: "Beim Anlegen des Kunden ist ein Fehler aufgetreten",
-        create_item: "%{item} anlegen",
-        create_label: "Tippen Sie, um einen neuen Kunden anzulegen",
+        create_item: "Neuen Kunden „%{item}“ anlegen",
+        create_label: "Neuen Kunden anlegen",
       },
     },
     contacts: {

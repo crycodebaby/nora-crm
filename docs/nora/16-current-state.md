@@ -83,11 +83,11 @@ Diese Fakten wurden per read-only MCP-Abfragen gegen die echte Produktionsdatenb
 
 ## 7. Welche offenen Bugs/UX-Probleme existieren?
 
-Details, Status und vermutete Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassung:
+Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassung (Stand 2026-08-25, Live-UX-Fixes-Wave):
 
-1. **Kunden-Autocomplete „neuen Kunden anlegen"-UX** (`/kontakte/create`) — Aktionstext nicht eindeutig als Aktion erkennbar. Bestätigt im Code (`create_label` in den Message-Katalogen). **OPEN.**
-2. **LinkedIn-Feld auf `/kontakte/create`** — als Live-Feedback gemeldet; aktueller Code (`ContactInputs.tsx`) rendert kein `linkedin_url`-Feld mehr, nur `links_jsonb`. **Nicht im aktuellen Code reproduzierbar** — vermutlich veralteter Stand vor Deploy oder Browser-Cache beim Melder. Vor erneuter Untersuchung live neu prüfen.
-3. **Kunden-Show Tab-/Routing-Bug** (`/#/kunden/:id/show`, Tabs „Änderungsverlauf"/„Kontakte") — beim Klick kurze Navigation, danach Rücksprung zu „Aktivität". Selbst live beobachtet (2026-08-25, `/kunden/27/show`). Wahrscheinliche Ursache identifiziert, aber nicht gefixt: `CompanyShowContent` navigiert per `useMatch("/companies/:id/show/:tab")`-Pattern (technischer, englischer Pfad) via `navigate(`/companies/${id}/show/${tab}`)`; die sichtbare/aliasierte deutsche Route ist aber `/kunden/...` (`routing/noraRoutes.ts`, `translateLegacyPathname`). Vermutung: Nach der Navigation greift der Legacy-Redirect und schreibt die URL auf `/kunden/...` um, wodurch `useMatch` (das nur auf `/companies/...` passt) nicht mehr matcht und `currentTab` auf `"activity"` zurückfällt. **BUG, Ursache nicht verifiziert/gefixt.**
+1. **Kunden-Autocomplete „neuen Kunden anlegen"-UX** (`/kontakte/create`) — **RESOLVED / VERIFIED.** Create-Option ist jetzt visuell abgesetzt (eigene `CommandGroup`, `CommandSeparator`, Plus-Icon) und zeigt eindeutigen deutschen Aktionstext („Neuen Kunden „%{item}" anlegen"). Fix in `autocomplete-input.tsx` (generisch) + drei Message-Kataloge. Test + Live-Verifikation vorhanden.
+2. **LinkedIn-Feld auf `/kontakte/create`** — **VERIFIED NOT REPRODUCIBLE / ALREADY RESOLVED.** `ContactInputs.tsx` rendert kein `linkedin_url`-Feld, nur `links_jsonb`; live auf `/#/kontakte/create` bestätigt kein „LinkedIn"-Text vorhanden. Keine Code-Änderung nötig.
+3. **Kunden-Show Tab-/Routing-Bug** (`/#/kunden/:id/show`, Tabs „Änderungsverlauf"/„Kontakte") — **RESOLVED / VERIFIED.** Root Cause verifiziert: `CompanyShowContent` navigierte auf den englischen `/companies/...`-Pfad, den der `LegacyPathRedirect` (registriert für dieselbe deutsche `kunden/*`-Alias-Route) sofort auf `/kunden/...` zurückschrieb — `useMatch("/companies/...")` matchte danach nicht mehr. Fix: Navigation und `useMatch` verwenden jetzt durchgehend den kanonischen deutschen Pfad (`CompanyShow.tsx`). `ContactShow`/`DealShow` geprüft, nicht betroffen (kein `useMatch`-Tab-Mechanismus bzw. dialogbasiert). Regressionstest + Live-Verifikation vorhanden.
 
 ## 8. Welche nächsten Domain-Waves sind geplant?
 

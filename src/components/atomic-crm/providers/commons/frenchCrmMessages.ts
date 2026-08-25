@@ -93,8 +93,8 @@ export const frenchCrmMessages = {
       autocomplete: {
         create_error:
           "Une erreur s'est produite lors de la création de l'entreprise",
-        create_item: "Créer %{item}",
-        create_label: "Commencez à taper pour créer une nouvelle entreprise",
+        create_item: 'Créer le nouveau client « %{item} »',
+        create_label: "Créer un nouveau client",
       },
       filters: {
         customer_type: "Type de client",
