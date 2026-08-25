@@ -1,0 +1,17 @@
+-- Nora CRM – Migration-Bookkeeping-Korrektur
+--
+-- Kontext: Beim Anwenden von 20260825120000_customer_contact_workflow.sql auf
+-- nora-crm-prod über die Supabase-MCP-`apply_migration`-Aktion wurde die
+-- Migration versehentlich mit dem Anwendungszeitstempel statt dem
+-- Dateinamen-Zeitstempel in `supabase_migrations.schema_migrations`
+-- eingetragen (20260825120416 statt 20260825120000). Das wäre exakt dieselbe
+-- Repo/Prod-Drift-Falle wie bei nora_core_indexes gewesen.
+--
+-- Korrektur direkt auf Prod: UPDATE des Versionswerts auf den korrekten
+-- Dateinamen-Zeitstempel. Diese Korrektur selbst wurde dabei erneut mit einem
+-- eigenen (Anwendungszeitstempel-)Eintrag in schema_migrations vermerkt —
+-- diese leere Datei bildet exakt diesen einen Bookkeeping-Eintrag nach, damit
+-- lokale und Produktions-Migrationshistorie wieder deckungsgleich sind.
+--
+-- Kein Schema-, Daten- oder Verhaltensunterschied. Rein Historie-Abgleich.
+select 1;
