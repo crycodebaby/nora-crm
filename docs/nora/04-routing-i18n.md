@@ -22,6 +22,18 @@ Alte Pfade sollen nicht hart brechen:
 
 Interne alte Links dürfen über Redirects weiter funktionieren, sollten aber schrittweise auf Nora-Pfade umgestellt werden.
 
+### ⚠️ Bekanntes Fehlermuster: interne Navigation gegen englische Ur-Code-Pfade
+
+**Bug-Beispiel (behoben, siehe Decision Log „Live-UX-Fixes-Wave“):** `CompanyShow.tsx` (unverändert aus dem englischen Atomic-CRM-Ur-Code übernommen) navigierte beim Tab-Wechsel intern per `navigate()` auf den alten englischen Pfad `/companies/...` und erkannte den aktiven Tab per `useMatch("/companies/:id/show/:tab")`. Der `LegacyPathRedirect` (siehe oben) hat diese `/companies/...`-URL aber sofort auf `/kunden/...` zurückgeschrieben — danach passte `useMatch` nicht mehr, der Tab sprang zurück auf „Aktivität“.
+
+**Ursache:** Ur-Code aus dem englischen Atomic CRM nutzt naturgemäß die englischen internen Pfade. Solange ein Nora-Agent so einen Code-Teil unangetastet übernimmt oder neuen Code nach diesem Vorbild schreibt, kann derselbe Fehler an anderer Stelle wieder auftreten (`ContactShow`, `DealShow`, neue Show-/List-Komponenten, o. ä. — im Rahmen dieser Wave geprüft und aktuell nicht betroffen).
+
+**Regel für zukünftige Änderungen:**
+
+- Interne Navigation (`navigate()`, `<Link to=...>`), Routenerkennung (`useMatch`) und Redirect-Ziele **immer** über die deutschen Nora-Pfade (`noraCreatePath()` aus `routing/noraRoutes.ts`) aufbauen — nicht über hartcodierte englische Pfade wie `/companies/...`, `/contacts/...`, `/deals/...`.
+- Die englischen Pfade sind ausschließlich als **Legacy-Redirect-Eingang** gedacht (`LegacyPathRedirect`), nicht als interne Navigationsquelle.
+- Bei Übernahme von Atomic-CRM-Ur-Code oder beim Schreiben neuer Show-/Tab-/Routing-Logik: explizit prüfen, ob englische Pfade hartcodiert sind, und auf `noraRoutes.ts`-Helfer umstellen.
+
 ## Öffentliche Auth-Routen (Welle 6a)
 
 | Route | Zweck | Auth |
