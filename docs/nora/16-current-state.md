@@ -55,8 +55,8 @@ Chronologisch, Details im Decision Log (`06-decision-log.md`):
 11. **Customer & Contact Workflow Wave** (2026-08-25) — siehe Abschnitt 5
 12. **Live-UX-Fixes-Wave** (2026-08-25): Kunden-Show Tab-Routing-Bug behoben, Kunden-Autocomplete-Create-UX verbessert — siehe Abschnitt 7
 13. **Unified Tasks Wave** (2026-08-25): `tasks.company_id`, historisch stabiler Kundenkontext, „Aufgaben"-Tab auf der Kundenakte — siehe Abschnitt 5a und Decision Log "2026-08-25 – Unified Tasks Wave". **Nur lokal verifiziert, noch nicht auf Production angewendet** (siehe Abschnitt 6).
-14. **Self Contact Wave** (2026-08-26): `companies.self_contact_id` (Person repräsentiert eine Kundenakte unabhängig von `contacts.company_id`), Kontakt→Kundenakte-Workflow, atomarer Quick-Capture-Command, Quick-Capture-Schritt-2-UX, Draft-Härtung, „Firma"-Label, Position-Fix — siehe Abschnitt 5b und Decision Log "2026-08-26 – Self Contact Wave". **Nur lokal verifiziert, noch nicht auf Production angewendet.**
-15. **Pre-Production Hardening Patch** (2026-08-27): unabhängiger Review der noch ungepushten Self Contact Wave fand konkrete Bugs; behoben und mit Tests abgesichert (kein neues Feature) — siehe Decision Log "2026-08-27 – Pre-Production Hardening Patch". **Nur lokal verifiziert, noch nicht gepusht/deployed** (wie die zugrunde liegende Self Contact Wave).
+14. **Self Contact Wave** (2026-08-26): `companies.self_contact_id` (Person repräsentiert eine Kundenakte unabhängig von `contacts.company_id`), Kontakt→Kundenakte-Workflow, atomarer Quick-Capture-Command, Quick-Capture-Schritt-2-UX, Draft-Härtung, „Firma"-Label, Position-Fix — siehe Abschnitt 5b und Decision Log "2026-08-26 – Self Contact Wave". **PRODUCTION VERIFIED** (2026-08-28, siehe Abschnitt 6).
+15. **Pre-Production Hardening Patch + Final RC Hardening** (2026-08-27/28): unabhängiger Review der Self Contact Wave fand konkrete Bugs (FakeRest-Parität, Falsy-ID-Audit, Error Contract, hardcodierter Navigationspfad, Individual Name Invariant am CREATE-Pfad); alle behoben und mit Tests abgesichert (kein neues Feature) — siehe Decision Log "2026-08-27 – Pre-Production Hardening Patch". **PRODUCTION VERIFIED** (2026-08-28, kontrollierter Release inkl. Production-Migration, DB-Verifikation, Deployment und Live-Smoke-Test).
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
@@ -105,14 +105,16 @@ Vollständige Entscheidung: Decision Log „2026-08-26 – Self Contact Wave".
 
 ## 6. Was ist aktuell live?
 
-Verifiziert am 2026-08-25 in dieser Session (read-only Prüfung gegen `nora-crm-prod`, Vercel-Deployment-Status) — **vor** der Unified Tasks Wave:
+Verifiziert am 2026-08-28 in dieser Session (kontrollierter Production Release, read-only Nachverifikation gegen `nora-crm-prod` und das echte Vercel-Projekt):
 
-- **Datenbank** (`nora-crm-prod`, Supabase-Projekt `kixxroxtfzbcbzctohex`): Migrationshistorie deckt sich mit `supabase/migrations/` bis einschließlich `20260825120612_nora_migration_bookkeeping_cleanup.sql`. Enthält die Customer & Contact Workflow Wave vollständig (Spalten, Constraint, Unique-Index, RPCs, Views). **Enthält die Unified Tasks Wave noch nicht** — Migration `20260825190000_unified_tasks_wave.sql` ist nur lokal angewendet, kein Production-Apply in dieser Session.
-- **Frontend** (Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`): Deployment `dpl_hJp4Bn4tuSaDP4nLGevLd5hNT6No`, Commit `e3f18f7f`, Status READY, Target production. Enthält weder die Live-UX-Fixes-Wave noch die Unified Tasks Wave.
-- **Produktionsdaten sind real**, nicht synthetisch: zum Prüfzeitpunkt 14 Kunden, 16 Kontakte, 6 Vorgänge, 3 Nutzer. Die Aussage „Nora ist noch kein Produktivsystem mit echten Kundendaten" (`00-project-context.md`, historisches Nicht-Ziel für v0.1) **stimmt nicht mehr** — als historische Zieldefinition markiert, siehe dort.
-- Git: `origin/main` bei Commit `e19e307f` (Live-UX-Fixes-Wave committed & gepusht; Unified Tasks Wave lokal, noch nicht gepusht).
+- **Datenbank** (`nora-crm-prod`, Supabase-Projekt `kixxroxtfzbcbzctohex`): Migrationshistorie deckt sich vollständig mit `supabase/migrations/` bis einschließlich `20260826120000_self_contact_and_quick_capture_case.sql`. Enthält damit die Customer & Contact Workflow Wave, die Unified Tasks Wave, die Self Contact Wave und den Final-RC-Domain-Fix (Individual Name Invariant am CREATE-Pfad) vollständig — Spalten, Constraints, Trigger, RPCs, Views, Grants read-only nachverifiziert.
+- **Frontend** (Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`): Deployment `dpl_5UL3NL8J2bTwGCAJrobUNZRQ99NB`, Commit `0c93912137d610f570b5c5fd449573d25160fe86`, Status READY, Target production. Enthält alle oben genannten Waves inkl. des Final-RC-Hardening-Commits.
+- **Produktionsdaten sind real**, nicht synthetisch: zum Prüfzeitpunkt 14 Kunden (davon 0 `individual`), 15 Kontakte, 4 Nutzer. Die Aussage „Nora ist noch kein Produktivsystem mit echten Kundendaten" (`00-project-context.md`, historisches Nicht-Ziel für v0.1) **stimmt nicht mehr** — als historische Zieldefinition markiert, siehe dort.
+- Git: `origin/main` bei Commit `0c93912137d610f570b5c5fd449573d25160fe86`.
+- **Live-Smoke-Test** (frische Session gegen `nora.ergart.de`, echte eingeloggte Sitzung): Hotboard/Kunden/Kontakte/Vorgänge laden fehlerfrei, Kunden-Show-Tab-Routing bleibt stabil (`#/kunden/:id/show/contacts`, `.../history`), Quick Capture öffnet und bietet den vorhandenen Hauptansprechpartner eines bestehenden Kunden korrekt an, Self-Contact-UI (Button „Kundenakte für diese Person anlegen") rendert fehlerfrei, „Firma"/„Privatperson"-Kundenart-Auswahl korrekt, keine rohen i18n-Keys oder DB-Fehlermeldungen sichtbar. Keine Testdaten in Production angelegt.
+- **Bekannter, bereits behobener Migration-Bookkeeping-Drift:** `apply_migration` trug die Self-Contact-Migration zunächst mit dem Anwendungszeitstempel (`20260828013725`) statt dem Dateiname-Zeitstempel (`20260826120000`) ein — derselbe Drift-Typ wie bei der Customer & Contact Workflow Migration am 2026-08-25. Per transaktionalem `UPDATE` auf den korrekten Zeitstempel korrigiert und read-only nachverifiziert (genau eine Zeile geändert, keine andere Migration betroffen). **Dauerhafte Regel:** nach jedem `apply_migration` gegen `nora-crm-prod` `list_migrations` gegen das lokale Zeitstempel-Präfix prüfen, bevor der Release als abgeschlossen gilt.
 
-Diese Fakten wurden per read-only MCP-Abfragen gegen die echte Produktionsdatenbank und das echte Vercel-Projekt verifiziert, nicht angenommen.
+Diese Fakten wurden per read-only MCP-Abfragen gegen die echte Produktionsdatenbank und das echte Vercel-Projekt sowie per Live-Browser-Smoke-Test verifiziert, nicht angenommen.
 
 ## 7. Welche offenen Bugs/UX-Probleme existieren?
 
@@ -124,11 +126,17 @@ Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassun
 
 ## 8. Welche nächsten Domain-Waves sind geplant?
 
-1. **Unified Tasks Wave + Self Contact Wave auf Production anwenden** — Migrationen und Frontend sind lokal vollständig implementiert und verifiziert (Abschnitt 5a/5b), aber noch nicht auf `nora-crm-prod` migriert/deployed. Nächster kontrollierter Schritt, keine automatische Freigabe.
-2. Legacy-Spalten-Cleanup (`linkedin_url`, `website`, `context_links`, `companies.phone_number`) nach ausreichender Übergangszeit.
-3. Mobile „Aufgaben"-Bereich auf der Kundenakte (die Unified Tasks Wave hat den Tab nur für Desktop `CompanyShow` gebaut, mobile `CompanyShowContentMobile` hat aktuell keine Tab-Struktur).
-4. Privatperson/Firma-Unterscheidung in Quick Capture (bewusst nicht Teil der Self Contact Wave, siehe Decision Log).
-5. Customer-Archive-/Soft-Delete-Lifecycle (`ArchiveCustomer`/`RestoreCustomer`) als Ersatz für das normale Kunden-Löschen — separate, noch nicht designte Wave; aktuell nur die notwendige Self-Contact-Delete-Invariante abgesichert.
+Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sind seit 2026-08-28 auf Production angewendet und PRODUCTION VERIFIED (siehe Abschnitt 6) — nicht mehr offen.
+
+1. Legacy-Spalten-Cleanup (`linkedin_url`, `website`, `context_links`, `companies.phone_number`) nach ausreichender Übergangszeit.
+2. Mobile „Aufgaben"-Bereich auf der Kundenakte (die Unified Tasks Wave hat den Tab nur für Desktop `CompanyShow` gebaut, mobile `CompanyShowContentMobile` hat aktuell keine Tab-Struktur).
+3. Privatperson/Firma-Unterscheidung in Quick Capture (bewusst nicht Teil der Self Contact Wave, siehe Decision Log).
+4. Customer-Archive-/Soft-Delete-Lifecycle (`ArchiveCustomer`/`RestoreCustomer`) als Ersatz für das normale Kunden-Löschen — separate, noch nicht designte Wave; aktuell nur die notwendige Self-Contact-Delete-Invariante abgesichert.
+5. Idempotency für retry-fähige/externe Write Commands (`CreateQuickCaptureCase`, `CreateCustomerFromContact`) — bewusst offen gelassen, additives `idempotencyKey`-Feld später möglich ohne Breaking Change.
+6. Stabilerer, maschinenlesbarer Error Contract ohne Text-/Regex-Abhängigkeit (aktuell mappt `normalizeCrmError` auf Basis von Nachrichtenmustern — funktioniert, aber fragil bei künftigen Wortlaut-Änderungen).
+7. `deals.contact_ids bigint[]` als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen/Zeitdimension) — siehe Decision Log.
+8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
+9. Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views) — nicht durch die Self-Contact-Wave verursacht, bewusst außerhalb dieses Scopes.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 
