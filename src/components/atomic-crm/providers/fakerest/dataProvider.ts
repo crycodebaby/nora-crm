@@ -47,6 +47,10 @@ import type {
   CreateQuickCaptureCaseParams,
   CreateQuickCaptureCaseResult,
 } from "../../operations/executeCreateQuickCaptureCase";
+import type {
+  CreateQuickCaptureTaskParams,
+  CreateQuickCaptureTaskResult,
+} from "../../operations/executeCreateQuickCaptureTask";
 import {
   readOperationIdFromMeta,
   withOperationIdParams,
@@ -71,6 +75,59 @@ import {
   isEffectiveContactOfCompany,
 } from "./internal/taskContextCheck";
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
+
+/**
+ * FakeRest mirror of nora_private.idempotency_check/idempotency_persist
+ * (Idempotency Wave, 2026-08-29) — minimal contract parity, not a
+ * transactional mechanism (FakeRest is single-threaded JS, so the
+ * advisory-lock/unique-violation concurrency proof the real RPCs need
+ * doesn't apply here). Keyed by (command, idempotencyKey, actorId), mirrors
+ * the server's (command, idempotency_key, actor_id) scope.
+ */
+const fakeRestIdempotencyStore = new Map<
+  string,
+  { fingerprint: string; result: unknown }
+>();
+
+const stableStringify = (value: unknown): string =>
+  JSON.stringify(value, (_key, val) => {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      return Object.keys(val)
+        .sort()
+        .reduce((acc: Record<string, unknown>, k) => {
+          acc[k] = (val as Record<string, unknown>)[k];
+          return acc;
+        }, {});
+    }
+    return val;
+  });
+
+const runWithFakeRestIdempotency = async <T>(
+  command: string,
+  idempotencyKey: Identifier | null | undefined,
+  actorId: Identifier | null | undefined,
+  fingerprintInput: unknown,
+  run: () => Promise<T>,
+): Promise<T> => {
+  if (idempotencyKey == null) {
+    return run();
+  }
+  const mapKey = `${command}:${String(idempotencyKey)}:${String(actorId ?? "")}`;
+  const fingerprint = stableStringify(fingerprintInput);
+  const existing = fakeRestIdempotencyStore.get(mapKey);
+  if (existing) {
+    if (existing.fingerprint !== fingerprint) {
+      throwNoraError(
+        "Idempotency-Key wurde mit einem anderen fachlichen Request wiederverwendet.",
+        NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT,
+      );
+    }
+    return existing.result as T;
+  }
+  const result = await run();
+  fakeRestIdempotencyStore.set(mapKey, { fingerprint, result });
+  return result;
+};
 
 /**
  * FakeRest mirror of nora_private.create_customer_with_contact_core() (Self
@@ -602,15 +659,27 @@ export const createDataProvider = ({
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["contact.convertToCustomer"],
         {},
-        async () =>
-          createCustomerWithContactCore(dataProvider, {
-            company: params.company,
-            existingCompanyId: null,
-            contact: null,
-            existingContactId: null,
-            selfContactId: params.contactId,
-            markSelf: false,
-          }),
+        async () => {
+          const identity = await getIdentity();
+          return runWithFakeRestIdempotency(
+            "create_customer_with_contact",
+            params.idempotencyKey,
+            identity?.id,
+            {
+              company: params.company,
+              contactId: params.contactId,
+            },
+            () =>
+              createCustomerWithContactCore(dataProvider, {
+                company: params.company,
+                existingCompanyId: null,
+                contact: null,
+                existingContactId: null,
+                selfContactId: params.contactId,
+                markSelf: false,
+              }),
+          );
+        },
       ),
     createQuickCaptureCase: async (
       params: CreateQuickCaptureCaseParams,
@@ -619,58 +688,121 @@ export const createDataProvider = ({
         OPERATION_CATALOG["quickCapture.createCase"],
         {},
         async () => {
-          // "Already effective" (existing company + existing contact that
-          // already belongs to it) is reference-only — no company_id/
-          // is_primary mutation, mirrors create_quick_capture_case()'s
-          // v_reference_contact_id split. Picking an existing contact of an
-          // already-established customer record must not silently
-          // promote/demote who is primary.
-          let referenceContactId: Identifier | null = null;
-          let coreExistingContactId: Identifier | null =
-            params.existingContactId ?? null;
-
-          if (params.existingCompanyId != null && params.existingContactId != null) {
-            if (
-              !(await isEffectiveContactOfCompany(
-                params.existingContactId,
-                params.existingCompanyId,
-                dataProvider,
-              ))
-            ) {
-              throwNoraError(
-                "Quick Capture darf einen bestehenden Kontakt nicht einem Kunden zuordnen, zu dessen effektivem Kontaktkreis er nicht gehört.",
-                NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT,
-              );
-            }
-            referenceContactId = params.existingContactId;
-            coreExistingContactId = null;
-          }
-
-          const core = await createCustomerWithContactCore(dataProvider, {
-            company: params.company ?? null,
-            existingCompanyId: params.existingCompanyId ?? null,
-            contact: params.contact ?? null,
-            existingContactId: coreExistingContactId,
-            selfContactId: params.selfContactId ?? null,
-            markSelf: false,
-            contactIsPrimary: params.contactIsPrimary ?? true,
-          });
-
-          const company_id = core.company_id;
-          const contact_id =
-            referenceContactId != null
-              ? Number(referenceContactId)
-              : core.contact_id;
-
-          const { data: deal } = await dataProvider.create("deals", {
-            data: {
-              ...params.deal,
-              company_id,
-              contact_ids: contact_id != null ? [contact_id] : [],
+          const identity = await getIdentity();
+          return runWithFakeRestIdempotency(
+            "quick_capture_case.core",
+            params.idempotencyKey,
+            identity?.id,
+            {
+              company: params.company ?? null,
+              existingCompanyId: params.existingCompanyId ?? null,
+              contact: params.contact ?? null,
+              existingContactId: params.existingContactId ?? null,
+              selfContactId: params.selfContactId ?? null,
+              deal: params.deal,
+              contactIsPrimary: params.contactIsPrimary ?? true,
             },
-          });
+            async () => {
+              // "Already effective" (existing company + existing contact
+              // that already belongs to it) is reference-only — no
+              // company_id/is_primary mutation, mirrors
+              // create_quick_capture_case()'s v_reference_contact_id split.
+              // Picking an existing contact of an already-established
+              // customer record must not silently promote/demote who is
+              // primary.
+              let referenceContactId: Identifier | null = null;
+              let coreExistingContactId: Identifier | null =
+                params.existingContactId ?? null;
 
-          return { company_id, contact_id, deal_id: deal.id };
+              if (
+                params.existingCompanyId != null &&
+                params.existingContactId != null
+              ) {
+                if (
+                  !(await isEffectiveContactOfCompany(
+                    params.existingContactId,
+                    params.existingCompanyId,
+                    dataProvider,
+                  ))
+                ) {
+                  throwNoraError(
+                    "Quick Capture darf einen bestehenden Kontakt nicht einem Kunden zuordnen, zu dessen effektivem Kontaktkreis er nicht gehört.",
+                    NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT,
+                  );
+                }
+                referenceContactId = params.existingContactId;
+                coreExistingContactId = null;
+              }
+
+              const core = await createCustomerWithContactCore(dataProvider, {
+                company: params.company ?? null,
+                existingCompanyId: params.existingCompanyId ?? null,
+                contact: params.contact ?? null,
+                existingContactId: coreExistingContactId,
+                selfContactId: params.selfContactId ?? null,
+                markSelf: false,
+                contactIsPrimary: params.contactIsPrimary ?? true,
+              });
+
+              const company_id = core.company_id;
+              const contact_id =
+                referenceContactId != null
+                  ? Number(referenceContactId)
+                  : core.contact_id;
+
+              const { data: deal } = await dataProvider.create("deals", {
+                data: {
+                  ...params.deal,
+                  company_id,
+                  contact_ids: contact_id != null ? [contact_id] : [],
+                },
+              });
+
+              return { company_id, contact_id, deal_id: deal.id };
+            },
+          );
+        },
+      ),
+    createQuickCaptureTask: async (
+      params: CreateQuickCaptureTaskParams,
+    ): Promise<CreateQuickCaptureTaskResult> =>
+      getDefaultOperationManager().execute(
+        OPERATION_CATALOG["quickCapture.createTask"],
+        {},
+        async () => {
+          const identity = await getIdentity();
+          return runWithFakeRestIdempotency(
+            "quick_capture_case.task",
+            params.idempotencyKey,
+            identity?.id,
+            {
+              companyId: params.companyId,
+              contactId: params.contactId ?? null,
+              type: params.type ?? null,
+              text: params.text ?? null,
+              dueDate: params.dueDate ?? null,
+              salesId: params.salesId ?? null,
+            },
+            async () => {
+              if (params.companyId == null && params.contactId == null) {
+                throw new Error("p_company_id or p_contact_id required");
+              }
+              const { data: task } = await dataProvider.create<Task>(
+                "tasks",
+                {
+                  data: {
+                    contact_id: params.contactId ?? undefined,
+                    company_id: params.companyId ?? undefined,
+                    type: params.type ?? undefined,
+                    text: params.text ?? undefined,
+                    due_date: params.dueDate ?? undefined,
+                    sales_id: params.salesId ?? undefined,
+                  } as Task,
+                },
+              );
+              return { task_id: Number(task.id) };
+            },
+          );
         },
       ),
     setPrimaryContact: async (contactId: Identifier): Promise<void> => {

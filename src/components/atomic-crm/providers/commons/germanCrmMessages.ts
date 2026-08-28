@@ -100,6 +100,11 @@ export const germanCrmMessages = {
         create_error: "Beim Anlegen des Kunden ist ein Fehler aufgetreten",
         create_item: "Neuen Kunden „%{item}“ anlegen",
         create_label: "Neuen Kunden anlegen",
+        empty: "Keine passenden Kunden gefunden.",
+        search_placeholder: "Kundenname oder Kundennummer suchen",
+        select_description:
+          "Bestehenden Kunden suchen oder einen neuen anlegen.",
+        select_title: "Kunde auswählen",
       },
     },
     contacts: {
@@ -129,6 +134,21 @@ export const germanCrmMessages = {
         has_newsletter: "Newsletter abonniert",
         sales_id: "Zuständige Person",
         is_primary: "Hauptansprechpartner",
+      },
+      create_form: {
+        intro:
+          "Zuerst die wichtigsten Angaben eintragen. Alles Weitere kann jetzt oder später ergänzt werden.",
+        person: "Person",
+        person_help: "Name und passende Anrede",
+        customer: "Kundenbezug",
+        customer_help: "Position und optional zugehöriger Kunde",
+        contact_methods: "Kontaktmöglichkeiten",
+        contact_methods_help: "So ist diese Person erreichbar",
+        additional: "Weitere Angaben",
+        additional_help: "Links, Notizen und interne Zuordnung",
+        add_email: "Weitere E-Mail-Adresse hinzufügen",
+        add_phone: "Weitere Telefonnummer hinzufügen",
+        add_link: "Weiteren Link hinzufügen",
       },
       helper: {
         is_primary:
@@ -627,6 +647,10 @@ export const germanCrmMessages = {
         contact_not_in_customer_context:
           "Dieser Ansprechpartner gehört nicht zu diesem Kunden.",
         permission_denied: "Sie haben für diese Aktion keine Berechtigung.",
+        idempotency_conflict:
+          "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
+        task_idempotency_conflict:
+          "Die Aufgabe wurde bereits mit anderen Daten angelegt. Bitte laden Sie die Seite neu und prüfen Sie die bestehende Aufgabe.",
       },
     },
     contact_to_customer: {
@@ -1018,6 +1042,8 @@ export const germanCrmMessages = {
         "Für eine Privatkundenakte wird ein Vor- oder Nachname der vertretenden Person benötigt.",
       private_customer_already_exists:
         "Für diese Person existiert bereits eine Privatkundenakte.",
+      idempotency_conflict:
+        "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
     },
     unsaved_changes: {
       title: "Änderungen verwerfen?",

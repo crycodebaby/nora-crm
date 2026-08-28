@@ -8,6 +8,7 @@ import { getAccessRedirectTarget } from "./noraAccessGuardUtils";
 import { resolveDirtyClose } from "./useNoraDirtyDialog";
 import {
   clearQuickCaptureDraft,
+  CURRENT_DRAFT_SCHEMA_VERSION,
   loadQuickCaptureDraft,
   saveQuickCaptureDraft,
   type QuickCaptureDraft,
@@ -16,7 +17,7 @@ import {
 const DRAFT_USER = "sales-v03k1";
 
 const baseDraft = (): QuickCaptureDraft => ({
-  schemaVersion: 2,
+  schemaVersion: CURRENT_DRAFT_SCHEMA_VERSION,
   step: 1,
   searchQuery: "Müller",
   selectedCompany: null,
@@ -37,6 +38,7 @@ const baseDraft = (): QuickCaptureDraft => ({
   createTask: false,
   taskType: "rueckruf",
   dismissCustomerSuggestions: false,
+  idempotencyKey: "11111111-1111-4111-8111-111111111111",
   savedAt: "2026-07-14T12:00:00.000Z",
   updatedAt: "2026-07-14T12:00:00.000Z",
 });

@@ -44,6 +44,7 @@ export type OperationType =
   | "contact.setPrimary"
   | "contact.convertToCustomer"
   | "quickCapture.createCase"
+  | "quickCapture.createTask"
   | "task.create"
   | "task.update"
   | "task.archive"

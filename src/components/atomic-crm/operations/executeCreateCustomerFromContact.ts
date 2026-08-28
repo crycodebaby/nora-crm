@@ -21,6 +21,12 @@ export type CreateCustomerFromContactCompanyInput = Record<string, unknown> & {
 export type CreateCustomerFromContactParams = {
   contactId: string | number;
   company: CreateCustomerFromContactCompanyInput;
+  /**
+   * Idempotency Wave (2026-08-29): client-owned write-intent id, stable
+   * across retries of the SAME dialog submit attempt. Not the same thing as
+   * operation_id. Omit for the pre-wave, non-idempotent behavior.
+   */
+  idempotencyKey?: string | null;
 };
 
 export type CreateCustomerFromContactResult = {
@@ -36,6 +42,7 @@ type RpcFn = (
     p_existing_contact_id: null;
     p_self_contact_id: string | number;
     p_mark_self: false;
+    p_idempotency_key: string | null;
   },
 ) => {
   setHeader: (
@@ -62,6 +69,7 @@ export const executeCreateCustomerFromContact = async (
         p_existing_contact_id: null,
         p_self_contact_id: params.contactId,
         p_mark_self: false,
+        p_idempotency_key: params.idempotencyKey ?? null,
       });
       const { data, error } = await builder.setHeader(
         NORA_OPERATION_ID_HEADER,

@@ -34,6 +34,7 @@ import {
   createCustomerFromContact,
   ExistingPrivateCustomerRecordError,
 } from "../application/commands/createCustomerFromContact";
+import { createOperationId } from "../operations/operationContext";
 
 type ContactToCustomerDialogProps = {
   contact: Contact;
@@ -61,6 +62,14 @@ export const ContactToCustomerDialog = ({
   const [existingRecordId, setExistingRecordId] = useState<
     string | number | null
   >(null);
+  // Idempotency Wave (2026-08-29): minted once per dialog session, stable
+  // across retries of the SAME submit attempt (network retry, retry after a
+  // transient error). No persisted draft for this dialog (unlike Quick
+  // Capture) — closing/reopening starts a new fachlicher intent and a new
+  // key (Key Contract, see docs/nora/06-decision-log.md "Idempotency Wave").
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    createOperationId(),
+  );
 
   const contactName =
     `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim();
@@ -72,6 +81,7 @@ export const ContactToCustomerDialog = ({
     setZipcode("");
     setCity("");
     setExistingRecordId(null);
+    setIdempotencyKey(createOperationId());
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -100,6 +110,7 @@ export const ContactToCustomerDialog = ({
                 city: city.trim() || undefined,
                 sales_id: identity?.id,
               },
+        idempotencyKey,
       });
       notify("crm.contact_to_customer.success", { type: "info" });
       handleOpenChange(false);

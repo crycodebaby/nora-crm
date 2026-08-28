@@ -95,8 +95,13 @@ export const frenchCrmMessages = {
       autocomplete: {
         create_error:
           "Une erreur s'est produite lors de la création de l'entreprise",
-        create_item: 'Créer le nouveau client « %{item} »',
+        create_item: "Créer le nouveau client « %{item} »",
         create_label: "Créer un nouveau client",
+        empty: "Aucun client correspondant trouvé.",
+        search_placeholder: "Rechercher par nom ou numéro de client",
+        select_description:
+          "Recherchez un client existant ou créez-en un nouveau.",
+        select_title: "Sélectionner un client",
       },
       filters: {
         customer_type: "Type de client",
@@ -130,6 +135,21 @@ export const frenchCrmMessages = {
         has_newsletter: "Abonné à la newsletter",
         sales_id: "Responsable de compte",
         is_primary: "Contact principal",
+      },
+      create_form: {
+        intro:
+          "Saisissez d’abord les informations essentielles. Le reste peut être ajouté maintenant ou plus tard.",
+        person: "Personne",
+        person_help: "Nom et formule d’adresse",
+        customer: "Lien avec le client",
+        customer_help: "Fonction et client associé facultatif",
+        contact_methods: "Coordonnées",
+        contact_methods_help: "Comment joindre cette personne",
+        additional: "Informations supplémentaires",
+        additional_help: "Liens, notes et attribution interne",
+        add_email: "Ajouter une adresse e-mail",
+        add_phone: "Ajouter un numéro de téléphone",
+        add_link: "Ajouter un lien",
       },
       helper: {
         is_primary:
@@ -625,6 +645,10 @@ export const frenchCrmMessages = {
         contact_not_in_customer_context:
           "Ce contact n'appartient pas à ce client.",
         permission_denied: "Vous n'avez pas l'autorisation pour cette action.",
+        idempotency_conflict:
+          "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
+        task_idempotency_conflict:
+          "Cette tâche a déjà été créée avec des données différentes. Veuillez recharger la page et vérifier la tâche existante.",
       },
     },
     contact_to_customer: {
@@ -992,7 +1016,8 @@ export const frenchCrmMessages = {
       invalid_url: "Doit être une URL valide",
       invalid_linkedin_url: "L'URL doit provenir de linkedin.com",
       invalid_email: "Doit être une adresse e-mail valide",
-      company_name_required: "Veuillez indiquer un nom de client ou de personne.",
+      company_name_required:
+        "Veuillez indiquer un nom de client ou de personne.",
     },
     access: {
       read_only_mode: "Mode lecture seule",
@@ -1020,6 +1045,8 @@ export const frenchCrmMessages = {
         "Une fiche client particulier nécessite un prénom ou un nom pour la personne représentée.",
       private_customer_already_exists:
         "Cette personne a déjà une fiche client particulier.",
+      idempotency_conflict:
+        "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
     },
     unsaved_changes: {
       title: "Abandonner les modifications ?",

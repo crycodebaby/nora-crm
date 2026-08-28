@@ -536,6 +536,37 @@ create table nora_private.google_oauth_states (
     created_at timestamptz not null default now()
 );
 
+-- Idempotency Wave (2026-08-29): claim + replay state for retry-safe write
+-- commands (CreateQuickCaptureCase core+task scopes, CreateCustomerFromContact).
+-- No direct client grants — reachable only via nora_private.idempotency_check/
+-- idempotency_persist, called from SECURITY DEFINER RPCs.
+create table nora_private.idempotency_records (
+    id uuid primary key default gen_random_uuid(),
+    command text not null,
+    idempotency_key uuid not null,
+    actor_id uuid not null,
+    request_fingerprint text not null,
+    result jsonb not null,
+    created_at timestamptz not null default now(),
+    constraint idempotency_records_command_check
+        check (command ~ '^[a-z][a-z0-9_.]*$'),
+    constraint idempotency_records_result_object_check
+        check (jsonb_typeof(result) = 'object')
+);
+
+create unique index uq_idempotency_records_scope
+    on nora_private.idempotency_records (command, idempotency_key, actor_id);
+
+create index idempotency_records_created_at_idx
+    on nora_private.idempotency_records (created_at desc);
+
+comment on table nora_private.idempotency_records is
+    'Idempotency Wave (2026-08-29): claim + replay state for retry-safe write commands. No direct client grants — reachable only via nora_private.idempotency_check/idempotency_persist, called from SECURITY DEFINER RPCs. idempotency_key is not authentication, not authorization, not an operation_id.';
+
+revoke all on table nora_private.idempotency_records from public;
+revoke all on table nora_private.idempotency_records from anon;
+revoke all on table nora_private.idempotency_records from authenticated;
+
 -- Foundation Wave 3: Error Observatory (failed operations; not audit_events)
 create table public.operation_errors (
     id uuid primary key default gen_random_uuid(),

@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-29 – Idempotency Wave | [Springen](#2026-08-29-idempotency-wave) |
 | 2026-08-28 – Error Contract Wave | [Springen](#2026-08-28-error-contract-wave) |
 | 2026-08-28 – Residual Security Advisor Closure | [Springen](#2026-08-28-residual-security-advisor-closure) |
 | 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`) | [Springen](#2026-08-28-intentional-privileged-read-views-init_state--sales_directory) |
@@ -80,6 +81,43 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-08-29 – Idempotency Wave
+
+### Kontext
+
+Zwei vorherige Assessment-Sessions (kein Code) hatten den bestehenden Write-Pfad von `CreateQuickCaptureCase`/`CreateCustomerFromContact` kartiert und den dokumentierten Rest-Gap aus der Self Contact Wave (`06-decision-log.md` Zeile ~226, `16-current-state.md` Punkt 5) bestätigt: kein serverseitiger Schutz gegen Doppelclick/Retry, Duplikate bei Netzwerk-Timeout möglich. Diese Session implementiert die additive, kleinstmögliche Idempotency-Lösung.
+
+### Entscheidung
+
+- Neue Tabelle `nora_private.idempotency_records` (`command`, `idempotency_key`, `actor_id`, `request_fingerprint`, `result`), unique auf `(command, idempotency_key, actor_id)`. Kein direkter Client-Zugriff — nur über zwei neue private Helper (`nora_private.idempotency_check`/`idempotency_persist`), analog zum bestehenden `create_customer_with_contact_core`-Muster.
+- Atomizität: `pg_advisory_xact_lock(hashtext('nora_idempotency'), hashtext(command || ':' || key))` + Unique-Index-Backstop mit `unique_violation`-Fallback — dasselbe bewährte Muster wie `start_checklist_run_from_template` (v0.3d3). Empirisch mit zwei echten parallelen Postgres-Sessions gegen denselben Key bewiesen: genau eine committete Mutation.
+- Transport: expliziter RPC-Parameter `p_idempotency_key uuid default null`, kein Header (bewusst getrennt von `x-nora-operation-id`, das reine technische Korrelation bleibt und nie Geschäftslogik steuert). `operation_id != idempotency_key` bleibt in beide Richtungen unabhängig.
+- **Signatur-Gate empirisch verifiziert**: `CREATE OR REPLACE FUNCTION` mit einem zusätzlichen Parameter ersetzt die Funktion NICHT — Postgres legt eine zweite, überladene Funktion an. Gegen die lokale Supabase/PostgREST-Instanz reproduziert: ein alter 5-Parameter-Aufruf brach danach mit `PGRST203` ("Could not choose the best candidate function"). Migration verwendet deshalb `DROP FUNCTION` + `CREATE FUNCTION` für beide bestehenden RPCs — empirisch bestätigt: alter und neuer Aufruf-Shape lösen danach exakt eine Funktion auf, keine Overloads.
+- Request-Fingerprint: `md5(jsonb_build_object(...)::text)` über die fachlich relevanten Parameter (kein `pgcrypto` nötig, `md5` ist Postgres-Core). Gleicher Key + gleicher Fingerprint → Replay des gespeicherten `result`; gleicher Key + anderer Fingerprint → neuer Code `NORA_IDEMPOTENCY_CONFLICT`.
+- **Quick-Capture-Task-Grenze**: Core (Company+Contact+Deal, `create_quick_capture_case`) bleibt eine Transaktion. Task bekommt eine eigene, neue RPC `public.create_quick_capture_task` mit eigener Transaktion und eigenem Idempotency-Scope (`quick_capture_case.task`) unter demselben client-seitigen `idempotency_key` wie der Core-Scope (`quick_capture_case.core`) — bewusst NICHT in eine gemeinsame Transaktion gezogen, damit die bestehende Best-Effort-Semantik (Core kann erfolgreich sein, auch wenn Task fehlschlägt) strukturell erhalten bleibt. Ein technisch fehlgeschlagener Task-Versuch hinterlässt keinen Record (Transaktion rollt komplett zurück) und bleibt frei retriable — kein `task_attempted`-Flag nötig, nur ein committeter Record zählt als „erledigt".
+- Key Ownership/Lifecycle: Quick Capture mintet den Key einmal pro frischem Formular-Zustand und persistiert ihn im bestehenden Draft (`quickCaptureDraft.ts`, Schema-Version 2→3) — ein Reload/Resume verwendet denselben Key. Bei `taskFailed:true` wird der Draft (und damit der Key) bewusst NICHT gelöscht, nur bei vollständigem Erfolg oder explizitem Verwerfen. `ContactToCustomerDialog` hat keinen persistierten Draft — der Key lebt nur für die Dialog-Session (kleinere, aber bewusste Garantie als bei Quick Capture).
+- Ein `NORA_IDEMPOTENCY_CONFLICT` im Task-Scope wird in `createQuickCaptureCase.ts` explizit NICHT in `taskFailed:true` verschluckt (das würde einen missbrauchten Retry mit geändertem Task-Payload verstecken), sondern als harter `QuickCaptureSubmitError` propagiert.
+
+### Empirische Verifikation (lokal, Docker/Supabase, keine Produktionsänderung)
+
+- Vollständiger `npx supabase db reset --local` inkl. neuer Migration `20260829120000_nora_idempotency_core.sql` — sauber.
+- SQL-Regressionssuite (alle `supabase/tests/*_verification.sql`, inkl. `rbac_rls_matrix.sql`/`rbac_rls_verification.sql` in korrekter Reihenfolge und `google_calendar_verification.sql`) grün.
+- Manuelle Szenario-Matrix gegen echtes lokales Postgres: First-Call, Replay (gleiche IDs, keine neuen Zeilen), Conflict bei geändertem Payload, RBAC unverändert (`viewer` weiterhin abgelehnt, VOR jeder Idempotency-Prüfung), Backward-Compat ohne Key, Task-Replay, Task-Conflict, fehlgeschlagener Task-Versuch blockiert Retry nicht, **zwei echte parallele Postgres-Sessions mit gleichem Key → genau eine Mutation** (Core und Task separat bewiesen).
+- Vitest (513→518 Tests inkl. neuer `fakeRestIdempotencyParity.test.ts`), `npm run typecheck`, `npm run build` — alle grün.
+
+### Nicht eingeführt (bewusst)
+
+Redis, Worker, Queue, Outbox, Event Bus, generisches Command-Framework, `idempotency_key`-Spalte direkt auf `tasks` (würde Infrastruktur-Semantik in eine Domain-Tabelle leaken), Retention/Cleanup-Infrastruktur (Volumen aktuell gering, `operation_errors` hat dasselbe Muster ohne Cleanup).
+
+### Hardening nach unabhängigem Review (2026-08-29)
+
+Ein unabhängiger Adversarial Review (separate Session, kein Code aus der Implementierungs-Session übernommen) fand keinen Duplicate-Write-Pfad, keine Datenkorruption und kein Authorization-Leak, aber drei zu klärende Punkte. Alle drei sind jetzt bewusst entschieden:
+
+- **`CreateCustomerFromContact` / `customerKind=individual` — Lost-Response-Replay**: Der Client-Precheck (`findExistingPrivateCustomerRecord`) lief bisher immer vor dem RPC-Call und hätte einen Lost-Response-Retry (Versuch 1 committet serverseitig, Response geht verloren, Versuch 2 mit demselben `idempotencyKey`) fälschlich in `ExistingPrivateCustomerRecordError` umgeleitet, statt den idempotenten RPC-Replay-Pfad zu erreichen. **Entscheidung**: der Precheck läuft jetzt nur noch, wenn **kein** `idempotencyKey` übergeben wird (Legacy-Aufrufer ohne Idempotency-Schutz). Mit gesetztem Key geht der Aufruf direkt zum RPC — die DB ist für Replay UND für den Fremd-Intent-Fall (`uq_companies_self_contact_individual`-Backstop → `NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS` → bestehender Catch-Block re-resolved und wirft dieselbe `ExistingPrivateCustomerRecordError`) bereits vollständig autoritativ, keine zusätzliche Client-Logik nötig. Gleicher Key + geänderter Payload läuft stattdessen in `NORA_IDEMPOTENCY_CONFLICT` (RPC-Fingerprint-Mismatch), nicht in `ExistingPrivateCustomerRecordError`.
+- **Quick Capture Task — No-Task → Task unter gleichem Root-Key (Semantic B, jetzt verbindlich)**: Task ist ein eigenständiger, optionaler Sub-Intent mit eigenem Idempotency-Scope (`quick_capture_case.task`), nicht Teil des eingefrorenen Core-Intents. Wenn unter einem Root-`idempotency_key` bisher **kein** Task erfolgreich committet wurde (unabhängig davon, ob überhaupt einer angefordert wurde oder ob ein Versuch technisch fehlschlug), darf unter demselben Key **erstmals oder erneut korrigiert** ein Task übermittelt werden — das ist kein Conflict. Erst ein bereits **erfolgreich committeter** Task-Record friert den Task-Scope ein: derselbe Payload → Replay, ein anderer Payload → `NORA_IDEMPOTENCY_CONFLICT`. Kurz: committed scope = eingefroren, uncommitted scope = frei retriable/korrigierbar/entfernbar. Diese Regel war im Code bereits so implementiert; sie war nur nicht explizit hier festgehalten.
+- **`idempotency_persist` — Preconditions statt Refactor**: Der `unique_violation`-Fallback in `idempotency_persist` rollt nur seinen eigenen INSERT zurück, nicht vorherige Business-Writes derselben Transaktion. Sicher ist das nur, weil alle drei Call-Sites (`create_customer_with_contact`, `create_quick_capture_case`, `create_quick_capture_task`) ausnahmslos zuerst `idempotency_check` (inkl. Advisory-Lock-Erwerb) aufrufen und danach in **derselben** Transaktion Business-Write → `idempotency_persist` ausführen. Das ist jetzt explizit in den Funktions-Kommentaren beider Helper festgehalten (siehe Migration). Kein generisches Idempotency-Framework, keine neue Architektur — nur die Precondition sichtbar gemacht. Jede künftige Wiederverwendung von `idempotency_persist` MUSS dieses Muster (Lock zuerst, dann Write, dann Persist, alles in einer TX) einhalten.
+- **Offen bleibt (ehrlich dokumentiert)**: ein vollständiger authentifizierter End-to-End-HTTP-Beweis gegen die lokale PostgREST-Instanz (echter `authenticated`-User-JWT, nicht `service_role`) für Legacy-Call/neuer Call/Replay/Conflict wurde in keiner der bisherigen Sessions hergestellt (lokale Test-User-Anmeldung war nicht ohne unverhältnismäßigen Aufwand erreichbar). Katalog-Ebene (genau ein Overload pro Funktion nach frischem Reset) und direkte SQL-Ebene sind bewiesen; der reine HTTP-Layer-Beweis mit `authenticated`-Rolle bleibt ein Rest-Gap vor Production.
 
 ## 2026-08-28 – Error Contract Wave
 

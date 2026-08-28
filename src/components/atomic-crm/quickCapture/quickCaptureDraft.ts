@@ -16,7 +16,7 @@ export const quickCaptureDraftStorageKey = (userId: unknown): string =>
   `nora-quick-capture-draft:${String(userId)}`;
 
 /** Bump when the draft shape changes incompatibly — an old-shaped draft is treated as "no draft" rather than risking a runtime error on load. */
-export const CURRENT_DRAFT_SCHEMA_VERSION = 2;
+export const CURRENT_DRAFT_SCHEMA_VERSION = 3;
 
 /** A draft older than this is treated as stale and silently discarded rather than surprising the user with old data. */
 const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -46,6 +46,14 @@ export type QuickCaptureDraft = {
   createTask: boolean;
   taskType: QuickCaptureTaskOption;
   dismissCustomerSuggestions: boolean;
+  /**
+   * Idempotency Wave (2026-08-29): stable write-intent id for this Quick
+   * Capture attempt, minted once and persisted with the draft so a
+   * reload/resume retry reuses the SAME key (not a new one — see
+   * docs/nora/06-decision-log.md "Idempotency Wave" Key Contract). Cleared
+   * together with the draft on success or explicit discard.
+   */
+  idempotencyKey: string;
   savedAt: string;
   updatedAt: string;
 };

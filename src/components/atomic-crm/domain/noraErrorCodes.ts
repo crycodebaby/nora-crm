@@ -24,6 +24,7 @@ export const NORA_ERROR_CODES = {
   SELF_CONTACT_DELETE_BLOCKED: "NORA_SELF_CONTACT_DELETE_BLOCKED",
   PRIVATE_CUSTOMER_ALREADY_EXISTS: "NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS",
   PERMISSION_DENIED: "NORA_PERMISSION_DENIED",
+  IDEMPOTENCY_CONFLICT: "NORA_IDEMPOTENCY_CONFLICT",
 } as const;
 
 export type NoraErrorCode =
@@ -71,6 +72,10 @@ export const NORA_ERROR_DEFINITIONS: Record<
   [NORA_ERROR_CODES.PERMISSION_DENIED]: {
     category: "authorization",
     messageKey: "crm.errors.permission_denied",
+  },
+  [NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT]: {
+    category: "conflict",
+    messageKey: "crm.errors.idempotency_conflict",
   },
 };
 

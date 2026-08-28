@@ -94,6 +94,10 @@ export const englishCrmMessages = {
         create_error: "An error occurred while creating the company",
         create_item: 'Create new company "%{item}"',
         create_label: "Create new company",
+        empty: "No matching customers found.",
+        search_placeholder: "Search by customer name or number",
+        select_description: "Find an existing customer or create a new one.",
+        select_title: "Select customer",
       },
       filters: {
         customer_type: "Customer type",
@@ -128,9 +132,23 @@ export const englishCrmMessages = {
         sales_id: "Account manager",
         is_primary: "Primary contact",
       },
+      create_form: {
+        intro:
+          "Enter the essential details first. You can add everything else now or later.",
+        person: "Person",
+        person_help: "Name and preferred form of address",
+        customer: "Customer association",
+        customer_help: "Role and optional associated customer",
+        contact_methods: "Contact details",
+        contact_methods_help: "How this person can be reached",
+        additional: "Additional details",
+        additional_help: "Links, notes and internal assignment",
+        add_email: "Add another email address",
+        add_phone: "Add another phone number",
+        add_link: "Add another link",
+      },
       helper: {
-        is_primary:
-          "Contacted first for calls/emails. Only one per customer.",
+        is_primary: "Contacted first for calls/emails. Only one per customer.",
       },
       action: {
         add: "Add contact",
@@ -618,6 +636,10 @@ export const englishCrmMessages = {
         contact_not_in_customer_context:
           "This contact does not belong to this customer.",
         permission_denied: "You do not have permission for this action.",
+        idempotency_conflict:
+          "This submission was already started with different data. Please reload the page and try again.",
+        task_idempotency_conflict:
+          "This task was already created with different data. Please reload the page and check the existing task.",
       },
     },
     contact_to_customer: {
@@ -1008,6 +1030,8 @@ export const englishCrmMessages = {
         "A private customer record requires a first or last name for the representing person.",
       private_customer_already_exists:
         "This person already has a private customer record.",
+      idempotency_conflict:
+        "This submission was already started with different data. Please reload the page and try again.",
     },
     unsaved_changes: {
       title: "Discard changes?",

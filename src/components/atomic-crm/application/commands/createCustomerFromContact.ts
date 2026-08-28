@@ -27,6 +27,12 @@ export type CreateCustomerFromContactInput = {
   customerKind: CustomerKind;
   /** Firma-Felder — für customerKind="individual" wird nur "name" als Fallback genutzt, der Server leitet companies.name aus dem Kontakt ab. */
   company: Record<string, unknown> & { name?: string };
+  /**
+   * Idempotency Wave (2026-08-29): client-owned write-intent id for this
+   * dialog submit attempt — same key reused across retries of the SAME
+   * intent. Omit to keep the pre-wave, non-idempotent behavior.
+   */
+  idempotencyKey?: string | null;
 };
 
 export type CreateCustomerFromContactOutput = {
@@ -46,7 +52,16 @@ export const createCustomerFromContact = async (
   dataProvider: CrmDataProvider,
   input: CreateCustomerFromContactInput,
 ): Promise<CreateCustomerFromContactOutput> => {
-  if (input.customerKind === "individual") {
+  // Idempotency Wave (2026-08-29): the pre-check only runs when no
+  // idempotencyKey is supplied (legacy/non-idempotent callers). With a key
+  // present, a lost-response retry of an already-committed attempt would
+  // otherwise find its OWN just-created record here and get diverted into
+  // ExistingPrivateCustomerRecordError before ever reaching the idempotent
+  // RPC's replay path. The RPC + uq_companies_self_contact_individual
+  // backstop below remain authoritative for genuinely distinct intents that
+  // hit an existing private customer record — that path already re-resolves
+  // and throws the same ExistingPrivateCustomerRecordError (see catch below).
+  if (input.customerKind === "individual" && !input.idempotencyKey) {
     const existing = await findExistingPrivateCustomerRecord(
       dataProvider,
       input.contactId,
@@ -67,6 +82,7 @@ export const createCustomerFromContact = async (
     result = await dataProvider.createCustomerFromContact({
       contactId: input.contactId,
       company,
+      idempotencyKey: input.idempotencyKey ?? null,
     });
   } catch (error) {
     // TOCTOU: the pre-check above can miss a private customer record

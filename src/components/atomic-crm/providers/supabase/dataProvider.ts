@@ -47,6 +47,11 @@ import {
   type CreateQuickCaptureCaseParams,
   type CreateQuickCaptureCaseResult,
 } from "../../operations/executeCreateQuickCaptureCase";
+import {
+  executeCreateQuickCaptureTask,
+  type CreateQuickCaptureTaskParams,
+  type CreateQuickCaptureTaskResult,
+} from "../../operations/executeCreateQuickCaptureTask";
 import { executeSetPrimaryContact } from "../../operations/executeSetPrimaryContact";
 import {
   createSupabaseOperationErrorRecorder,
@@ -332,6 +337,13 @@ const getDataProviderWithCustomMethods = () => {
       params: CreateQuickCaptureCaseParams,
     ): Promise<CreateQuickCaptureCaseResult> {
       return executeCreateQuickCaptureCase(params, (fn, args) =>
+        getSupabaseClient().rpc(fn, args as any),
+      );
+    },
+    async createQuickCaptureTask(
+      params: CreateQuickCaptureTaskParams,
+    ): Promise<CreateQuickCaptureTaskResult> {
+      return executeCreateQuickCaptureTask(params, (fn, args) =>
         getSupabaseClient().rpc(fn, args as any),
       );
     },

@@ -59,6 +59,7 @@ import {
   createQuickCaptureCase,
   QuickCaptureSubmitError,
 } from "../application/commands/createQuickCaptureCase";
+import { createOperationId } from "../operations/operationContext";
 import type { CustomerListEntry } from "./mergeCustomerSearchResults";
 import { useDuplicateCandidateSearch } from "./useDuplicateCandidateSearch";
 import {
@@ -99,6 +100,11 @@ const emptyFormState = (): Omit<
   createTask: false,
   taskType: "rueckruf",
   dismissCustomerSuggestions: false,
+  // Idempotency Wave (2026-08-29): minted once per fresh form state (new
+  // dialog session / explicit reset) — persisted with the draft so a
+  // reload/resume retry reuses the SAME key (Key Contract, see
+  // docs/nora/06-decision-log.md "Idempotency Wave").
+  idempotencyKey: createOperationId(),
 });
 
 export const QuickCaptureDialog = ({
@@ -170,6 +176,9 @@ export const QuickCaptureDialog = ({
       createTask: draft.createTask,
       taskType: draft.taskType,
       dismissCustomerSuggestions: draft.dismissCustomerSuggestions,
+      // Idempotency Wave: reuse the SAME key the draft was saved with — a
+      // restored draft is the same fachlicher write intent, not a new one.
+      idempotencyKey: draft.idempotencyKey,
     });
     setContactMode(
       draft.selectedContact
@@ -391,10 +400,18 @@ export const QuickCaptureDialog = ({
         followUpDate: form.followUpDate,
         taskType: form.createTask ? form.taskType : "",
         salesId: identity.id,
+        idempotencyKey: form.idempotencyKey,
       });
     },
     onSuccess: ({ dealId, taskFailed }) => {
-      if (identity?.id != null) clearQuickCaptureDraft(identity.id);
+      // Idempotency Wave (2026-08-29): a failed task keeps the draft (and
+      // therefore its idempotencyKey) around — Core is already committed
+      // and must never be re-run under a fresh key, and only the still-open
+      // draft lets a later retry reuse the SAME key for the task. Only a
+      // full success (or an explicit discard elsewhere) clears it.
+      if (identity?.id != null && !taskFailed) {
+        clearQuickCaptureDraft(identity.id);
+      }
       resetForm();
       if (taskFailed) {
         notify("crm.quick_capture.errors.task_create_failed_partial", {

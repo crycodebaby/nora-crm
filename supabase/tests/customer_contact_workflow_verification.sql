@@ -50,7 +50,7 @@ $$;
 do $$
 begin
     if has_function_privilege(
-        'anon', 'public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean)', 'EXECUTE'
+        'anon', 'public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean, uuid)', 'EXECUTE'
     ) then
         raise exception 'anon must not EXECUTE create_customer_with_contact';
     end if;
@@ -62,7 +62,7 @@ begin
     end if;
 
     if has_function_privilege(
-        'anon', 'public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean)', 'EXECUTE'
+        'anon', 'public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean, uuid)', 'EXECUTE'
     ) then
         raise exception 'anon must not EXECUTE create_quick_capture_case';
     end if;

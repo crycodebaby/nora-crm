@@ -14,10 +14,10 @@
  * successful Kunde+Kontakt+Vorgang, and this is existing, already-tested UX
  * (taskFailed partial-success notice).
  */
-import type { DataProvider, Identifier } from "ra-core";
+import type { Identifier } from "ra-core";
 
 import { cleanupContactForCreate } from "../../contacts/contactModel";
-import type { Contact, Task } from "../../types";
+import type { Contact } from "../../types";
 import {
   buildDealDescriptionWithSource,
   type QuickCaptureSourceChannel,
@@ -59,12 +59,22 @@ export type CreateQuickCaptureCaseInput = {
   followUpDate: string;
   taskType: QuickCaptureTaskOption;
   salesId: Identifier;
+  /**
+   * Idempotency Wave (2026-08-29): client-owned write-intent id for this
+   * Quick Capture submit attempt — same key reused across retries of the
+   * SAME intent (minted/persisted by the caller, e.g. the Quick Capture
+   * draft). Used for BOTH the Core RPC call (company+contact+deal) and the
+   * separate Task RPC call, each checked under its own server-side scope.
+   * Omit to keep the pre-wave, non-idempotent behavior.
+   */
+  idempotencyKey?: string | null;
 };
 
 export type CreateQuickCaptureCaseOutput = {
   dealId: Identifier;
   companyId: Identifier;
   contactId: Identifier | null;
+  taskId?: Identifier | null;
   taskFailed?: boolean;
 };
 
@@ -122,6 +132,7 @@ export const createQuickCaptureCase = async (
         expected_closing_date: input.followUpDate,
         sales_id: input.salesId,
       },
+      idempotencyKey: input.idempotencyKey ?? null,
     });
   } catch (error) {
     // Never build the i18n key from raw exception text (Error Contract,
@@ -134,7 +145,9 @@ export const createQuickCaptureCase = async (
         ? "contact_not_in_customer_context"
         : normalized.code === NORA_ERROR_CODES.PERMISSION_DENIED
           ? "permission_denied"
-          : "case_create_failed";
+          : normalized.code === NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT
+            ? "idempotency_conflict"
+            : "case_create_failed";
     throw new QuickCaptureSubmitError(
       messageSuffix,
       "case",
@@ -157,17 +170,30 @@ export const createQuickCaptureCase = async (
           ? "Besichtigung"
           : "Angebot erstellen";
     try {
-      await (dataProvider as unknown as DataProvider).create<Task>("tasks", {
-        data: {
-          contact_id: result.contact_id ?? undefined,
-          company_id: result.company_id,
-          type: input.taskType,
-          text: taskLabel,
-          due_date: input.followUpDate,
-          sales_id: input.salesId,
-        } as Task,
+      const taskResult = await dataProvider.createQuickCaptureTask({
+        companyId: result.company_id,
+        contactId: result.contact_id ?? null,
+        type: input.taskType,
+        text: taskLabel,
+        dueDate: input.followUpDate,
+        salesId: input.salesId,
+        idempotencyKey: input.idempotencyKey ?? null,
       });
-    } catch {
+      output.taskId = taskResult.task_id;
+    } catch (error) {
+      // NORA_IDEMPOTENCY_CONFLICT means this idempotency_key was already
+      // used to create a DIFFERENT task — a corrupted/misused retry, not an
+      // ordinary best-effort task failure. Never swallow it into
+      // taskFailed:true (that would silently hide the conflict); propagate
+      // as a hard error so the caller sees it (Idempotency Wave, 2026-08-29).
+      const normalized = normalizeCrmError(error);
+      if (normalized.code === NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT) {
+        throw new QuickCaptureSubmitError(
+          "task_idempotency_conflict",
+          "task",
+          normalized.code,
+        );
+      }
       output.taskFailed = true;
     }
   }

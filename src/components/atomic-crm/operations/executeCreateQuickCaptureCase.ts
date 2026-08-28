@@ -33,6 +33,15 @@ export type CreateQuickCaptureCaseParams = {
   /** Only relevant for a brand-new contact (`contact`) added to an EXISTING company — whether it becomes the new Hauptansprechpartner (demoting any previous one). Defaults to true server-side. */
   contactIsPrimary?: boolean;
   deal: CreateQuickCaptureCaseDealInput;
+  /**
+   * Idempotency Wave (2026-08-29): client-owned write-intent id, stable
+   * across retries of the SAME Quick Capture submit attempt (minted once,
+   * persisted in the draft — see quickCaptureDraft.ts). Covers exactly the
+   * Core scope (company+contact+deal); NOT the same thing as operation_id
+   * (a fresh technical correlation id per attempt, owned by OperationManager
+   * below). Omit for the pre-wave, non-idempotent behavior.
+   */
+  idempotencyKey?: string | null;
 };
 
 export type CreateQuickCaptureCaseResult = {
@@ -51,6 +60,7 @@ type RpcFn = (
     p_self_contact_id: string | number | null;
     p_deal: Record<string, unknown>;
     p_contact_is_primary: boolean;
+    p_idempotency_key: string | null;
   },
 ) => {
   setHeader: (
@@ -79,6 +89,7 @@ export const executeCreateQuickCaptureCase = async (
         p_self_contact_id: params.selfContactId ?? null,
         p_deal: params.deal,
         p_contact_is_primary: params.contactIsPrimary ?? true,
+        p_idempotency_key: params.idempotencyKey ?? null,
       });
       const { data, error } = await builder.setHeader(
         NORA_OPERATION_ID_HEADER,

@@ -28,7 +28,8 @@ export type CatalogOperationType =
   | "contact.update"
   | "contact.setPrimary"
   | "contact.convertToCustomer"
-  | "quickCapture.createCase";
+  | "quickCapture.createCase"
+  | "quickCapture.createTask";
 
 export const OPERATION_CATALOG: {
   readonly [K in CatalogOperationType]: OperationCatalogEntry & {
@@ -90,6 +91,13 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Schnellerfassung wird gespeichert …",
     successMessage: "Schnellerfassung wurde gespeichert.",
     errorMessage: "Schnellerfassung konnte nicht gespeichert werden.",
+  },
+  "quickCapture.createTask": {
+    operationType: "quickCapture.createTask",
+    resourceType: "tasks",
+    pendingMessage: "Aufgabe wird angelegt …",
+    successMessage: "Aufgabe wurde angelegt.",
+    errorMessage: "Aufgabe konnte nicht angelegt werden.",
   },
 } as const;
 
