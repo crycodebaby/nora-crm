@@ -124,12 +124,61 @@ Eine anschließende Final-Release-Candidate-Verification fand und behob drei wei
 
 Release vollständig abgeschlossen — keine offenen Nachprüfungspunkte mehr aus dieser Wave.
 
-## Security Follow-ups (bewusst offen, nicht durch Self Contact Wave verursacht)
+## Security Advisor Findings — assessed 2026-08-28
 
-- `public.init_state` — View mit `SECURITY DEFINER` (Security-Advisor-Finding, ERROR-Level)
-- `public.sales_directory` — View mit `SECURITY DEFINER` (Security-Advisor-Finding, ERROR-Level)
+Beide vorbestehenden Supabase Security Advisor ERROR-level Findings (`SECURITY DEFINER`-Views) wurden in einer dedizierten, read-only Session gegen den tatsächlichen `nora-crm-prod`-Katalog (nicht nur den Repo-Stand) untersucht — Definition, Owner, `security_invoker`, Dependency-Baum, Grants (inkl. `anon`/`authenticated`/`service_role`), zugrunde liegende RLS, tatsächliche Consumer und reale Zugriffsszenarien (anon, viewer, office, admin, manipulierter Client). Beide bereits vor der Customer & Contact Workflow Wave vorhanden.
 
-Beide bereits vor der Customer & Contact Workflow Wave vorhanden, in jedem Production-Preflight seither read-only bestätigt als unverändert (zuletzt 2026-08-28, siehe Punkt 9 oben und Decision Log). Bewusst nicht in dieser oder einer der vorherigen Waves behoben — separate Prüfung/Entscheidung nötig, ob `SECURITY DEFINER` hier fachlich erforderlich ist oder auf `SECURITY INVOKER` umgestellt werden kann.
+**Wichtig für zukünftige Agenten:** Die Advisor-ERROR-Klassifikation bezieht sich ausschließlich auf den Mechanismus (`SECURITY DEFINER`/`security_invoker=false`), nicht auf einen nachgewiesenen Exploit. Der Advisor ist ein automatisiertes Signal, keine abschließende Risikobewertung — die tatsächliche Einstufung erfolgt anhand von Definition, Grants, RLS, Consumer und exponiertem Datenumfang.
+
+### `public.init_state`
+
+**Status: `ASSESSED — LOW — KEEP`**
+
+- **Zweck:** Pre-Auth-Bootstrap-Check (`getIsInitialized()` in `authProvider.ts`), ob Nora bereits initialisiert wurde — steuert, ob die öffentliche Sign-up-Seite den Erstregistrierungs-Modus anbietet.
+- **Security-Semantik:** `security_invoker = off`, Owner `postgres` — bewusster Owner-Privilege-Zugriff auf `public.sales`, weil `anon` unter der normalen `sales`-RLS-Policy (`"Sales select own or admin"`, nur `authenticated` + eigene Zeile/Admin) diesen Bootstrap-Zustand sonst nicht feststellen könnte.
+- **Exponierter Datenumfang:** ausschließlich `is_initialized` — faktisch 0/1 (`count(...) from (select ... limit 1) sub`).
+- **Nicht exponiert:** keine Mitarbeiteridentität, Rollen, E-Mails, IDs oder sonstige `sales`-Spalten.
+- **Wichtige Sicherheitsgrenze:** Die tatsächliche Erstbenutzer-/Admin-Rollenvergabe wird **unabhängig von dieser View** serverseitig und atomar durch `nora_private.resolve_first_signup_role()` (`pg_advisory_xact_lock` + frischer `count(*)`) im `handle_new_user()`-Trigger geprüft — nicht via PostgREST erreichbar. Selbst ein falscher `init_state`-Wert kann keine zusätzliche Admin-Vergabe auslösen.
+- **Bewertung:** kein aktueller Privilege-Escalation-Pfad, kein Production-Blocker.
+- **Optionales Defense-in-Depth (nicht dringend, kein Security-Fix):** Die View trägt zusätzlich zu `SELECT` auch `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`/`REFERENCES`/`TRIGGER`-Grants für `anon`/`authenticated` (`grant all on table public.init_state ...` in `06_grants.sql`) — heute wirkungslos, da die View nicht automatisch updatebar ist (Subquery mit `LIMIT`) und keine `INSTEAD OF`-Trigger existieren. Könnte in einer künftigen, separaten kleinen Migration auf `grant select` reduziert werden.
+
+### `public.sales_directory`
+
+**Status: `ASSESSED — LOW — KEEP`**
+
+- **Zweck:** internes Team-/Assignee-Verzeichnis für Zuständigkeits-Picker (z. B. „Zuständig" an Vorgängen), nutzbar von allen aktiven Rollen inkl. `viewer`/`office`, die laut Rollenmatrix (`11-google-calendar-rbac.md` C.3) Teamlisten lesen dürfen, aber laut `sales`-RLS nur die eigene Zeile sehen.
+- **Security-Semantik:** `security_invoker = false`, Owner `postgres` — bewusste, enge Privilegienerweiterung über die strengere `sales`-RLS hinaus.
+- **Exponierte Spalten:** `id`, `first_name`, `last_name`, `avatar` — für alle nicht-`disabled` Sales-Zeilen.
+- **Nicht exponiert (per View-Kommentar dokumentiert):** `role`, `email`, `user_id`, `administrator`, `disabled`.
+- **Zugriff:** kein Tabellen-Grant für `anon` (`revoke all ... from anon`); `SELECT` nur für `authenticated`/`service_role`. Zusätzlich WHERE-Klausel `nora_private.is_active_user()` — SECURITY DEFINER, aber invoker-relativ (liest `auth.uid()` des tatsächlichen Aufrufers, nicht des View-Owners) — EXECUTE ebenfalls nicht an `anon` vergeben.
+- **Bewertung:** keine nachgewiesene unautorisierte Datenexposition. Manipulierter authentifizierter Client (jede Rolle) erhält exakt dieselben 4 Spalten wie über die UI — keine Rollen-/Auth-Metadaten erreichbar.
+- **Ausdrücklich festgehalten:** `security_invoker = true` ist **nicht** als pauschaler Fix vorgesehen — ein Wechsel würde nicht-Admin-Rollen (`office`/`viewer`) auf die eigene `sales`-Zeile beschränken und damit den dokumentierten Team-Picker funktional brechen (verifiziert gegen die aktuelle `"Sales select own or admin"`-Policy).
+
+### Guardrail für zukünftige Änderungen
+
+Die LOW/KEEP-Bewertung gilt **nur** für die aktuell geprüfte Definition, Projektion und Grants (Stand 2026-08-28, gegen `nora-crm-prod` verifiziert). Eine erneute Security-Bewertung ist zwingend erforderlich, wenn geändert werden:
+
+- die projizierten Spalten einer der beiden Views
+- die View-Grants (`anon`/`authenticated`/`service_role`)
+- die zugrunde liegende `sales`-RLS
+- `nora_private.is_active_user()`
+- der Bootstrap-/Sign-up-Auth-Flow
+- `nora_private.resolve_first_signup_role()`
+- die `security_invoker`-Semantik einer der beiden Views
+
+Für `sales_directory` ausdrücklich: **keine** Erweiterung um `role`, `email`, `user_id`, `administrator` oder sonstige Identity-/Security-Metadaten ohne neue, explizite Security-Entscheidung (Decision Log).
+
+Vollständige technische Herleitung (Dependency-Baum, Grant-Tabellen, Rollen-Szenarien): Session-Assessment 2026-08-28, zusammengefasst in `06-decision-log.md` „2026-08-28 – Intentional privileged read views".
+
+## Remaining Security Advisor Follow-ups
+
+Während des Assessments am 2026-08-28 wurden weitere Supabase Security Advisor Hinweise gesehen, aber **nicht bewertet** — hier ausdrücklich als `UNASSESSED` geführt, nicht als „harmlos" und nicht als „Sicherheitslücke":
+
+- `public.number_counters` — INFO `rls_enabled_no_policy` (RLS aktiviert, aber keine Policy vorhanden). Observed, not yet assessed.
+- Mehrere WARN-level `anon_security_definer_function_executable` / `authenticated_security_definer_function_executable` — diverse `SECURITY DEFINER`-Functions/RPCs (u. a. Audit-Trigger-Functions, `assign_customer_number()`, `assign_case_number()`, `create_customer_with_contact(...)`, `create_quick_capture_case(...)`, `set_primary_contact(...)`, `set_sales_role_by_admin(...)`, Google-Kalender-RPCs, Error-Observatory-RPCs) sind für `anon`/`authenticated` über `/rest/v1/rpc/...` ausführbar. Observed, not yet assessed.
+- `auth_leaked_password_protection` — WARN, HaveIBeenPwned-Check aktuell nicht aktiviert. Observed, not yet assessed.
+
+**Nächster sinnvoller Schritt:** eine separate, ebenfalls read-only Residual-Security-Advisor-Assessment-Welle nach demselben Muster wie die `init_state`/`sales_directory`-Session (Definition, Grants, RLS, Consumer, reale Zugriffsszenarien je Finding) — nicht in dieser oder der vorherigen Session vorgenommen.
 
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 

@@ -116,6 +116,19 @@ Verifiziert am 2026-08-28 in dieser Session (kontrollierter Production Release, 
 
 Diese Fakten wurden per read-only MCP-Abfragen gegen die echte Produktionsdatenbank und das echte Vercel-Projekt sowie per Live-Browser-Smoke-Test verifiziert, nicht angenommen.
 
+## 6a. Security Advisor Status
+
+Die zwei vorbestehenden Supabase Security Advisor ERROR-level Findings (`SECURITY DEFINER`-Views):
+
+- `public.init_state`
+- `public.sales_directory`
+
+wurden am 2026-08-28 in einer dedizierten, read-only Assessment-Session gegen den tatsächlichen Production-Katalog (`nora-crm-prod`) untersucht.
+
+Ergebnis: **beide `ASSESSED / LOW / KEEP`, kein aktueller Production Security Blocker.** Die Advisor-ERROR-Klassifikation bezieht sich auf den Mechanismus (`security_invoker = false`/`off`), nicht auf einen nachgewiesenen Exploit — beide Views sind bewusste, eng begrenzte Ausnahmen mit minimaler, geprüfter Datenprojektion. Vollständige Begründung: `17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28"; Architekturentscheidung: `06-decision-log.md` „2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`)".
+
+**Nicht vollständig abgearbeitet:** weitere vom Advisor gemeldete INFO-/WARN-Hinweise (u. a. `number_counters` RLS-ohne-Policy, mehrere ausführbare `SECURITY DEFINER`-Functions/RPCs, `auth_leaked_password_protection`) wurden gesehen, aber in dieser Session **nicht bewertet** — siehe „Remaining Security Advisor Follow-ups" in `17-known-issues-and-planned-waves.md`. Der Supabase Security Advisor als Ganzes ist damit **nicht** abgeschlossen geprüft.
+
 ## 7. Welche offenen Bugs/UX-Probleme existieren?
 
 Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassung (Stand 2026-08-25, Live-UX-Fixes-Wave):
@@ -136,7 +149,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 6. Stabilerer, maschinenlesbarer Error Contract ohne Text-/Regex-Abhängigkeit (aktuell mappt `normalizeCrmError` auf Basis von Nachrichtenmustern — funktioniert, aber fragil bei künftigen Wortlaut-Änderungen).
 7. `deals.contact_ids bigint[]` als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen/Zeitdimension) — siehe Decision Log.
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
-9. Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views) — nicht durch die Self-Contact-Wave verursacht, bewusst außerhalb dieses Scopes.
+9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 
@@ -156,6 +169,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 | Fensterauftrag-Workflow | `09-window-order-workflow.md` |
 | Checklisten/Textbausteine/Audit-Datenmodell | `10-checklists-snippets-audit.md` |
 | Google Kalender, Rollenmodell (RBAC) | `11-google-calendar-rbac.md` |
+| **Security Advisor Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views), unbewertete Follow-ups** | `16-current-state.md` Abschnitt 6a (Kurzstatus) + `17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28" (Details) + `06-decision-log.md` „2026-08-28 – Intentional privileged read views" (Begründung) |
 | Rollen-UX-Abnahme | `12-role-ux-acceptance.md` |
 | CRM-Audit-Retention | `13-crm-audit-retention.md` |
 | Google-Kalender-Implementierung (read-only) | `14-google-calendar-readonly-implementation.md` |

@@ -332,6 +332,29 @@ Details in `11-google-calendar-rbac.md`:
 - **Testrolle `nora_rls_test`** nur lokal via `rbac_rls_setup.sql` — **nie** in Produktionsmigrationen
 - **`anon`:** kein Tabellen-GRANT auf CRM-Tabellen; RLS + Grants zusammen prüfen
 
+### Falle 34: `SECURITY DEFINER`-Views/Functions blind auf Advisor-Finding umstellen
+
+Falsch:
+
+```text
+Supabase Security Advisor meldet ERROR "Security Definer View" →
+sofort security_invoker=true setzen, weil der Advisor es als Fehler markiert.
+```
+
+Richtig:
+
+```text
+Vor jeder Änderung an einer SECURITY DEFINER-View/-Function oder ihrem
+security_invoker prüfen: konkrete Datenprojektion, Grants (anon/authenticated/
+service_role), zugrunde liegende RLS, tatsächliche Consumer, serverseitige
+Auth-Checks, funktionale Abhängigkeiten. Ein Advisor-Finding ist ein
+automatisiertes Signal (jede SECURITY DEFINER-View ist per Default ein
+ERROR-Lint), kein Beweis für einen Exploit — und kein Beweis für
+Harmlosigkeit. Beide Richtungen müssen belegt werden.
+```
+
+`public.init_state` und `public.sales_directory` sind verifizierte, bewusste Ausnahmen mit geprüfter minimaler Datenprojektion — siehe `17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28" und `06-decision-log.md` „2026-08-28 – Intentional privileged read views". Für diese beiden Views gilt zusätzlich: Änderungen an Projektion, Grants, zugrunde liegender RLS oder `security_invoker` erfordern eine neue Security-Bewertung, keine Wiederverwendung der alten Einstufung. Weitere vom Advisor gemeldete `SECURITY DEFINER`-Functions/RPCs sind **nicht** Teil dieser Bewertung — siehe „Remaining Security Advisor Follow-ups" im selben Dokument.
+
 ### sales-Datenexposition (v0.4b.2)
 
 | Ressource | Wer liest | Felder |

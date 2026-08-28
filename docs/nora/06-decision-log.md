@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`) | [Springen](#2026-08-28-intentional-privileged-read-views-init_state--sales_directory) |
 | 2026-08-27 – Pre-Production Hardening Patch | [Springen](#2026-08-27-pre-production-hardening-patch) |
 | 2026-08-26 – Self Contact Wave | [Springen](#2026-08-26-self-contact-wave) |
 | 2026-08-25 – Unified Tasks Wave | [Springen](#2026-08-25-unified-tasks-wave) |
@@ -75,6 +76,37 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`)
+
+### Kontext
+
+Zwei vorbestehende Supabase Security Advisor ERROR-level Findings (`SECURITY DEFINER`-Views: `public.init_state`, `public.sales_directory`) waren seit vor der Customer & Contact Workflow Wave bekannt, aber nie im Detail bewertet — nur in jedem Production-Preflight read-only als „unverändert" bestätigt. Diese Session führte ein dediziertes, ausschließlich read-only Assessment gegen den tatsächlichen `nora-crm-prod`-Katalog durch (Definition, Owner, `security_invoker`, Dependency-Baum, Grants für `anon`/`authenticated`/`service_role`, zugrunde liegende `sales`-RLS, reale Consumer, Zugriffsszenarien je Rolle inkl. manipuliertem Client).
+
+### Entscheidung
+
+`public.init_state` und `public.sales_directory` bleiben bewusst mit `security_invoker = off` bzw. `false` bestehen. Keine Code-, Migrations- oder Grant-Änderung in dieser Session.
+
+### Begründung
+
+Beide Views überschreiten eine strengere Base-Table-RLS auf `public.sales` gezielt für einen engen, fachlich notwendigen Read-Use-Case:
+
+- **`init_state`:** anonymer Bootstrap-Status-Check (Sign-up-UI-Gating) mit minimalem, nicht-personenbezogenem 0/1-Signal (`is_initialized`). `anon` hat unter der `sales`-RLS-Policy „Sales select own or admin" sonst keine Möglichkeit, diesen Zustand vor dem Login festzustellen. Die tatsächliche Sicherheitsgrenze für „nur ein Erst-Admin" liegt nicht in dieser View, sondern unabhängig davon in `nora_private.resolve_first_signup_role()` (Advisory-Lock + frischer Count, nicht via PostgREST erreichbar).
+- **`sales_directory`:** internes Teamverzeichnis (`id`, `first_name`, `last_name`, `avatar` — explizit ohne `role`/`email`/`user_id`/`administrator`/`disabled`) für Zuständigkeits-Picker, nutzbar von allen aktiven Rollen. Die `sales`-RLS beschränkt reguläre Reads auf die eigene Zeile (oder Admin) — ohne die Owner-Privilegien der View könnten `office`/`viewer` keine Kollegen für Zuständigkeits-Auswahl sehen, was der dokumentierten Rollenmatrix (`11-google-calendar-rbac.md` C.3: „Kalender/Teamlisten lesen: alle Rollen") widerspricht.
+
+Ein pauschaler Wechsel auf `security_invoker = true` wurde für beide Views geprüft und würde den jeweiligen Use-Case nachweislich regressieren (`init_state`: `anon` sähe immer `is_initialized = 0`; `sales_directory`: `office`/`viewer` sähen nur die eigene Zeile).
+
+Security assessment: **LOW / KEEP** für beide Findings — **kein aktueller Production Security Blocker**. Der Supabase Advisor markiert hier den Mechanismus (jede `SECURITY DEFINER`-View ist per Default ein ERROR-Lint), nicht einen nachgewiesenen Exploit; die tatsächliche Risikobewertung erfolgt anhand der konkreten Datenprojektion, Grants, RLS, Consumer und Zugriffsszenarien — nicht anhand des Advisor-Labels allein.
+
+### Guardrail
+
+Diese Entscheidung gilt nur für die aktuell geprüfte Projektion, Grants und Abhängigkeiten beider Views (Stand 2026-08-28). Änderungen an den projizierten Spalten, den View-Grants, der zugrunde liegenden `sales`-RLS, `nora_private.is_active_user()`, dem Bootstrap-/Sign-up-Flow, `resolve_first_signup_role()` oder der `security_invoker`-Semantik erfordern eine neue Security-Bewertung. `sales_directory` darf ohne neue Entscheidung nicht um `role`, `email`, `user_id`, `administrator` oder sonstige Identity-/Security-Metadaten erweitert werden.
+
+**Optional, nicht dringend:** `init_state` trägt heute wirkungslose zusätzliche DML-Grants (`INSERT`/`UPDATE`/`DELETE`/…) für `anon`/`authenticated` neben `SELECT` (nicht updatebare View, keine `INSTEAD OF`-Trigger) — könnte in einer künftigen kleinen, separat reviewten Migration auf `grant select` reduziert werden. Das ist Grant-Hygiene/Defense-in-Depth, kein Security-Fix.
+
+Vollständige Details je Finding (Datenklassifikation, Grant-Tabellen, Rollen-Zugriffsszenarien): `17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28". Weitere vom Advisor gemeldete INFO-/WARN-Hinweise (`number_counters` RLS-ohne-Policy, mehrere ausführbare `SECURITY DEFINER`-RPCs, `auth_leaked_password_protection`) wurden in dieser Session **nicht bewertet** — siehe „Remaining Security Advisor Follow-ups" im selben Dokument. Der Supabase Security Advisor ist damit **nicht** vollständig abgearbeitet.
 
 ---
 

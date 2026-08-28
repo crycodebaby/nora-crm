@@ -60,6 +60,12 @@ Bei Checklisten-/Audit-Migration (ab v0.3d2) zusätzlich:
 - [ ] Checklisten-Start über RPC `start_checklist_run_from_template` — keine manuellen Run-Item-Inserts vom Client
 - [ ] v0.3d4: `DealProductionChecklistSection` in `DealShow` — Demo-Hinweis bei `VITE_IS_DEMO`
 
+Bei Änderungen an `SECURITY DEFINER`-Functions/Views, `security_invoker`, Grants oder RLS zusätzlich:
+
+- [ ] Zugriffsmatrix geprüft: `anon`, `authenticated viewer`, `authenticated office`, `authenticated admin`, `service_role` (nur soweit relevant)
+- [ ] UI niemals als Security Boundary behandelt — Prüfung erfolgt gegen Grants/RLS/Function-Body, nicht gegen sichtbare UI-Zustände
+- [ ] Bei `init_state`/`sales_directory`: bestehende Bewertung (`17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28") gilt nur für die dort geprüfte Projektion/Grants — bei Änderung neu bewerten, nicht die alte Einstufung übernehmen
+
 Bei RBAC-/Kalender-Änderungen (ab v0.4a) zusätzlich:
 
 - [ ] `docs/nora/11-google-calendar-rbac.md` gelesen
