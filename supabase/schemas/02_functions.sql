@@ -2967,7 +2967,7 @@ begin
         raise exception 'not authenticated' using errcode = '28000';
     end if;
     if not nora_private.can_write() then
-        raise exception 'insufficient privileges' using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+        raise exception 'insufficient privileges' using errcode = '42501';
     end if;
 
     select company_id into v_company_id from public.contacts where id = p_contact_id;
