@@ -110,15 +110,15 @@ Langfristige Zielrichtung: normales „Kunde löschen" durch einen fachlichen Li
 
 ---
 
-### 9a. Error Contract Wave — lokal implementiert, noch nicht auf Production
+### 9a. Error Contract Wave — PRODUCTION VERIFIED
 
-**Status: LOCAL VERIFICATION PASSED (2026-08-28) — kein Push, kein Deploy**
+**Status: RESOLVED / VERIFIED (2026-08-28) — PRODUCTION VERIFIED seit 2026-08-28**
 
 Maschinenlesbarer Nora Error Code (`DETAIL = NORA_<CODE>`) für fünf real nachgewiesene Business-Fälle: `NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT`, `NORA_INDIVIDUAL_NAME_REQUIRED`, `NORA_SELF_CONTACT_DELETE_BLOCKED`, `NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS`, `NORA_PERMISSION_DENIED`. Behebt die zuvor dokumentierte Individual-Name-Invariant-Erkennungslücke (fiel bisher auf `unknown`/`crm.errors.load_failed`). Additive Migration `20260828140000_error_contract_wave.sql`, `normalizeCrmError()` ist jetzt machine-code-first mit Legacy-Regex-Fallback. Vollständige Herleitung: Decision Log „2026-08-28 – Error Contract Wave".
 
 **Bewusst nicht in dieser Welle behoben, dokumentierter Follow-up:** FakeRest hat weiterhin keine `can_write()`-Entsprechung — Autorisierung wird im Demo-Modus ausschließlich UI-seitig (`canAccess`) durchgesetzt, nie auf Datenebene. `NORA_PERMISSION_DENIED` ist dadurch in FakeRest strukturell nicht end-to-end testbar (nur gegen echtes Supabase). Eine vollständige FakeRest-Autorisierungs-Parität wäre eine eigene, größere Welle (kleines RBAC-Modell im Demo-Provider) — bewusst nicht in dieser Welle aufgebaut, um den Scope klein zu halten.
 
-**Nächster Schritt vor Production-Release:** kontrollierter Release wie bei vorherigen Waves (RC einfrieren → Production-DB-Migration → DB-Verifikation → Push → Deploy → Live-Smoke), siehe `07-agent-change-checklist.md`.
+**Kontrollierter Production Release (2026-08-28):** Migration `20260828140000_error_contract_wave.sql` (SHA-256 `969768dac028914dd0f4fda3b9953927e5b5104d2cb6231f31387c2f12d30bfa`) gegen `nora-crm-prod` angewendet, Migration-Bookkeeping-Drift (dritte Wiederholung desselben Musters — Anwendungszeitstempel statt Repo-Zeitstempel) erkannt und korrigiert, alle sechs betroffenen Functions read-only vollständig verifiziert (Signatur, Security-Mode, `search_path`, Grants, alle fünf Codes). Commit `dbc41a742f82bdbb0fe734df7d0be33db6a5e35e` nach `origin/main` gepusht, Vercel-Production-Deployment (`dpl_92Y6n2e16R8ZfT1DcUXLrw98Cynh`) verifiziert (READY, korrekter Commit, Alias `nora.ergart.de`). Live-Smoke-Test erfolgreich (Hotboard/Kunden/Kontakte/Vorgänge, Tab-Routing — keine Fehler, keine Testdaten angelegt). Details: Decision Log „2026-08-28 – Error Contract Wave" Nachtrag „Kontrollierter Production Release — PRODUCTION VERIFIED".
 
 ---
 
