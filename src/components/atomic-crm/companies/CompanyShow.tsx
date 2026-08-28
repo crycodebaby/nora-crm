@@ -250,7 +250,11 @@ const SelfContactCard = ({ company }: { company: Company }) => {
   return (
     <RecordContextProvider value={selfContact}>
       <RouterLink
-        to={`/contacts/${selfContact.id}/show`}
+        to={noraCreatePath({
+          resource: "contacts",
+          type: "show",
+          id: selfContact.id,
+        })}
         className="nora-card p-4 flex items-center justify-between hover:bg-muted transition-colors"
       >
         <div>

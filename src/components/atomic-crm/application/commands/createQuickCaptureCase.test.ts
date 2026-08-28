@@ -52,6 +52,22 @@ describe("createQuickCaptureCase — Error Contract", () => {
     });
   });
 
+  it("maps FakeRest's German-text 'effektivem Kontaktkreis' rejection to the same stable code as the SQL/English wording (Final Release Candidate Verification, 2026-08-28 — verified live via the running demo, previously silently fell through to case_create_failed)", async () => {
+    const dataProvider = buildDataProvider(() =>
+      Promise.reject(
+        new Error(
+          "Quick Capture darf einen bestehenden Kontakt nicht einem Kunden zuordnen, zu dessen effektivem Kontaktkreis er nicht gehört.",
+        ),
+      ),
+    );
+
+    await expect(
+      createQuickCaptureCase(dataProvider, baseInput),
+    ).rejects.toMatchObject({
+      message: "contact_not_in_customer_context",
+    });
+  });
+
   it("maps an unrecognized/free-text RPC error to the generic case_create_failed code, never the raw exception text", async () => {
     const dataProvider = buildDataProvider(() =>
       Promise.reject(

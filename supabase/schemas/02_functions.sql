@@ -2650,6 +2650,8 @@ declare
     v_customer_kind text;
     v_name text;
     v_count int;
+    v_self_contact_touched boolean := false;
+    v_derived_name text;
 begin
     v_count :=
         (case when p_company is not null then 1 else 0 end) +
@@ -2717,6 +2719,7 @@ begin
         end if;
         update public.companies set self_contact_id = p_self_contact_id where id = v_company_id;
         v_contact_id := p_self_contact_id;
+        v_self_contact_touched := true;
     elsif p_existing_contact_id is not null then
         update public.contacts
         set company_id = v_company_id,
@@ -2730,6 +2733,7 @@ begin
 
         if v_customer_kind = 'individual' or p_mark_self then
             update public.companies set self_contact_id = v_contact_id where id = v_company_id;
+            v_self_contact_touched := true;
         end if;
     elsif p_contact is not null then
         -- A new contact for an EXISTING company may need to coexist with an
@@ -2764,7 +2768,32 @@ begin
 
         if v_customer_kind = 'individual' or p_mark_self then
             update public.companies set self_contact_id = v_contact_id where id = v_company_id;
+            v_self_contact_touched := true;
         end if;
+    end if;
+
+    -- Individual Name Invariant, CREATE-path (Final Release Candidate
+    -- Verification, 2026-08-28): whenever this call establishes the self
+    -- contact of an INDIVIDUAL customer record — regardless of which of the
+    -- three paths above did it, and regardless of an existing vs. brand-new
+    -- company — companies.name must be authoritatively derived from that
+    -- contact's canonical name, never left as an independently-supplied
+    -- p_company.name. A representing contact with no first_name/last_name
+    -- (after trim) is rejected outright rather than producing a nameless
+    -- Privatkundenakte. Mirrors nora_private.sync_individual_company_name()
+    -- (the rename-path guard) so CREATE and rename share the same authority.
+    if v_customer_kind = 'individual' and v_self_contact_touched then
+        select trim(both ' ' from coalesce(first_name, '') || ' ' || coalesce(last_name, ''))
+        into v_derived_name
+        from public.contacts
+        where id = v_contact_id;
+
+        if v_derived_name is null or v_derived_name = '' then
+            raise exception 'Privatkundenakte benoetigt einen Vor- oder Nachnamen des repraesentierenden Kontakts'
+                using errcode = '23514';
+        end if;
+
+        update public.companies set name = v_derived_name where id = v_company_id;
     end if;
 
     return query select v_company_id, v_contact_id;
@@ -2772,7 +2801,7 @@ end;
 $$;
 
 comment on function nora_private.create_customer_with_contact_core(jsonb, bigint, jsonb, bigint, bigint, boolean, boolean) is
-    'Shared core write used by both public.create_customer_with_contact and public.create_quick_capture_case — do not duplicate this logic.';
+    'Shared core write used by both public.create_customer_with_contact and public.create_quick_capture_case — do not duplicate this logic. For customer_kind=individual, companies.name is authoritatively derived from the representing contact''s first_name/last_name whenever self_contact_id is established here — a blank/whitespace-only name is rejected, and any client-supplied p_company.name is overridden (Falle 28, 03-data-model-guardrails.md).';
 
 create or replace function public.create_customer_with_contact(
     p_company jsonb,

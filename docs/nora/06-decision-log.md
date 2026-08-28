@@ -128,6 +128,14 @@ Docker Desktop wurde lokal gestartet und die volle kanonische RBAC-Testreihenfol
 - Production-Data-Preflight (read-only) gegen `nora-crm-prod` durchgeführt, siehe oben — keine Migration-Blocker gefunden.
 - Kein Push, kein Production-Deploy, keine Production-Migration in dieser Session (wie beauftragt) — Preflight war ausschließlich lesend (`execute_sql` mit `select`, `list_migrations`, `get_advisors`).
 
+### Nachtrag (2026-08-28, Final Release Candidate Verification): Individual Name Invariant am CREATE-Pfad geschlossen
+
+**Verifizierter, behobener Bug:** `nora_private.create_customer_with_contact_core()` erzwang die Individual-Name-Invariante bislang nur beim späteren Rename (`sync_individual_company_name()`-Guard aus dem Haupteintrag oben). Am CREATE-Pfad selbst prüfte nichts, ob der self-contact-werdende Kontakt tatsächlich einen Namen hat, und `companies.name` wurde nie aus dem Kontakt abgeleitet — ein client-seitig gelieferter `p_company.name` (z. B. „Batman") blieb unabhängig vom tatsächlichen Kontaktnamen stehen, sogar bei `customer_kind='individual'`. Live reproduziert: ein neuer Self Contact mit leerem/Whitespace-only Namen erzeugte eine Privatkundenakte mit einem vom Kontakt komplett unabhängigen Namen.
+
+**Fix (in `create_customer_with_contact_core`, alle drei Self-Contact-Zuweisungspfade — `p_self_contact_id`, `p_existing_contact_id`, neuer `p_contact` — sowie sowohl neue als auch bestehende Kundenakte):** sobald diese Funktion `self_contact_id` für eine `individual`-Kundenakte setzt, wird `companies.name` serverseitig aus `contacts.first_name`/`last_name` (getrimmt) abgeleitet und überschreibt einen abweichenden `p_company.name`; hat der repräsentierende Kontakt nach Trim weder Vor- noch Nachnamen, schlägt der gesamte Aufruf fehl (kein halbfertiger Datensatz, ein Funktionskörper = eine Transaktion). Für `customer_kind='business'` bleibt der Firmenname vollständig unabhängig vom Self Contact — die Ableitung greift ausschließlich bei `individual`. Geändert in derselben noch ungepushten Migration (`20260826120000_self_contact_and_quick_capture_case.sql`) und `supabase/schemas/02_functions.sql`, da die Self Contact Wave insgesamt noch nicht deployed ist.
+
+**Neue SQL-Tests** (`customer_contact_workflow_verification.sql`, Abschnitt 4c-iv): individuell + neuer Kontakt mit leerem/Whitespace-Namen → Ablehnung, vollständiger Rollback; individuell + bestehender Kontakt ohne sinnvollen Namen → Ablehnung; individuell + Kontakt „Existierender Kontaktname" + abweichendes `p_company.name="Batman"` → Ergebnis ist kanonisch „Existierender Kontaktname"; individuell + normal benannter neuer Kontakt → Erfolg mit korrekt abgeleitetem Namen; business + Self Contact über denselben Core (`p_mark_self`) → Firmenname bleibt unabhängig. Alle grün gegen `npx supabase db reset --local`, volle kanonische Testreihenfolge erneut vollständig durchlaufen.
+
 ## 2026-08-26 – Self Contact Wave
 
 ### Kontext

@@ -50,6 +50,22 @@ describe("normalizeCrmError", () => {
     expect(result.technicalMessage).toContain("effective contact context");
   });
 
+  it("maps FakeRest's German-text equivalent of the same business rejection to the same stable code (Final Release Candidate Verification, 2026-08-28)", () => {
+    // FakeRest raises this business rule as German free text
+    // (providers/fakerest/dataProvider.ts, createQuickCaptureCase existing
+    // company + existing contact path) — verified live to previously fall
+    // through to the generic "unknown" fallback before this pattern was added.
+    const result = normalizeCrmError(
+      new Error(
+        "Quick Capture darf einen bestehenden Kontakt nicht einem Kunden zuordnen, zu dessen effektivem Kontaktkreis er nicht gehört.",
+      ),
+    );
+    expect(result.kind).toBe("contact_not_in_customer_context");
+    expect(result.messageKey).toBe(
+      "crm.errors.contact_not_in_customer_context",
+    );
+  });
+
   it("maps the self-contact delete guard rejection to a stable code", () => {
     const result = normalizeCrmError(
       new Error(

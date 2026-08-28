@@ -416,6 +416,136 @@ begin
         raise exception 'rejected rename must not have partially applied to contacts';
     end if;
 
+    -- 4c-iii. Individual Name Invariant — CREATE path, not just rename
+    -- (Final Release Candidate Verification, 2026-08-28): the RPC itself
+    -- already requires a non-blank p_company.name at INSERT time
+    -- (independent of customer_kind), so a blank/whitespace-only company
+    -- name for a brand-new Privatkundenakte must already be rejected before
+    -- any row is written — prove this explicitly rather than assuming it
+    -- from the rename-path guard above.
+    v_failed := false;
+    begin
+        perform public.create_customer_with_contact(
+            jsonb_build_object('name', '   ', 'customer_kind', 'individual'),
+            jsonb_build_object('first_name', 'Neu', 'last_name', 'Person'),
+            null, null, false
+        );
+    exception
+        when others then
+            v_failed := true;
+    end;
+    if not v_failed then
+        raise exception 'create_customer_with_contact accepted a blank/whitespace-only company name for a new Privatkundenakte';
+    end if;
+    if exists (select 1 from public.companies where name = '') then
+        raise exception 'a company row with an empty name was left behind by the rejected create';
+    end if;
+
+    -- 4c-iv. Individual Name Invariant — companies.name must be
+    -- authoritatively DERIVED from the representing contact at CREATE time,
+    -- not left as an independently-supplied p_company.name (Final Release
+    -- Candidate Verification, 2026-08-28 domain fix). Supersedes an earlier,
+    -- now-corrected assumption in this file that a blank-named new contact
+    -- would silently succeed with the client-supplied company name.
+    declare
+        v_before_companies2 bigint;
+        v_before_contacts2 bigint;
+        v_blank_named_contact_id bigint;
+        v_named_contact_id bigint;
+        v_new_result jsonb;
+        v_new_company_id bigint;
+    begin
+        select count(*) into v_before_companies2 from public.companies;
+        select count(*) into v_before_contacts2 from public.contacts;
+
+        -- Case 1: individual + NEW contact with blank/whitespace-only name
+        -- => reject, full rollback (no company, no contact left behind).
+        v_failed := false;
+        begin
+            perform public.create_customer_with_contact(
+                jsonb_build_object('name', 'Platzhalter Privatkunde', 'customer_kind', 'individual'),
+                jsonb_build_object('first_name', ' ', 'last_name', ' '),
+                null, null, false
+            );
+        exception
+            when others then
+                v_failed := true;
+        end;
+        if not v_failed then
+            raise exception 'a blank/whitespace-only new-contact name was accepted for a Privatkundenakte CREATE';
+        end if;
+        if (select count(*) from public.companies) <> v_before_companies2
+           or (select count(*) from public.contacts) <> v_before_contacts2
+        then
+            raise exception 'rejected blank-name individual CREATE left a half-written company/contact behind';
+        end if;
+
+        -- Case 2: individual + EXISTING contact with no meaningful name
+        -- (already blank/whitespace in the DB) => reject.
+        insert into public.contacts (first_name, last_name) values (' ', ' ')
+        returning id into v_blank_named_contact_id;
+
+        v_failed := false;
+        begin
+            perform public.create_customer_with_contact(
+                jsonb_build_object('name', 'Noch ein Platzhalter', 'customer_kind', 'individual'),
+                null, v_blank_named_contact_id, null, false
+            );
+        exception
+            when others then
+                v_failed := true;
+        end;
+        if not v_failed then
+            raise exception 'an existing contact with no meaningful name was accepted as self_contact for a Privatkundenakte';
+        end if;
+        if exists (select 1 from public.companies where name = 'Noch ein Platzhalter') then
+            raise exception 'rejected existing-blank-contact CREATE left a company row behind';
+        end if;
+
+        -- Case 3: individual + a real contact + a deliberately DIFFERENT
+        -- p_company.name => the resulting companies.name must be the
+        -- canonical contact name, never the mismatched client-supplied name
+        -- (no second, independent identity).
+        insert into public.contacts (first_name, last_name) values ('Existierender', 'Kontaktname')
+        returning id into v_named_contact_id;
+
+        v_new_result := public.create_customer_with_contact(
+            jsonb_build_object('name', 'Batman', 'customer_kind', 'individual'),
+            null, v_named_contact_id, null, false
+        );
+        v_new_company_id := (v_new_result->>'company_id')::bigint;
+        select name into v_name from public.companies where id = v_new_company_id;
+        if v_name <> 'Existierender Kontaktname' then
+            raise exception 'companies.name was not overridden by the canonical contact name — client-supplied p_company.name (Batman) leaked through, got %', v_name;
+        end if;
+
+        -- Case 4: individual + normally-named NEW contact => succeeds,
+        -- companies.name derived from that contact.
+        v_new_result := public.create_customer_with_contact(
+            jsonb_build_object('name', 'Wird ueberschrieben', 'customer_kind', 'individual'),
+            jsonb_build_object('first_name', 'Anna', 'last_name', 'Normalperson'),
+            null, null, false
+        );
+        v_new_company_id := (v_new_result->>'company_id')::bigint;
+        select name into v_name from public.companies where id = v_new_company_id;
+        if v_name <> 'Anna Normalperson' then
+            raise exception 'individual CREATE with a normally-named new contact did not derive companies.name correctly, got %', v_name;
+        end if;
+
+        -- Case 5: business + Self Contact via the same core (p_mark_self)
+        -- => the company name stays fully independent of the contact's name.
+        v_new_result := public.create_customer_with_contact(
+            jsonb_build_object('name', 'Unabhaengiger Firmenname GmbH', 'customer_kind', 'business'),
+            jsonb_build_object('first_name', 'Betriebs', 'last_name', 'Inhaber'),
+            null, null, true
+        );
+        v_new_company_id := (v_new_result->>'company_id')::bigint;
+        select name into v_name from public.companies where id = v_new_company_id;
+        if v_name <> 'Unabhaengiger Firmenname GmbH' then
+            raise exception 'business customer_kind must keep its own name independent of the self contact, got %', v_name;
+        end if;
+    end;
+
     -- 4d. Self Contact delete guard: individual blocked, business allowed
     -- (contact DELETE requires admin — see fixture above)
     perform set_config('request.jwt.claim.sub', v_admin_user::text, true);

@@ -43,6 +43,10 @@ const DELETE_PATTERNS = [
 const CONTACT_NOT_IN_CUSTOMER_CONTEXT_PATTERNS = [
   /effective contact context/i,
   /not part of the effective/i,
+  // FakeRest raises the equivalent business rejection as German free text
+  // (providers/fakerest/dataProvider.ts) — same rule, different wording,
+  // must map to the same stable code (Falle 33, 03-data-model-guardrails.md).
+  /effektivem Kontaktkreis/i,
 ];
 
 const SELF_CONTACT_DELETE_BLOCKED_PATTERNS = [
