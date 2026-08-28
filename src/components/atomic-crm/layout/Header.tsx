@@ -63,7 +63,9 @@ const Header = () => {
                   src={lightModeLogo}
                   alt={title}
                 />
-                <h1 className="text-xl font-semibold">{title}</h1>
+                <h1 className="hidden text-xl font-semibold lg:block">
+                  {title}
+                </h1>
               </Link>
               <nav className="hidden md:flex shrink-0">
                 <NavigationTab
@@ -93,9 +95,12 @@ const Header = () => {
                   isActive={currentPath === "deals"}
                 />
               </nav>
-              <GlobalSearch className="hidden md:flex flex-1 max-w-sm min-w-[12rem]" />
-              <QuickCaptureTrigger variant="header" />
-              <DemoRoleSwitcher className="hidden md:flex" />
+              <GlobalSearch className="hidden min-w-[12rem] max-w-sm flex-1 xl:flex" />
+              <QuickCaptureTrigger
+                variant="header"
+                className="w-11 px-0 xl:w-auto xl:px-4"
+              />
+              <DemoRoleSwitcher className="hidden xl:flex" />
               <div className="flex items-center shrink-0">
                 <ThemeModeToggle />
                 <RefreshButton />
@@ -141,7 +146,7 @@ const NavigationTab = ({
 }) => (
   <Link
     to={to}
-    className={`px-5 py-3.5 md:py-3 text-sm font-medium transition-colors border-b-2 nora-touch-target ${
+    className={`px-2.5 py-3.5 text-sm font-medium transition-colors border-b-2 nora-touch-target md:py-3 xl:px-5 ${
       isActive
         ? "text-secondary-foreground border-[var(--nora-brand)]"
         : "text-secondary-foreground/70 border-transparent hover:text-secondary-foreground/80"

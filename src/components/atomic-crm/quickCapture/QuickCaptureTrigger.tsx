@@ -30,8 +30,10 @@ export const QuickCaptureTrigger = ({
           )}
           onClick={openQuickCapture}
         >
-          <ClipboardPlus className="size-4 mr-2" />
-          {translate("crm.quick_capture.title")}
+          <ClipboardPlus className="size-4" />
+          <span className="hidden xl:inline">
+            {translate("crm.quick_capture.title")}
+          </span>
         </Button>
       </CanAccess>
     );

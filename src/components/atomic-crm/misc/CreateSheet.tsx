@@ -28,6 +28,10 @@ export interface CreateSheetProps extends CreateBaseProps {
   title?: ReactNode;
   defaultValues?: FormProps["defaultValues"];
   headerActions?: ReactNode;
+  saveLabel?: string;
+  contentClassName?: string;
+  bodyClassName?: string;
+  saveButtonClassName?: string;
 }
 
 export const CreateSheet = ({
@@ -39,6 +43,10 @@ export const CreateSheet = ({
   mutationOptions,
   defaultValues,
   headerActions,
+  saveLabel,
+  contentClassName,
+  bodyClassName,
+  saveButtonClassName,
   ...createBaseProps
 }: CreateSheetProps) => {
   const resource = useResourceContext(createBaseProps);
@@ -85,6 +93,10 @@ export const CreateSheet = ({
           onOpenChange={onOpenChange}
           title={title}
           headerActions={headerActions}
+          saveLabel={saveLabel}
+          contentClassName={contentClassName}
+          bodyClassName={bodyClassName}
+          saveButtonClassName={saveButtonClassName}
         >
           {children}
         </CreateSheetBody>
@@ -98,11 +110,19 @@ const CreateSheetBody = ({
   onOpenChange,
   title,
   headerActions,
+  saveLabel,
+  contentClassName,
+  bodyClassName,
+  saveButtonClassName,
 }: {
   children: ReactNode;
   onOpenChange: (open: boolean) => void;
   title?: ReactNode;
   headerActions?: ReactNode;
+  saveLabel?: string;
+  contentClassName?: string;
+  bodyClassName?: string;
+  saveButtonClassName?: string;
 }) => {
   const { requestClose, dirtyConfirmDialog } = useNoraDirtyDialog({
     onClose: () => onOpenChange(false),
@@ -118,7 +138,7 @@ const CreateSheetBody = ({
       >
         <SheetContent
           side="bottom"
-          className="h-dvh flex flex-col"
+          className={cn("h-dvh flex flex-col", contentClassName)}
           aria-describedby={undefined}
           preventOutsideClose
           showClose={false}
@@ -145,16 +165,25 @@ const CreateSheetBody = ({
             </div>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+          <div
+            className={cn(
+              "flex flex-1 flex-col gap-3 overflow-y-auto p-4",
+              bodyClassName,
+            )}
+          >
             {children}
           </div>
 
-          <SheetFooter className="border-t flex flex-row w-full gap-4">
-            <SaveButton type="button" className="flex-1 h-12" />
+          <SheetFooter className="flex w-full flex-row gap-4 border-t bg-background/95 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-sm">
+            <SaveButton
+              type="button"
+              label={saveLabel}
+              className={cn("h-12 flex-1", saveButtonClassName)}
+            />
           </SheetFooter>
           <button
             type="button"
-            className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+            className="nora-touch-target ring-offset-background focus:ring-ring absolute right-1.5 top-1.5 rounded-md opacity-80 transition-opacity hover:bg-accent hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden sm:right-2 sm:top-2"
             onClick={requestClose}
             aria-label="Close"
           >

@@ -9,6 +9,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | Entscheidung | Anker |
 |---|---|
 | 2026-08-29 – Idempotency Wave | [Springen](#2026-08-29-idempotency-wave) |
+| 2026-08-28 – Kontakterstellung UI-Polish | [Springen](#2026-08-28-kontakterstellung-ui-polish) |
 | 2026-08-28 – Error Contract Wave | [Springen](#2026-08-28-error-contract-wave) |
 | 2026-08-28 – Residual Security Advisor Closure | [Springen](#2026-08-28-residual-security-advisor-closure) |
 | 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`) | [Springen](#2026-08-28-intentional-privileged-read-views-init_state--sales_directory) |
@@ -118,6 +119,36 @@ Ein unabhängiger Adversarial Review (separate Session, kein Code aus der Implem
 - **Quick Capture Task — No-Task → Task unter gleichem Root-Key (Semantic B, jetzt verbindlich)**: Task ist ein eigenständiger, optionaler Sub-Intent mit eigenem Idempotency-Scope (`quick_capture_case.task`), nicht Teil des eingefrorenen Core-Intents. Wenn unter einem Root-`idempotency_key` bisher **kein** Task erfolgreich committet wurde (unabhängig davon, ob überhaupt einer angefordert wurde oder ob ein Versuch technisch fehlschlug), darf unter demselben Key **erstmals oder erneut korrigiert** ein Task übermittelt werden — das ist kein Conflict. Erst ein bereits **erfolgreich committeter** Task-Record friert den Task-Scope ein: derselbe Payload → Replay, ein anderer Payload → `NORA_IDEMPOTENCY_CONFLICT`. Kurz: committed scope = eingefroren, uncommitted scope = frei retriable/korrigierbar/entfernbar. Diese Regel war im Code bereits so implementiert; sie war nur nicht explizit hier festgehalten.
 - **`idempotency_persist` — Preconditions statt Refactor**: Der `unique_violation`-Fallback in `idempotency_persist` rollt nur seinen eigenen INSERT zurück, nicht vorherige Business-Writes derselben Transaktion. Sicher ist das nur, weil alle drei Call-Sites (`create_customer_with_contact`, `create_quick_capture_case`, `create_quick_capture_task`) ausnahmslos zuerst `idempotency_check` (inkl. Advisory-Lock-Erwerb) aufrufen und danach in **derselben** Transaktion Business-Write → `idempotency_persist` ausführen. Das ist jetzt explizit in den Funktions-Kommentaren beider Helper festgehalten (siehe Migration). Kein generisches Idempotency-Framework, keine neue Architektur — nur die Precondition sichtbar gemacht. Jede künftige Wiederverwendung von `idempotency_persist` MUSS dieses Muster (Lock zuerst, dann Write, dann Persist, alles in einer TX) einhalten.
 - **Offen bleibt (ehrlich dokumentiert)**: ein vollständiger authentifizierter End-to-End-HTTP-Beweis gegen die lokale PostgREST-Instanz (echter `authenticated`-User-JWT, nicht `service_role`) für Legacy-Call/neuer Call/Replay/Conflict wurde in keiner der bisherigen Sessions hergestellt (lokale Test-User-Anmeldung war nicht ohne unverhältnismäßigen Aufwand erreichbar). Katalog-Ebene (genau ein Overload pro Funktion nach frischem Reset) und direkte SQL-Ebene sind bewiesen; der reine HTTP-Layer-Beweis mit `authenticated`-Rolle bleibt ein Rest-Gap vor Production.
+
+## 2026-08-28 – Kontakterstellung UI-Polish
+
+### Kontext
+
+Die Kontakterstellung war funktional, aber ohne klare visuelle Hierarchie: Pflichtangaben, Kundenbezug, Kontaktwege und selten benötigte Zusatzangaben wirkten gleich wichtig. Auf Mobilgeräten blieb die Kunden-Autocomplete-Auswahl ein kleines Popover; die Aktion zum direkten Anlegen eines Kunden stand zusammen mit normalen Suchtreffern und war dadurch schwerer erlernbar. Die bestehende iPad-Kopfzeile erzeugte bei 834 px außerdem horizontalen Überlauf.
+
+### Entscheidung
+
+- Nur die **Kontakterstellung** erhält die neue Komposition (`ContactInputs variant="create"`). Bestehende Kontakt-Edit-/Show-Flows behalten ihre bisherige Struktur und Semantik.
+- Vier wiedererkennbare Bereiche: „Person“, „Kundenbezug“, „Kontaktmöglichkeiten“ und die standardmäßig eingeklappten „Weiteren Angaben“. Validierungsfehler in einem Zusatzfeld öffnen den Bereich automatisch.
+- Mobile first: einspaltige Karten, mindestens 44 px große Touch-Ziele und eine feste Primäraktion „Kontakt anlegen“. Erst ab `xl` wird das Formular zweispaltig; iPad bleibt bewusst einspaltig.
+- Die Nora-Brandfarbe (`--nora-brand`) bleibt der primären Aktion, Fokus-/Auswahlzuständen und kleinen Abschnittsakzenten vorbehalten. Sämtliche Flächen verwenden bestehende Theme-Tokens und funktionieren in Hell- und Dunkelmodus.
+- Die Kundenwahl verwendet mobil ein großes Bottom Sheet mit eigener Suchfläche und einer räumlich getrennten Aktion „Neuen Kunden … anlegen“. Die existierende unmittelbare Create-/Select-Semantik bleibt unverändert. Zusätzlich filtert die UI die bereits geladenen Treffer unmittelbar nach Name und Kundennummer; die serverseitige `q`-Suche bleibt für weitere Datensätze bestehen.
+- Für iPad-Breiten wird nur die bestehende Desktop-Kopfzeile verdichtet: globale Suche und Demo-Rollenwahl erscheinen ab `xl`, Schnellerfassung bleibt darunter als Symbol verfügbar. Keine Routen-, Berechtigungs- oder Datenmodelländerung.
+- Neue sichtbare Texte liegen vollständig in Deutsch, Englisch und Französisch vor.
+
+### Verifikation
+
+- ESLint auf allen geänderten TSX-Dateien: grün.
+- `npm run typecheck`: grün.
+- 8 fokussierte Browser-Komponententests: grün (Struktur, Datenbereinigung, Kunden-Neuanlage, mobile Suchfläche und Filterung).
+- `npm run build`: grün; nur die bereits bekannten Chunk-/Browserslist-Warnungen.
+- Frischer Demo-Browserlauf: 1440 px Desktop, 834 px iPad und 390 px Mobil ohne horizontalen Überlauf; Hell-/Dunkelmodus, feste CTA, eingeklappte Zusatzangaben und mobile Kunden-Neuanlage visuell geprüft; keine Console- oder Vite-Overlay-Fehler.
+
+### Nicht Teil dieser Änderung
+
+Keine Supabase-Migration, kein neues Persistenzmodell, keine Änderung an `contacts.company_id`, `companies.self_contact_id`, `is_primary`, RBAC/RLS, Merge/vCard/Kundenakte-Aktionen oder bestehenden Routen. Stand ist lokal implementiert und verifiziert, noch nicht als Production-Deployment behauptet.
+
+---
 
 ## 2026-08-28 – Error Contract Wave
 

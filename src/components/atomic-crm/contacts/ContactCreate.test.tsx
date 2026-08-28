@@ -10,10 +10,40 @@ describe("ContactCreate", () => {
   it("shows empty email and phone placeholder inputs", async () => {
     const screen = await render(<ContactCreateBasic />);
 
+    await expect
+      .element(screen.getByRole("heading", { name: "New Contact" }))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Person", { exact: true }))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Customer association"))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Contact details"))
+      .toBeInTheDocument();
     await expect.element(screen.getByPlaceholder("Email")).toBeInTheDocument();
     await expect
       .element(screen.getByPlaceholder("Phone number"))
       .toBeInTheDocument();
+  });
+
+  it("keeps contact method type selection separate from row deletion", async () => {
+    const screen = await render(<ContactCreateBasic />);
+
+    await expect
+      .element(screen.getByRole("combobox").filter({ hasText: "Work" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("combobox").filter({ hasText: "Mobile" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Clear selection" }))
+      .not.toBeInTheDocument();
+
+    await expect
+      .element(screen.getByRole("button", { name: "Remove" }).first())
+      .toBeVisible();
   });
 
   it("does not render a redundant 'Position' section heading above the title field (Self Contact Wave regression)", async () => {
@@ -47,7 +77,7 @@ describe("ContactCreate", () => {
     await screen.getByLabelText(/first name/i).fill("Ada");
     await screen.getByLabelText(/last name/i).fill("Lovelace");
 
-    await screen.getByRole("button", { name: /^save$/i }).click();
+    await screen.getByRole("button", { name: /create contact/i }).click();
 
     await expect
       .poll(() => screen.getByText("Element created"))
@@ -87,7 +117,7 @@ describe("ContactCreate", () => {
     // Fill email but leave phone empty
     await screen.getByPlaceholder("Email").fill("ada@example.com");
 
-    await screen.getByRole("button", { name: /^save$/i }).click();
+    await screen.getByRole("button", { name: /create contact/i }).click();
 
     await expect.poll(() => createMock).toBeCalledTimes(1);
 
@@ -124,7 +154,7 @@ describe("ContactCreate", () => {
     await screen.getByPlaceholder("Email").fill("ada@example.com");
     await screen.getByPlaceholder("Phone number").fill("+1234567890");
 
-    await screen.getByRole("button", { name: /^save$/i }).click();
+    await screen.getByRole("button", { name: /create contact/i }).click();
 
     await expect.poll(() => createMock).toBeCalledTimes(1);
 

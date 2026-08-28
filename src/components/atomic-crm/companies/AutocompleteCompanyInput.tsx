@@ -1,4 +1,4 @@
-import { useCreate, useGetIdentity, useNotify } from "ra-core";
+import { useCreate, useGetIdentity, useNotify, useTranslate } from "ra-core";
 import { AutocompleteInput } from "@/components/admin/autocomplete-input";
 import type { InputProps } from "ra-core";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,6 +12,7 @@ export const AutocompleteCompanyInput = ({
   const [create] = useCreate();
   const { identity } = useGetIdentity();
   const notify = useNotify();
+  const translate = useTranslate();
   const handleCreateCompany = async (name?: string) => {
     if (!name) return;
     try {
@@ -48,6 +49,22 @@ export const AutocompleteCompanyInput = ({
       createLabel="resources.companies.autocomplete.create_label"
       validate={validate}
       modal={modal ?? isMobile}
+      clientFilter
+      clientFilterFields={["customer_number"]}
+      placeholder={translate(
+        "resources.companies.autocomplete.search_placeholder",
+      )}
+      mobileSheet={
+        isMobile
+          ? {
+              title: translate("resources.companies.autocomplete.select_title"),
+              description: translate(
+                "resources.companies.autocomplete.select_description",
+              ),
+              emptyText: translate("resources.companies.autocomplete.empty"),
+            }
+          : undefined
+      }
     />
   );
 };

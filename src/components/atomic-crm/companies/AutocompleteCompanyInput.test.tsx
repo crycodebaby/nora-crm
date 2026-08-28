@@ -19,6 +19,10 @@ describe("AutocompleteCompanyInput create action (/kontakte/create)", () => {
     await screen.getByRole("combobox", { name: /company/i }).click();
     await screen.getByPlaceholder(/search/i).fill("Traum und Horror UG");
 
+    await expect
+      .element(screen.getByRole("option", { name: "Familie Krüger" }))
+      .not.toBeInTheDocument();
+
     const createOption = screen.getByRole("option", {
       name: 'Create new company "Traum und Horror UG"',
     });

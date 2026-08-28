@@ -1,7 +1,8 @@
 import type { Meta } from "@storybook/react-vite";
 
 import { ContactCreate } from "./ContactCreate";
-import { buildContact, StoryWrapper } from "@/test/StoryWrapper";
+import { ContactCreateSheet } from "./ContactCreateSheet";
+import { buildCompany, buildContact, StoryWrapper } from "@/test/StoryWrapper";
 import type { DataProvider } from "ra-core";
 
 const meta = {
@@ -16,6 +17,15 @@ const meta = {
 
 export default meta;
 
+const contactCreateCompanies = [
+  buildCompany({ id: 10, name: "Familie Krüger" }),
+  buildCompany({
+    id: 11,
+    name: "Rheinbogen Immobilienservice GmbH",
+    customer_number: "K-0042",
+  }),
+];
+
 export const ContactCreateBasic = ({
   dataProvider = {},
   silent,
@@ -26,6 +36,7 @@ export const ContactCreateBasic = ({
   <StoryWrapper
     initialEntries={["/contacts/create"]}
     data={{
+      companies: contactCreateCompanies,
       contacts: [
         buildContact({
           id: 1,
@@ -65,3 +76,26 @@ export const ContactCreateBasicWithError = () => (
     <ContactCreate />
   </StoryWrapper>
 );
+
+export const ContactCreateMobile = Object.assign(
+  () => (
+    <StoryWrapper
+      initialEntries={["/"]}
+      data={{ companies: contactCreateCompanies }}
+      silent
+    >
+      <ContactCreateSheet open onOpenChange={() => undefined} />
+    </StoryWrapper>
+  ),
+  {
+    parameters: {
+      viewport: { defaultViewport: "mobile1" },
+    },
+  },
+);
+
+export const ContactCreateTablet = Object.assign(() => <ContactCreateBasic />, {
+  parameters: {
+    viewport: { defaultViewport: "ipad" },
+  },
+});
