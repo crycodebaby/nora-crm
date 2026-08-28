@@ -32,7 +32,7 @@ Nach der Änderung:
 Bei jedem `apply_migration` gegen eine echte Production-Datenbank (Supabase MCP) zusätzlich:
 
 - [ ] Zielprojekt vor JEDEM Write per `list_projects` gegen Name UND Ref bestätigt (nicht nur einmal zu Sessionbeginn)
-- [ ] Sofort nach dem Apply `list_migrations` prüfen: Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` hat bislang dreimal (2026-08-25, zweimal 2026-08-28) stattdessen den Anwendungszeitstempel eingetragen
+- [ ] Sofort nach dem Apply `list_migrations` prüfen: Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` hat bislang viermal (2026-08-25, zweimal 2026-08-28, 2026-08-28 Idempotency Wave) stattdessen den Anwendungszeitstempel eingetragen
 - [ ] Bei Drift: vor der Korrektur read-only verifizieren, dass die betroffene Zeile eindeutig zur gerade angewendeten Migration gehört (Name + Inhalt/`statements`-Spalte), dann transaktional exakt eine Zeile korrigieren, danach erneut read-only bestätigen (`list_migrations` deckt sich wieder 1:1 mit dem Repo, keine andere Zeile verändert)
 - [ ] Release-Reihenfolge bei schemaabhängigen Waves mit automatischem Vercel-Deploy: RC einfrieren (Commit-SHA + Migration-SHA-256) → Production-DB-Migration → DB-Verifikation → Git Push → automatisches Vercel-Deployment → Live-Smoke — **nicht** Push zuerst
 
