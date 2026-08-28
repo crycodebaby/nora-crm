@@ -624,6 +624,7 @@ export const frenchCrmMessages = {
         not_authenticated: "Veuillez vous reconnecter",
         contact_not_in_customer_context:
           "Ce contact n'appartient pas à ce client.",
+        permission_denied: "Vous n'avez pas l'autorisation pour cette action.",
       },
     },
     contact_to_customer: {
@@ -1015,6 +1016,10 @@ export const frenchCrmMessages = {
         "Ce contact n'appartient pas à ce client.",
       self_contact_delete_blocked:
         "La personne derrière une fiche client particulier ne peut pas être supprimée — modifiez d'abord la fiche client.",
+      individual_name_required:
+        "Une fiche client particulier nécessite un prénom ou un nom pour la personne représentée.",
+      private_customer_already_exists:
+        "Cette personne a déjà une fiche client particulier.",
     },
     unsaved_changes: {
       title: "Abandonner les modifications ?",

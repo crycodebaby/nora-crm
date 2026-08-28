@@ -617,6 +617,7 @@ export const englishCrmMessages = {
         not_authenticated: "Please sign in again",
         contact_not_in_customer_context:
           "This contact does not belong to this customer.",
+        permission_denied: "You do not have permission for this action.",
       },
     },
     contact_to_customer: {
@@ -1003,6 +1004,10 @@ export const englishCrmMessages = {
         "This contact does not belong to this customer.",
       self_contact_delete_blocked:
         "The person behind a private customer record cannot be deleted — update the customer record first.",
+      individual_name_required:
+        "A private customer record requires a first or last name for the representing person.",
+      private_customer_already_exists:
+        "This person already has a private customer record.",
     },
     unsaved_changes: {
       title: "Discard changes?",

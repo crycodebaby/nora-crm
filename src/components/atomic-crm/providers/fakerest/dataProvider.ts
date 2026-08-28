@@ -70,6 +70,7 @@ import {
   isTaskContextCheckSkipped,
   isEffectiveContactOfCompany,
 } from "./internal/taskContextCheck";
+import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 
 /**
  * FakeRest mirror of nora_private.create_customer_with_contact_core() (Self
@@ -127,6 +128,40 @@ const createCustomerWithContactCore = async (
     const { data: selfContact } = await dataProvider.getOne("contacts", {
       id,
     });
+
+    if (customerKind === "individual") {
+      // Individual Name Invariant, CREATE-path — mirrors
+      // nora_private.create_customer_with_contact_core()'s CREATE-path
+      // guard: a Privatkundenakte's representing contact must have a
+      // resolvable name (Error Contract Wave, 2026-08-28).
+      const derivedName = `${selfContact.first_name ?? ""} ${selfContact.last_name ?? ""}`.trim();
+      if (derivedName === "") {
+        throwNoraError(
+          "Privatkundenakte benoetigt einen Vor- oder Nachnamen des repraesentierenden Kontakts",
+          NORA_ERROR_CODES.INDIVIDUAL_NAME_REQUIRED,
+        );
+      }
+
+      // Mirrors uq_companies_self_contact_individual: one person has at
+      // most one Privatkundenakte. Backstop for the client-side pre-check
+      // in createCustomerFromContact.ts (findExistingPrivateCustomerRecord)
+      // so a race/bypass still yields the same NoraErrorCode.
+      const { data: conflicting } = await dataProvider.getList("companies", {
+        filter: { self_contact_id: id, customer_kind: "individual" },
+        pagination: { page: 1, perPage: 1000 },
+        sort: { field: "id", order: "ASC" },
+      });
+      const conflict = conflicting.find(
+        (c: any) => String(c.id) !== String(companyId),
+      );
+      if (conflict) {
+        throwNoraError(
+          "Für diese Person existiert bereits eine Privatkundenakte",
+          NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS,
+        );
+      }
+    }
+
     const alreadyMember = String(selfContact.company_id ?? "") === String(companyId);
     await dataProvider.update("companies", {
       id: companyId,
@@ -233,8 +268,9 @@ const deriveTaskCompanyContext = async (
           dataProvider,
         ))
       ) {
-        throw new Error(
+        throwNoraError(
           "tasks.company_id does not match the effective contact context of the selected contact",
+          NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT,
         );
       }
     } else if (
@@ -245,8 +281,9 @@ const deriveTaskCompanyContext = async (
         dataProvider,
       ))
     ) {
-      throw new Error(
+      throwNoraError(
         "tasks.company_id does not match contact (no employer, not the representing person of that customer record)",
+        NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT,
       );
     }
   }
@@ -600,8 +637,9 @@ export const createDataProvider = ({
                 dataProvider,
               ))
             ) {
-              throw new Error(
+              throwNoraError(
                 "Quick Capture darf einen bestehenden Kontakt nicht einem Kunden zuordnen, zu dessen effektivem Kontaktkreis er nicht gehört.",
+                NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT,
               );
             }
             referenceContactId = params.existingContactId;
@@ -878,9 +916,56 @@ export const createDataProvider = ({
 
           return result;
         },
-        beforeUpdate: async (params) => {
+        beforeUpdate: async (params, dataProvider) => {
+          // Individual Name Invariant, rename-path — mirrors
+          // nora_private.sync_individual_company_name(): renaming this
+          // contact's first_name/last_name to blank is rejected if it
+          // currently represents a Privatkundenakte (Error Contract Wave,
+          // 2026-08-28).
+          if ("first_name" in params.data || "last_name" in params.data) {
+            const derivedName = `${params.data.first_name ?? ""} ${params.data.last_name ?? ""}`.trim();
+            if (derivedName === "") {
+              const { data: represented } = await dataProvider.getList(
+                "companies",
+                {
+                  filter: {
+                    self_contact_id: params.id,
+                    customer_kind: "individual",
+                  },
+                  pagination: { page: 1, perPage: 1 },
+                  sort: { field: "id", order: "ASC" },
+                },
+              );
+              if (represented.length > 0) {
+                throwNoraError(
+                  "Privatkundenakte benoetigt einen Vor- oder Nachnamen (companies.name darf nicht leer werden)",
+                  NORA_ERROR_CODES.INDIVIDUAL_NAME_REQUIRED,
+                );
+              }
+            }
+          }
           const newParams = await processContactAvatar(params);
           return fetchAndUpdateCompanyData(newParams, dataProvider);
+        },
+        beforeDelete: async (params, dataProvider) => {
+          // Mirrors nora_private.guard_self_contact_delete(): the person
+          // representing a Privatkundenakte cannot be deleted (Error
+          // Contract Wave, 2026-08-28).
+          const { data: represented } = await dataProvider.getList(
+            "companies",
+            {
+              filter: { self_contact_id: params.id, customer_kind: "individual" },
+              pagination: { page: 1, perPage: 1 },
+              sort: { field: "id", order: "ASC" },
+            },
+          );
+          if (represented.length > 0) {
+            throwNoraError(
+              "Person hinter einer Privatkundenakte kann nicht geloescht werden — zuerst die Kundenakte anpassen",
+              NORA_ERROR_CODES.SELF_CONTACT_DELETE_BLOCKED,
+            );
+          }
+          return params;
         },
         afterDelete: async (result, dataProvider) => {
           if (result.data.company_id != null) {

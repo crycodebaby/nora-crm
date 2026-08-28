@@ -1,3 +1,19 @@
+import {
+  NORA_ERROR_CODES,
+  NORA_ERROR_DEFINITIONS,
+  extractNoraErrorCode,
+  type NoraErrorCode,
+} from "../domain/noraErrorCodes";
+
+/**
+ * Transport/infrastructure buckets (network/service/auth/notfound/aborted/
+ * unknown) are permanent — they have no server-side business meaning to
+ * encode. `contact_not_in_customer_context` and `self_contact_delete_blocked`
+ * are migration-compatibility-only: they exist because they predate
+ * NoraErrorCode. No new business member should be added here again — a new
+ * business rejection gets a NoraErrorCode (./domain/noraErrorCodes.ts)
+ * instead, resolved directly to a messageKey without a CrmErrorKind detour.
+ */
 export type CrmErrorKind =
   | "permission_denied"
   | "delete_not_allowed"
@@ -14,8 +30,18 @@ export type NormalizedCrmError = {
   kind: CrmErrorKind;
   messageKey: string;
   status?: number;
+  /** Recognized stable Nora business code, if any (Error Contract Wave). */
+  code?: NoraErrorCode;
   /** Original message — logged in development only. */
   technicalMessage?: string;
+};
+
+/** Legacy CrmErrorKind for a recognized NoraErrorCode — vestigial once `code` is present; only used by the handful of consumers that still branch on `kind` instead of `code`. */
+const KIND_BY_NORA_ERROR_CODE: Partial<Record<NoraErrorCode, CrmErrorKind>> = {
+  [NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT]:
+    "contact_not_in_customer_context",
+  [NORA_ERROR_CODES.SELF_CONTACT_DELETE_BLOCKED]: "self_contact_delete_blocked",
+  [NORA_ERROR_CODES.PERMISSION_DENIED]: "permission_denied",
 };
 
 const RLS_PATTERNS = [
@@ -51,6 +77,17 @@ const CONTACT_NOT_IN_CUSTOMER_CONTEXT_PATTERNS = [
 
 const SELF_CONTACT_DELETE_BLOCKED_PATTERNS = [
   /Privatkundenakte.*(nicht|not).*(gel|delet)/i,
+];
+
+// Legacy fallback only (Error Contract Wave) — every RPC/trigger that can
+// raise these now sets DETAIL to the canonical NoraErrorCode; these patterns
+// exist only for a not-yet-migrated call site or an older frontend build.
+// The constraint-name anchor is deliberately narrow: other unique violations
+// (e.g. uq_contacts_one_primary_per_company) must never match here.
+const INDIVIDUAL_NAME_REQUIRED_PATTERNS = [/Vor- oder Nachnamen/i];
+
+const PRIVATE_CUSTOMER_ALREADY_EXISTS_PATTERNS = [
+  /uq_companies_self_contact_individual/i,
 ];
 
 const DISABLED_PATTERNS = [/disabled/i, /deactivated/i, /inactive user/i];
@@ -112,6 +149,23 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
   const status = extractStatus(error);
   const technicalMessage = message || undefined;
 
+  // Machine-code-first (Error Contract Wave): a recognized NoraErrorCode —
+  // from PostgrestError.details, a FakeRest-thrown `.details`, or an
+  // explicit `.code` on a local typed business error — is authoritative
+  // regardless of MESSAGE wording. Only a canonical code is ever accepted;
+  // an unrecognized details/code string falls through to legacy detection.
+  const noraCode = extractNoraErrorCode(error);
+  if (noraCode) {
+    const definition = NORA_ERROR_DEFINITIONS[noraCode];
+    return {
+      kind: KIND_BY_NORA_ERROR_CODE[noraCode] ?? "unknown",
+      messageKey: definition.messageKey,
+      status,
+      code: noraCode,
+      technicalMessage,
+    };
+  }
+
   if (error instanceof DOMException && error.name === "AbortError") {
     return {
       kind: "aborted",
@@ -153,6 +207,7 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
       kind: "permission_denied",
       messageKey: "crm.errors.permission_denied",
       status,
+      code: NORA_ERROR_CODES.PERMISSION_DENIED,
       technicalMessage,
     };
   }
@@ -162,6 +217,7 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
       kind: "contact_not_in_customer_context",
       messageKey: "crm.errors.contact_not_in_customer_context",
       status,
+      code: NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT,
       technicalMessage,
     };
   }
@@ -171,6 +227,27 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
       kind: "self_contact_delete_blocked",
       messageKey: "crm.errors.self_contact_delete_blocked",
       status,
+      code: NORA_ERROR_CODES.SELF_CONTACT_DELETE_BLOCKED,
+      technicalMessage,
+    };
+  }
+
+  if (matchesAny(message, INDIVIDUAL_NAME_REQUIRED_PATTERNS)) {
+    return {
+      kind: "unknown",
+      messageKey: "crm.errors.individual_name_required",
+      status,
+      code: NORA_ERROR_CODES.INDIVIDUAL_NAME_REQUIRED,
+      technicalMessage,
+    };
+  }
+
+  if (matchesAny(message, PRIVATE_CUSTOMER_ALREADY_EXISTS_PATTERNS)) {
+    return {
+      kind: "unknown",
+      messageKey: "crm.errors.private_customer_already_exists",
+      status,
+      code: NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS,
       technicalMessage,
     };
   }

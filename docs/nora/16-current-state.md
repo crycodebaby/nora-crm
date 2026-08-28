@@ -57,6 +57,7 @@ Chronologisch, Details im Decision Log (`06-decision-log.md`):
 13. **Unified Tasks Wave** (2026-08-25): `tasks.company_id`, historisch stabiler Kundenkontext, „Aufgaben"-Tab auf der Kundenakte — siehe Abschnitt 5a und Decision Log "2026-08-25 – Unified Tasks Wave". **PRODUCTION VERIFIED** (2026-08-28, siehe Abschnitt 6).
 14. **Self Contact Wave** (2026-08-26): `companies.self_contact_id` (Person repräsentiert eine Kundenakte unabhängig von `contacts.company_id`), Kontakt→Kundenakte-Workflow, atomarer Quick-Capture-Command, Quick-Capture-Schritt-2-UX, Draft-Härtung, „Firma"-Label, Position-Fix — siehe Abschnitt 5b und Decision Log "2026-08-26 – Self Contact Wave". **PRODUCTION VERIFIED** (2026-08-28, siehe Abschnitt 6).
 15. **Pre-Production Hardening Patch + Final RC Hardening** (2026-08-27/28): unabhängiger Review der Self Contact Wave fand konkrete Bugs (FakeRest-Parität, Falsy-ID-Audit, Error Contract, hardcodierter Navigationspfad, Individual Name Invariant am CREATE-Pfad); alle behoben und mit Tests abgesichert (kein neues Feature) — siehe Decision Log "2026-08-27 – Pre-Production Hardening Patch". **PRODUCTION VERIFIED** (2026-08-28, kontrollierter Release inkl. Production-Migration, DB-Verifikation, Deployment und Live-Smoke-Test).
+16. **Error Contract Wave** (2026-08-28): maschinenlesbarer Nora Error Code (`DETAIL = NORA_<CODE>`) ersetzt reine Nachrichtenerkennung für fünf Business-Fälle (Contact-not-in-Context, Individual-Name-Required, Self-Contact-Delete-Blocked, Private-Customer-Already-Exists, Permission-Denied); rückwärtskompatibel, additive Migration, FakeRest-Parität für die vier fachlichen Fälle — siehe Decision Log "2026-08-28 – Error Contract Wave". **Lokal implementiert und verifiziert** (SQL-Tests, Vitest, Typecheck, Build) — noch **nicht** auf Production angewendet (kein Push/Deploy in dieser Session).
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
@@ -146,7 +147,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 3. Privatperson/Firma-Unterscheidung in Quick Capture (bewusst nicht Teil der Self Contact Wave, siehe Decision Log).
 4. Customer-Archive-/Soft-Delete-Lifecycle (`ArchiveCustomer`/`RestoreCustomer`) als Ersatz für das normale Kunden-Löschen — separate, noch nicht designte Wave; aktuell nur die notwendige Self-Contact-Delete-Invariante abgesichert.
 5. Idempotency für retry-fähige/externe Write Commands (`CreateQuickCaptureCase`, `CreateCustomerFromContact`) — bewusst offen gelassen, additives `idempotencyKey`-Feld später möglich ohne Breaking Change.
-6. Stabilerer, maschinenlesbarer Error Contract ohne Text-/Regex-Abhängigkeit (aktuell mappt `normalizeCrmError` auf Basis von Nachrichtenmustern — funktioniert, aber fragil bei künftigen Wortlaut-Änderungen).
+6. ~~Stabilerer, maschinenlesbarer Error Contract ohne Text-/Regex-Abhängigkeit~~ — **lokal implementiert, 2026-08-28 (Error Contract Wave)**, siehe Abschnitt 15 und Decision Log. Fünf Codes über `DETAIL`, machine-code-first `normalizeCrmError()`, Legacy-Regex bleibt Fallback. Noch nicht auf Production; weitere RPCs/Trigger können in Folgewellen migriert werden, sobald neue reale Fälle auftreten.
 7. `deals.contact_ids bigint[]` als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen/Zeitdimension) — siehe Decision Log.
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
 9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
@@ -175,6 +176,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 | Google-Kalender-Implementierung (read-only) | `14-google-calendar-readonly-implementation.md` |
 | **Dieser Überblick** | `16-current-state.md` |
 | **Offene Bugs, geplante Waves im Detail** | `17-known-issues-and-planned-waves.md` |
+| **Error Contract (`NoraErrorCode`, `DETAIL`-Konvention, machine-code-first `normalizeCrmError`)** | `06-decision-log.md` „2026-08-28 – Error Contract Wave" + `domain/noraErrorCodes.ts` + `07-agent-change-checklist.md` |
 
 Hinweis: Die Nummer `15` existiert nicht (keine `15-*.md` in der Git-Historie gefunden) — keine bewusste Reservierung, einfach eine Lücke. Bei der nächsten neuen Kern-Doku kann `15` vergeben werden, statt eine Lücke offenzulassen.
 

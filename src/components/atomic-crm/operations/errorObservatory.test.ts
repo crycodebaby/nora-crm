@@ -39,6 +39,29 @@ describe("Error Observatory client", () => {
     expect(JSON.stringify(ctx)).not.toMatch(/Bearer|password|JWT/i);
   });
 
+  it("reads sqlstate primarily from PostgrestError.code, not from details/hint text (Error Contract Wave, proven via local Postgres -> PostgREST round-trip)", () => {
+    // Real RPC-raised exception shape: code IS the raw SQLSTATE.
+    const ctx = buildTechnicalContext({
+      status: 403,
+      code: "42501",
+      message: "insufficient privileges",
+      details: "NORA_PERMISSION_DENIED",
+      hint: "",
+    });
+    expect(ctx.sqlstate).toBe("42501");
+  });
+
+  it("does not mistake a PGRST-family code for a SQLSTATE", () => {
+    const ctx = buildTechnicalContext({
+      status: 401,
+      code: "PGRST301",
+      message: "JWT expired",
+      details: "",
+    });
+    expect(ctx.sqlstate).toBeUndefined();
+    expect(ctx.postgrest_code).toBe("PGRST301");
+  });
+
   it("A: deal.update success → no Error Record", async () => {
     const recordError = vi.fn<
       (

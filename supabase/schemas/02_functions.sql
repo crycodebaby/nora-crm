@@ -1723,7 +1723,7 @@ BEGIN
               AND NOT nora_private.is_effective_contact_of_company(new.contact_id, new.company_id) THEN
             RAISE EXCEPTION 'tasks.company_id (%) does not match the effective contact context of contact % (%)',
                 new.company_id, new.contact_id, v_contact_company_id
-                USING ERRCODE = '23514';
+                USING ERRCODE = '23514', DETAIL = 'NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT';
         END IF;
     END IF;
 
@@ -1737,7 +1737,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION nora_private.enforce_task_company_context() IS
-    'Derives/validates tasks.company_id from the effective contact context (contacts.company_id OR companies.self_contact_id — see nora_private.is_effective_contact_of_company) whenever a task''s contact_id/company_id is set or changed. Skipped for routine field-only updates and for the explicit merge_contacts() bulk reassignment (nora.skip_task_context_check).';
+    'Derives/validates tasks.company_id from the effective contact context (contacts.company_id OR companies.self_contact_id — see nora_private.is_effective_contact_of_company) whenever a task''s contact_id/company_id is set or changed. Skipped for routine field-only updates and for the explicit merge_contacts() bulk reassignment (nora.skip_task_context_check). Effective-contact-context rejection carries DETAIL=NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT (Error Contract Wave, 2026-08-28).';
 
 CREATE OR REPLACE FUNCTION nora_private.delete_contact_only_tasks()
 RETURNS trigger
@@ -1779,7 +1779,7 @@ BEGIN
         WHERE self_contact_id = new.id AND customer_kind = 'individual'
     ) THEN
         RAISE EXCEPTION 'Privatkundenakte benoetigt einen Vor- oder Nachnamen (companies.name darf nicht leer werden)'
-            USING ERRCODE = '23514';
+            USING ERRCODE = '23514', DETAIL = 'NORA_INDIVIDUAL_NAME_REQUIRED';
     END IF;
 
     UPDATE public.companies
@@ -1791,7 +1791,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION nora_private.sync_individual_company_name() IS
-    'Keeps companies.name in lockstep with the representing contact''s name for customer_kind=individual customer records, so contacts stays the single canonical source for natural-person data. Rejects a rename that would blank both first_name and last_name for a contact representing an individual customer record.';
+    'Keeps companies.name in lockstep with the representing contact''s name for customer_kind=individual customer records, so contacts stays the single canonical source for natural-person data. Rejects a rename that would blank both first_name and last_name for a contact representing an individual customer record (DETAIL=NORA_INDIVIDUAL_NAME_REQUIRED, Error Contract Wave, 2026-08-28).';
 
 CREATE OR REPLACE FUNCTION nora_private.check_individual_company_has_self_contact()
 RETURNS trigger
@@ -1830,14 +1830,14 @@ BEGIN
         WHERE self_contact_id = old.id AND customer_kind = 'individual'
     ) THEN
         RAISE EXCEPTION 'Person hinter einer Privatkundenakte kann nicht geloescht werden — zuerst die Kundenakte anpassen'
-            USING ERRCODE = '23503';
+            USING ERRCODE = '23503', DETAIL = 'NORA_SELF_CONTACT_DELETE_BLOCKED';
     END IF;
     RETURN old;
 END;
 $$;
 
 COMMENT ON FUNCTION nora_private.guard_self_contact_delete() IS
-    'Blocks deleting a contact that is self_contact_id of an individual customer record. Business self_contact_id keeps ON DELETE SET NULL (the FK action).';
+    'Blocks deleting a contact that is self_contact_id of an individual customer record. Business self_contact_id keeps ON DELETE SET NULL (the FK action). DETAIL=NORA_SELF_CONTACT_DELETE_BLOCKED (Error Contract Wave, 2026-08-28).';
 
 CREATE OR REPLACE FUNCTION public.audit_contact_note_row()
 RETURNS trigger
@@ -2652,7 +2652,10 @@ declare
     v_count int;
     v_self_contact_touched boolean := false;
     v_derived_name text;
+    v_constraint_name text;
 begin
+    <<main>>
+    begin
     v_count :=
         (case when p_company is not null then 1 else 0 end) +
         (case when p_existing_company_id is not null then 1 else 0 end);
@@ -2790,18 +2793,27 @@ begin
 
         if v_derived_name is null or v_derived_name = '' then
             raise exception 'Privatkundenakte benoetigt einen Vor- oder Nachnamen des repraesentierenden Kontakts'
-                using errcode = '23514';
+                using errcode = '23514', detail = 'NORA_INDIVIDUAL_NAME_REQUIRED';
         end if;
 
         update public.companies set name = v_derived_name where id = v_company_id;
     end if;
 
     return query select v_company_id, v_contact_id;
+    exception
+        when unique_violation then
+            get stacked diagnostics v_constraint_name = constraint_name;
+            if v_constraint_name = 'uq_companies_self_contact_individual' then
+                raise exception 'Für diese Person existiert bereits eine Privatkundenakte'
+                    using errcode = '23505', detail = 'NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS';
+            end if;
+            raise;
+    end main;
 end;
 $$;
 
 comment on function nora_private.create_customer_with_contact_core(jsonb, bigint, jsonb, bigint, bigint, boolean, boolean) is
-    'Shared core write used by both public.create_customer_with_contact and public.create_quick_capture_case — do not duplicate this logic. For customer_kind=individual, companies.name is authoritatively derived from the representing contact''s first_name/last_name whenever self_contact_id is established here — a blank/whitespace-only name is rejected, and any client-supplied p_company.name is overridden (Falle 28, 03-data-model-guardrails.md).';
+    'Shared core write used by both public.create_customer_with_contact and public.create_quick_capture_case — do not duplicate this logic. For customer_kind=individual, companies.name is authoritatively derived from the representing contact''s first_name/last_name whenever self_contact_id is established here — a blank/whitespace-only name is rejected (DETAIL=NORA_INDIVIDUAL_NAME_REQUIRED), and any client-supplied p_company.name is overridden (Falle 28, 03-data-model-guardrails.md). A uq_companies_self_contact_individual race is translated to DETAIL=NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS; any other unique violation is re-raised unchanged (Error Contract Wave, 2026-08-28).';
 
 create or replace function public.create_customer_with_contact(
     p_company jsonb,
@@ -2823,7 +2835,7 @@ begin
         raise exception 'not authenticated' using errcode = '28000';
     end if;
     if not nora_private.can_write() then
-        raise exception 'insufficient privileges' using errcode = '42501';
+        raise exception 'insufficient privileges' using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
     end if;
     if p_company is null then
         raise exception 'p_company required' using errcode = '22023';
@@ -2842,7 +2854,7 @@ $$;
 alter function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) owner to postgres;
 
 comment on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) is
-    'Atomically creates a company and (optionally) a new/existing/self contact. p_self_contact_id links an existing contact as the representing person WITHOUT touching its company_id/is_primary. p_mark_self additionally marks a new/existing contact as self for customer_kind=business (always true for individual). Actor from safe_auth_uid(); requires can_write() (office/admin).';
+    'Atomically creates a company and (optionally) a new/existing/self contact. p_self_contact_id links an existing contact as the representing person WITHOUT touching its company_id/is_primary. p_mark_self additionally marks a new/existing contact as self for customer_kind=business (always true for individual). Actor from safe_auth_uid(); requires can_write() (office/admin) — rejection carries DETAIL=NORA_PERMISSION_DENIED (Error Contract Wave, 2026-08-28).';
 
 revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) from public;
 revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) from anon;
@@ -2876,7 +2888,7 @@ begin
         raise exception 'not authenticated' using errcode = '28000';
     end if;
     if not nora_private.can_write() then
-        raise exception 'insufficient privileges' using errcode = '42501';
+        raise exception 'insufficient privileges' using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
     end if;
     if p_deal is null then
         raise exception 'p_deal required' using errcode = '22023';
@@ -2886,7 +2898,7 @@ begin
         if not nora_private.is_effective_contact_of_company(p_existing_contact_id, p_existing_company_id) then
             raise exception 'contact % is not part of the effective contact context of company %',
                 p_existing_contact_id, p_existing_company_id
-                using errcode = '42501';
+                using errcode = '42501', detail = 'NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT';
         end if;
         -- Already effective — reference as-is, no company_id/is_primary
         -- mutation (picking an existing contact of an already-established
@@ -2935,7 +2947,7 @@ $$;
 alter function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) owner to postgres;
 
 comment on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) is
-    'Quick Capture Application Command: Kunde + Kontakt + Vorgang atomically in one transaction. Validates that an existing contact paired with an existing company is already part of its effective contact context. Task creation stays a separate, best-effort step after this call succeeds. Actor from safe_auth_uid(); requires can_write() (office/admin).';
+    'Quick Capture Application Command: Kunde + Kontakt + Vorgang atomically in one transaction. Validates that an existing contact paired with an existing company is already part of its effective contact context (DETAIL=NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT on rejection). Task creation stays a separate, best-effort step after this call succeeds. Actor from safe_auth_uid(); requires can_write() (office/admin) — rejection carries DETAIL=NORA_PERMISSION_DENIED (Error Contract Wave, 2026-08-28).';
 
 revoke all on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) from public;
 revoke all on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) from anon;
@@ -2955,7 +2967,7 @@ begin
         raise exception 'not authenticated' using errcode = '28000';
     end if;
     if not nora_private.can_write() then
-        raise exception 'insufficient privileges' using errcode = '42501';
+        raise exception 'insufficient privileges' using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
     end if;
 
     select company_id into v_company_id from public.contacts where id = p_contact_id;

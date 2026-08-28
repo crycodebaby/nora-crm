@@ -25,6 +25,10 @@ import {
 } from "../../quickCapture/quickCaptureUtils";
 import type { CrmDataProvider } from "../../providers/types";
 import { normalizeCrmError } from "../../misc/normalizeCrmError";
+import {
+  NORA_ERROR_CODES,
+  type NoraErrorCode,
+} from "../../domain/noraErrorCodes";
 
 export type QuickCaptureCustomerSelection =
   | { mode: "existing"; companyId: Identifier }
@@ -68,6 +72,8 @@ export class QuickCaptureSubmitError extends Error {
   constructor(
     message: string,
     public readonly stage: "case" | "task",
+    /** Recognized stable Nora business code, if any (Error Contract Wave) — `.message` stays the i18n key suffix consumed by QuickCaptureDialog. */
+    public readonly code: NoraErrorCode | null = null,
   ) {
     super(message);
     this.name = "QuickCaptureSubmitError";
@@ -123,11 +129,17 @@ export const createQuickCaptureCase = async (
     // "not_authenticated" is preserved as-is for backward compatibility with
     // the pre-existing client-side auth guard above.
     const normalized = normalizeCrmError(error);
-    const code =
-      normalized.kind === "contact_not_in_customer_context"
+    const messageSuffix =
+      normalized.code === NORA_ERROR_CODES.CONTACT_NOT_IN_CUSTOMER_CONTEXT
         ? "contact_not_in_customer_context"
-        : "case_create_failed";
-    throw new QuickCaptureSubmitError(code, "case");
+        : normalized.code === NORA_ERROR_CODES.PERMISSION_DENIED
+          ? "permission_denied"
+          : "case_create_failed";
+    throw new QuickCaptureSubmitError(
+      messageSuffix,
+      "case",
+      normalized.code ?? null,
+    );
   }
 
   const output: CreateQuickCaptureCaseOutput = {

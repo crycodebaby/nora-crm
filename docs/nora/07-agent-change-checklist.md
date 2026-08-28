@@ -201,6 +201,19 @@ Bei Customer & Contact Workflow Wave (2026-08-25) zusätzlich:
 - [ ] `npx supabase db reset --local` nach Migration (nicht in diesem Sandbox-Environment ausführbar — siehe Abschlussbericht)
 - [ ] `npm run typecheck` / `npm run build` / `npm run dev:demo` — Kunden-/Privatperson-Anlage manuell im Browser geprüft
 
+Bei Error-Contract-Änderungen (ab Error Contract Wave, 2026-08-28) zusätzlich:
+
+- [ ] Neuer Business-Fehler bekommt einen `NoraErrorCode` in `domain/noraErrorCodes.ts` UND serverseitig `USING DETAIL = 'NORA_<CODE>'` — nicht nur ein neues Regex-Pattern
+- [ ] `normalizeCrmError()` bleibt machine-code-first: erkannter Code aus `.details`/explizitem `.code` vor der Regex-Kette
+- [ ] Kein `startsWith("NORA_")`-Raten — nur kanonisch gelistete Codes werden akzeptiert
+- [ ] Kein neuer generischer `CrmErrorKind`-Business-Zwischenwert (`domain_rejection` o. ä.) — neue Codes gehen direkt auf `messageKey`
+- [ ] FakeRest wirft denselben Code über `throwNoraError()` (`.details`), sofern FakeRest den Command-Pfad überhaupt modelliert — sonst als Debt dokumentieren, nicht Scope aufblasen
+- [ ] Migration additiv, neue Datei mit neuem Zeitstempel — bereits angewendete Migrationen nie editieren
+- [ ] `supabase/schemas/02_functions.sql` synchron nachgezogen
+- [ ] `supabase/tests/error_contract_verification.sql` (oder Erweiterung) nach `db reset --local` grün
+- [ ] Human Message Independence nachgewiesen, wenn zwei Origins denselben Code liefern (Test mit unterschiedlichem MESSAGE-Text, gleichem DETAIL)
+- [ ] `npm run typecheck` / `npm run build` / `npx vitest run`
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

@@ -626,6 +626,7 @@ export const germanCrmMessages = {
         not_authenticated: "Bitte erneut anmelden",
         contact_not_in_customer_context:
           "Dieser Ansprechpartner gehört nicht zu diesem Kunden.",
+        permission_denied: "Sie haben für diese Aktion keine Berechtigung.",
       },
     },
     contact_to_customer: {
@@ -1013,6 +1014,10 @@ export const germanCrmMessages = {
         "Dieser Ansprechpartner gehört nicht zu diesem Kunden.",
       self_contact_delete_blocked:
         "Person hinter einer Privatkundenakte kann nicht gelöscht werden — zuerst die Kundenakte anpassen.",
+      individual_name_required:
+        "Für eine Privatkundenakte wird ein Vor- oder Nachname der vertretenden Person benötigt.",
+      private_customer_already_exists:
+        "Für diese Person existiert bereits eine Privatkundenakte.",
     },
     unsaved_changes: {
       title: "Änderungen verwerfen?",

@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-28 – Error Contract Wave | [Springen](#2026-08-28-error-contract-wave) |
 | 2026-08-28 – Residual Security Advisor Closure | [Springen](#2026-08-28-residual-security-advisor-closure) |
 | 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`) | [Springen](#2026-08-28-intentional-privileged-read-views-init_state--sales_directory) |
 | 2026-08-27 – Pre-Production Hardening Patch | [Springen](#2026-08-27-pre-production-hardening-patch) |
@@ -77,6 +78,45 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-28 – Error Contract Wave
+
+### Kontext
+
+Vorherige, separate Assessment-Session hatte den bestehenden Fehlerfluss kartiert: `normalizeCrmError` klassifizierte Business-Fehler ausschließlich per Regex auf `error.message` — Herkunft, Wave 1A dieser Serie. Bestätigte Lücke: die Individual Name Invariant (leerer Vor-/Nachname bei Privatkundenakte) hatte kein passendes Muster und fiel auf `unknown`/`crm.errors.load_failed`. Diese Session (Wave 1B) implementiert den ersten produktionsreifen, rückwärtskompatiblen Contract.
+
+Empirisch bewiesen (lokaler echter Postgres → PostgREST-Roundtrip, danach erneut über die realen migrierten RPCs bestätigt): PostgREST liefert bei `RAISE EXCEPTION ... USING ERRCODE = 'x', DETAIL = 'y'` das SQLSTATE unverändert in `PostgrestError.code` und `DETAIL` unverändert in `.details` — kein Text-Parsing nötig, um einen stabilen Code zu transportieren.
+
+### Entscheidung
+
+- **Contract:** `MESSAGE` = Mensch/Diagnose, frei umformulierbar. `ERRCODE` = PostgreSQL-Semantik, keine Nora-Business-Identität. `DETAIL` = stabiler `NoraErrorCode`, nie aus `MESSAGE` abgeleitet.
+- **Zentrale Definition:** `src/components/atomic-crm/domain/noraErrorCodes.ts` — framework-frei, `NORA_ERROR_CODES`/`NoraErrorCode`/`NoraErrorCategory`/`NORA_ERROR_DEFINITIONS` (code → category + messageKey), `extractNoraErrorCode()` (akzeptiert ausschließlich kanonische Werte, kein `startsWith("NORA_")`), `throwNoraError()` für FakeRest (wirft `Error` mit `.details = code`, spiegelt die PostgrestError-Form).
+- **Fünf erste Codes**, ausschließlich für bereits real nachgewiesene Fälle: `NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT`, `NORA_INDIVIDUAL_NAME_REQUIRED`, `NORA_SELF_CONTACT_DELETE_BLOCKED`, `NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS`, `NORA_PERMISSION_DENIED`. Bewusst **nicht** `NORA_INSUFFICIENT_PRIVILEGE` — der Code beschreibt Noras Application-Semantik, nicht PostgreSQLs `42501 insufficient_privilege`.
+- **`normalizeCrmError` ist machine-code-first:** erkannter `NoraErrorCode` aus `.details`/explizitem `.code` ist immer autoritativ vor der bestehenden Regex-Kette. Unbekannte `.details`-Werte werden nie akzeptiert. `NormalizedCrmError` bekommt ein neues optionales Feld `code?: NoraErrorCode` — `technicalMessage`/`status` bleiben unverändert Dev-only/Observatory, nie Teil des stabilen Contracts.
+- **`CrmErrorKind` (10 Werte, nicht 11) friert ein:** bleibt für Transport-/Infrastrukturfehler (network/service/auth/notfound/aborted/unknown) dauerhaft bestehen. Die zwei bestehenden Business-Werte (`contact_not_in_customer_context`, `self_contact_delete_blocked`) sind reine Rückwärtskompatibilität für noch nicht migrierte Aufrufer — **kein** neuer generischer `domain_rejection`-Zwischenwert. Neue Business-Errors gehen `NoraErrorCode → messageKey` direkt, ohne `CrmErrorKind`-Umweg.
+- **Server-seitig additiv:** neue Migration `20260828140000_error_contract_wave.sql` (SHA-256 `969768dac028914dd0f4fda3b9953927e5b5104d2cb6231f31387c2f12d30bfa`) — `20260826120000_self_contact_and_quick_capture_case.sql` bleibt unverändert. `CREATE OR REPLACE FUNCTION` auf bestehenden Signaturen für `nora_private.create_customer_with_contact_core`, `nora_private.enforce_task_company_context`, `nora_private.sync_individual_company_name`, `nora_private.guard_self_contact_delete`, `public.create_customer_with_contact`, `public.create_quick_capture_case`. `supabase/schemas/02_functions.sql` synchron nachgezogen.
+- **Human Message Independence bewiesen:** `enforce_task_company_context()` (23514, englischer Text) und `create_quick_capture_case()` (42501, anderer englischer Text) liefern beide `DETAIL=NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT` — per SQL-Test (`supabase/tests/error_contract_verification.sql`) gegen echtes lokales Postgres bewiesen, nicht nur behauptet.
+- **Private Customer TOCTOU:** `create_customer_with_contact_core` fängt `unique_violation` in einem benannten Block (`<<main>> ... exception when unique_violation then get stacked diagnostics ... constraint_name ...`) und übersetzt ausschließlich `uq_companies_self_contact_individual` zu `NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS` — jede andere Unique-Violation wird unverändert weitergereicht (`raise;`). Client-seitig fängt `createCustomerFromContact.ts` diesen Code ab und löst denselben `ExistingPrivateCustomerRecordError` aus wie der normale Pre-Check (`findExistingPrivateCustomerRecord`) — kein separater Race-UI-Pfad.
+- **FakeRest-Parität:** `throwNoraError()` für alle fünf Szenarien, soweit FakeRest den jeweiligen Command-Pfad überhaupt modelliert. Neu implementiert (existierten vorher gar nicht in FakeRest): Individual Name Invariant (CREATE- und Rename-Pfad) und Self Contact Delete Guard und Private-Customer-Uniqueness-Backstop in `createCustomerWithContactCore`/`markCompanySelfContact` sowie neue `beforeUpdate`/`beforeDelete`-Hooks auf `contacts`. **Bewusst nicht angefasst:** FakeRest hat weiterhin keine `can_write()`-Entsprechung — Autorisierung wird in FakeRest nur UI-seitig (`canAccess`) durchgesetzt, nicht auf Datenebene. `NORA_PERMISSION_DENIED` ist daher über FakeRest nicht end-to-end testbar; dokumentiert als bestehender, nicht in dieser Welle behobener Debt (separat von der bereits bekannten Security-Advisor-Bewertung).
+- **Error Observatory korrigiert, Scope klein gehalten:** `errorObservatory.ts::extractSqlstate()` liest die SQLSTATE jetzt primär aus `PostgrestError.code` (empirisch bewiesen, dass das dort unverändert ankommt) statt sie aus `details`/`hint`-Text zu raten; PGRST-Codes werden weiterhin korrekt als eigene Familie behandelt (`postgrest_code`, nicht `sqlstate`). Kein Observatory-Redesign.
+- **Legacy-Regex bleibt** als Fallback für nicht migrierte Aufrufer und für Rückwärtskompatibilität — inkl. eines neuen, bewusst als Legacy-only markierten Musters für `uq_companies_self_contact_individual` im Nachrichtentext, das ausschließlich greift, wenn keine `DETAIL` vorhanden ist.
+
+### Tests
+
+Lokal `npx supabase db reset --local`, danach `supabase/tests/customer_contact_workflow_verification.sql`, `supabase/tests/task_customer_context_verification.sql` (beide weiterhin grün — Migration ist additiv, keine Verhaltensänderung an bestehenden Prüfungen) und neu `supabase/tests/error_contract_verification.sql` (alle fünf Codes, Human Message Independence, TOCTOU-Race, Fremd-Unique-Violation bleibt unübersetzt, Permission Denied für office/admin/viewer). TypeScript: `normalizeCrmError.test.ts` (neu), `errorContractParity.test.ts` (neu, FakeRest), `createCustomerFromContact.test.ts` (neu, TOCTOU), Erweiterungen an `createQuickCaptureCase.test.ts` und `errorObservatory.test.ts`. `npx vitest run`: 71 Testdateien/513 Tests grün. `npm run typecheck` und `npm run build` grün.
+
+### Begründung
+
+Kleinstmögliche Änderung, die die tatsächlich nachgewiesene Fragilität behebt (Text-Regex als einzige Erkennung, eine dokumentierte Erkennungslücke), ohne neues Error-Framework, ohne Idempotency/Notification/Observatory-Redesign — diese bleiben bewusst außerhalb des Scopes für spätere Wellen.
+
+### Bekannte Folgepunkte
+
+- Legacy-Regex-Pfade erst entfernen, wenn nachgewiesen ist, dass alle relevanten Production-Aufrufer `DETAIL` liefern.
+- FakeRest-Authorization-Parity (`can_write()`-Äquivalent) bleibt offener, separat zu spezifizierender Debt-Punkt.
+- Idempotency für `CreateQuickCaptureCase`/`CreateCustomerFromContact` bleibt eigene, spätere Welle (unverändert aus Self Contact Wave).
+- Das geplante Nora Status-/Notification-System ist ein späterer Consumer von `NoraErrorCode`/`operation_id` — nicht Teil dieser Welle.
 
 ---
 

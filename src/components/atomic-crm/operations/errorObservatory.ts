@@ -64,8 +64,24 @@ const extractTechnicalErrorCode = (error: unknown): string | undefined => {
   return trimmed;
 };
 
+const SQLSTATE_SHAPE = /^[0-9A-Z]{5}$/;
+
+/**
+ * For an RPC-raised Postgres exception, PostgrestError.code IS the raw
+ * SQLSTATE verbatim — proven via a local Postgres -> PostgREST round-trip
+ * (Error Contract Wave, 2026-08-28): `RAISE ... USING ERRCODE = '42501'`
+ * arrives as `{ code: "42501", ... }`. PostgREST's own internal failures use
+ * a different, longer "PGRST..." code family (already captured separately
+ * as postgrest_code below) and must not be reported as sqlstate. The
+ * details/hint scan below is a fallback only, for an error shape that
+ * doesn't carry a real SQLSTATE in `.code`.
+ */
 const extractSqlstate = (error: unknown): string | undefined => {
   if (!error || typeof error !== "object") return undefined;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code === "string" && SQLSTATE_SHAPE.test(code)) {
+    return code;
+  }
   const details = (error as { details?: unknown }).details;
   const hint = (error as { hint?: unknown }).hint;
   for (const candidate of [details, hint]) {

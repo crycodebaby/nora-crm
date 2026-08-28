@@ -19,6 +19,8 @@ import type {
   CreateCustomerFromContactResult,
 } from "../../operations/executeCreateCustomerFromContact";
 import type { CrmDataProvider } from "../../providers/types";
+import { normalizeCrmError } from "../../misc/normalizeCrmError";
+import { NORA_ERROR_CODES } from "../../domain/noraErrorCodes";
 
 export type CreateCustomerFromContactInput = {
   contactId: Identifier;
@@ -60,11 +62,33 @@ export const createCustomerFromContact = async (
     ...input.company,
   };
 
-  const result: CreateCustomerFromContactResult =
-    await dataProvider.createCustomerFromContact({
+  let result: CreateCustomerFromContactResult;
+  try {
+    result = await dataProvider.createCustomerFromContact({
       contactId: input.contactId,
       company,
     });
+  } catch (error) {
+    // TOCTOU: the pre-check above can miss a private customer record
+    // created by a concurrent request between the check and this write —
+    // the DB's uq_companies_self_contact_individual backstop then rejects
+    // with NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS. Re-resolve the now-existing
+    // record so the race path reaches the exact same
+    // ExistingPrivateCustomerRecordError / dialog affordance as the normal
+    // pre-check path — the user must never see a difference (Error Contract
+    // Wave, 2026-08-28).
+    const normalized = normalizeCrmError(error);
+    if (normalized.code === NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS) {
+      const existing = await findExistingPrivateCustomerRecord(
+        dataProvider,
+        input.contactId,
+      );
+      if (existing != null) {
+        throw new ExistingPrivateCustomerRecordError(existing);
+      }
+    }
+    throw error;
+  }
 
   return { companyId: result.company_id, contactId: result.contact_id };
 };
