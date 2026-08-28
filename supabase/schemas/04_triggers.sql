@@ -156,6 +156,21 @@ create or replace trigger delete_contact_only_tasks_before_contact_delete_trigge
     before delete on public.contacts
     for each row execute function nora_private.delete_contact_only_tasks();
 
+-- Self Contact Wave (2026-08-26)
+create or replace trigger sync_individual_company_name_trigger
+    after update of first_name, last_name on public.contacts
+    for each row execute function nora_private.sync_individual_company_name();
+
+create or replace trigger guard_self_contact_delete_trigger
+    before delete on public.contacts
+    for each row execute function nora_private.guard_self_contact_delete();
+
+drop trigger if exists check_individual_company_has_self_contact_trigger on public.companies;
+create constraint trigger check_individual_company_has_self_contact_trigger
+    after insert or update of customer_kind, self_contact_id on public.companies
+    deferrable initially deferred
+    for each row execute function nora_private.check_individual_company_has_self_contact();
+
 create or replace trigger audit_contact_note_row_trigger
     after insert or update or delete on public.contact_notes
     for each row execute function public.audit_contact_note_row();

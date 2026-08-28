@@ -35,7 +35,12 @@ create table public.companies (
     customer_kind text not null default 'business',
     links_jsonb jsonb not null default '[]'::jsonb,
     email_jsonb jsonb not null default '[]'::jsonb,
-    phone_jsonb jsonb not null default '[]'::jsonb
+    phone_jsonb jsonb not null default '[]'::jsonb,
+    -- Self Contact Wave (2026-08-26): the natural person representing this
+    -- customer record, independent of contacts.company_id — see
+    -- docs/nora/06-decision-log.md. FK added below (contacts is declared
+    -- later in this file).
+    self_contact_id bigint
 );
 
 alter table public.companies
@@ -194,6 +199,10 @@ alter table public.tasks
 alter table public.tasks
     add constraint tasks_company_id_fkey foreign key (company_id) references public.companies(id) on update cascade on delete cascade;
 
+-- Self Contact Wave (2026-08-26)
+alter table public.companies
+    add constraint companies_self_contact_id_fkey foreign key (self_contact_id) references public.contacts(id) on delete set null;
+
 -- Legacy primary key constraint names (from before snake_case rename)
 alter table only public.contact_notes
     add constraint "contactNotes_pkey" primary key (id);
@@ -231,6 +240,14 @@ alter table only public.deals
 create unique index uq_contacts_one_primary_per_company
     on public.contacts (company_id)
     where is_primary and company_id is not null;
+
+-- Self Contact Wave (2026-08-26): eine Person hat höchstens eine
+-- Privatkundenakte. Dieselbe Person darf jedoch self_contact_id mehrerer
+-- Firmen-Kundenakten sein (z. B. Inhaber mehrerer Selbstständigkeiten) —
+-- daher NUR für customer_kind = 'individual', kein globales UNIQUE.
+create unique index uq_companies_self_contact_individual
+    on public.companies (self_contact_id)
+    where customer_kind = 'individual' and self_contact_id is not null;
 
 --
 -- Checklists, text snippets, audit (v0.3d2) — see 10-checklists-snippets-audit.md

@@ -80,21 +80,45 @@ Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show`: Klick auf Tab 
 
 ### 5. Schnellerfassung auf atomare Customer/Contact-Operation umstellen
 
-**Status: PLANNED FOLLOW-UP**
+**Status: RESOLVED / VERIFIED (2026-08-26, Self Contact Wave)**
 
-Die Schnellerfassung (`Kunde → Ansprechpartner → Vorgang`, `QuickCaptureDialog.tsx` / `submitQuickCapture.ts`) verwendet weiterhin **sequentielle** `dataProvider.create`-Aufrufe (Stand v0.3e), nicht die neue RPC `create_customer_with_contact`. Bei einem Fehler zwischen Kunden- und Kontakt-Anlage kann derselbe Teilzustand entstehen, den `/kunden/create` durch die neue atomare Operation seit der Customer & Contact Workflow Wave nicht mehr hat.
-
-`/kunden/create` verwendet bereits die neue Architektur vollständig; die Schnellerfassung noch nicht. Diese Umstellung war ausdrücklich **nicht Teil** der Customer & Contact Workflow Wave (siehe Decision Log).
+Die Schnellerfassung (`QuickCaptureDialog.tsx`) ruft jetzt den Application Command `createQuickCaptureCase` (`application/commands/createQuickCaptureCase.ts`) auf, der Kunde+Kontakt+Vorgang über die neue RPC `create_quick_capture_case` in einer Transaktion schreibt — kein Teilzustand mehr zwischen diesen dreien. `submitQuickCapture.ts` wurde entfernt. Aufgabe bleibt bewusst ein separater Best-Effort-Schritt danach (bestehende `taskFailed`-Notice-Semantik unverändert). Vollständige Entscheidung: Decision Log „2026-08-26 – Self Contact Wave".
 
 ---
 
-### 6. Legacy-Spalten-Cleanup
+### 6. Privatperson/Firma-Unterscheidung in Quick Capture
+
+**Status: PLANNED FOLLOW-UP**
+
+Die Schnellerfassung erzeugt Kunden weiterhin ohne `customer_kind`-Auswahl (Datenbank-Default `business`). Eine „Diese Person ist selbst Ansprechpartner"-Option analog zu `/kunden/create` bzw. dem neuen Kontakt→Kundenakte-Flow ist für Quick Capture **nicht** umgesetzt — bewusst nicht Teil der Self Contact Wave (siehe Decision Log). Bei Bedarf als eigene Folge-Welle zu spezifizieren.
+
+---
+
+### 7. Customer-Archive-/Soft-Delete-Lifecycle
+
+**Status: PLANNED FOLLOW-UP, kein Zeitdruck**
+
+Langfristige Zielrichtung: normales „Kunde löschen" durch einen fachlichen Lifecycle (`ArchiveCustomer`/`RestoreCustomer`, unveränderliche Kundennummer, historische Referenzintegrität) ersetzen. In der Self Contact Wave wurde dafür **nur** die notwendige Self-Contact-Delete-Invariante abgesichert (Löschen des repräsentierenden Kontakts einer Privatkundenakte ist blockiert) — kein vollständiger Archive-Lifecycle gebaut, bewusst außerhalb des Scopes.
+
+---
+
+### 8. Legacy-Spalten-Cleanup
 
 **Status: PLANNED FOLLOW-UP, kein Zeitdruck**
 
 `companies.linkedin_url`, `companies.website`, `companies.context_links`, `companies.phone_number`, `contacts.linkedin_url` sind seit der Customer & Contact Workflow Wave UI-seitig nur noch Lese-Fallback (Bestandsdaten per Migration in `links_jsonb`/`email_jsonb`/`phone_jsonb` kopiert). Entfernen erst nach ausreichender Übergangszeit und Bestätigung, dass keine externen Integrationen (CSV-Import, alte API-Clients) mehr auf die alten Spalten schreiben.
 
 ---
+
+### 9. Pre-Production Hardening Patch — vollständig nachgeprüft
+
+**Status: RESOLVED / VERIFIED — 2026-08-27**
+
+Die Pre-Production-Hardening-Session (siehe Decision Log) hat verifizierte Bugs behoben (FakeRest-Effective-Contact-Parität, Falsy-ID-Audit, Error Contract für Quick Capture, Individual Name Invariant). Docker wurde in derselben Session gestartet und die volle kanonische RBAC-Testreihenfolge (`07-agent-change-checklist.md`) gegen einen frischen `npx supabase db reset --local` durchlaufen — **alle Tests grün**, inkl. der neuen Domain-Contract-Matrix (Abschnitt 7) und des Individual-Name-Invariant-Negativtests (Abschnitt 4c-ii) in `customer_contact_workflow_verification.sql`, sowie eines neuen empirischen Atomic-Rollback-Tests (Abschnitt 6f). Concurrency wurde bewertet (kein neuer Doppel-Datensatz-Bug; ein bekannter/dokumentierter Idempotency-Gap bleibt bewusst offen für eine spätere Welle).
+
+**Production-Data-Preflight (read-only, nachgeholt nach Umstellung der Supabase-MCP-Verbindung auf `nora-crm-prod`):** 14 Kunden, 0 `individual` → kein Self-Contact-Backfill-Kollisionsrisiko; keine Dubletten/verwaisten FKs/CHECK-Verletzungen gefunden; 2 vorbestehende (nicht durch diesen Patch verursachte) Security-Advisor-Findings zu `SECURITY DEFINER`-Views notiert, nicht behoben (außerhalb des Scopes). **Keine Migration-Blocker.** Details: Decision Log „2026-08-27 – Pre-Production Hardening Patch".
+
+Vor dem eigentlichen Push/Deploy der Self Contact Wave (Punkt 8 unten) bleibt nur noch der Deploy-Schritt selbst offen — keine offenen Nachprüfungspunkte mehr aus dieser Session.
 
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 

@@ -29,6 +29,8 @@ describe("executeCreateCustomerWithContact", () => {
       p_company: { name: "Metaphor GmbH" },
       p_contact: { first_name: "Max", last_name: "Mustermann" },
       p_existing_contact_id: null,
+      p_self_contact_id: null,
+      p_mark_self: false,
     });
     expect(setHeader).toHaveBeenCalledWith(
       NORA_OPERATION_ID_HEADER,
@@ -52,12 +54,10 @@ describe("executeCreateCustomerWithContact", () => {
   });
 
   it("passes existingContactId through as p_existing_contact_id and omits p_contact", async () => {
-    const setHeader = vi
-      .fn()
-      .mockResolvedValue({
-        data: { company_id: 1, contact_id: 9 },
-        error: null,
-      });
+    const setHeader = vi.fn().mockResolvedValue({
+      data: { company_id: 1, contact_id: 9 },
+      error: null,
+    });
     const rpc = vi.fn().mockReturnValue({ setHeader });
 
     await executeCreateCustomerWithContact(

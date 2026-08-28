@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useRecordContext, useTranslate } from "ra-core";
 import { ShowButton } from "@/components/admin/show-button";
 import { ReferenceManyField } from "@/components/admin/reference-many-field";
+import { Button } from "@/components/ui/button";
 
 import { NoraDeleteButton, NoraEditButton } from "../misc/NoraAccessActions";
 import { NoraWriteAccess } from "../misc/NoraAccessActions";
@@ -15,10 +17,12 @@ import { AsideSection } from "../misc/AsideSection";
 import type { Contact } from "../types";
 import { ContactMergeButton } from "./ContactMergeButton";
 import { ExportVCardButton } from "./ExportVCardButton";
+import { ContactToCustomerDialog } from "./ContactToCustomerDialog";
 
 export const ContactAside = ({ link = "edit" }: { link?: "edit" | "show" }) => {
   const record = useRecordContext<Contact>();
   const translate = useTranslate();
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
 
   if (!record) return null;
 
@@ -81,8 +85,22 @@ export const ContactAside = ({ link = "edit" }: { link?: "edit" | "show" }) => {
             <div className="mt-6 pt-6 border-t hidden sm:flex flex-col gap-2 items-start">
               <ExportVCardButton />
               <ContactMergeButton />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-0 cursor-pointer"
+                onClick={() => setCustomerDialogOpen(true)}
+              >
+                {translate("crm.contact_to_customer.action")}
+              </Button>
             </div>
           </NoraWriteAccess>
+          <ContactToCustomerDialog
+            contact={record}
+            open={customerDialogOpen}
+            onOpenChange={setCustomerDialogOpen}
+          />
           <div className="mt-6 pt-6 border-t hidden sm:flex flex-col gap-2 items-start">
             <NoraDeleteButton
               resource="contacts"

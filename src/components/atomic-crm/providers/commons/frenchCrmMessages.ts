@@ -31,6 +31,8 @@ export const frenchCrmMessages = {
         phone_jsonb: "Numéros de téléphone",
         links_jsonb: "Liens",
         link_url: "URL",
+        name_from_contact_hint: "Modifier sur la fiche contact",
+        self_contact_hint: "Cette fiche client appartient à cette personne",
       },
       empty: {
         description: "Il semble que la liste de vos entreprises soit vide.",
@@ -544,6 +546,15 @@ export const frenchCrmMessages = {
       customer_name_placeholder: "Nom du client",
       contact_for: "Contact pour",
       create_contact: "Créer un nouveau contact",
+      contact_step_missing_customer:
+        "Veuillez d'abord sélectionner ou créer un client à l'étape 1.",
+      contact_use_primary: "Utiliser l'interlocuteur principal",
+      contact_choose_other: "Choisir un autre contact existant",
+      contact_create_new: "Créer un nouveau contact",
+      contact_none: "Continuer sans contact",
+      contact_mark_primary: "Définir comme interlocuteur principal",
+      contact_mark_primary_hint:
+        "Cette personne devient l'interlocuteur principal de ce client.",
       source: "Source",
       follow_up_date: "Prochain contact client",
       create_task: "Créer une tâche",
@@ -600,6 +611,8 @@ export const frenchCrmMessages = {
       errors: {
         company_name_required: "Veuillez saisir un nom de client",
         company_create_failed: "Impossible de créer le client",
+        contact_selection_required:
+          "Veuillez choisir, créer ou volontairement ignorer un contact",
         contact_name_required: "Veuillez saisir le prénom et le nom du contact",
         contact_create_failed: "Impossible de créer le contact",
         deal_create_failed: "Impossible de créer l'affaire",
@@ -609,7 +622,22 @@ export const frenchCrmMessages = {
           "L'affaire a été créée mais la tâche n'a pas pu être créée",
         unknown: "Échec de la saisie rapide",
         not_authenticated: "Veuillez vous reconnecter",
+        contact_not_in_customer_context:
+          "Ce contact n'appartient pas à ce client.",
       },
+    },
+    contact_to_customer: {
+      action: "Créer une fiche client pour cette personne",
+      title: "Créer une fiche client pour %{name}",
+      individual_preview:
+        "Fiche client pour %{name} — nom, e-mail, téléphone et liens sont repris de la fiche contact.",
+      business_preview:
+        "%{name} reste l'interlocuteur là où il/elle l'est déjà, et est également enregistré(e) comme la personne derrière cette nouvelle fiche client.",
+      submit: "Créer la fiche client",
+      success: "La fiche client a été créée.",
+      error: "La fiche client n'a pas pu être créée.",
+      existing_private_record: "%{name} a déjà une fiche client particulier.",
+      open_existing: "Ouvrir la fiche client existante",
     },
     changelog: {
       title: "Notes de version",
@@ -983,6 +1011,10 @@ export const frenchCrmMessages = {
       request_aborted: "La requête a été annulée.",
       retry: "Réessayer",
       retry_hint: "Vérifiez votre connexion et réessayez.",
+      contact_not_in_customer_context:
+        "Ce contact n'appartient pas à ce client.",
+      self_contact_delete_blocked:
+        "La personne derrière une fiche client particulier ne peut pas être supprimée — modifiez d'abord la fiche client.",
     },
     unsaved_changes: {
       title: "Abandonner les modifications ?",

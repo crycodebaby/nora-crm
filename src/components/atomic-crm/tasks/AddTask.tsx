@@ -157,7 +157,7 @@ export const AddTask = ({
                 </DialogTitle>
               </DialogHeader>
               <TaskFormContent
-                selectContact={selectContact && !resolvedContactId}
+                selectContact={selectContact && resolvedContactId == null}
                 companyId={companyId}
                 defaultTaskType={defaultTaskType}
               />

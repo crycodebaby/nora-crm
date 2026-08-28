@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-08-25 (nach Unified Tasks Wave, Live-UX-Fixes-Wave, Customer & Contact Workflow Wave + Foundation Performance/Index-Härtung, PR #1).
+Stand: 2026-08-26 (nach Self Contact Wave, Unified Tasks Wave, Live-UX-Fixes-Wave, Customer & Contact Workflow Wave + Foundation Performance/Index-Härtung, PR #1).
 
 Dieses Dokument ist eine **schnelle Orientierung**, kein Ersatz für die referenzierten Dokumente. Es verlinkt, statt Inhalte zu duplizieren.
 
@@ -12,7 +12,7 @@ Nora CRM ist eine angepasste Kunden- und Vorgangsverwaltung für einen deutschen
 
 | Sichtbar | Technisch | Kurzbeschreibung |
 |---|---|---|
-| Kunde | `companies` | Unternehmen/Selbstständig (`customer_kind = business`) oder Privatperson (`customer_kind = individual`) |
+| Kunde | `companies` | Firma (`customer_kind = business`) oder Privatperson (`customer_kind = individual`); `self_contact_id` = repräsentierende Person, unabhängig von deren `contacts.company_id` (Self Contact Wave) |
 | Ansprechpartner | `contacts` | natürliche Person, optional `company_id`; max. 1 `is_primary = true` pro Kunde |
 | Vorgang | `deals` | Anfrage/Auftrag/Angebot |
 | Aufgabe | `tasks` | `contact_id` und `company_id` beide nullable, mindestens eines gesetzt (CHECK). `company_id` ist der **historisch stabile** Kundenkontext — wird bei Erstellung/Kontextänderung serverseitig aus `contact_id` abgeleitet, aber nie automatisch nachgeführt, wenn der Kontakt später den Kunden wechselt (siehe Unified Tasks Wave, Decision Log) |
@@ -55,6 +55,8 @@ Chronologisch, Details im Decision Log (`06-decision-log.md`):
 11. **Customer & Contact Workflow Wave** (2026-08-25) — siehe Abschnitt 5
 12. **Live-UX-Fixes-Wave** (2026-08-25): Kunden-Show Tab-Routing-Bug behoben, Kunden-Autocomplete-Create-UX verbessert — siehe Abschnitt 7
 13. **Unified Tasks Wave** (2026-08-25): `tasks.company_id`, historisch stabiler Kundenkontext, „Aufgaben"-Tab auf der Kundenakte — siehe Abschnitt 5a und Decision Log "2026-08-25 – Unified Tasks Wave". **Nur lokal verifiziert, noch nicht auf Production angewendet** (siehe Abschnitt 6).
+14. **Self Contact Wave** (2026-08-26): `companies.self_contact_id` (Person repräsentiert eine Kundenakte unabhängig von `contacts.company_id`), Kontakt→Kundenakte-Workflow, atomarer Quick-Capture-Command, Quick-Capture-Schritt-2-UX, Draft-Härtung, „Firma"-Label, Position-Fix — siehe Abschnitt 5b und Decision Log "2026-08-26 – Self Contact Wave". **Nur lokal verifiziert, noch nicht auf Production angewendet.**
+15. **Pre-Production Hardening Patch** (2026-08-27): unabhängiger Review der noch ungepushten Self Contact Wave fand konkrete Bugs; behoben und mit Tests abgesichert (kein neues Feature) — siehe Decision Log "2026-08-27 – Pre-Production Hardening Patch". **Nur lokal verifiziert, noch nicht gepusht/deployed** (wie die zugrunde liegende Self Contact Wave).
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
@@ -86,6 +88,21 @@ Vollständige Entscheidung: Decision Log "2026-08-25 – Unified Tasks Wave".
 
 **Nicht Teil dieser Wave:** `deal_id` an `tasks` (bewusst ausgeschlossen); Company-seitige `nb_tasks`-Zählung/Badge auf dem Tab-Label (nur Kontakte/Vorgänge haben Zähler, Aufgaben-Tab ist ein einfaches Label).
 
+## 5b. Self Contact Wave — was ist tatsächlich implementiert
+
+Vollständige Entscheidung: Decision Log „2026-08-26 – Self Contact Wave".
+
+- `companies.self_contact_id` (nullable FK auf `contacts`, entkoppelt von `contacts.company_id`) — drückt aus, welche natürliche Person eine Kundenakte repräsentiert, unabhängig davon, wo diese Person sonst als Ansprechpartner geführt wird (Freddie-Szenario: bleibt Ansprechpartner von Firma A, wird zusätzlich selbst Kunde). Partial Unique Index nur für `customer_kind='individual'`.
+- `contacts` bleibt kanonische Quelle für Personendaten bei Privatkunden — `companies.name` wird bei `customer_kind='individual'` serverseitig synchron gehalten (`nora_private.sync_individual_company_name()`), im Edit-Formular read-only mit Link zum Kontakt.
+- **Effective Contact Context** — eine zentrale Regel (`nora_private.is_effective_contact_of_company()` SQL, `domain/customerContactContext.ts` TS): ein Kontakt gehört zu einer Kundenakte, wenn `company_id` passt ODER er deren `self_contact_id` ist. Genutzt von Task-Kontextvalidierung, Quick-Capture-Validierung, CompanyShow-Kontakte-Tab.
+- Neue Application Commands: `application/commands/createCustomerFromContact.ts` (Kontakt → Kundenakte, UI: `ContactToCustomerDialog.tsx`, Button in `ContactAside.tsx` bei Export/Merge) und `application/commands/createQuickCaptureCase.ts` (ersetzt `submitQuickCapture.ts` — Kunde+Kontakt+Vorgang atomar über neue RPC `create_quick_capture_case`, Aufgabe bleibt separater Best-Effort-Schritt).
+- Neue RPC-Kern-Refaktorierung: `nora_private.create_customer_with_contact_core()` — gemeinsame Logik für `create_customer_with_contact` (erweitert, PostgREST-rückwärtskompatibel) und `create_quick_capture_case` (neu).
+- Quick Capture Schritt 2 („Ansprechpartner"): expliziter Tri-State (bestehend/neu/kein Ansprechpartner) statt einer Checkbox, die implizit eine Entität erzeugte.
+- Quick-Capture-Draft: pro Benutzer gescoped, Schema-Version + Staleness, Autosave + Lifecycle-Flush; alter globaler Key wird beim Upgrade entfernt (nie migriert).
+- UI-Fixes: doppelte „Position"-Anzeige auf `/kontakte/create` behoben (Root Cause: Sektionsüberschrift duplizierte das Feld-Auto-Label), „Unternehmen / Selbstständig" → „Firma".
+
+**Nicht Teil dieser Wave:** Privatperson/Firma-Unterscheidung in Quick Capture (kennt weiterhin nur einen Firmenmodus); Customer-Archive-/Soft-Delete-Lifecycle (nur die notwendige Self-Contact-Delete-Invariante wurde abgesichert).
+
 ## 6. Was ist aktuell live?
 
 Verifiziert am 2026-08-25 in dieser Session (read-only Prüfung gegen `nora-crm-prod`, Vercel-Deployment-Status) — **vor** der Unified Tasks Wave:
@@ -107,10 +124,11 @@ Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassun
 
 ## 8. Welche nächsten Domain-Waves sind geplant?
 
-1. **Unified Tasks Wave auf Production anwenden** — Migration und Frontend sind lokal vollständig implementiert und verifiziert (Abschnitt 5a), aber noch nicht auf `nora-crm-prod` migriert/deployed. Nächster kontrollierter Schritt, keine automatische Freigabe.
-2. **Schnellerfassung auf `create_customer_with_contact` umstellen** — aktuell sequentielle Client-Creates (Teilzustand-Risiko wie vor dieser Wave bei `/kunden/create`).
-3. Legacy-Spalten-Cleanup (`linkedin_url`, `website`, `context_links`, `companies.phone_number`) nach ausreichender Übergangszeit.
-4. Mobile „Aufgaben"-Bereich auf der Kundenakte (die Unified Tasks Wave hat den Tab nur für Desktop `CompanyShow` gebaut, mobile `CompanyShowContentMobile` hat aktuell keine Tab-Struktur).
+1. **Unified Tasks Wave + Self Contact Wave auf Production anwenden** — Migrationen und Frontend sind lokal vollständig implementiert und verifiziert (Abschnitt 5a/5b), aber noch nicht auf `nora-crm-prod` migriert/deployed. Nächster kontrollierter Schritt, keine automatische Freigabe.
+2. Legacy-Spalten-Cleanup (`linkedin_url`, `website`, `context_links`, `companies.phone_number`) nach ausreichender Übergangszeit.
+3. Mobile „Aufgaben"-Bereich auf der Kundenakte (die Unified Tasks Wave hat den Tab nur für Desktop `CompanyShow` gebaut, mobile `CompanyShowContentMobile` hat aktuell keine Tab-Struktur).
+4. Privatperson/Firma-Unterscheidung in Quick Capture (bewusst nicht Teil der Self Contact Wave, siehe Decision Log).
+5. Customer-Archive-/Soft-Delete-Lifecycle (`ArchiveCustomer`/`RestoreCustomer`) als Ersatz für das normale Kunden-Löschen — separate, noch nicht designte Wave; aktuell nur die notwendige Self-Contact-Delete-Invariante abgesichert.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 
@@ -119,6 +137,7 @@ Details, Status und Ursachen: `17-known-issues-and-planned-waves.md`. Kurzfassun
 | Projektziel, Nicht-Ziele | `00-project-context.md` |
 | Domänenmodell, Kundenart, Hauptansprechpartner | `01-domain-model.md` |
 | **Aufgaben/Tasks, `tasks.company_id`, historischer Kundenkontext** | `01-domain-model.md` (Modell) + `03-data-model-guardrails.md` Falle 7/7a (Fallen) + `06-decision-log.md` „Unified Tasks Wave" (Begründung) |
+| **Self Contact, Effective Contact Context, Kontakt→Kundenakte, Quick-Capture-Command/Draft** | `01-domain-model.md` (Modell) + `03-data-model-guardrails.md` (Fallen) + `06-decision-log.md` „Self Contact Wave" (Begründung, Alternativen) |
 | Design/UI-Regeln | `02-design-system.md` |
 | Datenmodell-Fallen, Guardrails | `03-data-model-guardrails.md` |
 | Routing, i18n, deutsche URLs, **bekanntes Fehlermuster englische Ur-Code-Pfade** | `04-routing-i18n.md` |

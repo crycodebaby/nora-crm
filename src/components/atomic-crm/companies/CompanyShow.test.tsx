@@ -73,6 +73,51 @@ describe("CompanyShow tab routing (Nora /kunden alias)", () => {
   });
 });
 
+// Self Contact Wave (2026-08-26): a company's self_contact_id can point at a
+// contact whose own company_id is a DIFFERENT company (Freddie stays
+// Ansprechpartner of Firma A while being self_contact_id of his own
+// Privatkundenakte). The plain company_id-filtered ReferenceManyField would
+// miss him — the SelfContactCard fallback must surface him anyway, and
+// nb_contacts must agree with what's actually shown.
+describe("CompanyShow Kontakte tab self_contact_id (Self Contact Wave)", () => {
+  beforeAll(() => {
+    page.viewport(1600, 1200);
+  });
+
+  it("shows the self contact even when their company_id points at a different company", async () => {
+    const firmaA = buildCompany({ id: 40, name: "Traum und Horror UG" });
+    const privatAkte = buildCompany({
+      id: 41,
+      name: "Freddie Krüger",
+      customer_kind: "individual",
+      nb_contacts: 1,
+      self_contact_id: 400,
+    } as any);
+    const freddie = buildContact({
+      id: 400,
+      company_id: 40,
+      company_name: firmaA.name,
+      first_name: "Freddie",
+      last_name: "Krüger",
+      is_primary: true,
+    });
+
+    const screen = await render(
+      <StoryWrapper
+        initialEntries={["/kunden/41/show/contacts"]}
+        data={{
+          companies: [firmaA, privatAkte],
+          contacts: [freddie],
+        }}
+      >
+        <div />
+      </StoryWrapper>,
+    );
+
+    await expect.element(screen.getByText("Freddie Krüger")).toBeVisible();
+  });
+});
+
 // Unified Tasks Wave: the customer record must show every task with
 // task.company_id = this customer — with or without a contact — in a single
 // list, without duplicating the task that also appears on the contact.

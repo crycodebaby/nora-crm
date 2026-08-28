@@ -140,8 +140,103 @@ Nur bei belegtem Bedarf:
 | `contacts.is_primary` | Hauptansprechpartner, max. 1 pro Kunde (Partial Unique Index) — **implementiert** |
 | `companies.links_jsonb` / `contacts.links_jsonb` | generisches Link-Modell (Website, LinkedIn, …) — **implementiert**, ersetzt LinkedIn-only-Validierung |
 | `companies.email_jsonb` / `companies.phone_jsonb` | mehrere Firmen-Kontaktmethoden mit Typ — **implementiert** |
-| `create_customer_with_contact` (RPC) | atomare Kunde+Ansprechpartner-Anlage — **implementiert** |
+| `create_customer_with_contact` (RPC) | atomare Kunde+Ansprechpartner-Anlage — **implementiert**, erweitert um `self_contact_id`/`mark_self` (Self Contact Wave) |
 | `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert** |
+| `companies.self_contact_id` | Person repräsentiert Kundenakte, entkoppelt von `contacts.company_id` — **implementiert** (Self Contact Wave, 2026-08-26) |
+| `create_quick_capture_case` (RPC) | atomare Kunde+Kontakt+Vorgang-Anlage für Schnellerfassung — **implementiert** |
+| `nora_private.is_effective_contact_of_company` | zentrale „gehört Kontakt zu Kundenakte"-Regel — **implementiert**, FakeRest-Parität in Pre-Production-Hardening-Session (2026-08-27) korrigiert |
+| `nora_private.sync_individual_company_name` Empty-Name-Guard | verhindert `companies.name = ''` bei Privatkundenakte (Whitespace-only Vor-/Nachname) — **implementiert** (Pre-Production Hardening Patch, 2026-08-27) |
+
+### Falle 29: `self_contact_id` mit `contacts.company_id` verwechseln
+
+Falsch:
+
+```text
+Beim „Kontakt → Kundenakte"-Flow contacts.company_id auf die neue
+Kundenakte umhängen, um "diese Person ist der Kunde" auszudrücken.
+```
+
+Richtig:
+
+```text
+companies.self_contact_id zeigt auf den Kontakt — contacts.company_id
+(die bestehende Arbeitgeber-/Ansprechpartner-Beziehung) bleibt unangetastet.
+Eine Person kann Ansprechpartner einer Firma bleiben und gleichzeitig
+self_contact_id einer ANDEREN Kundenakte sein (Freddie-Szenario).
+```
+
+### Falle 30: `is_primary` unabhängig vom `company_id`-Kontext lesen
+
+Falsch:
+
+```text
+contact.is_primary === true als "Hauptansprechpartner dieser Kundenakte"
+werten, ohne zu prüfen, ob contact.company_id tatsächlich zu dieser
+Kundenakte passt.
+```
+
+Richtig:
+
+```text
+is_primary ist nur aussagekräftig, wenn zusätzlich company_id passt
+(explicitPrimaryContact in domain/customerContactContext.ts). Ein
+is_primary=true bei abweichendem company_id ist für DIESE Kundenakte
+bedeutungslos.
+```
+
+### Falle 33: `error.message` als i18n-Key oder Business-Code verwenden
+
+Falsch:
+
+```text
+notify(`crm.quick_capture.errors.${error.message}`)   // error.message = roher Postgres-Exception-Text
+```
+
+Richtig:
+
+```text
+const normalized = normalizeCrmError(error);   // -> stabiler messageKey, z. B. "crm.errors.contact_not_in_customer_context"
+notify(normalized.messageKey);
+```
+
+`error.message` ist niemals ein stabiler Business-Code — freier DB-/Exception-Text darf nicht direkt an einen i18n-Key angehängt werden (erzeugt nie-übersetzte Keys, die dem Büropersonal als Rohtext angezeigt werden). `normalizeCrmError.ts`/`CrmErrorKind` (`misc/normalizeCrmError.ts`) ist die einzige Stelle, die technische Fehler auf stabile `messageKey`s abbildet — bei neuen Business-Rejections (neue RPC-Exception-Texte) dort ein neues Pattern/`CrmErrorKind` ergänzen, kein zweites Error-Framework bauen. **Verifizierter, in dieser Session behobener Fall:** `application/commands/createQuickCaptureCase.ts` reichte bei einem RPC-Fehlschlag den rohen `error.message` unverändert als `QuickCaptureSubmitError`-Code durch, den `QuickCaptureDialog.tsx` direkt in einen i18n-Key-Suffix einsetzte — behoben durch `normalizeCrmError()` mit neuem `contact_not_in_customer_context`/`self_contact_delete_blocked`-Mapping (Pre-Production Hardening Patch, 2026-08-27).
+
+### Falle 32: Numerische Entity-/Demo-IDs per Truthiness prüfen
+
+Falsch:
+
+```text
+if (!identity?.id) return;          // identity.id = 0 (Default-Demo-Admin) wird fälschlich als "keine Identity" behandelt
+disabled={!winnerId}                // winnerId = 0 wäre ein gültiges Merge-Ziel
+```
+
+Richtig:
+
+```text
+if (identity?.id == null) return;
+disabled={winnerId == null}
+```
+
+Demo/FakeRest verwendet reale numerische IDs einschließlich `0` (`demoSession.ts`: Default-Demo-Admin hat `identity.id = 0`). Existenzprüfungen für numerische Entity-/Identity-IDs müssen `== null` (nullish) statt Truthiness verwenden, wenn fachlich nur „nicht vorhanden" gemeint ist — sonst wird eine legitime ID `0` fälschlich als „fehlt" behandelt. Betraf verifiziert u. a. `QuickCaptureDialog.tsx` (`identity?.id`), `ContactMergeButton.tsx` (`winnerId`), `CompanyAside.tsx` (`record.sales_id`), `CompanyInputs.tsx`/`CompanyShow.tsx` (`self_contact_id`), `NoteCreateSheet.tsx`/`TaskCreateSheet.tsx` (`referenceRecordId`), `AddTask.tsx` (`resolvedContactId`) — behoben in der Pre-Production-Hardening-Session, siehe Decision Log. UUID-/String-IDs sind von dieser Regel nicht betroffen (leerer String ist dort meist schon fachlich ungültig).
+
+### Falle 31: Effective-Contact-Regel mehrfach implementieren
+
+Falsch:
+
+```text
+In CompanyShow, Aufgaben-Kontaktauswahl und Quick Capture jeweils eigene
+Ad-hoc-Logik schreiben, ob ein Kontakt "zu einem Kunden gehört".
+```
+
+Richtig:
+
+```text
+nora_private.is_effective_contact_of_company() (SQL) bzw.
+domain/customerContactContext.ts::resolveCustomerContacts() (TS) sind die
+einzigen Implementierungen dieser Regel.
+```
+
+**Domain Contract Testing (Pre-Production Hardening Patch, 2026-08-27):** Die drei parallelen Implementierungen (SQL `nora_private.is_effective_contact_of_company`, TS `domain/customerContactContext.ts`, FakeRest `providers/fakerest/internal/taskContextCheck.ts`) werden über eine gemeinsam benannte Szenario-Matrix geprüft: `domain/effectiveContactContext.contractCases.ts` (Fälle `regular_contact` / `self_contact` / `foreign_contact` / `foreign_primary_contact` / `regular_and_self` / `missing_contact` / `missing_company`), genutzt von `customerContactContext.test.ts` und `taskContextCheck.test.ts`; identisch benannte Fälle in `supabase/tests/customer_contact_workflow_verification.sql` Abschnitt 7. **Verifizierter, in dieser Session behobener Bug:** FakeRests `isEffectiveContactOfCompany()` prüfte bisher **nur** `self_contact_id` und nie `contact.company_id = company.id` — ein regulärer Kontakt derselben Firma wurde in FakeRest fälschlich als "nicht effektiv zugehörig" abgelehnt (SQL/TS waren korrekt). Bei künftigen Änderungen an der Regel alle drei Stellen UND die Szenario-Matrix synchron halten.
 
 ### Falle 28: Privatperson-Namensfeld doppelt vorhalten
 
@@ -265,7 +360,8 @@ Details in `10-checklists-snippets-audit.md`:
 - **Quelle/Herkunft** vorerst in `deals.description` als Präfix `Quelle: …` — kein `source_channel`-Feld (später empfohlen)
 - **Keine Tags** für Quelle — vermeidet Datenmodell-Duplikate
 - **Dubletten** nur heuristisch (Name, Telefon, E-Mail) — keine KI
-- **Nicht atomar** — sequentielle Client-CREATEs; bei Fehler nach Kunde/Ansprechpartner Teilzustand möglich → später RPC empfohlen
+- **Atomar seit Self Contact Wave (2026-08-26)**: Kunde+Kontakt+Vorgang laufen über den Application Command `createQuickCaptureCase` → RPC `create_quick_capture_case` — kein Teilzustand zwischen diesen dreien mehr möglich. Aufgabe bleibt bewusst ein separater Best-Effort-Schritt danach (kann isoliert fehlschlagen, ohne Kunde/Kontakt/Vorgang zurückzurollen).
+- **Draft** pro Benutzer gescoped (`nora-quick-capture-draft:{identity.id}`), Schema-Version + Staleness-Schwelle, Autosave + Lifecycle-Flush — siehe Decision Log „Self Contact Wave"
 - **Keine** Gmail/WhatsApp/Google-Kalender-Integration — nur manuelle Quellen-Auswahl
 
 ## Dubletten-Vorschläge (Welle v0.3f)
@@ -287,8 +383,8 @@ Details in `10-checklists-snippets-audit.md`:
 
 ## Schnellerfassung UX (Welle v0.3g)
 
-- **Keine Migration** — Entwürfe nur lokal im Browser (`nora-quick-capture-draft` in `localStorage`)
-- **Kein serverseitiger Entwurf** in dieser Welle — später ersetzbar
+- **Keine Migration** — Entwürfe nur lokal im Browser, pro Benutzer gescoped (`nora-quick-capture-draft:{identity.id}` in `localStorage`, seit Self Contact Wave — der alte globale Key ohne Benutzer-Scope wird beim Upgrade entfernt, nie migriert)
+- **Kein serverseitiger Entwurf** — bewusst weiterhin rein clientseitig (kein echter Nutzen für einen serverseitigen Draft identifiziert)
 - **Freie Tab-Navigation** — keine Blockade durch unvollständige Felder zwischen Schritten
 - **Ein Kundenvorschlags-Bereich** — `mergeCustomerSearchResults` dedupliziert Suche und Scoring
 - **Kein Auto-Merge** — unverändert aus v0.3f

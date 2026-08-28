@@ -29,6 +29,8 @@ export const englishCrmMessages = {
         phone_jsonb: "Phone numbers",
         links_jsonb: "Links",
         link_url: "URL",
+        name_from_contact_hint: "Edit on the contact record",
+        self_contact_hint: "This customer record belongs to this person",
       },
       empty: {
         description: "It seems your company list is empty.",
@@ -537,6 +539,15 @@ export const englishCrmMessages = {
       customer_name_placeholder: "Customer name",
       contact_for: "Contact for",
       create_contact: "Create new contact",
+      contact_step_missing_customer:
+        "Please select or create a customer in step 1 first.",
+      contact_use_primary: "Use main contact",
+      contact_choose_other: "Choose a different existing contact",
+      contact_create_new: "Create a new contact",
+      contact_none: "Continue without a contact",
+      contact_mark_primary: "Set as main contact",
+      contact_mark_primary_hint:
+        "This person becomes the main contact for this customer.",
       source: "Source",
       follow_up_date: "Next contact date",
       create_task: "Create task",
@@ -593,6 +604,8 @@ export const englishCrmMessages = {
       errors: {
         company_name_required: "Please enter a customer name",
         company_create_failed: "Could not create customer",
+        contact_selection_required:
+          "Please choose, create, or deliberately skip a contact",
         contact_name_required: "Please enter contact first and last name",
         contact_create_failed: "Could not create contact",
         deal_create_failed: "Could not create deal",
@@ -602,7 +615,22 @@ export const englishCrmMessages = {
           "Deal was created but the task could not be created",
         unknown: "Quick capture failed",
         not_authenticated: "Please sign in again",
+        contact_not_in_customer_context:
+          "This contact does not belong to this customer.",
       },
+    },
+    contact_to_customer: {
+      action: "Create customer record for this person",
+      title: "Create customer record for %{name}",
+      individual_preview:
+        "Customer record for %{name} — name, email, phone and links are taken from the contact record.",
+      business_preview:
+        "%{name} stays the Ansprechpartner wherever they already are, and is additionally recorded as the person behind this new customer record.",
+      submit: "Create customer record",
+      success: "Customer record was created.",
+      error: "Customer record could not be created.",
+      existing_private_record: "%{name} already has a private customer record.",
+      open_existing: "Open existing customer record",
     },
     changelog: {
       title: "Changelog",
@@ -971,6 +999,10 @@ export const englishCrmMessages = {
       request_aborted: "The request was cancelled.",
       retry: "Try again",
       retry_hint: "Check your connection and try again.",
+      contact_not_in_customer_context:
+        "This contact does not belong to this customer.",
+      self_contact_delete_blocked:
+        "The person behind a private customer record cannot be deleted — update the customer record first.",
     },
     unsaved_changes: {
       title: "Discard changes?",

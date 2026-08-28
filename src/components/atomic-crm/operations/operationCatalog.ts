@@ -26,7 +26,9 @@ export type CatalogOperationType =
   | "customer.update"
   | "customer.createWithContact"
   | "contact.update"
-  | "contact.setPrimary";
+  | "contact.setPrimary"
+  | "contact.convertToCustomer"
+  | "quickCapture.createCase";
 
 export const OPERATION_CATALOG: {
   readonly [K in CatalogOperationType]: OperationCatalogEntry & {
@@ -74,6 +76,20 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Hauptansprechpartner wird geändert …",
     successMessage: "Hauptansprechpartner wurde geändert.",
     errorMessage: "Hauptansprechpartner konnte nicht geändert werden.",
+  },
+  "contact.convertToCustomer": {
+    operationType: "contact.convertToCustomer",
+    resourceType: "companies",
+    pendingMessage: "Kundenakte wird angelegt …",
+    successMessage: "Kundenakte wurde angelegt.",
+    errorMessage: "Kundenakte konnte nicht angelegt werden.",
+  },
+  "quickCapture.createCase": {
+    operationType: "quickCapture.createCase",
+    resourceType: "deals",
+    pendingMessage: "Schnellerfassung wird gespeichert …",
+    successMessage: "Schnellerfassung wurde gespeichert.",
+    errorMessage: "Schnellerfassung konnte nicht gespeichert werden.",
   },
 } as const;
 

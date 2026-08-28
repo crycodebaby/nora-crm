@@ -1,5 +1,6 @@
 import { required, useRecordContext, useTranslate } from "ra-core";
 import { useWatch } from "react-hook-form";
+import { Link } from "react-router-dom";
 import { ReferenceInput } from "@/components/admin/reference-input";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
@@ -27,6 +28,7 @@ import {
   DEFAULT_LINK_TYPE,
 } from "../misc/linksModel";
 import { customerKindChoices } from "./customerKind";
+import { noraCreatePath } from "../routing/noraRoutes";
 
 export const CompanyInputs = () => {
   const isMobile = useIsMobile();
@@ -65,11 +67,44 @@ const CompanyDisplayInputs = () => {
   });
   // Beim Neuanlegen einer Privatperson wird der Kundenname aus Vor-/Nachname
   // abgeleitet (siehe CustomerCreateForm) — kein doppeltes Pflichtfeld.
-  // Beim Bearbeiten bleibt companies.name die eigenständige, führende Quelle.
   const nameIsDerived = !record && customerKind === "individual";
+  // Self Contact Wave (2026-08-26): beim Bearbeiten einer Privatkundenakte
+  // mit self_contact_id bleibt contacts die kanonische Personenquelle —
+  // companies.name ist eine serverseitig synchronisierte Ableitung (siehe
+  // nora_private.sync_individual_company_name()) und wird hier NICHT als
+  // frei editierbares zweites Namensfeld angeboten. Ohne self_contact_id
+  // (z. B. sehr alte Bestandsdaten) fällt es weich auf editierbar zurück.
+  const nameIsReadOnlyIndividual =
+    !!record && customerKind === "individual" && record.self_contact_id != null;
   return (
     <div className="flex flex-col gap-2 flex-1">
-      {nameIsDerived ? null : (
+      {nameIsDerived ? null : nameIsReadOnlyIndividual ? (
+        <div className="flex gap-4 flex-1 flex-row items-center">
+          <ImageEditorField
+            source="logo"
+            type="avatar"
+            width={60}
+            height={60}
+            emptyText={record?.name.charAt(0)}
+            linkPosition="bottom"
+          />
+          <div className="flex flex-col gap-1">
+            <p className="text-lg font-semibold">{record.name}</p>
+            <Link
+              to={noraCreatePath({
+                resource: "contacts",
+                type: "edit",
+                id: record.self_contact_id ?? undefined,
+              })}
+              className="text-sm text-primary hover:underline w-fit"
+            >
+              {translate("resources.companies.fields.name_from_contact_hint", {
+                _: "Im Ansprechpartner-Datensatz bearbeiten",
+              })}
+            </Link>
+          </div>
+        </div>
+      ) : (
         <div className="flex gap-4 flex-1 flex-row">
           <ImageEditorField
             source="logo"

@@ -31,6 +31,8 @@ export const germanCrmMessages = {
         phone_jsonb: "Telefonnummern",
         links_jsonb: "Links",
         link_url: "Adresse",
+        name_from_contact_hint: "Im Ansprechpartner-Datensatz bearbeiten",
+        self_contact_hint: "Diese Kundenakte gehört zu dieser Person",
       },
       empty: {
         description: "Ihre Kundenliste ist noch leer.",
@@ -47,7 +49,7 @@ export const germanCrmMessages = {
       },
       inputs: {
         customer_kind: {
-          business: "Unternehmen / Selbstständig",
+          business: "Firma",
           individual: "Privatperson",
         },
         link_types: {
@@ -545,6 +547,15 @@ export const germanCrmMessages = {
       customer_name_placeholder: "Kundenname",
       contact_for: "Ansprechpartner für",
       create_contact: "Neuen Ansprechpartner erfassen",
+      contact_step_missing_customer:
+        "Bitte zuerst in Schritt 1 einen Kunden auswählen oder anlegen.",
+      contact_use_primary: "Hauptansprechpartner verwenden",
+      contact_choose_other: "Anderen vorhandenen Ansprechpartner wählen",
+      contact_create_new: "Neuen Ansprechpartner anlegen",
+      contact_none: "Ohne Ansprechpartner fortfahren",
+      contact_mark_primary: "Als Hauptansprechpartner festlegen",
+      contact_mark_primary_hint:
+        "Diese Person wird die Hauptansprechperson für diesen Kunden.",
       source: "Quelle",
       follow_up_date: "Nächster Kontakttermin",
       create_task: "Aufgabe anlegen",
@@ -603,6 +614,8 @@ export const germanCrmMessages = {
         company_create_failed: "Kunde konnte nicht angelegt werden",
         contact_name_required:
           "Bitte Vor- und Nachname des Ansprechpartners eingeben",
+        contact_selection_required:
+          "Bitte einen Ansprechpartner wählen, anlegen oder bewusst ohne fortfahren",
         contact_create_failed: "Ansprechpartner konnte nicht angelegt werden",
         deal_create_failed: "Vorgang konnte nicht angelegt werden",
         deal_title_required: "Bitte einen Vorgangstitel eingeben",
@@ -611,7 +624,22 @@ export const germanCrmMessages = {
           "Vorgang wurde angelegt, die Aufgabe konnte nicht erstellt werden",
         unknown: "Schnellerfassung fehlgeschlagen",
         not_authenticated: "Bitte erneut anmelden",
+        contact_not_in_customer_context:
+          "Dieser Ansprechpartner gehört nicht zu diesem Kunden.",
       },
+    },
+    contact_to_customer: {
+      action: "Kundenakte für diese Person anlegen",
+      title: "Kundenakte für %{name} anlegen",
+      individual_preview:
+        "Kundenakte für %{name} — Name, E-Mail, Telefon und Links werden aus dem Ansprechpartner-Datensatz übernommen.",
+      business_preview:
+        "%{name} bleibt Ansprechpartner, wo er/sie es bereits ist, und wird zusätzlich als die Person hinter dieser neuen Kundenakte hinterlegt.",
+      submit: "Kundenakte anlegen",
+      success: "Kundenakte wurde angelegt.",
+      error: "Kundenakte konnte nicht angelegt werden.",
+      existing_private_record: "%{name} hat bereits eine Privatkundenakte.",
+      open_existing: "Bestehende Kundenakte öffnen",
     },
     changelog: {
       title: "Änderungsprotokoll",
@@ -981,6 +1009,10 @@ export const germanCrmMessages = {
       request_aborted: "Die Anfrage wurde abgebrochen.",
       retry: "Erneut versuchen",
       retry_hint: "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
+      contact_not_in_customer_context:
+        "Dieser Ansprechpartner gehört nicht zu diesem Kunden.",
+      self_contact_delete_blocked:
+        "Person hinter einer Privatkundenakte kann nicht gelöscht werden — zuerst die Kundenakte anpassen.",
     },
     unsaved_changes: {
       title: "Änderungen verwerfen?",

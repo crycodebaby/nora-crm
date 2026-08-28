@@ -253,7 +253,7 @@ export const AdditionalInfo = ({ record }: { record: Company }) => {
   if (
     !record.customer_number &&
     !record.created_at &&
-    !record.sales_id &&
+    record.sales_id == null &&
     !record.description
   ) {
     return null;

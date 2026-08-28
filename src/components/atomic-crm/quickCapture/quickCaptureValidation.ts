@@ -2,6 +2,8 @@ import type { Contact } from "../types";
 
 export type QuickCaptureStep = 1 | 2 | 3;
 
+export type QuickCaptureContactMode = "existing" | "new" | "none" | null;
+
 export type QuickCaptureFieldErrors = {
   customer?: string;
   contact?: string;
@@ -13,11 +15,10 @@ export type QuickCaptureValidationInput = {
   selectedCompany: { id: unknown } | null;
   createNewCompany: boolean;
   newCompanyName: string;
+  contactMode: QuickCaptureContactMode;
   selectedContact: Contact | null;
-  createNewContact: boolean;
   contactFirstName: string;
   contactLastName: string;
-  companyContactsCount: number;
   dealTitle: string;
   dealCategory: string;
 };
@@ -41,17 +42,17 @@ export function validateQuickCaptureForSave(
     errors.customer = "company_name_required";
   }
 
-  const mustCreateContact =
-    input.createNewContact || input.companyContactsCount === 0;
-
+  // "none" is a deliberate, valid choice — Quick Capture step 2 requires an
+  // explicit decision (existing/new/none), not an implicit default.
   const hasContact =
-    (!mustCreateContact && !!input.selectedContact) ||
-    (mustCreateContact &&
+    input.contactMode === "none" ||
+    (input.contactMode === "existing" && !!input.selectedContact) ||
+    (input.contactMode === "new" &&
       input.contactFirstName.trim().length > 0 &&
       input.contactLastName.trim().length > 0);
 
   if (!hasContact) {
-    errors.contact = "contact_name_required";
+    errors.contact = "contact_selection_required";
   }
 
   if (!input.dealTitle.trim()) {

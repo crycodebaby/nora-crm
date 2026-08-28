@@ -65,6 +65,7 @@ export const generateNoraCompanies = (): Required<Company>[] => {
     phone_jsonb: seed.phone_number
       ? [{ number: seed.phone_number, type: "Central" as const }]
       : [],
+    self_contact_id: null,
   }));
 
   return assignCustomerNumbers(companies) as Required<Company>[];

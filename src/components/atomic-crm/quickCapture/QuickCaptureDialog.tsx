@@ -4,11 +4,12 @@ import {
   useDataProvider,
   useGetIdentity,
   useGetList,
+  useGetOne,
   useNotify,
   useRedirect,
   useTranslate,
 } from "ra-core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,12 +36,15 @@ import { BusinessNumber } from "../misc/BusinessNumber";
 import { noraCreatePath } from "../routing/noraRoutes";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Company, Contact } from "../types";
+import type { CrmDataProvider } from "../providers/types";
+import { resolveCustomerContacts } from "../domain/customerContactContext";
 import { PossibleCustomersPanel } from "./PossibleCustomersPanel";
 import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
 import {
   clearQuickCaptureDraft,
   isDraftEmpty,
   loadQuickCaptureDraft,
+  purgeLegacyGlobalQuickCaptureDraft,
   saveQuickCaptureDraft,
   type QuickCaptureDraft,
   type QuickCaptureStep,
@@ -52,13 +56,14 @@ import {
   type QuickCaptureTaskOption,
 } from "./quickCaptureUtils";
 import {
+  createQuickCaptureCase,
   QuickCaptureSubmitError,
-  submitQuickCapture,
-} from "./submitQuickCapture";
+} from "../application/commands/createQuickCaptureCase";
 import type { CustomerListEntry } from "./mergeCustomerSearchResults";
 import { useDuplicateCandidateSearch } from "./useDuplicateCandidateSearch";
 import {
   validateQuickCaptureForSave,
+  type QuickCaptureContactMode,
   type QuickCaptureFieldErrors,
 } from "./quickCaptureValidation";
 
@@ -68,8 +73,12 @@ type QuickCaptureDialogProps = {
 };
 
 const defaultFollowUpDate = () => new Date().toISOString().slice(0, 10);
+const AUTOSAVE_DEBOUNCE_MS = 500;
 
-const emptyFormState = (): Omit<QuickCaptureDraft, "savedAt"> => ({
+const emptyFormState = (): Omit<
+  QuickCaptureDraft,
+  "savedAt" | "updatedAt" | "schemaVersion"
+> => ({
   step: 1,
   searchQuery: "",
   selectedCompany: null,
@@ -81,6 +90,7 @@ const emptyFormState = (): Omit<QuickCaptureDraft, "savedAt"> => ({
   contactLastName: "",
   contactPhone: "",
   contactEmail: "",
+  markNewContactPrimary: true,
   dealTitle: "",
   dealCategory: "fensterservice",
   dealDescription: "",
@@ -99,10 +109,15 @@ export const QuickCaptureDialog = ({
   const { onCloseAutoFocus } = useDialogFocusReturn(open);
   const notify = useNotify();
   const redirect = useRedirect();
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<CrmDataProvider>();
   const { identity } = useGetIdentity();
   const { dealCategories } = useConfigurationContext();
 
+  // "createNewContact" from the draft shape is now a derived concept —
+  // step 2 tracks an explicit tri-state contactMode instead (Self Contact
+  // Wave, 2026-08-26): a "Neuen Ansprechpartner erfassen" checkbox no
+  // longer silently means "this will create an entity".
+  const [contactMode, setContactMode] = useState<QuickCaptureContactMode>(null);
   const [form, setForm] = useState(emptyFormState);
   const [fieldErrors, setFieldErrors] = useState<QuickCaptureFieldErrors>({});
   const [draftNotice, setDraftNotice] = useState<"restored" | "present" | null>(
@@ -123,8 +138,7 @@ export const QuickCaptureDialog = ({
       if (
         patch.selectedContact !== undefined ||
         patch.contactFirstName !== undefined ||
-        patch.contactLastName !== undefined ||
-        patch.createNewContact !== undefined
+        patch.contactLastName !== undefined
       ) {
         delete next.contact;
       }
@@ -147,6 +161,7 @@ export const QuickCaptureDialog = ({
       contactLastName: draft.contactLastName,
       contactPhone: draft.contactPhone,
       contactEmail: draft.contactEmail,
+      markNewContactPrimary: draft.markNewContactPrimary ?? true,
       dealTitle: draft.dealTitle,
       dealCategory: draft.dealCategory,
       dealDescription: draft.dealDescription,
@@ -156,40 +171,82 @@ export const QuickCaptureDialog = ({
       taskType: draft.taskType,
       dismissCustomerSuggestions: draft.dismissCustomerSuggestions,
     });
+    setContactMode(
+      draft.selectedContact
+        ? "existing"
+        : draft.createNewContact
+          ? "new"
+          : null,
+    );
     setFieldErrors({});
   }, []);
 
   const buildDraft = useCallback(
-    (): QuickCaptureDraft => ({
+    (): Omit<QuickCaptureDraft, "schemaVersion" | "savedAt" | "updatedAt"> => ({
       ...form,
-      savedAt: new Date().toISOString(),
+      createNewContact: contactMode === "new",
     }),
-    [form],
+    [form, contactMode],
   );
 
   const persistDraft = useCallback(() => {
+    if (identity?.id == null) return;
     const draft = buildDraft();
-    if (isDraftEmpty(draft)) {
-      clearQuickCaptureDraft();
+    if (isDraftEmpty(draft as QuickCaptureDraft)) {
+      clearQuickCaptureDraft(identity.id);
       return;
     }
-    saveQuickCaptureDraft(draft);
-  }, [buildDraft]);
+    saveQuickCaptureDraft(identity.id, draft as QuickCaptureDraft);
+  }, [buildDraft, identity?.id]);
 
   const resetForm = useCallback(() => {
     setForm(emptyFormState());
+    setContactMode(null);
     setFieldErrors({});
     setDraftNotice(null);
   }, []);
 
+  // Legacy global draft key retired on first mount — never assigned to any
+  // user, ownership is not determinable across users on a shared profile.
   useEffect(() => {
-    if (!open) return;
-    const draft = loadQuickCaptureDraft();
+    purgeLegacyGlobalQuickCaptureDraft();
+  }, []);
+
+  useEffect(() => {
+    if (!open || identity?.id == null) return;
+    const draft = loadQuickCaptureDraft(identity.id);
     if (draft && !isDraftEmpty(draft)) {
       applyDraft(draft);
       setDraftNotice("restored");
     }
-  }, [open, applyDraft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, identity?.id]);
+
+  // Autosave while typing, in addition to save-on-close, so a plain reload
+  // doesn't lose the last few seconds of input.
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!open || identity?.id == null) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(persistDraft, AUTOSAVE_DEBOUNCE_MS);
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, identity?.id, form, contactMode]);
+
+  // Synchronous flush on page/tab lifecycle events — a reload or tab close
+  // must not lose whatever the debounce timer hasn't saved yet.
+  useEffect(() => {
+    if (!open) return;
+    const flush = () => persistDraft();
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [open, persistDraft]);
 
   useEffect(() => {
     setForm((current) => ({ ...current, dismissCustomerSuggestions: false }));
@@ -199,7 +256,6 @@ export const QuickCaptureDialog = ({
     form.contactPhone,
     form.contactEmail,
     form.createNewCompany,
-    form.createNewContact,
   ]);
 
   const customerSearchEnabled =
@@ -233,7 +289,7 @@ export const QuickCaptureDialog = ({
   };
 
   const handleDiscardDraft = () => {
-    clearQuickCaptureDraft();
+    if (identity?.id != null) clearQuickCaptureDraft(identity.id);
     resetForm();
     onOpenChange(false);
   };
@@ -244,7 +300,9 @@ export const QuickCaptureDialog = ({
       createNewCompany: false,
       newCompanyName: "",
       dismissCustomerSuggestions: false,
+      selectedContact: null,
     });
+    setContactMode(null);
   };
 
   const handleCreateNewCustomer = () => {
@@ -262,35 +320,69 @@ export const QuickCaptureDialog = ({
   const { data: companyContacts } = useGetList<Contact>(
     "contacts",
     {
-      filter: companyId ? { company_id: companyId } : {},
+      filter: companyId != null ? { company_id: companyId } : {},
       pagination: { page: 1, perPage: 50 },
       sort: { field: "last_name", order: "ASC" },
     },
-    { enabled: open && !!companyId },
+    { enabled: open && companyId != null },
+  );
+
+  // Effective Contact Context (Self Contact Wave): a self_contact can point
+  // at a contact whose company_id is a DIFFERENT company — the plain
+  // company_id-filtered getList above would miss it, so it is fetched
+  // separately whenever it isn't already in the loaded set.
+  const selfContactId = form.selectedCompany?.self_contact_id;
+  const selfContactAlreadyLoaded = (companyContacts ?? []).some(
+    (c) => String(c.id) === String(selfContactId),
+  );
+  const { data: fetchedSelfContact } = useGetOne<Contact>(
+    "contacts",
+    { id: selfContactId as string | number },
+    {
+      enabled: open && selfContactId != null && !selfContactAlreadyLoaded,
+    },
+  );
+
+  const effectiveContacts = [
+    ...(companyContacts ?? []),
+    ...(fetchedSelfContact && !selfContactAlreadyLoaded
+      ? [fetchedSelfContact]
+      : []),
+  ];
+
+  const contactContext = resolveCustomerContacts(
+    form.selectedCompany,
+    effectiveContacts,
   );
 
   const sourceLabel = translate(
     `crm.quick_capture.sources.${form.sourceChannel}`,
   );
 
-  const mustCreateContact =
-    form.createNewContact || (companyContacts?.length ?? 0) === 0;
-
   const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: () => {
-      if (!identity?.id) {
-        throw new QuickCaptureSubmitError("not_authenticated", "deal");
+      if (identity?.id == null) {
+        throw new QuickCaptureSubmitError("not_authenticated", "case");
       }
-      return submitQuickCapture(dataProvider, {
-        company: form.createNewCompany ? null : form.selectedCompany,
-        newCompanyName: form.createNewCompany ? form.newCompanyName : "",
-        contact: mustCreateContact ? null : form.selectedContact,
-        newContact: {
-          first_name: form.contactFirstName,
-          last_name: form.contactLastName,
-          phone: form.contactPhone,
-          email: form.contactEmail,
-        },
+      return createQuickCaptureCase(dataProvider, {
+        customer: form.createNewCompany
+          ? { mode: "new", name: form.newCompanyName }
+          : { mode: "existing", companyId: form.selectedCompany!.id },
+        contact:
+          contactMode === "existing" && form.selectedContact
+            ? { mode: "existing", contactId: form.selectedContact.id }
+            : contactMode === "new"
+              ? {
+                  mode: "new",
+                  contact: {
+                    first_name: form.contactFirstName,
+                    last_name: form.contactLastName,
+                    phone: form.contactPhone,
+                    email: form.contactEmail,
+                  },
+                  markPrimary: form.markNewContactPrimary,
+                }
+              : { mode: "none" },
         dealTitle: form.dealTitle,
         dealCategory: form.dealCategory,
         dealDescription: form.dealDescription,
@@ -302,7 +394,7 @@ export const QuickCaptureDialog = ({
       });
     },
     onSuccess: ({ dealId, taskFailed }) => {
-      clearQuickCaptureDraft();
+      if (identity?.id != null) clearQuickCaptureDraft(identity.id);
       resetForm();
       if (taskFailed) {
         notify("crm.quick_capture.errors.task_create_failed_partial", {
@@ -334,11 +426,10 @@ export const QuickCaptureDialog = ({
       selectedCompany: form.selectedCompany,
       createNewCompany: form.createNewCompany,
       newCompanyName: form.newCompanyName,
+      contactMode,
       selectedContact: form.selectedContact,
-      createNewContact: form.createNewContact,
       contactFirstName: form.contactFirstName,
       contactLastName: form.contactLastName,
-      companyContactsCount: companyContacts?.length ?? 0,
       dealTitle: form.dealTitle,
       dealCategory: form.dealCategory,
     });
@@ -418,15 +509,15 @@ export const QuickCaptureDialog = ({
               newCompanyName={
                 form.createNewCompany ? form.newCompanyName : undefined
               }
-              contacts={companyContacts ?? []}
+              members={contactContext.members}
+              preferredContact={contactContext.preferredContact}
+              contactMode={contactMode}
+              onContactModeChange={setContactMode}
               selectedContact={form.selectedContact}
-              onSelectContact={(selectedContact) =>
-                patchForm({ selectedContact, createNewContact: false })
-              }
-              createNewContact={form.createNewContact}
-              onCreateNewContactChange={(createNewContact) =>
-                patchForm({ createNewContact })
-              }
+              onSelectContact={(selectedContact) => {
+                patchForm({ selectedContact });
+                setContactMode("existing");
+              }}
               contactFirstName={form.contactFirstName}
               onContactFirstNameChange={(contactFirstName) =>
                 patchForm({ contactFirstName })
@@ -442,6 +533,10 @@ export const QuickCaptureDialog = ({
               contactEmail={form.contactEmail}
               onContactEmailChange={(contactEmail) =>
                 patchForm({ contactEmail })
+              }
+              markNewContactPrimary={form.markNewContactPrimary}
+              onMarkNewContactPrimaryChange={(markNewContactPrimary) =>
+                patchForm({ markNewContactPrimary })
               }
               error={fieldErrors.contact}
             />
@@ -529,7 +624,7 @@ export const QuickCaptureDialog = ({
             <Button
               type="button"
               className="nora-primary-action nora-touch-target"
-              disabled={isSaving || !identity?.id}
+              disabled={isSaving || identity?.id == null}
               onClick={handleSave}
             >
               {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -676,11 +771,12 @@ const StepCustomer = ({
 type StepContactProps = {
   company: Company | null;
   newCompanyName?: string;
-  contacts: Contact[];
+  members: Contact[];
+  preferredContact: Contact | null;
+  contactMode: QuickCaptureContactMode;
+  onContactModeChange: (mode: QuickCaptureContactMode) => void;
   selectedContact: Contact | null;
   onSelectContact: (contact: Contact) => void;
-  createNewContact: boolean;
-  onCreateNewContactChange: (value: boolean) => void;
   contactFirstName: string;
   onContactFirstNameChange: (value: string) => void;
   contactLastName: string;
@@ -689,17 +785,20 @@ type StepContactProps = {
   onContactPhoneChange: (value: string) => void;
   contactEmail: string;
   onContactEmailChange: (value: string) => void;
+  markNewContactPrimary: boolean;
+  onMarkNewContactPrimaryChange: (value: boolean) => void;
   error?: string;
 };
 
 const StepContact = ({
   company,
   newCompanyName,
-  contacts,
+  members,
+  preferredContact,
+  contactMode,
+  onContactModeChange,
   selectedContact,
   onSelectContact,
-  createNewContact,
-  onCreateNewContactChange,
   contactFirstName,
   onContactFirstNameChange,
   contactLastName,
@@ -708,9 +807,26 @@ const StepContact = ({
   onContactPhoneChange,
   contactEmail,
   onContactEmailChange,
+  markNewContactPrimary,
+  onMarkNewContactPrimaryChange,
   error,
 }: StepContactProps) => {
   const translate = useTranslate();
+
+  const contextName = company?.name ?? newCompanyName;
+  if (!contextName) {
+    return (
+      <div className="space-y-4 max-w-2xl">
+        <p className="text-sm text-muted-foreground">
+          {translate("crm.quick_capture.contact_step_missing_customer")}
+        </p>
+      </div>
+    );
+  }
+
+  const otherMembers = members.filter(
+    (c) => String(c.id) !== String(preferredContact?.id),
+  );
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -718,45 +834,75 @@ const StepContact = ({
 
       <p className="text-sm text-muted-foreground">
         {translate("crm.quick_capture.contact_for")}:{" "}
-        <span className="font-medium text-foreground">
-          {company?.name ?? newCompanyName}
-        </span>
+        <span className="font-medium text-foreground">{contextName}</span>
       </p>
 
-      {contacts.length > 0 && !createNewContact ? (
-        <div className="nora-card divide-y overflow-hidden">
-          {contacts.map((contact) => (
-            <button
-              key={contact.id}
-              type="button"
-              onClick={() => onSelectContact(contact)}
-              className={cn(
-                "w-full text-left px-4 py-3 nora-touch-target hover:bg-muted/60 transition-colors",
-                selectedContact?.id === contact.id && "bg-muted/50",
-              )}
-            >
-              <span className="text-sm font-medium">
-                {contact.first_name} {contact.last_name}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <div className="nora-card divide-y overflow-hidden">
+        {preferredContact ? (
+          <button
+            type="button"
+            onClick={() => onSelectContact(preferredContact)}
+            className={cn(
+              "w-full text-left px-4 py-3 nora-touch-target hover:bg-muted/60 transition-colors",
+              contactMode === "existing" &&
+                String(selectedContact?.id) === String(preferredContact.id) &&
+                "bg-muted/50",
+            )}
+          >
+            <span className="text-sm font-medium">
+              {translate("crm.quick_capture.contact_use_primary")}:{" "}
+              {preferredContact.first_name} {preferredContact.last_name}
+            </span>
+          </button>
+        ) : null}
 
-      <div className="space-y-3 nora-card p-4">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="quick-capture-new-contact"
-            checked={createNewContact}
-            onCheckedChange={(checked) =>
-              onCreateNewContactChange(checked === true)
-            }
-          />
-          <Label htmlFor="quick-capture-new-contact" className="font-medium">
-            {translate("crm.quick_capture.create_contact")}
-          </Label>
-        </div>
-        {createNewContact || contacts.length === 0 ? (
+        {otherMembers.map((contact) => (
+          <button
+            key={contact.id}
+            type="button"
+            onClick={() => onSelectContact(contact)}
+            className={cn(
+              "w-full text-left px-4 py-3 nora-touch-target hover:bg-muted/60 transition-colors",
+              contactMode === "existing" &&
+                String(selectedContact?.id) === String(contact.id) &&
+                "bg-muted/50",
+            )}
+          >
+            <span className="text-sm font-medium">
+              {contact.first_name} {contact.last_name}
+            </span>
+          </button>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => onContactModeChange("new")}
+          className={cn(
+            "w-full text-left px-4 py-3 nora-touch-target hover:bg-muted/60 transition-colors",
+            contactMode === "new" && "bg-muted/50",
+          )}
+        >
+          <span className="text-sm font-medium">
+            {translate("crm.quick_capture.contact_create_new")}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onContactModeChange("none")}
+          className={cn(
+            "w-full text-left px-4 py-3 nora-touch-target hover:bg-muted/60 transition-colors",
+            contactMode === "none" && "bg-muted/50",
+          )}
+        >
+          <span className="text-sm font-medium text-muted-foreground">
+            {translate("crm.quick_capture.contact_none")}
+          </span>
+        </button>
+      </div>
+
+      {contactMode === "new" ? (
+        <div className="space-y-3 nora-card p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>{translate("resources.contacts.fields.first_name")}</Label>
@@ -766,6 +912,7 @@ const StepContact = ({
                   onContactFirstNameChange(event.target.value)
                 }
                 className="nora-touch-target"
+                autoFocus
               />
             </div>
             <div className="space-y-1.5">
@@ -798,8 +945,28 @@ const StepContact = ({
               />
             </div>
           </div>
-        ) : null}
-      </div>
+          <div className="flex items-start gap-2 pt-2">
+            <Checkbox
+              id="quick-capture-mark-primary"
+              checked={markNewContactPrimary}
+              onCheckedChange={(checked) =>
+                onMarkNewContactPrimaryChange(checked === true)
+              }
+            />
+            <div>
+              <Label
+                htmlFor="quick-capture-mark-primary"
+                className="font-medium"
+              >
+                {translate("crm.quick_capture.contact_mark_primary")}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {translate("crm.quick_capture.contact_mark_primary_hint")}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

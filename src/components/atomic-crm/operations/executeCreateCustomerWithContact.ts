@@ -22,6 +22,14 @@ export type CreateCustomerWithContactParams = {
   company: CreateCustomerWithContactCompanyInput;
   contact?: CreateCustomerWithContactContactInput | null;
   existingContactId?: string | number | null;
+  /**
+   * Links an existing contact as the representing person of the new
+   * company WITHOUT touching its company_id/is_primary (Self Contact Wave,
+   * 2026-08-26) — mutually exclusive with contact/existingContactId.
+   */
+  selfContactId?: string | number | null;
+  /** customer_kind=business only: also mark the new/existing contact as self. */
+  markSelf?: boolean;
 };
 
 export type CreateCustomerWithContactResult = {
@@ -35,6 +43,8 @@ type RpcFn = (
     p_company: Record<string, unknown>;
     p_contact: Record<string, unknown> | null;
     p_existing_contact_id: string | number | null;
+    p_self_contact_id: string | number | null;
+    p_mark_self: boolean;
   },
 ) => {
   setHeader: (
@@ -59,6 +69,8 @@ export const executeCreateCustomerWithContact = async (
         p_company: params.company,
         p_contact: params.contact ?? null,
         p_existing_contact_id: params.existingContactId ?? null,
+        p_self_contact_id: params.selfContactId ?? null,
+        p_mark_self: params.markSelf ?? false,
       });
       const { data, error } = await builder.setHeader(
         NORA_OPERATION_ID_HEADER,

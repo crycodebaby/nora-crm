@@ -35,6 +35,40 @@ describe("normalizeCrmError", () => {
     expect(result.kind).toBe("not_found");
     expect(result.messageKey).toBe("crm.errors.record_not_found");
   });
+
+  it("maps the effective-contact-context business rejection to a stable code, not raw text", () => {
+    const result = normalizeCrmError(
+      new Error(
+        "contact 7 is not part of the effective contact context of company 3",
+      ),
+    );
+    expect(result.kind).toBe("contact_not_in_customer_context");
+    expect(result.messageKey).toBe(
+      "crm.errors.contact_not_in_customer_context",
+    );
+    // Technical detail is preserved for observability, just not used as the key.
+    expect(result.technicalMessage).toContain("effective contact context");
+  });
+
+  it("maps the self-contact delete guard rejection to a stable code", () => {
+    const result = normalizeCrmError(
+      new Error(
+        "Person hinter einer Privatkundenakte kann nicht geloescht werden — zuerst die Kundenakte anpassen",
+      ),
+    );
+    expect(result.kind).toBe("self_contact_delete_blocked");
+    expect(result.messageKey).toBe("crm.errors.self_contact_delete_blocked");
+  });
+
+  it("falls back to the generic unknown code for an unrecognized DB error, never echoing raw text into the key", () => {
+    const result = normalizeCrmError(
+      new Error(
+        'duplicate key value violates unique constraint "companies_pkey"',
+      ),
+    );
+    expect(result.kind).toBe("unknown");
+    expect(result.messageKey).toBe("crm.errors.load_failed");
+  });
 });
 
 describe("role matrix (UI guard)", () => {

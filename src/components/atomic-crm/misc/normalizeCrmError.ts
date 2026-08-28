@@ -6,6 +6,8 @@ export type CrmErrorKind =
   | "service_unavailable"
   | "not_found"
   | "aborted"
+  | "contact_not_in_customer_context"
+  | "self_contact_delete_blocked"
   | "unknown";
 
 export type NormalizedCrmError = {
@@ -31,6 +33,20 @@ const DELETE_PATTERNS = [
   /cannot be deleted/i,
   /delete is not allowed/i,
   /not deletable/i,
+];
+
+// Self Contact Wave (2026-08-26) business rejections — raised as free-text
+// Postgres exceptions by nora_private.is_effective_contact_of_company() /
+// create_quick_capture_case() and nora_private.guard_self_contact_delete().
+// Mapped here to stable codes so callers never build an i18n key from raw
+// exception text (Pre-Production Hardening Patch, Error Contract).
+const CONTACT_NOT_IN_CUSTOMER_CONTEXT_PATTERNS = [
+  /effective contact context/i,
+  /not part of the effective/i,
+];
+
+const SELF_CONTACT_DELETE_BLOCKED_PATTERNS = [
+  /Privatkundenakte.*(nicht|not).*(gel|delet)/i,
 ];
 
 const DISABLED_PATTERNS = [/disabled/i, /deactivated/i, /inactive user/i];
@@ -132,6 +148,24 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
     return {
       kind: "permission_denied",
       messageKey: "crm.errors.permission_denied",
+      status,
+      technicalMessage,
+    };
+  }
+
+  if (matchesAny(message, CONTACT_NOT_IN_CUSTOMER_CONTEXT_PATTERNS)) {
+    return {
+      kind: "contact_not_in_customer_context",
+      messageKey: "crm.errors.contact_not_in_customer_context",
+      status,
+      technicalMessage,
+    };
+  }
+
+  if (matchesAny(message, SELF_CONTACT_DELETE_BLOCKED_PATTERNS)) {
+    return {
+      kind: "self_contact_delete_blocked",
+      messageKey: "crm.errors.self_contact_delete_blocked",
       status,
       technicalMessage,
     };

@@ -93,12 +93,22 @@ select
     c.tax_identifier,
     c.logo,
     count(distinct d.id) as nb_deals,
-    count(distinct co.id) as nb_contacts,
+    count(distinct co.id)
+        + case
+            when c.self_contact_id is not null
+                 and not exists (
+                     select 1 from public.contacts sc
+                     where sc.id = c.self_contact_id and sc.company_id = c.id
+                 )
+            then 1
+            else 0
+          end as nb_contacts,
     c.customer_number,
     c.customer_kind,
     c.links_jsonb,
     c.email_jsonb,
-    c.phone_jsonb
+    c.phone_jsonb,
+    c.self_contact_id
 from public.companies c
     left join public.deals d on c.id = d.company_id
     left join public.contacts co on c.id = co.company_id

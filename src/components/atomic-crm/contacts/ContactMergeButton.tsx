@@ -90,7 +90,7 @@ const ContactMergeDialog = ({ open, onClose }: ContactMergeDialogProps) => {
   );
 
   // Get counts of items to be merged
-  const canFetchCounts = open && !!loserContact && !!winnerId;
+  const canFetchCounts = open && !!loserContact && winnerId != null;
   const { total: tasksCount } = useGetManyReference(
     "tasks",
     {
@@ -129,7 +129,7 @@ const ContactMergeDialog = ({ open, onClose }: ContactMergeDialogProps) => {
   }, [matchingContacts]);
 
   const handleMerge = async () => {
-    if (!winnerId || !loserContact) {
+    if (winnerId == null || !loserContact) {
       notify("resources.contacts.merge.select_target", {
         type: "warning",
         messageArgs: {
@@ -217,7 +217,7 @@ const ContactMergeDialog = ({ open, onClose }: ContactMergeDialogProps) => {
             </Form>
           </div>
 
-          {winnerId && (
+          {winnerId != null && (
             <>
               <div className="space-y-2">
                 <p className="font-medium text-sm">
@@ -296,7 +296,10 @@ const ContactMergeDialog = ({ open, onClose }: ContactMergeDialogProps) => {
             <CircleX />
             {translate("ra.action.cancel")}
           </Button>
-          <Button onClick={handleMerge} disabled={!winnerId || isMerging}>
+          <Button
+            onClick={handleMerge}
+            disabled={winnerId == null || isMerging}
+          >
             <Merge />
             {isMerging
               ? translate("resources.contacts.merge.merging", {

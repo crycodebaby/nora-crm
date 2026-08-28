@@ -7,6 +7,7 @@ import { UserPlus } from "lucide-react";
 import {
   RecordContextProvider,
   ShowBase,
+  useGetOne,
   useListContext,
   useLocaleState,
   useRecordContext,
@@ -187,13 +188,12 @@ const CompanyShowContent = () => {
                   >
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-row justify-end space-x-2 mt-1">
-                        {!!record.nb_contacts && (
-                          <SortButton
-                            fields={["last_name", "first_name", "last_seen"]}
-                          />
-                        )}
+                        <SortButton
+                          fields={["last_name", "first_name", "last_seen"]}
+                        />
                         <CreateRelatedContactButton />
                       </div>
+                      <SelfContactCard company={record} />
                       <ContactsIterator />
                     </div>
                   </ReferenceManyField>
@@ -202,6 +202,7 @@ const CompanyShowContent = () => {
                     <div className="flex flex-row justify-end space-x-2 mt-1">
                       <CreateRelatedContactButton />
                     </div>
+                    <SelfContactCard company={record} />
                   </div>
                 )}
               </TabsContent>
@@ -222,6 +223,48 @@ const CompanyShowContent = () => {
       </div>
       <CompanyAside />
     </div>
+  );
+};
+
+/**
+ * Self Contact Wave (2026-08-26): the Kontakte-Tab's ReferenceManyField only
+ * queries by company_id, which misses a self_contact_id whose own
+ * company_id points elsewhere (the Freddie scenario — he stays
+ * Ansprechpartner of a different company). Rendered only when that contact
+ * isn't already part of the company_id-based list, so nb_contacts and the
+ * visibly listed contacts stay consistent (Acceptance Check "Kontaktzähler
+ * konsistent halten").
+ */
+const SelfContactCard = ({ company }: { company: Company }) => {
+  const translate = useTranslate();
+  const { data: selfContact } = useGetOne<Contact>(
+    "contacts",
+    { id: company.self_contact_id as string | number },
+    { enabled: company.self_contact_id != null },
+  );
+
+  if (!selfContact || String(selfContact.company_id) === String(company.id)) {
+    return null;
+  }
+
+  return (
+    <RecordContextProvider value={selfContact}>
+      <RouterLink
+        to={`/contacts/${selfContact.id}/show`}
+        className="nora-card p-4 flex items-center justify-between hover:bg-muted transition-colors"
+      >
+        <div>
+          <p className="font-medium">
+            {selfContact.first_name} {selfContact.last_name}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {translate("resources.companies.self_contact_hint", {
+              _: "Diese Kundenakte gehört zu dieser Person",
+            })}
+          </p>
+        </div>
+      </RouterLink>
+    </RecordContextProvider>
   );
 };
 

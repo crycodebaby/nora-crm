@@ -45,7 +45,7 @@ export const NoteCreateSheet = ({
 
   const handleSuccess = async (data: any) => {
     const referenceRecordId = data[foreignKeyMapping["contacts"]];
-    if (!referenceRecordId) return;
+    if (referenceRecordId == null) return;
     const { data: contact } = await dataProvider.getOne("contacts", {
       id: referenceRecordId,
     });

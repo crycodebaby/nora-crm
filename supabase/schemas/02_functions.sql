@@ -296,6 +296,11 @@ BEGIN
   UPDATE tasks SET contact_id = winner_id WHERE contact_id = loser_id;
   PERFORM set_config('nora.skip_task_context_check', '', true);
 
+  -- 1b. Preserve self_contact_id: if the loser was the representing person
+  --     of one or more customer records, the winner takes over that role —
+  --     otherwise the merge would silently orphan the name-sync anchor.
+  UPDATE companies SET self_contact_id = winner_id WHERE self_contact_id = loser_id;
+
   -- 2. Reassign contact notes from loser to winner
   UPDATE contact_notes SET contact_id = winner_id WHERE contact_id = loser_id;
 
@@ -412,7 +417,8 @@ BEGIN
     tags = merged_tags
   WHERE id = winner_id;
 
-  -- 6. Delete loser contact
+  -- 6. Delete loser contact (self_contact_id already repointed in step 1b,
+  --    so guard_self_contact_delete() no longer blocks this)
   DELETE FROM contacts WHERE id = loser_id;
 
   RETURN winner_id;
@@ -1219,6 +1225,8 @@ BEGIN
     IF part IS NOT NULL THEN v := v || jsonb_build_object('email_jsonb', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.phone_jsonb), to_jsonb(p_new.phone_jsonb), 'phone_jsonb');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('phone_jsonb', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.self_contact_id), to_jsonb(p_new.self_contact_id), 'self_contact_id');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('self_contact_id', part); END IF;
     RETURN v;
 END;
 $$;
@@ -1650,6 +1658,31 @@ $$;
 
 ALTER FUNCTION public.audit_task_row() OWNER TO postgres;
 
+-- Self Contact Wave (2026-08-26): single shared "does this contact belong
+-- to this customer record" rule — used by enforce_task_company_context()
+-- and create_quick_capture_case(). Do not reimplement this invariant
+-- separately.
+CREATE OR REPLACE FUNCTION nora_private.is_effective_contact_of_company(
+    p_contact_id bigint,
+    p_company_id bigint
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.contacts c
+        WHERE c.id = p_contact_id AND c.company_id = p_company_id
+    ) OR EXISTS (
+        SELECT 1 FROM public.companies co
+        WHERE co.id = p_company_id AND co.self_contact_id = p_contact_id
+    );
+$$;
+
+COMMENT ON FUNCTION nora_private.is_effective_contact_of_company(bigint, bigint) IS
+    'Authoritative "does this contact belong to this customer record" rule: contact.company_id = company.id OR company.self_contact_id = contact.id.';
+
 CREATE OR REPLACE FUNCTION nora_private.enforce_task_company_context()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1684,14 +1717,13 @@ BEGIN
                 USING ERRCODE = '23503';
         END IF;
 
-        IF v_contact_company_id IS NOT NULL THEN
-            IF new.company_id IS NULL THEN
-                new.company_id := v_contact_company_id;
-            ELSIF new.company_id IS DISTINCT FROM v_contact_company_id THEN
-                RAISE EXCEPTION 'tasks.company_id (%) does not match the company of contact % (%)',
-                    new.company_id, new.contact_id, v_contact_company_id
-                    USING ERRCODE = '23514';
-            END IF;
+        IF new.company_id IS NULL THEN
+            new.company_id := v_contact_company_id;
+        ELSIF new.company_id IS DISTINCT FROM v_contact_company_id
+              AND NOT nora_private.is_effective_contact_of_company(new.contact_id, new.company_id) THEN
+            RAISE EXCEPTION 'tasks.company_id (%) does not match the effective contact context of contact % (%)',
+                new.company_id, new.contact_id, v_contact_company_id
+                USING ERRCODE = '23514';
         END IF;
     END IF;
 
@@ -1705,7 +1737,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION nora_private.enforce_task_company_context() IS
-    'Derives/validates tasks.company_id from the (server-loaded) contact.company_id whenever a task''s contact_id/company_id is set or changed. Skipped for routine field-only updates and for the explicit merge_contacts() bulk reassignment (nora.skip_task_context_check).';
+    'Derives/validates tasks.company_id from the effective contact context (contacts.company_id OR companies.self_contact_id — see nora_private.is_effective_contact_of_company) whenever a task''s contact_id/company_id is set or changed. Skipped for routine field-only updates and for the explicit merge_contacts() bulk reassignment (nora.skip_task_context_check).';
 
 CREATE OR REPLACE FUNCTION nora_private.delete_contact_only_tasks()
 RETURNS trigger
@@ -1728,6 +1760,84 @@ $$;
 
 COMMENT ON FUNCTION nora_private.delete_contact_only_tasks() IS
     'Before a contact is deleted, deletes its tasks that have no company_id (would otherwise violate tasks_company_or_contact_check once contact_id is set to NULL by the FK action). Tasks with a company_id survive and keep that historical context.';
+
+-- Self Contact Wave (2026-08-26)
+
+CREATE OR REPLACE FUNCTION nora_private.sync_individual_company_name()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_name text;
+BEGIN
+    v_name := trim(both ' ' from coalesce(new.first_name, '') || ' ' || coalesce(new.last_name, ''));
+
+    IF v_name = '' AND EXISTS (
+        SELECT 1 FROM public.companies
+        WHERE self_contact_id = new.id AND customer_kind = 'individual'
+    ) THEN
+        RAISE EXCEPTION 'Privatkundenakte benoetigt einen Vor- oder Nachnamen (companies.name darf nicht leer werden)'
+            USING ERRCODE = '23514';
+    END IF;
+
+    UPDATE public.companies
+    SET name = v_name
+    WHERE self_contact_id = new.id
+      AND customer_kind = 'individual';
+    RETURN new;
+END;
+$$;
+
+COMMENT ON FUNCTION nora_private.sync_individual_company_name() IS
+    'Keeps companies.name in lockstep with the representing contact''s name for customer_kind=individual customer records, so contacts stays the single canonical source for natural-person data. Rejects a rename that would blank both first_name and last_name for a contact representing an individual customer record.';
+
+CREATE OR REPLACE FUNCTION nora_private.check_individual_company_has_self_contact()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+    -- Deferred constraint trigger: re-query the row's current state instead
+    -- of trusting the captured NEW values, since a multi-statement flow
+    -- (insert company, then update self_contact_id) within one transaction
+    -- would otherwise see a stale NEW.self_contact_id = NULL from the
+    -- INSERT event at commit time.
+    v_customer_kind text;
+    v_self_contact_id bigint;
+BEGIN
+    SELECT customer_kind, self_contact_id INTO v_customer_kind, v_self_contact_id
+    FROM public.companies WHERE id = new.id;
+
+    IF v_customer_kind = 'individual' AND v_self_contact_id IS NULL THEN
+        RAISE EXCEPTION 'Privatkundenakte % benoetigt eine repraesentierende Person (self_contact_id)', new.id
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN new;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION nora_private.guard_self_contact_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM public.companies
+        WHERE self_contact_id = old.id AND customer_kind = 'individual'
+    ) THEN
+        RAISE EXCEPTION 'Person hinter einer Privatkundenakte kann nicht geloescht werden — zuerst die Kundenakte anpassen'
+            USING ERRCODE = '23503';
+    END IF;
+    RETURN old;
+END;
+$$;
+
+COMMENT ON FUNCTION nora_private.guard_self_contact_delete() IS
+    'Blocks deleting a contact that is self_contact_id of an individual customer record. Business self_contact_id keeps ON DELETE SET NULL (the FK action).';
 
 CREATE OR REPLACE FUNCTION public.audit_contact_note_row()
 RETURNS trigger
@@ -2517,63 +2627,97 @@ grant execute on function public.report_operation_error(uuid, text) to service_r
 -- Customer & Contact Workflow Wave (2026-08-25)
 -- ---------------------------------------------------------------------------
 
-create or replace function public.create_customer_with_contact(
+-- Self Contact Wave (2026-08-26): shared core write, used by both
+-- create_customer_with_contact and create_quick_capture_case. Not
+-- SECURITY DEFINER itself — callers (both SECURITY DEFINER,
+-- can_write()-gated) are the only intended entry points.
+create or replace function nora_private.create_customer_with_contact_core(
     p_company jsonb,
-    p_contact jsonb default null,
-    p_existing_contact_id bigint default null
+    p_existing_company_id bigint,
+    p_contact jsonb,
+    p_existing_contact_id bigint,
+    p_self_contact_id bigint,
+    p_mark_self boolean,
+    p_contact_is_primary boolean default true
 )
-returns jsonb
+returns table(company_id bigint, contact_id bigint)
 language plpgsql
-security definer
 set search_path = ''
 as $$
 declare
     v_company_id bigint;
     v_contact_id bigint;
+    v_customer_kind text;
     v_name text;
+    v_count int;
 begin
-    if nora_private.safe_auth_uid() is null then
-        raise exception 'not authenticated' using errcode = '28000';
-    end if;
-    if not nora_private.can_write() then
-        raise exception 'insufficient privileges' using errcode = '42501';
-    end if;
-    if p_company is null then
-        raise exception 'p_company required' using errcode = '22023';
-    end if;
-    if p_contact is not null and p_existing_contact_id is not null then
-        raise exception 'p_contact and p_existing_contact_id are mutually exclusive' using errcode = '22023';
+    v_count :=
+        (case when p_company is not null then 1 else 0 end) +
+        (case when p_existing_company_id is not null then 1 else 0 end);
+    if v_count <> 1 then
+        raise exception 'exactly one of p_company or p_existing_company_id is required' using errcode = '22023';
     end if;
 
-    v_name := nullif(btrim(coalesce(p_company->>'name', '')), '');
-    if v_name is null then
-        raise exception 'company name required' using errcode = '22023';
+    v_count :=
+        (case when p_contact is not null then 1 else 0 end) +
+        (case when p_existing_contact_id is not null then 1 else 0 end) +
+        (case when p_self_contact_id is not null then 1 else 0 end);
+    if v_count > 1 then
+        raise exception 'p_contact, p_existing_contact_id and p_self_contact_id are mutually exclusive' using errcode = '22023';
     end if;
 
-    insert into public.companies (
-        name, customer_kind, sector, size, address, zipcode, city, state_abbr, country,
-        description, revenue, tax_identifier, sales_id, links_jsonb, email_jsonb, phone_jsonb
-    ) values (
-        v_name,
-        coalesce(nullif(p_company->>'customer_kind', ''), 'business'),
-        nullif(p_company->>'sector', ''),
-        nullif(p_company->>'size', '')::smallint,
-        nullif(p_company->>'address', ''),
-        nullif(p_company->>'zipcode', ''),
-        nullif(p_company->>'city', ''),
-        nullif(p_company->>'state_abbr', ''),
-        nullif(p_company->>'country', ''),
-        nullif(p_company->>'description', ''),
-        nullif(p_company->>'revenue', ''),
-        nullif(p_company->>'tax_identifier', ''),
-        nullif(p_company->>'sales_id', '')::bigint,
-        coalesce(p_company->'links_jsonb', '[]'::jsonb),
-        coalesce(p_company->'email_jsonb', '[]'::jsonb),
-        coalesce(p_company->'phone_jsonb', '[]'::jsonb)
-    )
-    returning id into v_company_id;
+    if p_existing_company_id is not null then
+        select id, customer_kind into v_company_id, v_customer_kind
+        from public.companies
+        where id = p_existing_company_id;
 
-    if p_existing_contact_id is not null then
+        if v_company_id is null then
+            raise exception 'existing company not found: %', p_existing_company_id using errcode = 'P0002';
+        end if;
+    else
+        v_name := nullif(btrim(coalesce(p_company->>'name', '')), '');
+        if v_name is null then
+            raise exception 'company name required' using errcode = '22023';
+        end if;
+        v_customer_kind := coalesce(nullif(p_company->>'customer_kind', ''), 'business');
+
+        if v_customer_kind = 'individual'
+           and p_contact is null and p_existing_contact_id is null and p_self_contact_id is null
+        then
+            raise exception 'a Privatkundenakte requires a representing contact' using errcode = '22023';
+        end if;
+
+        insert into public.companies (
+            name, customer_kind, sector, size, address, zipcode, city, state_abbr, country,
+            description, revenue, tax_identifier, sales_id, links_jsonb, email_jsonb, phone_jsonb
+        ) values (
+            v_name,
+            v_customer_kind,
+            nullif(p_company->>'sector', ''),
+            nullif(p_company->>'size', '')::smallint,
+            nullif(p_company->>'address', ''),
+            nullif(p_company->>'zipcode', ''),
+            nullif(p_company->>'city', ''),
+            nullif(p_company->>'state_abbr', ''),
+            nullif(p_company->>'country', ''),
+            nullif(p_company->>'description', ''),
+            nullif(p_company->>'revenue', ''),
+            nullif(p_company->>'tax_identifier', ''),
+            nullif(p_company->>'sales_id', '')::bigint,
+            coalesce(p_company->'links_jsonb', '[]'::jsonb),
+            coalesce(p_company->'email_jsonb', '[]'::jsonb),
+            coalesce(p_company->'phone_jsonb', '[]'::jsonb)
+        )
+        returning id into v_company_id;
+    end if;
+
+    if p_self_contact_id is not null then
+        if not exists (select 1 from public.contacts where id = p_self_contact_id) then
+            raise exception 'contact not found: %', p_self_contact_id using errcode = 'P0002';
+        end if;
+        update public.companies set self_contact_id = p_self_contact_id where id = v_company_id;
+        v_contact_id := p_self_contact_id;
+    elsif p_existing_contact_id is not null then
         update public.contacts
         set company_id = v_company_id,
             is_primary = true
@@ -2583,7 +2727,23 @@ begin
         if v_contact_id is null then
             raise exception 'existing contact not found: %', p_existing_contact_id using errcode = 'P0002';
         end if;
+
+        if v_customer_kind = 'individual' or p_mark_self then
+            update public.companies set self_contact_id = v_contact_id where id = v_company_id;
+        end if;
     elsif p_contact is not null then
+        -- A new contact for an EXISTING company may need to coexist with an
+        -- already-primary contact — hardcoding is_primary=true would
+        -- violate uq_contacts_one_primary_per_company in that case (e.g.
+        -- Quick Capture adding a second contact to a customer that already
+        -- has one). p_contact_is_primary defaults to true (matching the
+        -- original always-primary behavior for a brand-new company with no
+        -- prior contacts); any previous primary is explicitly demoted first.
+        if p_contact_is_primary then
+            update public.contacts set is_primary = false
+            where public.contacts.company_id = v_company_id and is_primary = true;
+        end if;
+
         insert into public.contacts (
             first_name, last_name, gender, title, background, company_id, sales_id,
             is_primary, email_jsonb, phone_jsonb, links_jsonb
@@ -2595,27 +2755,163 @@ begin
             nullif(p_contact->>'background', ''),
             v_company_id,
             nullif(p_contact->>'sales_id', '')::bigint,
-            true,
+            coalesce(p_contact_is_primary, true),
             coalesce(p_contact->'email_jsonb', '[]'::jsonb),
             coalesce(p_contact->'phone_jsonb', '[]'::jsonb),
             coalesce(p_contact->'links_jsonb', '[]'::jsonb)
         )
         returning id into v_contact_id;
+
+        if v_customer_kind = 'individual' or p_mark_self then
+            update public.companies set self_contact_id = v_contact_id where id = v_company_id;
+        end if;
     end if;
+
+    return query select v_company_id, v_contact_id;
+end;
+$$;
+
+comment on function nora_private.create_customer_with_contact_core(jsonb, bigint, jsonb, bigint, bigint, boolean, boolean) is
+    'Shared core write used by both public.create_customer_with_contact and public.create_quick_capture_case — do not duplicate this logic.';
+
+create or replace function public.create_customer_with_contact(
+    p_company jsonb,
+    p_contact jsonb default null,
+    p_existing_contact_id bigint default null,
+    p_self_contact_id bigint default null,
+    p_mark_self boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_company_id bigint;
+    v_contact_id bigint;
+begin
+    if nora_private.safe_auth_uid() is null then
+        raise exception 'not authenticated' using errcode = '28000';
+    end if;
+    if not nora_private.can_write() then
+        raise exception 'insufficient privileges' using errcode = '42501';
+    end if;
+    if p_company is null then
+        raise exception 'p_company required' using errcode = '22023';
+    end if;
+
+    select core.company_id, core.contact_id
+    into v_company_id, v_contact_id
+    from nora_private.create_customer_with_contact_core(
+        p_company, null, p_contact, p_existing_contact_id, p_self_contact_id, p_mark_self, true
+    ) as core;
 
     return jsonb_build_object('company_id', v_company_id, 'contact_id', v_contact_id);
 end;
 $$;
 
-alter function public.create_customer_with_contact(jsonb, jsonb, bigint) owner to postgres;
+alter function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) owner to postgres;
 
-comment on function public.create_customer_with_contact(jsonb, jsonb, bigint) is
-    'Atomically creates a company and (optionally) a new or existing primary contact. Actor from safe_auth_uid(); requires can_write() (office/admin).';
+comment on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) is
+    'Atomically creates a company and (optionally) a new/existing/self contact. p_self_contact_id links an existing contact as the representing person WITHOUT touching its company_id/is_primary. p_mark_self additionally marks a new/existing contact as self for customer_kind=business (always true for individual). Actor from safe_auth_uid(); requires can_write() (office/admin).';
 
-revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint) from public;
-revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint) from anon;
-grant execute on function public.create_customer_with_contact(jsonb, jsonb, bigint) to authenticated;
-grant execute on function public.create_customer_with_contact(jsonb, jsonb, bigint) to service_role;
+revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) from public;
+revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) from anon;
+grant execute on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) to authenticated;
+grant execute on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean) to service_role;
+
+-- Self Contact Wave (2026-08-26): Quick Capture Application Command RPC.
+create or replace function public.create_quick_capture_case(
+    p_company jsonb default null,
+    p_existing_company_id bigint default null,
+    p_contact jsonb default null,
+    p_existing_contact_id bigint default null,
+    p_self_contact_id bigint default null,
+    p_deal jsonb default null,
+    p_contact_is_primary boolean default true
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_company_id bigint;
+    v_contact_id bigint;
+    v_deal_id bigint;
+    v_deal_name text;
+    v_core_existing_contact_id bigint;
+    v_reference_contact_id bigint;
+begin
+    if nora_private.safe_auth_uid() is null then
+        raise exception 'not authenticated' using errcode = '28000';
+    end if;
+    if not nora_private.can_write() then
+        raise exception 'insufficient privileges' using errcode = '42501';
+    end if;
+    if p_deal is null then
+        raise exception 'p_deal required' using errcode = '22023';
+    end if;
+
+    if p_existing_company_id is not null and p_existing_contact_id is not null then
+        if not nora_private.is_effective_contact_of_company(p_existing_contact_id, p_existing_company_id) then
+            raise exception 'contact % is not part of the effective contact context of company %',
+                p_existing_contact_id, p_existing_company_id
+                using errcode = '42501';
+        end if;
+        -- Already effective — reference as-is, no company_id/is_primary
+        -- mutation (picking an existing contact of an already-established
+        -- customer record must not silently promote/demote who is primary).
+        v_reference_contact_id := p_existing_contact_id;
+    else
+        v_core_existing_contact_id := p_existing_contact_id;
+    end if;
+
+    select core.company_id, core.contact_id
+    into v_company_id, v_contact_id
+    from nora_private.create_customer_with_contact_core(
+        p_company, p_existing_company_id, p_contact, v_core_existing_contact_id, p_self_contact_id, false, p_contact_is_primary
+    ) as core;
+
+    if v_reference_contact_id is not null then
+        v_contact_id := v_reference_contact_id;
+    end if;
+
+    v_deal_name := nullif(btrim(coalesce(p_deal->>'name', '')), '');
+    if v_deal_name is null then
+        raise exception 'deal name required' using errcode = '22023';
+    end if;
+
+    insert into public.deals (
+        name, company_id, contact_ids, category, stage, description, amount,
+        expected_closing_date, sales_id, index
+    ) values (
+        v_deal_name,
+        v_company_id,
+        case when v_contact_id is not null then array[v_contact_id] else array[]::bigint[] end,
+        nullif(p_deal->>'category', ''),
+        coalesce(nullif(p_deal->>'stage', ''), 'neue-anfrage'),
+        nullif(p_deal->>'description', ''),
+        coalesce(nullif(p_deal->>'amount', '')::bigint, 0),
+        nullif(p_deal->>'expected_closing_date', '')::date,
+        nullif(p_deal->>'sales_id', '')::bigint,
+        0
+    )
+    returning id into v_deal_id;
+
+    return jsonb_build_object('company_id', v_company_id, 'contact_id', v_contact_id, 'deal_id', v_deal_id);
+end;
+$$;
+
+alter function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) owner to postgres;
+
+comment on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) is
+    'Quick Capture Application Command: Kunde + Kontakt + Vorgang atomically in one transaction. Validates that an existing contact paired with an existing company is already part of its effective contact context. Task creation stays a separate, best-effort step after this call succeeds. Actor from safe_auth_uid(); requires can_write() (office/admin).';
+
+revoke all on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) from public;
+revoke all on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) from anon;
+grant execute on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) to authenticated;
+grant execute on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean) to service_role;
 
 create or replace function public.set_primary_contact(p_contact_id bigint)
 returns void

@@ -61,6 +61,11 @@ export const buildCustomerCreatePayload = (
   const mode: ContactCaptureMode = isIndividual
     ? "self"
     : (values[CONTACT_CAPTURE_FIELD] ?? "new");
+  // "self" = Unternehmer/Selbstständiger ist selbst Ansprechpartner — der neu
+  // angelegte Kontakt wird zusätzlich als self_contact_id der Kundenakte
+  // markiert (Self Contact Wave, 2026-08-26). Für individual ist das
+  // serverseitig ohnehin immer der Fall, markSelf ist dort ein No-op.
+  const markSelf = mode === "self";
 
   if (mode === "existing") {
     existingContactId = values.contact_existing_id ?? null;
@@ -84,6 +89,6 @@ export const buildCustomerCreatePayload = (
 
   return {
     ok: true,
-    params: { company, contact, existingContactId },
+    params: { company, contact, existingContactId, markSelf },
   };
 };

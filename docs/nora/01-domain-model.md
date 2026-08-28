@@ -175,6 +175,20 @@ Checklisten-Ereignisse (`checklist.*`) und CRM-Kernänderungen (Kunde, Kontakt, 
 
 Vollständige Entscheidung: `06-decision-log.md` (2026-08-25).
 
+## Self Contact / Effective Contact Context (Self Contact Wave, 2026-08-26)
+
+| Fachlich | Technisch | Hinweis |
+|---|---|---|
+| „Diese Person repräsentiert diese Kundenakte" | `companies.self_contact_id` | Gerichteter FK company→contact, **entkoppelt** von `contacts.company_id` — eine Person kann Ansprechpartner einer Firma bleiben und gleichzeitig `self_contact_id` einer anderen (eigenen) Kundenakte sein |
+| Eindeutigkeit | Partial Unique Index nur für `customer_kind='individual'` | Eine Person hat höchstens eine Privatkundenakte, darf aber `self_contact_id` mehrerer Firmen-Kundenakten sein |
+| „Gehört dieser Kontakt zu dieser Kundenakte?" | `nora_private.is_effective_contact_of_company()` (SQL) / `domain/customerContactContext.ts` (TS) | Einzige Regel: `contact.company_id = company.id` ODER `company.self_contact_id = contact.id`. Genutzt von Task-Kontextvalidierung, Quick-Capture-Validierung, CompanyShow |
+| Rollen (bewusst getrennt) | `selfContact` / `explicitPrimaryContact` / `preferredContact` | `is_primary` eines Kontakts mit abweichendem `company_id` ist für die jeweilige Kundenakte fachlich bedeutungslos — kein „Primary hier" |
+| Privatperson-Namensquelle | `contacts` kanonisch, `companies.name` serverseitig synchronisiert | `nora_private.sync_individual_company_name()`; Edit-Formular zeigt `companies.name` bei individual+self_contact_id read-only |
+| Kontakt → Kundenakte | Application Command `createCustomerFromContact` | Wiederverwendet vorhandene Personendaten, verändert `contacts.company_id`/`is_primary` nie |
+| Schnellerfassung atomar | Application Command `createQuickCaptureCase` → RPC `create_quick_capture_case` | Kunde+Kontakt+Vorgang eine Transaktion; Aufgabe bleibt separater Best-Effort-Schritt |
+
+Vollständige Entscheidung inkl. Alternativen: `06-decision-log.md` „2026-08-26 – Self Contact Wave".
+
 ## Erweiterungen geplant (Welle 7b)
 
 | Fachlich | Technisch (Ziel) | Status |

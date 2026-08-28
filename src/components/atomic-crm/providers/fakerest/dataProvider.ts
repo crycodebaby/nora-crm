@@ -39,6 +39,14 @@ import type {
   CreateCustomerWithContactParams,
   CreateCustomerWithContactResult,
 } from "../../operations/executeCreateCustomerWithContact";
+import type {
+  CreateCustomerFromContactParams,
+  CreateCustomerFromContactResult,
+} from "../../operations/executeCreateCustomerFromContact";
+import type {
+  CreateQuickCaptureCaseParams,
+  CreateQuickCaptureCaseResult,
+} from "../../operations/executeCreateQuickCaptureCase";
 import {
   readOperationIdFromMeta,
   withOperationIdParams,
@@ -58,7 +66,139 @@ import { authProvider as defaultAuthProvider } from "./authProvider";
 import generateData from "./dataGenerator";
 import type { Db } from "./dataGenerator/types";
 import { withSupabaseFilterAdapter } from "./internal/supabaseAdapter";
-import { isTaskContextCheckSkipped } from "./internal/taskContextCheck";
+import {
+  isTaskContextCheckSkipped,
+  isEffectiveContactOfCompany,
+} from "./internal/taskContextCheck";
+
+/**
+ * FakeRest mirror of nora_private.create_customer_with_contact_core() (Self
+ * Contact Wave, 2026-08-26) — shared by createCustomerWithContact,
+ * createCustomerFromContact and createQuickCaptureCase so the demo provider
+ * does not duplicate this logic per call site, matching the server-side
+ * shared-core design.
+ */
+const createCustomerWithContactCore = async (
+  dataProvider: DataProvider,
+  params: {
+    company: Record<string, unknown> | null;
+    existingCompanyId: Identifier | null;
+    contact: Record<string, unknown> | null;
+    existingContactId: Identifier | null;
+    selfContactId: Identifier | null;
+    markSelf: boolean;
+    /** Only relevant for the `contact` (brand-new) branch — default true. */
+    contactIsPrimary?: boolean;
+  },
+): Promise<{ company_id: number; contact_id: number | null }> => {
+  let companyId: number;
+  let customerKind: string | undefined;
+
+  if (params.existingCompanyId != null) {
+    const { data: existingCompany } = await dataProvider.getOne("companies", {
+      id: params.existingCompanyId,
+    });
+    companyId = existingCompany.id;
+    customerKind = existingCompany.customer_kind;
+  } else {
+    if (!params.company) {
+      throw new Error("p_company required");
+    }
+    customerKind = (params.company.customer_kind as string) ?? "business";
+    // dataProvider (lifecycle-wrapped), not baseDataProvider — first_seen/
+    // last_seen/customer_number/nb_contacts defaults must run.
+    const { data: company } = await dataProvider.create("companies", {
+      data: params.company,
+    });
+    companyId = company.id;
+  }
+
+  let contactId: number | null = null;
+
+  const markCompanySelfContact = async (id: number) => {
+    const { data: previousCompany } = await dataProvider.getOne("companies", {
+      id: companyId,
+    });
+    // Mirrors the companies_summary SQL view formula: nb_contacts counts
+    // regular company_id members plus the self contact when it isn't
+    // already one of them (Freddie scenario) — FakeRest keeps nb_contacts
+    // as a persisted counter (see afterCreate/afterDelete below), so it
+    // must be bumped explicitly here instead of being recomputed on read.
+    const { data: selfContact } = await dataProvider.getOne("contacts", {
+      id,
+    });
+    const alreadyMember = String(selfContact.company_id ?? "") === String(companyId);
+    await dataProvider.update("companies", {
+      id: companyId,
+      data: {
+        self_contact_id: id,
+        nb_contacts: alreadyMember
+          ? previousCompany.nb_contacts
+          : (previousCompany.nb_contacts ?? 0) + 1,
+      },
+      previousData: previousCompany,
+    });
+  };
+
+  if (params.selfContactId != null) {
+    const { data: existing } = await dataProvider.getOne("contacts", {
+      id: params.selfContactId,
+    });
+    await markCompanySelfContact(existing.id);
+    contactId = Number(existing.id);
+  } else if (params.existingContactId != null) {
+    const { data: existing } = await dataProvider.getOne("contacts", {
+      id: params.existingContactId,
+    });
+    await dataProvider.update("contacts", {
+      id: params.existingContactId,
+      data: { company_id: companyId, is_primary: true },
+      previousData: existing,
+    });
+    contactId = Number(params.existingContactId);
+    if (customerKind === "individual" || params.markSelf) {
+      await markCompanySelfContact(contactId);
+    }
+  } else if (params.contact) {
+    // A new contact for an EXISTING company may need to coexist with an
+    // already-primary contact — mirrors
+    // nora_private.create_customer_with_contact_core()'s p_contact_is_primary
+    // handling: demote any previous primary first instead of blindly
+    // hardcoding is_primary=true (would otherwise create two primaries).
+    const isPrimary = params.contactIsPrimary ?? true;
+    if (isPrimary) {
+      const { data: siblings } = await dataProvider.getList("contacts", {
+        filter: { company_id: companyId },
+        pagination: { page: 1, perPage: 1000 },
+        sort: { field: "id", order: "ASC" },
+      });
+      await Promise.all(
+        siblings
+          .filter((c: any) => c.is_primary)
+          .map((c: any) =>
+            dataProvider.update("contacts", {
+              id: c.id,
+              data: { is_primary: false },
+              previousData: c,
+            }),
+          ),
+      );
+    }
+    const { data: contact } = await dataProvider.create("contacts", {
+      data: {
+        ...params.contact,
+        company_id: companyId,
+        is_primary: isPrimary,
+      },
+    });
+    contactId = contact.id;
+    if (customerKind === "individual" || params.markSelf) {
+      await markCompanySelfContact(contact.id);
+    }
+  }
+
+  return { company_id: companyId, contact_id: contactId };
+};
 
 const TASK_MARKED_AS_DONE = "TASK_MARKED_AS_DONE";
 const TASK_MARKED_AS_UNDONE = "TASK_MARKED_AS_UNDONE";
@@ -66,10 +206,12 @@ const TASK_DONE_NOT_CHANGED = "TASK_DONE_NOT_CHANGED";
 
 /**
  * Mirrors nora_private.enforce_task_company_context() (see
- * supabase/migrations/*_unified_tasks_wave.sql): when a task's contact_id
- * is set, derive company_id from the contact's current company if not
- * given, or reject a company_id that doesn't match it. A task must always
- * end up with a company_id or a contact_id.
+ * supabase/migrations/*_unified_tasks_wave.sql, extended by the Self
+ * Contact Wave): when a task's contact_id is set, derive company_id from
+ * the contact's effective context if not given, or reject a company_id
+ * that doesn't match it — unless the contact is the given company's
+ * self_contact (isEffectiveContactOfCompany). A task must always end up
+ * with a company_id or a contact_id.
  */
 const deriveTaskCompanyContext = async (
   data: Partial<Task>,
@@ -83,11 +225,29 @@ const deriveTaskCompanyContext = async (
       if (data.company_id == null) {
         return { company_id: contact.company_id };
       }
-      if (data.company_id !== contact.company_id) {
+      if (
+        data.company_id !== contact.company_id &&
+        !(await isEffectiveContactOfCompany(
+          data.contact_id,
+          data.company_id,
+          dataProvider,
+        ))
+      ) {
         throw new Error(
-          "tasks.company_id does not match the company of the selected contact",
+          "tasks.company_id does not match the effective contact context of the selected contact",
         );
       }
+    } else if (
+      data.company_id != null &&
+      !(await isEffectiveContactOfCompany(
+        data.contact_id,
+        data.company_id,
+        dataProvider,
+      ))
+    ) {
+      throw new Error(
+        "tasks.company_id does not match contact (no employer, not the representing person of that customer record)",
+      );
     }
   }
 
@@ -389,36 +549,90 @@ export const createDataProvider = ({
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["customer.createWithContact"],
         {},
+        async () =>
+          createCustomerWithContactCore(dataProvider, {
+            company: params.company,
+            existingCompanyId: null,
+            contact: params.contact ?? null,
+            existingContactId: params.existingContactId ?? null,
+            selfContactId: params.selfContactId ?? null,
+            markSelf: params.markSelf ?? false,
+          }),
+      ),
+    createCustomerFromContact: async (
+      params: CreateCustomerFromContactParams,
+    ): Promise<CreateCustomerFromContactResult> =>
+      getDefaultOperationManager().execute(
+        OPERATION_CATALOG["contact.convertToCustomer"],
+        {},
+        async () =>
+          createCustomerWithContactCore(dataProvider, {
+            company: params.company,
+            existingCompanyId: null,
+            contact: null,
+            existingContactId: null,
+            selfContactId: params.contactId,
+            markSelf: false,
+          }),
+      ),
+    createQuickCaptureCase: async (
+      params: CreateQuickCaptureCaseParams,
+    ): Promise<CreateQuickCaptureCaseResult> =>
+      getDefaultOperationManager().execute(
+        OPERATION_CATALOG["quickCapture.createCase"],
+        {},
         async () => {
-          // dataProvider (lifecycle-wrapped), not baseDataProvider — first_seen/
-          // last_seen/customer_number/nb_contacts defaults must run.
-          const { data: company } = await dataProvider.create("companies", {
-            data: params.company,
-          });
+          // "Already effective" (existing company + existing contact that
+          // already belongs to it) is reference-only — no company_id/
+          // is_primary mutation, mirrors create_quick_capture_case()'s
+          // v_reference_contact_id split. Picking an existing contact of an
+          // already-established customer record must not silently
+          // promote/demote who is primary.
+          let referenceContactId: Identifier | null = null;
+          let coreExistingContactId: Identifier | null =
+            params.existingContactId ?? null;
 
-          let contactId: number | null = null;
-          if (params.existingContactId != null) {
-            const { data: existing } = await dataProvider.getOne("contacts", {
-              id: params.existingContactId,
-            });
-            await dataProvider.update("contacts", {
-              id: params.existingContactId,
-              data: { company_id: company.id, is_primary: true },
-              previousData: existing,
-            });
-            contactId = Number(params.existingContactId);
-          } else if (params.contact) {
-            const { data: contact } = await dataProvider.create("contacts", {
-              data: {
-                ...params.contact,
-                company_id: company.id,
-                is_primary: true,
-              },
-            });
-            contactId = contact.id;
+          if (params.existingCompanyId != null && params.existingContactId != null) {
+            if (
+              !(await isEffectiveContactOfCompany(
+                params.existingContactId,
+                params.existingCompanyId,
+                dataProvider,
+              ))
+            ) {
+              throw new Error(
+                "Quick Capture darf einen bestehenden Kontakt nicht einem Kunden zuordnen, zu dessen effektivem Kontaktkreis er nicht gehört.",
+              );
+            }
+            referenceContactId = params.existingContactId;
+            coreExistingContactId = null;
           }
 
-          return { company_id: company.id, contact_id: contactId };
+          const core = await createCustomerWithContactCore(dataProvider, {
+            company: params.company ?? null,
+            existingCompanyId: params.existingCompanyId ?? null,
+            contact: params.contact ?? null,
+            existingContactId: coreExistingContactId,
+            selfContactId: params.selfContactId ?? null,
+            markSelf: false,
+            contactIsPrimary: params.contactIsPrimary ?? true,
+          });
+
+          const company_id = core.company_id;
+          const contact_id =
+            referenceContactId != null
+              ? Number(referenceContactId)
+              : core.contact_id;
+
+          const { data: deal } = await dataProvider.create("deals", {
+            data: {
+              ...params.deal,
+              company_id,
+              contact_ids: contact_id != null ? [contact_id] : [],
+            },
+          });
+
+          return { company_id, contact_id, deal_id: deal.id };
         },
       ),
     setPrimaryContact: async (contactId: Identifier): Promise<void> => {

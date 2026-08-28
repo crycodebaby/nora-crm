@@ -385,3 +385,61 @@ begin
     raise notice 'task_customer_context_verification: all checks passed';
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 3. Self Contact Wave (2026-08-26): Self Contact is a valid task customer
+--    context, even when contacts.company_id points elsewhere (Freddie case).
+-- ---------------------------------------------------------------------------
+do $$
+declare
+    v_office_user uuid := 'a0000000-0000-4000-8000-000000000198';
+    v_firma_a bigint;
+    v_privat_akte bigint;
+    v_freddie bigint;
+    v_task_id bigint;
+    v_failed boolean;
+    v_task_company_id bigint;
+    v_unrelated_company bigint;
+begin
+    perform set_config('request.jwt.claim.sub', v_office_user::text, true);
+    execute 'set local role authenticated';
+
+    insert into public.companies (name, customer_kind) values ('Traum und Horror UG (Tasks)', 'business')
+    returning id into v_firma_a;
+    insert into public.companies (name, customer_kind) values ('Unrelated Company (Tasks)', 'business')
+    returning id into v_unrelated_company;
+    insert into public.contacts (first_name, last_name, company_id, is_primary)
+    values ('Freddie', 'TaskTest', v_firma_a, true)
+    returning id into v_freddie;
+    insert into public.companies (name, customer_kind, self_contact_id)
+    values ('Freddie TaskTest (Privat)', 'individual', v_freddie)
+    returning id into v_privat_akte;
+
+    -- A task for Freddie in the context of his OWN Privatkundenakte (not his
+    -- employer Firma A) must be accepted — he is the self_contact there.
+    insert into public.tasks (text, contact_id, company_id)
+    values ('Privater Termin', v_freddie, v_privat_akte)
+    returning id into v_task_id;
+
+    select company_id into v_task_company_id from public.tasks where id = v_task_id;
+    if v_task_company_id <> v_privat_akte then
+        raise exception 'task company_id was not accepted for the self-contact customer context';
+    end if;
+
+    -- A task for Freddie in the context of a THIRD, unrelated company (not
+    -- his employer, not his self_contact company) must still be rejected.
+    v_failed := false;
+    begin
+        insert into public.tasks (text, contact_id, company_id)
+        values ('Sollte scheitern', v_freddie, v_unrelated_company);
+    exception
+        when others then
+            v_failed := true;
+    end;
+    if not v_failed then
+        raise exception 'enforce_task_company_context accepted an unrelated company_id for a contact that is neither its Ansprechpartner nor its self_contact';
+    end if;
+
+    raise notice 'task_customer_context_verification: self_contact_wave checks passed';
+end;
+$$;

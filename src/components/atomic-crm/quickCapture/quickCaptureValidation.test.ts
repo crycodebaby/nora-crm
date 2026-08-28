@@ -11,13 +11,12 @@ describe("validateQuickCaptureForSave", () => {
     selectedCompany: { id: 1 },
     createNewCompany: false,
     newCompanyName: "",
+    contactMode: "existing",
     selectedContact: {
       id: 2,
     } as QuickCaptureValidationInput["selectedContact"],
-    createNewContact: false,
     contactFirstName: "",
     contactLastName: "",
-    companyContactsCount: 1,
     dealTitle: "Fenster defekt",
     dealCategory: "fensterservice",
   };
@@ -50,17 +49,45 @@ describe("validateQuickCaptureForSave", () => {
     expect(result.errors.customer).toBeUndefined();
   });
 
-  it("requires contact when no existing contacts", () => {
+  it("requires an explicit contact choice — undecided is invalid", () => {
     const result = validateQuickCaptureForSave({
       ...validBase,
+      contactMode: null,
       selectedContact: null,
-      createNewContact: true,
+    });
+    expect(result.errors.contact).toBe("contact_selection_required");
+    expect(result.firstInvalidStep).toBe(2);
+  });
+
+  it("requires first/last name when creating a new contact", () => {
+    const result = validateQuickCaptureForSave({
+      ...validBase,
+      contactMode: "new",
+      selectedContact: null,
       contactFirstName: "",
       contactLastName: "",
-      companyContactsCount: 0,
     });
-    expect(result.errors.contact).toBe("contact_name_required");
-    expect(result.firstInvalidStep).toBe(2);
+    expect(result.errors.contact).toBe("contact_selection_required");
+  });
+
+  it("accepts a new contact once first/last name are filled", () => {
+    const result = validateQuickCaptureForSave({
+      ...validBase,
+      contactMode: "new",
+      selectedContact: null,
+      contactFirstName: "Max",
+      contactLastName: "Mustermann",
+    });
+    expect(result.errors.contact).toBeUndefined();
+  });
+
+  it("accepts a deliberate 'none' contact choice", () => {
+    const result = validateQuickCaptureForSave({
+      ...validBase,
+      contactMode: "none",
+      selectedContact: null,
+    });
+    expect(result.errors.contact).toBeUndefined();
   });
 
   it("requires deal title and category on step 3", () => {

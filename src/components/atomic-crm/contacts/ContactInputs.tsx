@@ -79,11 +79,14 @@ const ContactIdentityInputs = () => {
 };
 
 const ContactPositionInputs = () => {
-  const translate = useTranslate();
   const companyId = useWatch({ name: "company_id" });
   return (
+    // Keine Sektionsüberschrift hier: "Position" wäre nur eine Wiederholung
+    // des title-Feld-Labels selbst (Root Cause der doppelten "Position"-
+    // Anzeige auf /kontakte/create) — das Feld behält sein reguläres Label
+    // aus Accessibility-Gründen (echter Accessible Name statt nur einer
+    // visuell benachbarten Überschrift).
     <div className="nora-form-section">
-      <h6>{translate("resources.contacts.field_categories.position")}</h6>
       <TextInput source="title" helperText={false} />
       <ReferenceInput source="company_id" reference="companies" perPage={10}>
         <AutocompleteCompanyInput label="resources.contacts.fields.company_id" />

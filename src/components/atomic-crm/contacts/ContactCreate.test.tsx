@@ -16,6 +16,18 @@ describe("ContactCreate", () => {
       .toBeInTheDocument();
   });
 
+  it("does not render a redundant 'Position' section heading above the title field (Self Contact Wave regression)", async () => {
+    const screen = await render(<ContactCreateBasic />);
+
+    // The section heading duplicated the title field's own auto-derived
+    // label (both "Position" in German) — removed at the source, keeping
+    // the field's real accessible label (a11y) instead of hiding via CSS.
+    await expect
+      .element(screen.getByRole("heading", { name: "Position" }))
+      .not.toBeInTheDocument();
+    await expect.element(screen.getByLabelText("Title")).toBeInTheDocument();
+  });
+
   it("does not submit empty email and phone entries", async () => {
     const createMock = vi
       .fn()

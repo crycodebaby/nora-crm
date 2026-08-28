@@ -13,7 +13,10 @@ import {
   type QuickCaptureDraft,
 } from "../quickCapture/quickCaptureDraft";
 
+const DRAFT_USER = "sales-v03k1";
+
 const baseDraft = (): QuickCaptureDraft => ({
+  schemaVersion: 2,
   step: 1,
   searchQuery: "Müller",
   selectedCompany: null,
@@ -25,6 +28,7 @@ const baseDraft = (): QuickCaptureDraft => ({
   contactLastName: "",
   contactPhone: "",
   contactEmail: "",
+  markNewContactPrimary: true,
   dealTitle: "Fenster",
   dealCategory: "fensterservice",
   dealDescription: "",
@@ -34,6 +38,7 @@ const baseDraft = (): QuickCaptureDraft => ({
   taskType: "rueckruf",
   dismissCustomerSuggestions: false,
   savedAt: "2026-07-14T12:00:00.000Z",
+  updatedAt: "2026-07-14T12:00:00.000Z",
 });
 
 describe("v0.3k.1 edit guard redirects", () => {
@@ -127,16 +132,16 @@ describe("v0.3k.1 dirty dialog close", () => {
 
 describe("v0.3k.1 quick capture draft on cancel", () => {
   it("keeps draft when closing like Abbrechen (persistDraft)", () => {
-    clearQuickCaptureDraft();
+    clearQuickCaptureDraft(DRAFT_USER);
     const draft = baseDraft();
-    saveQuickCaptureDraft(draft);
+    saveQuickCaptureDraft(DRAFT_USER, draft);
 
     // Simulate handleOpenChange(false): persistDraft then close
-    saveQuickCaptureDraft(loadQuickCaptureDraft()!);
+    saveQuickCaptureDraft(DRAFT_USER, loadQuickCaptureDraft(DRAFT_USER)!);
 
-    expect(loadQuickCaptureDraft()?.searchQuery).toBe("Müller");
-    expect(loadQuickCaptureDraft()?.dealTitle).toBe("Fenster");
-    clearQuickCaptureDraft();
+    expect(loadQuickCaptureDraft(DRAFT_USER)?.searchQuery).toBe("Müller");
+    expect(loadQuickCaptureDraft(DRAFT_USER)?.dealTitle).toBe("Fenster");
+    clearQuickCaptureDraft(DRAFT_USER);
   });
 });
 

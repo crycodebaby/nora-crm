@@ -37,6 +37,16 @@ import {
   type CreateCustomerWithContactParams,
   type CreateCustomerWithContactResult,
 } from "../../operations/executeCreateCustomerWithContact";
+import {
+  executeCreateCustomerFromContact,
+  type CreateCustomerFromContactParams,
+  type CreateCustomerFromContactResult,
+} from "../../operations/executeCreateCustomerFromContact";
+import {
+  executeCreateQuickCaptureCase,
+  type CreateQuickCaptureCaseParams,
+  type CreateQuickCaptureCaseResult,
+} from "../../operations/executeCreateQuickCaptureCase";
 import { executeSetPrimaryContact } from "../../operations/executeSetPrimaryContact";
 import {
   createSupabaseOperationErrorRecorder,
@@ -308,6 +318,20 @@ const getDataProviderWithCustomMethods = () => {
       params: CreateCustomerWithContactParams,
     ): Promise<CreateCustomerWithContactResult> {
       return executeCreateCustomerWithContact(params, (fn, args) =>
+        getSupabaseClient().rpc(fn, args as any),
+      );
+    },
+    async createCustomerFromContact(
+      params: CreateCustomerFromContactParams,
+    ): Promise<CreateCustomerFromContactResult> {
+      return executeCreateCustomerFromContact(params, (fn, args) =>
+        getSupabaseClient().rpc(fn, args as any),
+      );
+    },
+    async createQuickCaptureCase(
+      params: CreateQuickCaptureCaseParams,
+    ): Promise<CreateQuickCaptureCaseResult> {
+      return executeCreateQuickCaptureCase(params, (fn, args) =>
         getSupabaseClient().rpc(fn, args as any),
       );
     },

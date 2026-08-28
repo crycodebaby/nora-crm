@@ -1,6 +1,6 @@
 import type { Identifier, DataProvider } from "ra-core";
 
-import type { Contact, Task, Deal, ContactNote } from "../../types";
+import type { Company, Contact, Task, Deal, ContactNote } from "../../types";
 import { withTaskContextCheckSkipped } from "../fakerest/internal/taskContextCheck";
 
 /**
@@ -54,6 +54,29 @@ export const mergeContacts = async (
         }),
       ) || [],
     ),
+  );
+
+  // 1b. Preserve self_contact_id (Self Contact Wave, 2026-08-26): if the
+  // loser was the representing person of one or more customer records, the
+  // winner takes over that role — otherwise the merge would silently
+  // orphan the name-sync anchor. Mirrors merge_contacts() step 1b in
+  // supabase/migrations/*_self_contact_and_quick_capture_case.sql.
+  const { data: representedCompanies } = await dataProvider.getList<Company>(
+    "companies",
+    {
+      filter: { self_contact_id: loserId },
+      pagination: { page: 1, perPage: 100 },
+      sort: { field: "id", order: "ASC" },
+    },
+  );
+  await Promise.all(
+    representedCompanies?.map((company) =>
+      dataProvider.update<Company>("companies", {
+        id: company.id,
+        data: { self_contact_id: winnerId },
+        previousData: company,
+      }),
+    ) || [],
   );
 
   // 2. Reassign all notes from loser to winner

@@ -118,6 +118,15 @@ export type Company = {
   links_jsonb: LinkAndType[];
   email_jsonb: EmailAndType[];
   phone_jsonb: PhoneNumberAndType[];
+  /**
+   * The natural person representing this customer record — the private
+   * customer themselves for customer_kind=individual, or the representing
+   * person behind a business for customer_kind=business. Independent of
+   * contacts.company_id (Self Contact Wave, 2026-08-26): a contact can
+   * remain the Ansprechpartner of a different company while being
+   * self_contact_id here. Not a verified legal ownership claim.
+   */
+  self_contact_id?: Identifier | null;
 } & Pick<RaRecord, "id">;
 
 export type EmailAndType = {

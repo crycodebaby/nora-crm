@@ -8,7 +8,7 @@ export const customerKindChoices: {
   {
     value: "business",
     label: "resources.companies.inputs.customer_kind.business",
-    defaultLabel: "Unternehmen / Selbstständig",
+    defaultLabel: "Firma",
   },
   {
     value: "individual",

@@ -42,6 +42,8 @@ export type OperationType =
   | "contact.archive"
   | "contact.restore"
   | "contact.setPrimary"
+  | "contact.convertToCustomer"
+  | "quickCapture.createCase"
   | "task.create"
   | "task.update"
   | "task.archive"
