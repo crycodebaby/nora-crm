@@ -24,6 +24,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import type {
   ChoicesProps,
   InputProps,
@@ -76,6 +84,8 @@ import { PopoverProps } from "@radix-ui/react-popover";
  *   </Create>
  * );
  */
+const EMPTY_CLIENT_FILTER_FIELDS: string[] = [];
+
 export const AutocompleteInput = (
   props: Omit<InputProps, "source"> &
     Omit<SupportCreateSuggestionOptions, "handleChange" | "filter"> &
@@ -84,11 +94,18 @@ export const AutocompleteInput = (
       className?: string;
       disableValue?: string;
       filterToQuery?: (searchText: string) => any;
+      clientFilter?: boolean;
+      clientFilterFields?: string[];
       translateChoice?: boolean;
       placeholder?: string;
       inputText?:
         | React.ReactNode
         | ((option: any | undefined) => React.ReactNode);
+      mobileSheet?: {
+        title: React.ReactNode;
+        description?: React.ReactNode;
+        emptyText?: React.ReactNode;
+      };
     } & Pick<PopoverProps, "modal">,
 ) => {
   const {
@@ -102,6 +119,9 @@ export const AutocompleteInput = (
     onCreate,
     optionText,
     modal,
+    mobileSheet,
+    clientFilter = false,
+    clientFilterFields = EMPTY_CLIENT_FILTER_FIELDS,
   } = props;
   const {
     allChoices = [],
@@ -202,6 +222,92 @@ export const AutocompleteInput = (
       ? getCreateItem(filterValue)
       : null;
 
+  const handleFilterChange = (filter: string) => {
+    setFilterValue(filter);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollTo(0, 0);
+    });
+    // We don't want the ChoicesContext to filter the choices if the input
+    // is not from a reference as it would also filter out selected values.
+    if (isFromReference) {
+      setFilters(filterToQuery(filter));
+    }
+  };
+
+  const trigger = (
+    <Button
+      type="button"
+      variant="outline"
+      role="combobox"
+      aria-expanded={open}
+      aria-labelledby={uniqueId}
+      className="h-auto min-h-11 w-full justify-between py-1.75 font-normal"
+    >
+      {selectedChoice ? (
+        <span className="truncate">{getInputText(selectedChoice)}</span>
+      ) : (
+        <span className="truncate text-muted-foreground">{placeholder}</span>
+      )}
+      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+    </Button>
+  );
+
+  const choices = (
+    <CommandGroup>
+      {allChoices.map((choice) => {
+        const choiceText = getChoiceText(choice);
+        const choiceKeywords = isValidElement(choiceText)
+          ? undefined
+          : [
+              choiceText,
+              ...clientFilterFields.flatMap((fieldName) => {
+                const value = choice[fieldName];
+                return value == null ? [] : [String(value)];
+              }),
+            ];
+
+        return (
+          <CommandItem
+            key={getChoiceValue(choice)}
+            value={getChoiceValue(choice)}
+            keywords={choiceKeywords}
+            onSelect={() => handleChangeWithCreateSupport(choice)}
+            className={cn(mobileSheet && "min-h-12 rounded-lg px-3")}
+          >
+            <Check
+              className={cn(
+                "mr-2 h-4 w-4",
+                field.value === getChoiceValue(choice)
+                  ? "opacity-100"
+                  : "opacity-0",
+              )}
+            />
+            <span className="truncate">{choiceText}</span>
+          </CommandItem>
+        );
+      })}
+    </CommandGroup>
+  );
+
+  const createChoice = createItem ? (
+    <CommandItem
+      key={getChoiceValue(createItem)}
+      // Include the filter value so the option is shown even when the filter
+      // starts or ends with a space.
+      value={`?${filterValue}?`}
+      onSelect={() => handleChangeWithCreateSupport(createItem)}
+      disabled={getOptionDisabled(createItem)}
+      className={cn(
+        "font-medium text-primary data-[selected=true]:text-primary",
+        mobileSheet &&
+          "min-h-12 rounded-lg px-3 text-[var(--nora-brand)] data-[selected=true]:text-[var(--nora-brand)]",
+      )}
+    >
+      <Plus className="mr-2 h-4 w-4 shrink-0" />
+      <span className="truncate">{getChoiceText(createItem)}</span>
+    </CommandItem>
+  ) : null;
+
   return (
     <>
       <FormField className={props.className} id={id} name={source}>
@@ -216,96 +322,78 @@ export const AutocompleteInput = (
           </FormLabel>
         )}
         <FormControl>
-          <Popover open={open} onOpenChange={handleOpenChange} modal={modal}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={open}
-                aria-labelledby={uniqueId}
-                className="w-full justify-between h-auto py-1.75 font-normal"
+          {mobileSheet ? (
+            <Sheet open={open} onOpenChange={handleOpenChange}>
+              <SheetTrigger asChild>{trigger}</SheetTrigger>
+              <SheetContent
+                side="bottom"
+                className="h-[min(86dvh,44rem)] gap-0 overflow-hidden rounded-t-2xl p-0"
               >
-                {selectedChoice ? (
-                  getInputText(selectedChoice)
-                ) : (
-                  <span className="text-muted-foreground">{placeholder}</span>
-                )}
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-full max-w-(--radix-popover-trigger-width) p-0">
-              {/* We handle the filtering ourselves */}
-              <Command shouldFilter={!isFromReference}>
-                <CommandInput
-                  placeholder={placeholder}
-                  value={filterValue}
-                  onValueChange={(filter) => {
-                    setFilterValue(filter);
-                    requestAnimationFrame(() => {
-                      listRef.current?.scrollTo(0, 0);
-                    });
-                    // We don't want the ChoicesContext to filter the choices if the input
-                    // is not from a reference as it would also filter out the selected values
-                    if (isFromReference) {
-                      setFilters(filterToQuery(filter));
-                    }
-                  }}
-                />
-                <CommandList ref={listRef}>
-                  <CommandEmpty>No matching item found.</CommandEmpty>
-                  <CommandGroup>
-                    {allChoices.map((choice) => {
-                      const choiceText = getChoiceText(choice);
-
-                      return (
-                        <CommandItem
-                          key={getChoiceValue(choice)}
-                          value={getChoiceValue(choice)}
-                          keywords={
-                            isValidElement(choiceText)
-                              ? undefined
-                              : [choiceText]
-                          }
-                          onSelect={() => handleChangeWithCreateSupport(choice)}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              field.value === getChoiceValue(choice)
-                                ? "opacity-100"
-                                : "opacity-0",
-                            )}
-                          />
-                          {choiceText}
-                        </CommandItem>
-                      );
-                    })}
-                  </CommandGroup>
-                  {createItem && (
-                    <>
-                      {allChoices.length > 0 && <CommandSeparator />}
-                      <CommandGroup>
-                        <CommandItem
-                          key={getChoiceValue(createItem)}
-                          // Include the filter value so the option is shown
-                          // even when the filter starts/ends with a space.
-                          value={`?${filterValue}?`}
-                          onSelect={() =>
-                            handleChangeWithCreateSupport(createItem)
-                          }
-                          disabled={getOptionDisabled(createItem)}
-                          className="text-primary font-medium data-[selected=true]:text-primary"
-                        >
-                          <Plus className="mr-2 h-4 w-4 shrink-0" />
-                          {getChoiceText(createItem)}
-                        </CommandItem>
+                <SheetHeader className="border-b px-4 pb-3 pr-14 pt-4 text-left">
+                  <SheetTitle className="text-lg">
+                    {mobileSheet.title}
+                  </SheetTitle>
+                  {mobileSheet.description ? (
+                    <SheetDescription>
+                      {mobileSheet.description}
+                    </SheetDescription>
+                  ) : null}
+                </SheetHeader>
+                <Command
+                  shouldFilter={!isFromReference || clientFilter}
+                  className="min-h-0 flex-1 rounded-none bg-background"
+                >
+                  <CommandInput
+                    autoFocus
+                    placeholder={placeholder}
+                    value={filterValue}
+                    onValueChange={handleFilterChange}
+                    className="h-12 text-base"
+                  />
+                  <CommandList
+                    ref={listRef}
+                    className="min-h-0 max-h-none flex-1 px-2 py-2"
+                  >
+                    <CommandEmpty>
+                      {mobileSheet.emptyText ?? "No matching item found."}
+                    </CommandEmpty>
+                    {choices}
+                  </CommandList>
+                  {createChoice ? (
+                    <div className="border-t bg-background p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+                      <CommandGroup className="p-0">
+                        {createChoice}
                       </CommandGroup>
-                    </>
-                  )}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+                    </div>
+                  ) : null}
+                </Command>
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <Popover open={open} onOpenChange={handleOpenChange} modal={modal}>
+              <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+              <PopoverContent className="w-full max-w-(--radix-popover-trigger-width) p-0">
+                {/* We handle the filtering ourselves */}
+                <Command shouldFilter={!isFromReference || clientFilter}>
+                  <CommandInput
+                    placeholder={placeholder}
+                    value={filterValue}
+                    onValueChange={handleFilterChange}
+                  />
+                  <CommandList ref={listRef}>
+                    <CommandEmpty>No matching item found.</CommandEmpty>
+                    {choices}
+                    {createChoice ? (
+                      <>
+                        {allChoices.length > 0 && <CommandSeparator />}
+                        <CommandGroup>{createChoice}</CommandGroup>
+                      </>
+                    ) : null}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          )}
         </FormControl>
         <InputHelperText helperText={props.helperText} />
         <FormError />

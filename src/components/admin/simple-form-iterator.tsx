@@ -230,7 +230,7 @@ export const SimpleFormIteratorItem = React.forwardRef(
           )}
           <div
             className={cn(
-              "flex flex-1 gap-2",
+              "flex min-w-0 flex-1 gap-2",
               inline ? "flex-col sm:flex-row gap-2" : "flex-col",
             )}
           >
@@ -447,6 +447,7 @@ export const RemoveItemButton = (props: React.ComponentProps<"button">) => {
             variant="ghost"
             size="icon"
             onClick={() => remove()}
+            aria-label={translate("ra.action.remove")}
             className={cn(
               "button-remove",
               `button-remove-${source}-${index}`,

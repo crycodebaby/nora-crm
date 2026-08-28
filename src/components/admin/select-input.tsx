@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -85,6 +86,7 @@ export const SelectInput = (props: SelectInputProps) => {
     validate,
     readOnly,
     disabled,
+    clearable = true,
 
     className,
     emptyText = "",
@@ -238,10 +240,15 @@ export const SelectInput = (props: SelectInputProps) => {
   }
 
   // Handle reset functionality
-  const handleReset = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleReset = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     field.onChange(emptyValue);
   };
+
+  const canClear =
+    clearable &&
+    !field.disabled &&
+    Boolean(field.value && field.value !== emptyValue);
 
   return (
     <>
@@ -272,21 +279,14 @@ export const SelectInput = (props: SelectInputProps) => {
             onValueChange={handleChangeWithCreateSupport}
           >
             <SelectTrigger
-              className={cn("w-full transition-all hover:bg-accent")}
+              className={cn(
+                "w-full transition-all hover:bg-accent",
+                canClear && "pe-16",
+              )}
               disabled={field.disabled}
               aria-labelledby={labelId}
             >
               <SelectValue placeholder={renderEmptyItemOption()} />
-
-              {field.value && field.value !== emptyValue ? (
-                <div
-                  role="button"
-                  className="p-0 ml-auto pointer-events-auto hover:bg-transparent text-muted-foreground opacity-50 hover:opacity-100"
-                  onClick={handleReset}
-                >
-                  <X className="h-4 w-4" />
-                </div>
-              ) : null}
             </SelectTrigger>
             <SelectContent>
               {finalChoices?.map((choice) => {
@@ -310,6 +310,21 @@ export const SelectInput = (props: SelectInputProps) => {
               })}
             </SelectContent>
           </Select>
+          {canClear ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              data-slot="select-clear"
+              className="absolute end-8 top-1/2 z-10 size-7 -translate-y-1/2 text-muted-foreground opacity-60 hover:bg-accent hover:opacity-100"
+              aria-label={translate("ra.action.clear_input_value", {
+                _: "Clear selection",
+              })}
+              onClick={handleReset}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
         <InputHelperText helperText={helperText} />
       </FormField>
@@ -323,6 +338,8 @@ export type SelectInputProps = ChoicesProps &
   Partial<InputProps> &
   Omit<SupportCreateSuggestionOptions, "handleChange"> & {
     emptyText?: string | ReactElement;
+    /** Whether a selected value can be reset independently. Defaults to true. */
+    clearable?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emptyValue?: any;
     onChange?: (value: string) => void;
