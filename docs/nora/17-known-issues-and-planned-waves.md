@@ -80,7 +80,7 @@ Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show`: Klick auf Tab 
 
 ### 5. Schnellerfassung auf atomare Customer/Contact-Operation umstellen
 
-**Status: RESOLVED / VERIFIED (2026-08-26, Self Contact Wave)**
+**Status: RESOLVED / VERIFIED (2026-08-26, Self Contact Wave) — PRODUCTION VERIFIED seit 2026-08-28**
 
 Die Schnellerfassung (`QuickCaptureDialog.tsx`) ruft jetzt den Application Command `createQuickCaptureCase` (`application/commands/createQuickCaptureCase.ts`) auf, der Kunde+Kontakt+Vorgang über die neue RPC `create_quick_capture_case` in einer Transaktion schreibt — kein Teilzustand mehr zwischen diesen dreien. `submitQuickCapture.ts` wurde entfernt. Aufgabe bleibt bewusst ein separater Best-Effort-Schritt danach (bestehende `taskFailed`-Notice-Semantik unverändert). Vollständige Entscheidung: Decision Log „2026-08-26 – Self Contact Wave".
 
@@ -122,7 +122,14 @@ Eine anschließende Final-Release-Candidate-Verification fand und behob drei wei
 
 **Kontrollierter Production Release (2026-08-28):** Migration `20260826120000_self_contact_and_quick_capture_case.sql` (SHA-256 `b747b94d6132b37f41ed82367bcd898db52b07e85dbf2f14c83e8fcdd285c2e7`) gegen `nora-crm-prod` angewendet, Migration-Bookkeeping-Drift (Anwendungszeitstempel statt Repo-Zeitstempel — derselbe Drift-Typ wie am 2026-08-25) erkannt und korrigiert, Schema/Funktionen/Trigger/Grants/View read-only vollständig verifiziert. Commit `0c93912137d610f570b5c5fd449573d25160fe86` nach `origin/main` gepusht, Vercel-Production-Deployment (`dpl_5UL3NL8J2bTwGCAJrobUNZRQ99NB`) verifiziert (READY, korrekter Commit). Live-Smoke-Test gegen `nora.ergart.de` in echter Session erfolgreich (Hotboard/Kunden/Kontakte/Vorgänge, Tab-Routing, Quick Capture, Self-Contact-UI, Firma/Privatperson-Labels — keine Fehler, keine Testdaten angelegt). Details: Decision Log „2026-08-27 – Pre-Production Hardening Patch" und Session-Verlauf.
 
-Vor dem eigentlichen Push/Deploy der Self Contact Wave (Punkt 8 unten) bleibt nur noch der Deploy-Schritt selbst offen — keine offenen Nachprüfungspunkte mehr aus dieser Session.
+Release vollständig abgeschlossen — keine offenen Nachprüfungspunkte mehr aus dieser Wave.
+
+## Security Follow-ups (bewusst offen, nicht durch Self Contact Wave verursacht)
+
+- `public.init_state` — View mit `SECURITY DEFINER` (Security-Advisor-Finding, ERROR-Level)
+- `public.sales_directory` — View mit `SECURITY DEFINER` (Security-Advisor-Finding, ERROR-Level)
+
+Beide bereits vor der Customer & Contact Workflow Wave vorhanden, in jedem Production-Preflight seither read-only bestätigt als unverändert (zuletzt 2026-08-28, siehe Punkt 9 oben und Decision Log). Bewusst nicht in dieser oder einer der vorherigen Waves behoben — separate Prüfung/Entscheidung nötig, ob `SECURITY DEFINER` hier fachlich erforderlich ist oder auf `SECURITY INVOKER` umgestellt werden kann.
 
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 
