@@ -15,7 +15,6 @@ import { useTranslate } from "ra-core";
 import { useFormContext, useWatch } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/admin/text-input";
-import { SelectInput } from "@/components/admin/select-input";
 import { RadioButtonGroupInput } from "@/components/admin/radio-button-group-input";
 import { ReferenceInput } from "@/components/admin/reference-input";
 import { AutocompleteInput } from "@/components/admin/autocomplete-input";
@@ -23,6 +22,7 @@ import { ArrayInput } from "@/components/admin/array-input";
 import { SimpleFormIterator } from "@/components/admin/simple-form-iterator";
 
 import { contactOptionText } from "../misc/ContactOption";
+import { ContactDetailTypeInput } from "../misc/ContactDetailTypeInput";
 import {
   contactGender,
   translateContactGenderLabel,
@@ -175,14 +175,9 @@ export const CustomerContactCaptureInputs = () => {
                 label={false}
                 placeholder={translate("resources.contacts.fields.email")}
               />
-              <SelectInput
-                source="type"
-                helperText={false}
-                label={false}
-                optionText="name"
+              <ContactDetailTypeInput
                 choices={emailTypes}
                 defaultValue={DEFAULT_CONTACT_EMAIL_TYPE}
-                className="w-28 min-w-28"
               />
             </SimpleFormIterator>
           </ArrayInput>
@@ -206,14 +201,9 @@ export const CustomerContactCaptureInputs = () => {
                   "resources.contacts.fields.phone_number",
                 )}
               />
-              <SelectInput
-                source="type"
-                helperText={false}
-                label={false}
-                optionText="name"
+              <ContactDetailTypeInput
                 choices={emailTypes}
                 defaultValue={DEFAULT_CONTACT_PHONE_TYPE}
-                className="w-28 min-w-28"
               />
             </SimpleFormIterator>
           </ArrayInput>
@@ -238,14 +228,9 @@ export const CustomerContactCaptureInputs = () => {
                 })}
                 validate={isValidUrl}
               />
-              <SelectInput
-                source="type"
-                helperText={false}
-                label={false}
-                optionText="name"
+              <ContactDetailTypeInput
                 choices={linkTypes}
                 defaultValue={DEFAULT_LINK_TYPE}
-                className="w-28 min-w-28"
               />
             </SimpleFormIterator>
           </ArrayInput>

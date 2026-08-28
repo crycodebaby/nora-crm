@@ -29,6 +29,7 @@ import {
 } from "../misc/linksModel";
 import { customerKindChoices } from "./customerKind";
 import { noraCreatePath } from "../routing/noraRoutes";
+import { ContactDetailTypeInput } from "../misc/ContactDetailTypeInput";
 
 export const CompanyInputs = () => {
   const isMobile = useIsMobile();
@@ -176,14 +177,9 @@ const CompanyContactInputs = () => {
             })}
             validate={isEmailField}
           />
-          <SelectInput
-            source="type"
-            helperText={false}
-            label={false}
-            optionText="name"
+          <ContactDetailTypeInput
             choices={emailTypes}
             defaultValue={DEFAULT_COMPANY_EMAIL_TYPE}
-            className="w-28 min-w-28"
           />
         </SimpleFormIterator>
       </ArrayInput>
@@ -201,14 +197,9 @@ const CompanyContactInputs = () => {
             label={false}
             placeholder={translate("resources.companies.fields.phone_number")}
           />
-          <SelectInput
-            source="type"
-            helperText={false}
-            label={false}
-            optionText="name"
+          <ContactDetailTypeInput
             choices={emailTypes}
             defaultValue={DEFAULT_COMPANY_PHONE_TYPE}
-            className="w-28 min-w-28"
           />
         </SimpleFormIterator>
       </ArrayInput>
@@ -229,14 +220,9 @@ const CompanyContactInputs = () => {
             })}
             validate={isValidUrl}
           />
-          <SelectInput
-            source="type"
-            helperText={false}
-            label={false}
-            optionText="name"
+          <ContactDetailTypeInput
             choices={linkTypes}
             defaultValue={DEFAULT_LINK_TYPE}
-            className="w-28 min-w-28"
           />
         </SimpleFormIterator>
       </ArrayInput>
