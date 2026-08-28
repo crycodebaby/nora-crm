@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-28 – Residual Security Advisor Closure | [Springen](#2026-08-28-residual-security-advisor-closure) |
 | 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`) | [Springen](#2026-08-28-intentional-privileged-read-views-init_state--sales_directory) |
 | 2026-08-27 – Pre-Production Hardening Patch | [Springen](#2026-08-27-pre-production-hardening-patch) |
 | 2026-08-26 – Self Contact Wave | [Springen](#2026-08-26-self-contact-wave) |
@@ -76,6 +77,34 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-28 – Residual Security Advisor Closure
+
+### Kontext
+
+Nachfolge-Session zu „Intentional privileged read views" (siehe unten). Diese Session hat den restlichen Supabase Security Advisor Backlog bewertet, der zuvor als `UNASSESSED` geführt wurde (`number_counters` RLS-ohne-Policy, ausführbare `SECURITY DEFINER`-Functions/RPCs, `auth_leaked_password_protection`), und zusätzlich einen offenen Nachweis zum Search-Path-Schutz von `SECURITY DEFINER`-Functions mit nicht-leerem `search_path` erbracht. Vollständig read-only bis auf einen einzigen, gezielten Auth-Konfigurations-Toggle.
+
+### Entscheidung / Befunde
+
+- **`public.number_counters` (RLS enabled, no policy):** `ASSESSED — INFORMATIONAL — KEEP`. Kein Tabellen-Grant für `anon`/`authenticated` (auch `service_role` hat kein SELECT/DML, nur `REFERENCES`/`TRIGGER`/`TRUNCATE`), also deny-by-grants unabhängig von RLS. Einzige Consumer sind `assign_customer_number()`/`assign_case_number()` — `SECURITY DEFINER`, Owner `postgres`, ausschließlich als BEFORE-INSERT-Trigger auf `companies`/`deals` verwendet. Deliberate deny-all-Architektur, keine Lücke.
+- **Ausführbare `SECURITY DEFINER`-Trigger-/Event-Trigger-Functions (`anon_security_definer_function_executable` / `authenticated_security_definer_function_executable` für 17 Functions, u. a. alle `audit_*`, `handle_new_user`, `handle_update_user`, `assign_case_number`, `assign_customer_number`, `cleanup_note_attachments`, `enforce_google_calendar_connection_rules`, `handle_contact_note_created_or_updated`, `rls_auto_enable`):** `ASSESSED — INFORMATIONAL — KEEP`. Alle haben Rückgabetyp `trigger` bzw. (`rls_auto_enable`) `event_trigger` — Postgres verbietet den direkten Aufruf solcher Functions unabhängig von Grants/Rolle ("trigger functions can only be called as triggers"); PostgREST exponiert sie ohnehin nicht als aufrufbare `/rest/v1/rpc/...`-Endpunkte. Der Advisor kann den Rückgabetyp bei dieser Lint-Kategorie nicht berücksichtigen und markiert den (wirkungslosen) PUBLIC-Default-EXECUTE-Grant fälschlich als Exposure. Advisor-Falsch-Positiv-Klasse, kein Exploit.
+- **Aufrufbare `authenticated`-only `SECURITY DEFINER`-Business-RPCs** (`create_customer_with_contact`, `create_quick_capture_case`, `set_primary_contact`, `set_sales_role_by_admin`, `start_checklist_run_from_template`, `link_google_calendar_event`, `unlink_google_calendar_event`, `get_audit_storage_stats`, `get_entity_audit_events`, `get_global_audit_events`, `record_operation_error`, `report_operation_error`): `ASSESSED — KEEP`. Keine ist für `anon` ausführbar; jede prüft serverseitig `can_write()`, `has_role([...])`, `is_admin()` oder Actor-Ownership (nie nur RLS, nie Client-/UI-Vertrauen). Kein Authorization-Bug gefunden.
+- **Search-Path-Schutz von `SECURITY DEFINER`-Functions:** `NO SEARCH PATH SECURITY BLOCKER`. `CREATE` auf Schema `public` (und `pg_catalog`, `nora_private`) ist auf Production für keine der Rollen `PUBLIC`, `anon`, `authenticated`, `service_role` vergeben — nur `pg_database_owner`/`supabase_admin`/`postgres` besitzen es. Damit kann kein untrusted Client Objekte anlegen, die einen `search_path` shadowen könnten. Zusätzlich: jede `SECURITY DEFINER`-Function in der Datenbank hat ein explizites `proconfig` (`search_path=''` bei der Mehrheit, `search_path=public` bei 9 Functions — `assign_case_number`, `assign_customer_number`, `audit_checklist_run_changes`, `audit_checklist_run_item_changes`, `audit_deal_stage_change`, `audit_saved_text_snippet_changes`, `next_case_number`, `next_customer_number`, `get_user_id_by_email` —, `search_path=pg_catalog` bei `rls_auto_enable`); keine Function verlässt sich auf den Such-Pfad des Aufrufers. Die neun `search_path=public`-Functions referenzieren intern ausschließlich schema-qualifizierte Objekte (`public.number_counters`, `public.insert_audit_event`, `auth.users`, …), keine Dynamic SQL — auch bei hypothetisch offenerem `public`-Schema wären sie robust.
+- **`auth_leaked_password_protection`:** `RESOLVED — ENABLED` (2026-08-28, Production). Vorheriger Zustand: deaktiviert (Advisor WARN). Über das Supabase Dashboard (Authentication → Sign In/Providers → Email-Provider-Panel → „Prevent use of leaked passwords") aktiviert — kein Management-API-/SQL-Zugriff auf Auth-Config vorhanden, daher gezielte Browser-Interaktion mit expliziter Nutzerbestätigung vor dem Speichern. Ausschließlich dieser eine Toggle geändert; alle übrigen Felder im selben Panel (Secure password change, Require current password when updating, Minimum password length = 6, Password requirements, Email OTP expiration/length) unverändert gelassen und per Re-Open des Panels nach dem Speichern verifiziert. Anschließend `get_advisors` erneut read-only abgerufen: `auth_leaked_password_protection`-WARN ist aus dem aktuellen Snapshot verschwunden, alle anderen Findings (`number_counters` INFO, zwei `security_definer_view` ERRORs) unverändert vorhanden.
+
+### Begründung
+
+Ziel des Supabase Security Advisors ist nachgewiesene Sicherheit, nicht „0 Findings". Die verbleibenden INFO-/WARN-Signale (`number_counters`, die 17 Trigger-/Event-Trigger-Functions) sind nach Prüfung von Definition, Grants, RLS, Consumer und realem Angriffspfad bewusst akzeptierte Architektur bzw. Advisor-Mechanik-Artefakte — kein Fix nötig oder sinnvoll. Der einzige Punkt mit echtem, kostengünstigem Sicherheitsgewinn ohne Nora-spezifische Abhängigkeit war `auth_leaked_password_protection`, daher isoliert aktiviert.
+
+Diese Bewertung deckt den zum 2026-08-28 abgerufenen Advisor-Snapshot vollständig ab, ist aber keine Zusicherung für alle Zukunft: jede künftige Migration, neue Function/RPC, Grant-Änderung oder neue Advisor-Lint-Kategorie kann neue Findings erzeugen, die eigenständig zu bewerten sind — unabhängig vom hier dokumentierten Abschluss.
+
+### Guardrail
+
+Diese Bewertung gilt nur für den zum Zeitpunkt geprüften Production-Privilege-Stand. Bei künftigen Änderungen an Schema-Grants (`CREATE` auf `public`/`pg_catalog`/`nora_private`), an einer der 9 `search_path=public`-Functions (neue unqualifizierte Referenzen, Dynamic SQL) oder an einer der `authenticated`-only Business-RPCs (neue Parameter, geänderte Rollen-/Ownership-Prüfung) ist eine erneute Security-Bewertung erforderlich — nicht die alte Einstufung wiederverwenden. Kein pauschaler Rückschluss „SECURITY DEFINER + search_path gesetzt = sicher" ohne erneute Prüfung von Schema-Privilegien und interner Qualifizierung.
+
+Vollständige technische Herleitung: Session-Assessment 2026-08-28 (Nachfolge-Session zu „Intentional privileged read views"), zusammengefasst in `17-known-issues-and-planned-waves.md`.
 
 ---
 

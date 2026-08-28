@@ -170,15 +170,41 @@ Für `sales_directory` ausdrücklich: **keine** Erweiterung um `role`, `email`, 
 
 Vollständige technische Herleitung (Dependency-Baum, Grant-Tabellen, Rollen-Szenarien): Session-Assessment 2026-08-28, zusammengefasst in `06-decision-log.md` „2026-08-28 – Intentional privileged read views".
 
-## Remaining Security Advisor Follow-ups
+## Residual Security Advisor Follow-ups — assessed 2026-08-28
 
-Während des Assessments am 2026-08-28 wurden weitere Supabase Security Advisor Hinweise gesehen, aber **nicht bewertet** — hier ausdrücklich als `UNASSESSED` geführt, nicht als „harmlos" und nicht als „Sicherheitslücke":
+Die zuvor als `UNASSESSED` geführten Findings wurden in einer Folge-Session (2026-08-28, „Residual Security Advisor Closure", siehe `06-decision-log.md`) read-only gegen `nora-crm-prod` bewertet:
 
-- `public.number_counters` — INFO `rls_enabled_no_policy` (RLS aktiviert, aber keine Policy vorhanden). Observed, not yet assessed.
-- Mehrere WARN-level `anon_security_definer_function_executable` / `authenticated_security_definer_function_executable` — diverse `SECURITY DEFINER`-Functions/RPCs (u. a. Audit-Trigger-Functions, `assign_customer_number()`, `assign_case_number()`, `create_customer_with_contact(...)`, `create_quick_capture_case(...)`, `set_primary_contact(...)`, `set_sales_role_by_admin(...)`, Google-Kalender-RPCs, Error-Observatory-RPCs) sind für `anon`/`authenticated` über `/rest/v1/rpc/...` ausführbar. Observed, not yet assessed.
-- `auth_leaked_password_protection` — WARN, HaveIBeenPwned-Check aktuell nicht aktiviert. Observed, not yet assessed.
+### `public.number_counters`
 
-**Nächster sinnvoller Schritt:** eine separate, ebenfalls read-only Residual-Security-Advisor-Assessment-Welle nach demselben Muster wie die `init_state`/`sales_directory`-Session (Definition, Grants, RLS, Consumer, reale Zugriffsszenarien je Finding) — nicht in dieser oder der vorherigen Session vorgenommen.
+**Status: `ASSESSED — INFORMATIONAL — KEEP`**
+
+RLS aktiviert, keine Policy — aber kein Tabellen-Grant für `anon`/`authenticated` (auch `service_role` hat nur `REFERENCES`/`TRIGGER`/`TRUNCATE`, kein SELECT/DML). Deny-by-grants unabhängig von RLS. Einzige Consumer: `assign_customer_number()`/`assign_case_number()` (`SECURITY DEFINER`, Owner `postgres`, ausschließlich als BEFORE-INSERT-Trigger auf `companies`/`deals`). Deliberate deny-all-Architektur.
+
+### Ausführbare `SECURITY DEFINER`-Trigger-/Event-Trigger-Functions
+
+**Status: `ASSESSED — INFORMATIONAL — KEEP`**
+
+17 Functions (alle `audit_*`, `handle_new_user`, `handle_update_user`, `assign_case_number`, `assign_customer_number`, `cleanup_note_attachments`, `enforce_google_calendar_connection_rules`, `handle_contact_note_created_or_updated`, `rls_auto_enable`) haben Rückgabetyp `trigger` bzw. `event_trigger` — Postgres verbietet den direkten Aufruf unabhängig von Grants/Rolle, PostgREST exponiert sie nicht als RPC-Endpunkte. Advisor-Falsch-Positiv-Klasse (Lint berücksichtigt keinen Rückgabetyp), kein Exploit.
+
+### Aufrufbare `authenticated`-only `SECURITY DEFINER`-Business-RPCs
+
+**Status: `ASSESSED — KEEP`**
+
+`create_customer_with_contact`, `create_quick_capture_case`, `set_primary_contact`, `set_sales_role_by_admin`, `start_checklist_run_from_template`, `link_google_calendar_event`, `unlink_google_calendar_event`, `get_audit_storage_stats`, `get_entity_audit_events`, `get_global_audit_events`, `record_operation_error`, `report_operation_error`. Keine für `anon` ausführbar; jede prüft serverseitig `can_write()`/`has_role([...])`/`is_admin()`/Actor-Ownership. Kein Authorization-Bug gefunden.
+
+### Search-Path-Schutz (`SECURITY DEFINER` mit `search_path=public`)
+
+**Status: `NO SEARCH PATH SECURITY BLOCKER`**
+
+`CREATE` auf `public`/`pg_catalog`/`nora_private` ist auf Production für keine client-facing Rolle vergeben. Alle `SECURITY DEFINER`-Functions haben explizites `proconfig` (`search_path=''` oder `search_path=public`, eine mit `search_path=pg_catalog`); die neun `search_path=public`-Functions referenzieren intern ausschließlich schema-qualifizierte Objekte, keine Dynamic SQL.
+
+### `auth_leaked_password_protection`
+
+**Status: `RESOLVED — ENABLED` (2026-08-28, Production)**
+
+Über Supabase Dashboard (Authentication → Sign In/Providers → Email → „Prevent use of leaked passwords") aktiviert; kein Management-API-/SQL-Zugriff auf Auth-Config vorhanden, daher gezielte Browser-Interaktion mit Nutzerbestätigung vor dem Speichern. Ausschließlich dieser eine Toggle geändert, alle übrigen Felder im Panel unverändert (per Re-Open verifiziert). `get_advisors` danach erneut abgerufen: WARN verschwunden, alle anderen Findings unverändert.
+
+Vollständige Herleitung: `06-decision-log.md` „2026-08-28 – Residual Security Advisor Closure".
 
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 
