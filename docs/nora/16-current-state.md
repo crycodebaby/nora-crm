@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-08-26 (nach Self Contact Wave, Unified Tasks Wave, Live-UX-Fixes-Wave, Customer & Contact Workflow Wave + Foundation Performance/Index-Härtung, PR #1).
+Stand: 2026-08-28 (nach Security Advisor Baseline Closure + Error Contract Wave Production Release).
 
 Dieses Dokument ist eine **schnelle Orientierung**, kein Ersatz für die referenzierten Dokumente. Es verlinkt, statt Inhalte zu duplizieren.
 
@@ -29,14 +29,14 @@ Vollständiges Domänenmodell: `01-domain-model.md`. Datenmodell-Fallen: `03-dat
 - Audit: `audit_events`, append-only, automatisch über INSERT/UPDATE-Trigger auf Kern-Tabellen — siehe `13-crm-audit-retention.md`.
 - Error Observatory: `operation_errors`, getrennt von Audit (fehlgeschlagene vs. erfolgreiche Operationen) — Decision Log 2026-08-10.
 
-**Bekannte, noch offene Security-/Ops-Themen** (aus früherer Analyse vor dieser Session, hier nicht neu verifiziert — vor Umsetzung gegen aktuellen Code prüfen):
+**Supabase Security Advisor Baseline: abgeschlossen (Stand 2026-08-28).** Der zu diesem Zeitpunkt bekannte Advisor-Backlog ist vollständig bewertet — jedes Finding ist entweder `ASSESSED/KEEP` (bewusste, geprüfte Architektur) oder `RESOLVED` (behoben und per Advisor-Re-Check bestätigt). Kein Finding wurde ungeprüft als „ok" markiert. Details, Einzelbewertungen und die Guardrail für künftige Änderungen: Abschnitt 6a unten, `06-decision-log.md`, `17-known-issues-and-planned-waves.md`. **Diese Abgeschlossenheit gilt nur für den geprüften Snapshot** — jede neue Migration, Function/RPC, Grant-Änderung oder neue Advisor-Lint-Kategorie erfordert eine eigene, neue Bewertung.
+
+**Separat davon — bekannte, noch offene Ops-/Betriebs-Themen** (aus einer früheren Analyse vor der Customer & Contact Workflow Wave, **nicht** Teil der Security-Advisor-Bewertung und weiterhin nicht in einer Session verifiziert — vor Umsetzung gegen aktuellen Code prüfen):
 - Offene Selbstregistrierung (Status unklar, `handle_new_user`/`init_state`-Logik prüfen)
 - Attachment-Bucket-Konfiguration
 - Nicht deployte Edge Functions
 - Rollen-Cache-Verhalten im Frontend
 - Audit-Retention/Löschstrategie (`13-crm-audit-retention.md` beschreibt das Modell, keine automatische Löschung ist Stand v0.3l)
-
-Diese Punkte waren zu Beginn der Customer & Contact Workflow Wave als "bekannt, nicht Kern des Auftrags" benannt und wurden in dieser Session nicht untersucht.
 
 ## 4. Welche großen Waves sind abgeschlossen?
 
