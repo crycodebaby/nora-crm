@@ -22,7 +22,9 @@ import {
 } from "./errorObservatory";
 import {
   OPERATION_RETENTION,
+  type OperationExecutionDisposition,
   type OperationRecord,
+  type OperationResultReference,
   type OperationStatus,
 } from "./operationModel";
 
@@ -33,7 +35,25 @@ export type ExecuteInput = {
   step?: string;
 };
 
-export type OperationHandler<T> = (context: OperationContext) => Promise<T> | T;
+export type OperationOutcomeMeta = {
+  execution?: OperationExecutionDisposition;
+  result?: OperationResultReference;
+};
+
+/**
+ * Context handed to a handler, extended with an opt-in reporter for the
+ * Operation Status Contract v1 (execution disposition / result reference).
+ * Calling `reportOutcome` is optional — existing handlers that never call it
+ * behave exactly as before (execution/result stay undefined on the record).
+ * Only the LAST call before the handler settles wins (no merge semantics).
+ */
+export type ExecutionOperationContext = OperationContext & {
+  reportOutcome: (meta: OperationOutcomeMeta) => void;
+};
+
+export type OperationHandler<T> = (
+  context: ExecutionOperationContext,
+) => Promise<T> | T;
 
 export type OperationManager = {
   execute: <T>(
@@ -171,6 +191,7 @@ export const createOperationManager = (options?: {
         status: "error",
         finishedAt: nowIso(),
         safeErrorCode,
+        errorCode: normalized.code ?? "unknown",
         runtimeErrorId,
       });
       scheduleCleanup(pending.operationId, "error");
@@ -182,6 +203,7 @@ export const createOperationManager = (options?: {
           status: "error",
           finishedAt: nowIso(),
           safeErrorCode: "unknown",
+          errorCode: "unknown",
           runtimeErrorId,
         });
         scheduleCleanup(pending.operationId, "error");
@@ -248,12 +270,22 @@ export const createOperationManager = (options?: {
     };
     setRecord(pending);
 
+    let outcomeMeta: OperationOutcomeMeta = {};
+    const executionContext: ExecutionOperationContext = {
+      ...context,
+      reportOutcome: (meta) => {
+        outcomeMeta = meta;
+      },
+    };
+
     try {
-      const result = await handler(context);
+      const result = await handler(executionContext);
       setRecord({
         ...pending,
         status: "success",
         finishedAt: nowIso(),
+        ...(outcomeMeta.execution ? { execution: outcomeMeta.execution } : {}),
+        ...(outcomeMeta.result ? { result: outcomeMeta.result } : {}),
       });
       scheduleCleanup(context.operationId, "success");
       return result;

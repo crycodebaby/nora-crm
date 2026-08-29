@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice) | [Springen](#2026-08-29-operation-status-contract-wave-v1-createquickcapturecase-slice) |
 | 2026-08-29 – Idempotency Wave | [Springen](#2026-08-29-idempotency-wave) |
 | 2026-08-28 – Kontakterstellung UI-Polish | [Springen](#2026-08-28-kontakterstellung-ui-polish) |
 | 2026-08-28 – Error Contract Wave | [Springen](#2026-08-28-error-contract-wave) |
@@ -80,6 +81,66 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)
+
+### Kontext
+
+Zwei vorherige Assessment-Sessions (kein Code) hatten den bestehenden Operation Manager (Foundation Wave 2), das Error Contract (`NoraErrorCode`) und die Idempotency Wave kartiert und einen konkreten, aus dem Code abgeleiteten Contract-Vorschlag gemacht. Kernbefund: der Application Layer konnte bislang nicht unterscheiden, ob ein erfolgreicher idempotenter RPC-Call einen neuen Write durchgeführt oder ein bestehendes Ergebnis replayed hat — `idempotency_check`/`idempotency_persist` gaben identische JSON-Formen zurück. Zwei Entscheidungen waren offen: das RPC-Metadatenformat für `executed`/`replayed` und die Korrektur der Fehlerquelle am Operation Record (`kind` vs. `code`). Diese Session trifft beide Entscheidungen und implementiert Contract v1 am ersten Vertical Slice.
+
+### Entscheidung
+
+- **Lifecycle bleibt `pending | success | error`** — keine neuen Werte (`partial`, `queued`, `retrying`, `cancelled`, `paused`, `timed_out`) ohne reale Nora-Semantik.
+- **`execution?: "executed" | "replayed"`** ist kein Lifecycle-Status, sondern ein optionales Zusatzfeld an einem `success`-Record. Fehlt (undefined), wenn kein `idempotencyKey` übergeben wurde — nie „executed" für einen ungeschützten Legacy-Call annehmen.
+- **RPC-Metadatenformat:** additives `_meta.disposition` im bestehenden JSONB-Result der drei idempotenten RPCs (`create_customer_with_contact`, `create_quick_capture_case`, `create_quick_capture_task`), additive Migration `20260829150000_operation_status_disposition.sql` — reine `CREATE OR REPLACE FUNCTION`-Body-Änderung auf den bestehenden Signaturen (kein `DROP`/Overload-Risiko wie bei der Idempotency Wave, da kein neuer Parameter). `_meta` wird nur gesetzt, wenn `p_idempotency_key` nicht `null` ist — ein Legacy-Call ohne Key erhält exakt das alte, unveränderte Result-JSON (kein `_meta`-Key überhaupt). Bei Replay überschreibt `v_replay || jsonb_build_object('_meta', ...)` den in `idempotency_records.result` gespeicherten `_meta`-Wert (der beim Erst-Write `"executed"` war) auf `"replayed"` — jsonb `||` überschreibt Top-Level-Keys der rechten Seite.
+- **`_meta` ist reine Transportmetadata**, nie Business-Feld, nie Bestandteil des in `idempotency_records` persistierten fachlichen Contracts über die Fingerprint-Berechnung hinaus (Fingerprint wird weiterhin ausschließlich aus den fachlichen `p_*`-Parametern gebildet, unverändert).
+- **Fehler-Contract-Korrektur:** `OperationRecord` bekommt ein neues Feld `errorCode?: NoraErrorCode | "unknown"`, gespeist aus `normalizeCrmError().code` (statt weiterhin nur `.kind`, das laut `normalizeCrmError.ts` selbst als „vestigial once `code` is present" markiert ist). Das bestehende `safeErrorCode` (`.kind`) bleibt unverändert als Legacy-/Rückwärtskompatibilitätsfeld bestehen — keine stille Umdefinition, keine neue Fehlerklassifikation.
+- **Result-Referenzen:** neues `OperationResultReference`-Feld (`result?: Record<string, string|number|null>`) am `OperationRecord`, ausschließlich die vom RPC zurückgegebenen IDs (`companyId`/`contactId`/`dealId`/`taskId`), nie vollständige Domainobjekte.
+- **Manager-API-Erweiterung, kein neuer Manager:** `OperationHandler`-Signatur bekommt einen `ExecutionOperationContext` (Context + optionales `reportOutcome({execution?, result?})`) statt des bisherigen reinen `OperationContext`. Rückwärtskompatibel — ein Handler, der `reportOutcome` nie aufruft, verhält sich exakt wie vorher (execution/result bleiben `undefined`). Nur die drei betroffenen `execute*.ts`-Wrapper (`executeCreateQuickCaptureCase`, `executeCreateQuickCaptureTask`, `executeCreateCustomerFromContact`) rufen `reportOutcome` tatsächlich auf; `executeCreateCustomerWithContact` (schickt nie einen `idempotencyKey`) bleibt unverändert.
+- **FakeRest-Parität hergestellt:** `runWithFakeRestIdempotency` in `providers/fakerest/dataProvider.ts` gibt jetzt `{result, disposition}` zurück (disposition `undefined` ohne Key, `"executed"` bei Erstschreiben, `"replayed"` bei Replay) — die drei betroffenen FakeRest-Handler (die den Operation Manager direkt aufrufen, nicht über `execute*.ts`) rufen `context.reportOutcome(...)` entsprechend auf. Die an den Aufrufer zurückgegebene Business-Form bleibt unverändert (kein `_meta`-Leak), verifiziert per Test.
+- **Quick Capture Partial Success bleibt wie zuvor modelliert:** kein neuer `partial`-Lifecycle-Status. Core (`quickCapture.createCase`) und Task (`quickCapture.createTask`) bleiben zwei unabhängige Operation-Manager-Einträge; `taskFailed` bleibt ein Feld des Application-Command-Outputs (`createQuickCaptureCase.ts`), keine Parent/Child-Verknüpfung auf Manager-Ebene in dieser Wave.
+- **Audit-Kompatibilität geprüft, keine Änderung nötig:** `nora_private.current_operation_id()` liest den Korrelations-Header unabhängig vom RPC-Rückgabewert; die `_meta`-Erweiterung berührt weder die `INSERT`-Statements auf `companies`/`contacts`/`deals`/`tasks` noch `insert_audit_event`/`request_id`. Keine Audit-Änderung vorgenommen.
+
+### Erster Vertical Slice
+
+`CreateQuickCaptureCase` (inkl. des separaten Task-Schritts) und, da dieselben drei bereits idempotenten RPCs betroffen sind, `CreateCustomerFromContact` gleich mit — beide nutzen denselben additiven `_meta`-Mechanismus ohne Mehraufwand.
+
+### Verifikation
+
+- `npm run typecheck`, `npm run build`: grün.
+- `npx vitest run`: 75 Testdateien / 538 Tests grün (1 vorbestehender Skip, unverändert), inkl. neuer `operations/operationStatusContract.test.ts` (11 Tests: executed/replayed/undefined-Disposition, präziser `errorCode`, Retry-Attempt-Isolation, Core-success+Task-error-Trennung, Result-Referenz-Minimalität) und Erweiterung von `fakeRestIdempotencyParity.test.ts` (2 neue Tests: FakeRest-Disposition-Parität, kein `_meta`-Leak in die Business-Antwort).
+- **Nicht verifiziert in dieser Session (Phase 6B):** kein lokaler Supabase/Docker-Stack verfügbar (Sandbox-Limitierung, wie bereits bei der Customer & Contact Workflow Wave dokumentiert) — `npx supabase db reset --local`, die neue SQL-Suite `supabase/tests/operation_status_disposition_verification.sql` (geschrieben, ungetestet) und ein authentifizierter End-to-End-PostgREST-Roundtrip stehen noch aus. Migration wurde sorgfältig als reine `CREATE OR REPLACE`-Body-Änderung auf unveränderten Signaturen konstruiert (kein Overload-Risiko wie bei der Idempotency Wave), aber das ist Code-Review, kein DB-Beweis. **Diese Lücke ist seit Phase 6C (Nachtrag unten) geschlossen.**
+
+### Nicht eingeführt (bewusst)
+
+Notification-/Status-UI, Incident-Inbox, Retry-Button, persistente Operation-History-Tabelle, Parent/Child-Operation-Tree, Event Bus, Queue, Worker, Outbox, Audit-Redesign, neue Lifecycle-Werte ohne reale Semantik.
+
+### Bekannte Folgepunkte
+
+- Notification-/Status-UI bleibt eigene, spätere Welle — Contract v1 ist UI-neutral gehalten (keine Farben/Texte im Contract).
+- `executeCreateCustomerWithContact.ts` (`/kunden/create`) sendet weiterhin keinen `idempotencyKey` — bewusste, unveränderte Legacy-Semantik dieses Pfads (kein Contract-Bug, kein Scope dieser Wave), kein `_meta` für diesen Aufrufer möglich, bis er selbst auf Idempotency umgestellt wird (separater, späterer Ausbau).
+
+### Nachtrag (2026-08-29, Phase 6C): Vollständige lokale DB-/PostgREST-Verifikation — LOCAL RC / REVIEW READY
+
+Docker war in dieser Folge-Session erreichbar. Vollständig durchgeführt, alles gegen einen frischen `npx supabase db reset --local` (46 Migrationen, `20260829150000` korrekt eingetragen, keine Bookkeeping-Drift — `db reset` schreibt Dateiname-Zeitstempel direkt, kein `apply_migration`-Risiko):
+
+- **Signatur-/Overload-Check:** alle drei RPCs existieren nach dem Reset exakt einmal mit der erwarteten Argumentliste (`pg_proc`-Abfrage) — kein Overload durch die reine `CREATE OR REPLACE`-Body-Änderung.
+- **Neue SQL-Suite `operation_status_disposition_verification.sql`:** lief grün gegen echtes lokales Postgres (`ALL CHECKS PASSED`) — Legacy ohne `_meta`, frischer Write → `executed`, Replay → `replayed` mit identischen IDs und ohne zweite Zeile, Konflikt → `NORA_IDEMPOTENCY_CONFLICT`, Task-Scope unabhängig disposition-fähig.
+- **Kritischer empirischer Beweis (der explizit befürchtete Fehlerfall):** direkt gegen `nora_private.idempotency_records` geprüft — die gespeicherte Zeile bleibt für immer `"executed"` (Schreibzeitpunkt eingefroren); jede Replay-Antwort auf der Leitung berichtet unabhängig davon korrekt `"replayed"` (jsonb `||`-Override greift wie vorgesehen). Kein Leck des eingefrorenen `"executed"`-Werts in eine Replay-Antwort.
+- **Authentifizierter End-to-End-HTTP-Beweis** (echter `authenticated`-User-JWT via GoTrue-Password-Grant, kein `service_role`): über `curl` gegen die lokale PostgREST-Instanz — Legacy-Call (kein `_meta`), frischer Call (`_meta.disposition=executed`), Replay (`_meta.disposition=replayed`, identische `company_id`/`deal_id`), Konflikt (HTTP 409, `code=23505`, `details=NORA_IDEMPOTENCY_CONFLICT`, keine zusätzliche Zeile). Zusätzlich über den echten `@supabase/supabase-js`-Client (dieselbe Bibliothek wie die App) reproduziert — `error.details === "NORA_IDEMPOTENCY_CONFLICT"` exakt wie `extractNoraErrorCode()` es erwartet.
+- **Quick Capture Partial Success, real:** Core-Schreibvorgang erfolgreich (`executed`), Task-Versuch mit absichtlich ungültigem Payload (`p_company_id`/`p_contact_id` beide `null`) schlägt real fehl (HTTP 400, `22023`) und hinterlässt **keinen** committeten Idempotency-Record; ein korrigierter Retry mit demselben Key gelingt danach frisch (`executed`, kein Konflikt) — bestätigt die bereits aus der Idempotency Wave dokumentierte „uncommitted scope = frei wiederholbar"-Regel bleibt durch diese Wave intakt.
+- **Audit-Kompatibilität, real bewiesen (nicht nur gelesen):** `audit_events` zeigt für den Core-Write genau ein `company.created`/`deal.created` mit korrektem `actor_id`; der anschließende Replay über denselben Key erzeugt **keine** zusätzlichen Audit-Zeilen (0 neue Events). `request_id`-Korrelation mit einem explizit gesendeten `x-nora-operation-id`-Header bestätigt (`audit_events.request_id` = gesendete UUID) — unverändert durch diese Wave.
+- **Error Observatory:** `errorObservatory.ts` und die zugehörigen SQL-Functions (`record_operation_error`, `operation_errors`) sind laut Diff unverändert; kein gesonderter Test nötig über die bestehende, weiterhin grüne Suite hinaus.
+- **Vollständige kanonische RBAC/RLS-Testsequenz** (`07-agent-change-checklist.md`, Pflicht bei `SECURITY DEFINER`-Änderungen — alle drei betroffenen RPCs sind `SECURITY DEFINER`): `production_check` → `first_admin_parallel` (der PowerShell-Runner hatte einen vorbestehenden, von dieser Wave unabhängigen Regex-Parsing-Bug bei der Sales-Leerprüfung unter Windows — echte Parallelität stattdessen über zwei parallele `docker exec psql`-Hintergrundprozesse in Bash nachgebildet, Ergebnis exakt 1 Admin + 1 Viewer) → `setup` → `matrix` → `final_hardening` → `checklists_audit` → `crm_audit` → `google_calendar` → `operation_status_disposition_verification` (neu) → `teardown` → `production_check`. Alle Schritte grün. Zusätzlich `customer_contact_workflow_verification.sql`, `task_customer_context_verification.sql`, `error_contract_verification.sql` erneut grün (unverändertes Verhalten bestehender Business-Regeln bestätigt).
+- **Backward Compatibility:** alle Konsumenten der drei RPC-Result-Shapes durchsucht (`ContactToCustomerDialog.tsx`, `QuickCaptureDialog.tsx`, `CustomerCreateForm.tsx`, beide Application Commands) — keiner liest `_meta` oder verlässt sich auf das exakte JSON-Objekt jenseits der dokumentierten Felder; `executeCreateCustomerWithContact.ts` bleibt unverändert (sendet nie einen Key, erhält nie `_meta`).
+- **Vollständige Regression danach:** `npm run typecheck`, `npx vitest run` (75 Dateien/539 Tests grün, 1 unveränderter Skip — ein neuer Invarianten-Test ergänzt, siehe unten), `npm run build` — alle grün.
+- **Neuer Regressionstest:** `reportOutcome()` gefolgt von einem dennoch geworfenen Fehler erzeugt nachweislich **keinen** widersprüchlichen Record (kein `execution`/`result` auf einem `error`-Status) — der bestehende Code verhindert das bereits strukturell (der Error-Pfad baut den finalen Record aus dem ursprünglichen `pending`-Snapshot, nie aus dem im Handler mutierten `outcomeMeta`); keine Codeänderung nötig, nur ein Test ergänzt, der das absichert.
+- **Migration/Schema-Parität:** `20260829150000_operation_status_disposition.sql` und die entsprechenden Abschnitte in `supabase/schemas/02_functions.sql` sind Zeile für Zeile identisch in der disposition-relevanten Logik; keine Signatur-, Security-Mode- oder Grant-Änderung.
+- **Kanonischer Migration-Hash:** SHA-256 `ec4eb5b1bb774d452a82b83d82c89deb9a43ceb74baa6899ad06f3ea94e10f5d` (git-Blob-Inhalt nach `git add`, LF-normalisiert — nicht der ggf. CRLF-transformierte Working-Tree-Bytehash).
+
+**Ergebnis: LOCAL RC / REVIEW READY.** Kein Production-Write, keine Production-Migration, kein Push in dieser Session. Nicht gleichzusetzen mit „PRODUCTION VERIFIED" — dieser Status erfordert einen eigenen, späteren, kontrollierten Production-Release-Prozess (RC einfrieren → Production-DB-Migration → DB-Verifikation → Git Push → Deployment → Live-Smoke, wie bei den vorherigen Waves).
 
 ---
 

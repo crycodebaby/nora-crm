@@ -16,6 +16,7 @@ import {
   type OperationManager,
 } from "./operationManager";
 import { NORA_OPERATION_ID_HEADER } from "./operationContext";
+import { extractRpcDisposition } from "./rpcDisposition";
 
 export type CreateQuickCaptureTaskParams = {
   companyId: string | number | null;
@@ -83,6 +84,14 @@ export const executeCreateQuickCaptureTask = async (
       if (error) {
         throw error;
       }
-      return data as CreateQuickCaptureTaskResult;
+      const { business, disposition } =
+        extractRpcDisposition<CreateQuickCaptureTaskResult>(data);
+      if (disposition) {
+        context.reportOutcome({
+          execution: disposition,
+          result: { taskId: business.task_id },
+        });
+      }
+      return business;
     },
   );

@@ -2952,7 +2952,7 @@ begin
 
     v_replay := nora_private.idempotency_check('create_customer_with_contact', p_idempotency_key, v_fingerprint);
     if v_replay is not null then
-        return v_replay;
+        return v_replay || jsonb_build_object('_meta', jsonb_build_object('disposition', 'replayed'));
     end if;
 
     select core.company_id, core.contact_id
@@ -2962,6 +2962,9 @@ begin
     ) as core;
 
     v_result := jsonb_build_object('company_id', v_company_id, 'contact_id', v_contact_id);
+    if p_idempotency_key is not null then
+        v_result := v_result || jsonb_build_object('_meta', jsonb_build_object('disposition', 'executed'));
+    end if;
     return nora_private.idempotency_persist('create_customer_with_contact', p_idempotency_key, v_fingerprint, v_result);
 end;
 $$;
@@ -2969,7 +2972,7 @@ $$;
 alter function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean, uuid) owner to postgres;
 
 comment on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean, uuid) is
-    'Atomically creates a company and (optionally) a new/existing/self contact. p_self_contact_id links an existing contact as the representing person WITHOUT touching its company_id/is_primary. p_mark_self additionally marks a new/existing contact as self for customer_kind=business (always true for individual). Actor from safe_auth_uid(); requires can_write() (office/admin) — rejection carries DETAIL=NORA_PERMISSION_DENIED (Error Contract Wave, 2026-08-28). Optional p_idempotency_key: same key + same request replays the stored result (no second write); same key + different request raises DETAIL=NORA_IDEMPOTENCY_CONFLICT; null (default) preserves pre-wave behavior (Idempotency Wave, 2026-08-29).';
+    'Atomically creates a company and (optionally) a new/existing/self contact. p_self_contact_id links an existing contact as the representing person WITHOUT touching its company_id/is_primary. p_mark_self additionally marks a new/existing contact as self for customer_kind=business (always true for individual). Actor from safe_auth_uid(); requires can_write() (office/admin) — rejection carries DETAIL=NORA_PERMISSION_DENIED (Error Contract Wave, 2026-08-28). Optional p_idempotency_key: same key + same request replays the stored result (no second write); same key + different request raises DETAIL=NORA_IDEMPOTENCY_CONFLICT; null (default) preserves pre-wave behavior (Idempotency Wave, 2026-08-29). When p_idempotency_key is set, the returned jsonb carries _meta.disposition = "executed" | "replayed" (Operation Status Contract Wave, 2026-08-29); omitted entirely when p_idempotency_key is null.';
 
 revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean, uuid) from public;
 revoke all on function public.create_customer_with_contact(jsonb, jsonb, bigint, bigint, boolean, uuid) from anon;
@@ -3025,7 +3028,7 @@ begin
 
     v_replay := nora_private.idempotency_check('quick_capture_case.core', p_idempotency_key, v_fingerprint);
     if v_replay is not null then
-        return v_replay;
+        return v_replay || jsonb_build_object('_meta', jsonb_build_object('disposition', 'replayed'));
     end if;
 
     if p_existing_company_id is not null and p_existing_contact_id is not null then
@@ -3075,6 +3078,9 @@ begin
     returning id into v_deal_id;
 
     v_result := jsonb_build_object('company_id', v_company_id, 'contact_id', v_contact_id, 'deal_id', v_deal_id);
+    if p_idempotency_key is not null then
+        v_result := v_result || jsonb_build_object('_meta', jsonb_build_object('disposition', 'executed'));
+    end if;
     return nora_private.idempotency_persist('quick_capture_case.core', p_idempotency_key, v_fingerprint, v_result);
 end;
 $$;
@@ -3082,7 +3088,7 @@ $$;
 alter function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean, uuid) owner to postgres;
 
 comment on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean, uuid) is
-    'Quick Capture Application Command: Kunde + Kontakt + Vorgang atomically in one transaction. Validates that an existing contact paired with an existing company is already part of its effective contact context (DETAIL=NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT on rejection). Task creation stays a separate, best-effort step after this call succeeds — see public.create_quick_capture_task for its own idempotency scope under the same key. Actor from safe_auth_uid(); requires can_write() (office/admin) — rejection carries DETAIL=NORA_PERMISSION_DENIED (Error Contract Wave, 2026-08-28). Optional p_idempotency_key covers exactly this Core scope (company+contact+deal); same key + same request replays; same key + different request raises DETAIL=NORA_IDEMPOTENCY_CONFLICT; null (default) preserves pre-wave behavior (Idempotency Wave, 2026-08-29).';
+    'Quick Capture Application Command: Kunde + Kontakt + Vorgang atomically in one transaction. Validates that an existing contact paired with an existing company is already part of its effective contact context (DETAIL=NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT on rejection). Task creation stays a separate, best-effort step after this call succeeds — see public.create_quick_capture_task for its own idempotency scope under the same key. Actor from safe_auth_uid(); requires can_write() (office/admin) — rejection carries DETAIL=NORA_PERMISSION_DENIED (Error Contract Wave, 2026-08-28). Optional p_idempotency_key covers exactly this Core scope (company+contact+deal); same key + same request replays; same key + different request raises DETAIL=NORA_IDEMPOTENCY_CONFLICT; null (default) preserves pre-wave behavior (Idempotency Wave, 2026-08-29). When p_idempotency_key is set, the returned jsonb carries _meta.disposition = "executed" | "replayed" (Operation Status Contract Wave, 2026-08-29); omitted entirely when p_idempotency_key is null.';
 
 revoke all on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean, uuid) from public;
 revoke all on function public.create_quick_capture_case(jsonb, bigint, jsonb, bigint, bigint, jsonb, boolean, uuid) from anon;
@@ -3136,7 +3142,7 @@ begin
 
     v_replay := nora_private.idempotency_check('quick_capture_case.task', p_idempotency_key, v_fingerprint);
     if v_replay is not null then
-        return v_replay;
+        return v_replay || jsonb_build_object('_meta', jsonb_build_object('disposition', 'replayed'));
     end if;
 
     insert into public.tasks (
@@ -3147,6 +3153,9 @@ begin
     returning id into v_task_id;
 
     v_result := jsonb_build_object('task_id', v_task_id);
+    if p_idempotency_key is not null then
+        v_result := v_result || jsonb_build_object('_meta', jsonb_build_object('disposition', 'executed'));
+    end if;
     return nora_private.idempotency_persist('quick_capture_case.task', p_idempotency_key, v_fingerprint, v_result);
 end;
 $$;
@@ -3154,7 +3163,7 @@ $$;
 alter function public.create_quick_capture_task(bigint, bigint, text, text, date, bigint, uuid) owner to postgres;
 
 comment on function public.create_quick_capture_task(bigint, bigint, text, text, date, bigint, uuid) is
-    'Quick Capture follow-up task creation — deliberately a separate RPC/transaction from create_quick_capture_case (best-effort semantics: a failed task must never roll back an already-committed Core write). Optional p_idempotency_key should reuse the SAME key as the paired create_quick_capture_case call but is checked under its own scope (quick_capture_case.task); same key + same request replays the existing task (no duplicate); same key + different request raises DETAIL=NORA_IDEMPOTENCY_CONFLICT; a technically failed attempt (no committed row) leaves the key freely retriable. Actor from safe_auth_uid(); requires can_write() (Idempotency Wave, 2026-08-29).';
+    'Quick Capture follow-up task creation — deliberately a separate RPC/transaction from create_quick_capture_case (best-effort semantics: a failed task must never roll back an already-committed Core write). Optional p_idempotency_key should reuse the SAME key as the paired create_quick_capture_case call but is checked under its own scope (quick_capture_case.task); same key + same request replays the existing task (no duplicate); same key + different request raises DETAIL=NORA_IDEMPOTENCY_CONFLICT; a technically failed attempt (no committed row) leaves the key freely retriable. Actor from safe_auth_uid(); requires can_write() (Idempotency Wave, 2026-08-29). When p_idempotency_key is set, the returned jsonb carries _meta.disposition = "executed" | "replayed" (Operation Status Contract Wave, 2026-08-29); omitted entirely when p_idempotency_key is null.';
 
 revoke all on function public.create_quick_capture_task(bigint, bigint, text, text, date, bigint, uuid) from public;
 revoke all on function public.create_quick_capture_task(bigint, bigint, text, text, date, bigint, uuid) from anon;

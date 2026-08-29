@@ -102,15 +102,27 @@ const stableStringify = (value: unknown): string =>
     return val;
   });
 
+/**
+ * Operation Status Contract v1 (2026-08-29): mirrors the `_meta.disposition`
+ * ("executed" | "replayed") the real RPCs now report — see
+ * 20260829150000_operation_status_disposition.sql. `disposition` stays
+ * undefined when no idempotencyKey was supplied, matching the server
+ * contract (never assume "executed" for an unprotected legacy call).
+ */
+type FakeRestIdempotentRun<T> = {
+  result: T;
+  disposition?: "executed" | "replayed";
+};
+
 const runWithFakeRestIdempotency = async <T>(
   command: string,
   idempotencyKey: Identifier | null | undefined,
   actorId: Identifier | null | undefined,
   fingerprintInput: unknown,
   run: () => Promise<T>,
-): Promise<T> => {
+): Promise<FakeRestIdempotentRun<T>> => {
   if (idempotencyKey == null) {
-    return run();
+    return { result: await run() };
   }
   const mapKey = `${command}:${String(idempotencyKey)}:${String(actorId ?? "")}`;
   const fingerprint = stableStringify(fingerprintInput);
@@ -122,11 +134,11 @@ const runWithFakeRestIdempotency = async <T>(
         NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT,
       );
     }
-    return existing.result as T;
+    return { result: existing.result as T, disposition: "replayed" };
   }
   const result = await run();
   fakeRestIdempotencyStore.set(mapKey, { fingerprint, result });
-  return result;
+  return { result, disposition: "executed" };
 };
 
 /**
@@ -659,9 +671,9 @@ export const createDataProvider = ({
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["contact.convertToCustomer"],
         {},
-        async () => {
+        async (context) => {
           const identity = await getIdentity();
-          return runWithFakeRestIdempotency(
+          const { result, disposition } = await runWithFakeRestIdempotency(
             "create_customer_with_contact",
             params.idempotencyKey,
             identity?.id,
@@ -679,6 +691,16 @@ export const createDataProvider = ({
                 markSelf: false,
               }),
           );
+          if (disposition) {
+            context.reportOutcome({
+              execution: disposition,
+              result: {
+                companyId: result.company_id,
+                contactId: result.contact_id,
+              },
+            });
+          }
+          return result;
         },
       ),
     createQuickCaptureCase: async (
@@ -687,9 +709,9 @@ export const createDataProvider = ({
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["quickCapture.createCase"],
         {},
-        async () => {
+        async (context) => {
           const identity = await getIdentity();
-          return runWithFakeRestIdempotency(
+          const { result, disposition } = await runWithFakeRestIdempotency(
             "quick_capture_case.core",
             params.idempotencyKey,
             identity?.id,
@@ -761,6 +783,17 @@ export const createDataProvider = ({
               return { company_id, contact_id, deal_id: deal.id };
             },
           );
+          if (disposition) {
+            context.reportOutcome({
+              execution: disposition,
+              result: {
+                companyId: result.company_id,
+                contactId: result.contact_id,
+                dealId: result.deal_id,
+              },
+            });
+          }
+          return result;
         },
       ),
     createQuickCaptureTask: async (
@@ -769,9 +802,9 @@ export const createDataProvider = ({
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["quickCapture.createTask"],
         {},
-        async () => {
+        async (context) => {
           const identity = await getIdentity();
-          return runWithFakeRestIdempotency(
+          const { result, disposition } = await runWithFakeRestIdempotency(
             "quick_capture_case.task",
             params.idempotencyKey,
             identity?.id,
@@ -803,6 +836,13 @@ export const createDataProvider = ({
               return { task_id: Number(task.id) };
             },
           );
+          if (disposition) {
+            context.reportOutcome({
+              execution: disposition,
+              result: { taskId: result.task_id },
+            });
+          }
+          return result;
         },
       ),
     setPrimaryContact: async (contactId: Identifier): Promise<void> => {

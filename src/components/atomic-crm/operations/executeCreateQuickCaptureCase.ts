@@ -13,6 +13,7 @@ import {
   type OperationManager,
 } from "./operationManager";
 import { NORA_OPERATION_ID_HEADER } from "./operationContext";
+import { extractRpcDisposition } from "./rpcDisposition";
 
 export type CreateQuickCaptureCaseCompanyInput = Record<string, unknown> & {
   name: string;
@@ -98,6 +99,18 @@ export const executeCreateQuickCaptureCase = async (
       if (error) {
         throw error;
       }
-      return data as CreateQuickCaptureCaseResult;
+      const { business, disposition } =
+        extractRpcDisposition<CreateQuickCaptureCaseResult>(data);
+      if (disposition) {
+        context.reportOutcome({
+          execution: disposition,
+          result: {
+            companyId: business.company_id,
+            contactId: business.contact_id,
+            dealId: business.deal_id,
+          },
+        });
+      }
+      return business;
     },
   );

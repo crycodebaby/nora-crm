@@ -13,6 +13,7 @@ import {
   type OperationManager,
 } from "./operationManager";
 import { NORA_OPERATION_ID_HEADER } from "./operationContext";
+import { extractRpcDisposition } from "./rpcDisposition";
 
 export type CreateCustomerFromContactCompanyInput = Record<string, unknown> & {
   name: string;
@@ -78,6 +79,17 @@ export const executeCreateCustomerFromContact = async (
       if (error) {
         throw error;
       }
-      return data as CreateCustomerFromContactResult;
+      const { business, disposition } =
+        extractRpcDisposition<CreateCustomerFromContactResult>(data);
+      if (disposition) {
+        context.reportOutcome({
+          execution: disposition,
+          result: {
+            companyId: business.company_id,
+            contactId: business.contact_id,
+          },
+        });
+      }
+      return business;
     },
   );

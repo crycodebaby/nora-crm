@@ -1,6 +1,10 @@
 import { createDataProvider } from "./dataProvider";
 import { buildCompany, createCrmDb } from "@/test/StoryWrapper";
 import { NORA_ERROR_CODES } from "../../domain/noraErrorCodes";
+import {
+  getDefaultOperationManager,
+  resetDefaultOperationManagerForTests,
+} from "../../operations/operationManager";
 
 /**
  * Idempotency Wave (2026-08-29): FakeRest must mirror the real RPCs'
@@ -13,6 +17,10 @@ import { NORA_ERROR_CODES } from "../../domain/noraErrorCodes";
  * Postgres RPCs (supabase/tests/*_verification.sql).
  */
 describe("FakeRest idempotency parity", () => {
+  afterEach(() => {
+    resetDefaultOperationManagerForTests();
+  });
+
   const getDetails = (error: unknown): unknown =>
     (error as { details?: unknown } | null)?.details;
 
@@ -180,5 +188,73 @@ describe("FakeRest idempotency parity", () => {
       sort: { field: "id", order: "ASC" },
     });
     expect(total).toBe(2);
+  });
+
+  /**
+   * Operation Status Contract v1 (2026-08-29): FakeRest must mirror the same
+   * execution disposition ("executed"/"replayed") the real RPCs now report,
+   * without leaking `_meta` into the business result FakeRest already
+   * returns (see runWithFakeRestIdempotency in dataProvider.ts).
+   */
+  it("reports execution=executed on first write and execution=replayed on replay via the Operation Manager", async () => {
+    resetDefaultOperationManagerForTests();
+    const dataProvider = createDataProvider({
+      db: createCrmDb({ companies: [] }),
+      silent: true,
+      latency: 0,
+    });
+
+    const params = {
+      company: { name: "Disposition GmbH" },
+      existingCompanyId: null,
+      contact: null,
+      existingContactId: null,
+      selfContactId: null,
+      deal: { name: "Disposition Deal", category: "fensterservice" },
+      idempotencyKey: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    };
+
+    const first = await dataProvider.createQuickCaptureCase(params);
+    expect(first).not.toHaveProperty("_meta");
+
+    const manager = getDefaultOperationManager();
+    const afterFirst = manager
+      .getOperations()
+      .find((op) => op.operationType === "quickCapture.createCase");
+    expect(afterFirst?.execution).toBe("executed");
+
+    const replay = await dataProvider.createQuickCaptureCase(params);
+    expect(replay).toEqual(first);
+    expect(replay).not.toHaveProperty("_meta");
+
+    const afterReplay = manager
+      .getOperations()
+      .filter((op) => op.operationType === "quickCapture.createCase")
+      .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1))[0];
+    expect(afterReplay?.execution).toBe("replayed");
+  });
+
+  it("does not report an execution disposition for a legacy call without idempotencyKey", async () => {
+    resetDefaultOperationManagerForTests();
+    const dataProvider = createDataProvider({
+      db: createCrmDb({ companies: [] }),
+      silent: true,
+      latency: 0,
+    });
+
+    await dataProvider.createQuickCaptureCase({
+      company: { name: "Legacy GmbH" },
+      existingCompanyId: null,
+      contact: null,
+      existingContactId: null,
+      selfContactId: null,
+      deal: { name: "Legacy Deal", category: "fensterservice" },
+    });
+
+    const manager = getDefaultOperationManager();
+    const op = manager
+      .getOperations()
+      .find((entry) => entry.operationType === "quickCapture.createCase");
+    expect(op?.execution).toBeUndefined();
   });
 });
