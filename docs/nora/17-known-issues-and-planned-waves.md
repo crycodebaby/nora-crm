@@ -218,6 +218,14 @@ RLS aktiviert, keine Policy — aber kein Tabellen-Grant für `anon`/`authentica
 
 Vollständige Herleitung: `06-decision-log.md` „2026-08-28 – Residual Security Advisor Closure".
 
+## Operation Manager — pendente Operationen ohne eigenen TTL
+
+**Status: `ASSESSED — LOW — PLANNED FOLLOW-UP`**
+
+`operationManager.ts::enforceCapacity()` eviktiert bei Kapazitätsüberschreitung ausschließlich nicht-pendente (`success`/`error`) Records — pendente Operationen werden nie automatisch entfernt und haben keinen eigenen TTL-/Timeout-Lifecycle. Vorbestehend seit Foundation Wave 2 (Operation Manager Grundgerüst), **nicht** durch die Operation Status Contract Wave v1 (2026-08-29) eingeführt oder verändert. Bewusst kein Fix in dieser oder der Operation Status Contract Wave — kein neuer Lifecycle-Status (z. B. `timed_out`/`cancelled`) ohne reale Semantik/Bedarf eingeführt (siehe `03-data-model-guardrails.md` Grundregel 5). Bei künftigem Bedarf (z. B. hängende Handler, die nie resolven/rejecten) eigene, spätere Welle mit explizitem Timeout-Mechanismus statt stillschweigender Kapazitätslogik.
+
+Bestätigt read-only in der Phase-6D.1-Closure-Verifikation (2026-08-29) — kein neuer RC-Blocker, siehe `06-decision-log.md` Nachtrag „Phase 6D.1".
+
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 
 Aus einer früheren Analyse vor der Customer & Contact Workflow Wave als „bekannt, nicht Kern des Auftrags" benannt, hier zur Vollständigkeit aufgeführt — **nicht in dieser Session verifiziert oder detailliert**, vor Bearbeitung gegen aktuellen Code/Produktion neu prüfen:

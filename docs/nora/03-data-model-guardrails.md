@@ -573,6 +573,65 @@ Richtig:
 origin = google → read-only; origin = nora → office/admin mit Bestätigung beim Löschen
 ```
 
+## Operation Status Contract v1 — Guardrails (Welle 2026-08-29, Phase 6C/6D.1)
+
+### Falle 35: Gespeicherten `idempotency_records.result._meta.disposition` als aktuelle externe Ausführungsdisposition lesen
+
+Falsch:
+
+```text
+select result -> '_meta' ->> 'disposition' from nora_private.idempotency_records
+where idempotency_key = ...;
+-- und diesen Wert als "was der Client gerade als Disposition sieht" interpretieren
+```
+
+Richtig:
+
+```text
+Die drei idempotenten RPCs (create_customer_with_contact, create_quick_capture_case,
+create_quick_capture_task) schreiben `_meta.disposition = "executed"` beim Erstschreiben
+UNVERÄNDERLICH in die gespeicherte Zeile — dieser Wert bleibt für immer "executed", auch
+nach beliebig vielen Replays. Bei jedem Replay überschreibt die RPC den zurückgegebenen
+Wert frisch per `v_replay || jsonb_build_object('_meta', jsonb_build_object('disposition',
+'replayed'))` (jsonb `||` gewinnt auf der rechten Seite) — die externe Disposition wird
+also bei JEDEM Request serverseitig neu berechnet, nie aus der gespeicherten Zeile
+übernommen. Die Tabelle ist ohnehin nur über die beiden SECURITY DEFINER-Functions
+(`idempotency_check`/`idempotency_persist`) erreichbar, nicht direkt per PostgREST.
+Ein künftiger Agent, der z. B. eine Admin-Ansicht oder ein Reporting auf
+`idempotency_records` aufbaut, darf `result._meta.disposition` NICHT als „letzte bekannte
+Disposition" ausgeben — es ist ein eingefrorener Schreibzeitpunkt-Wert, kein Live-Status.
+Empirisch verifiziert (Decision Log „2026-08-29 – Operation Status Contract Wave",
+Nachtrag Phase 6C und 6D.1): direkte Abfrage der Zeile zeigt weiterhin `"executed"`,
+während der gleichzeitige Replay-Response korrekt `"replayed"` liefert.
+```
+
+### Falle 36: KI/Automatisierung mit rohem SQL direkt gegen `audit_events`
+
+Falsch:
+
+```text
+Ein zukünftiger LLM-/Automatisierungs-Consumer generiert eigenständig
+SELECT-Statements gegen public.audit_events (oder andere Rohtabellen), um
+"die Historie eines Kunden" zu beantworten.
+```
+
+Richtig:
+
+```text
+Zukünftige KI-/Automatisierungs-Konsumenten von Business-Historie gehen ausschließlich
+über anwendungsseitige Read-Models/Queries (konzeptionell z. B. GetCustomerHistory(customerId)),
+niemals über roh generiertes SQL direkt gegen audit_events oder andere Tabellen. Dies ist
+eine Architekturregel für künftige Wellen (Notification-/Status-UI, KI-Assistenz) — in
+dieser Session bewusst NICHT implementiert, nur als Guardrail dokumentiert.
+```
+
+`operation_id` (technische Korrelation über Manager/Audit/Error-Observatory hinweg, wo
+unterstützt) und `idempotency_key` (fachliche Retry-Absicht) sind zwei unterschiedliche
+Konzepte und dürfen nicht verwechselt werden. `audit_events.request_id` ist trotz des
+historischen Spaltennamens die `operation_id`-Korrelation (befüllt aus dem Request-Header
+`x-nora-operation-id`, siehe `nora_private.current_operation_id()` in Migration
+`20260810160000_nora_operation_correlation.sql`) — keine zweite, unabhängige Request-ID.
+
 ## Migrationsregel
 
 Vor einer Migration dokumentieren:
