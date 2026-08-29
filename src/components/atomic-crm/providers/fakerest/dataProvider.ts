@@ -708,7 +708,9 @@ export const createDataProvider = ({
     ): Promise<CreateQuickCaptureCaseResult> =>
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["quickCapture.createCase"],
-        {},
+        // Parity with the Supabase path (Phase 7B.3): an explicitly supplied
+        // correlation id is used verbatim; without one the manager mints.
+        { operationId: params.operationId },
         async (context) => {
           const identity = await getIdentity();
           const { result, disposition } = await runWithFakeRestIdempotency(
@@ -801,7 +803,7 @@ export const createDataProvider = ({
     ): Promise<CreateQuickCaptureTaskResult> =>
       getDefaultOperationManager().execute(
         OPERATION_CATALOG["quickCapture.createTask"],
-        {},
+        { operationId: params.operationId },
         async (context) => {
           const identity = await getIdentity();
           const { result, disposition } = await runWithFakeRestIdempotency(

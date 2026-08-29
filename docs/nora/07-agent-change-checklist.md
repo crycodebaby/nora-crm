@@ -215,6 +215,17 @@ Bei Error-Contract-Änderungen (ab Error Contract Wave, 2026-08-28) zusätzlich:
 - [ ] Human Message Independence nachgewiesen, wenn zwei Origins denselben Code liefern (Test mit unterschiedlichem MESSAGE-Text, gleichem DETAIL)
 - [ ] `npm run typecheck` / `npm run build` / `npx vitest run`
 
+Bei Notification-/Feedback-Änderungen (ab Phase 7B.4, 2026-08-29) zusätzlich:
+
+- [ ] **Ein Flow gehört genau einer Feedback-Schicht.** Wird ein Flow auf die Notification-Karte migriert, werden seine `notify()`-Aufrufe für dieselbe fachliche Aussage im selben Schritt entfernt — nie Karte *und* Toast nebeneinander
+- [ ] sonner bleibt für alle nicht migrierten Flows montiert; keine globale Toast-Bereinigung nebenbei
+- [ ] Ein Operation-Slot wird nur registriert, wenn die Operation auch wirklich startet (kein Phantom-Slot → sonst hängt die Karte für immer auf `pending`)
+- [ ] Fehler **vor** dem Start einer Operation werden nicht in einen synthetischen `OperationRecord` verwandelt — Feldfehler bleiben inline, alles andere meldet der Aufrufer selbst (`QuickCaptureUnnotifiedError`-Muster)
+- [ ] `application/commands/*` importiert weiterhin nichts aus `notifications/` (kein Display Context, kein i18n-Key, kein Tone)
+- [ ] Kein zweiter `OperationManager`: der `NotificationProvider` liegt unterhalb des `OperationProvider`
+- [ ] Neue sichtbare Texte kommen aus `crm.notifications.*` in **allen** registrierten Katalogen (Deutsch primär, Englisch gepflegt, französische Struktur nicht still brechen)
+- [ ] `npm run typecheck` / `npm run build` / `npx vitest run`
+
 Wenn ein Fehler entsteht:
 
 1. Ursache dokumentieren.

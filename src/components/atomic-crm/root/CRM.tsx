@@ -63,6 +63,7 @@ import { CompanyShow } from "../companies/CompanyShow.tsx";
 import { NoteShowPage } from "../notes/NoteShowPage.tsx";
 import { useNoraResourceAliasRoutes } from "../routing/NoraResourceAliasRoutes";
 import { OperationProvider } from "../operations/OperationProvider";
+import { NotificationProvider } from "../notifications/NotificationProvider";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -226,16 +227,23 @@ export const CRM = ({
 
   return (
     <OperationProvider>
-      <ResponsiveAdmin
-        dataProvider={dataProvider}
-        authProvider={wrappedAuthProvider}
-        i18nProvider={i18nProvider}
-        store={store}
-        loginPage={StartPage}
-        requireAuth
-        disableTelemetry
-        {...rest}
-      />
+      {/* Inside OperationProvider on purpose: the notification store derives
+          its state from that same OperationManager instance and must never
+          create a second one (Phase 7B.4). It also sits ABOVE the Admin so a
+          card survives the Quick Capture dialog closing and the redirect that
+          follows. */}
+      <NotificationProvider>
+        <ResponsiveAdmin
+          dataProvider={dataProvider}
+          authProvider={wrappedAuthProvider}
+          i18nProvider={i18nProvider}
+          store={store}
+          loginPage={StartPage}
+          requireAuth
+          disableTelemetry
+          {...rest}
+        />
+      </NotificationProvider>
     </OperationProvider>
   );
 };

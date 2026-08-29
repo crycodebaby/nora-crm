@@ -68,6 +68,29 @@ export type CreateQuickCaptureCaseInput = {
    * Omit to keep the pre-wave, non-idempotent behavior.
    */
   idempotencyKey?: string | null;
+  /**
+   * Optional correlation ids for the technical attempts (Phase 7B.3).
+   * Deliberately separate from `idempotencyKey`: a retry of the same intent
+   * reuses the key but gets fresh operation ids. Omit for existing behavior.
+   */
+  operationIds?: QuickCaptureOperationIds;
+};
+
+/**
+ * Neutral execution metadata (Phase 7B.3): correlation ids for the technical
+ * attempts this one user intent produces. Minted by the caller (a UI/delivery
+ * layer) BEFORE the work starts, so an outer layer can reference the
+ * operations without this Command knowing that layer exists.
+ *
+ * This Command stays presentation-independent: no notification, no display
+ * context, no i18n key, no tone. Those never appear in this signature.
+ *
+ * When both are supplied they must differ — Core and Task are two separately
+ * correlatable operations (see docs/nora/06-decision-log.md, Phase 7A).
+ */
+export type QuickCaptureOperationIds = {
+  caseOperationId?: string;
+  taskOperationId?: string;
 };
 
 export type CreateQuickCaptureCaseOutput = {
@@ -133,6 +156,7 @@ export const createQuickCaptureCase = async (
         sales_id: input.salesId,
       },
       idempotencyKey: input.idempotencyKey ?? null,
+      operationId: input.operationIds?.caseOperationId,
     });
   } catch (error) {
     // Never build the i18n key from raw exception text (Error Contract,
@@ -178,6 +202,9 @@ export const createQuickCaptureCase = async (
         dueDate: input.followUpDate,
         salesId: input.salesId,
         idempotencyKey: input.idempotencyKey ?? null,
+        // Only the Task id reaches the Task provider — the two operations
+        // stay independently correlatable.
+        operationId: input.operationIds?.taskOperationId,
       });
       output.taskId = taskResult.task_id;
     } catch (error) {

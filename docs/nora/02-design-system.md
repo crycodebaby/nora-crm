@@ -399,3 +399,28 @@ Lesende Darstellung von `audit_events` — fachlich formatiert, kein technisches
 - **Fehler in Detail/Listen (v0.3k.1):** `NoraShowBoundary`, `NoraListBoundary`, Checklisten-Abschnitt mit `NoraQueryError`.
 - **Lesemodus-Banner:** kompakt (eine Zeile mobil, Hinweis ab `sm`).
 - **Demo-Rollensimulation (v0.3k.2):** `DemoRoleSwitcher` nur bei `VITE_IS_DEMO=true`; kanonische Session in `demoSession.ts`; Hinweis „simuliert nur die Oberfläche“.
+
+## Statusmeldungen / Notifications (Phase 7B)
+
+Seit Phase 7B.4 real montiert — vorerst **nur** für Quick Capture. Alle anderen Flows nutzen weiterhin sonner (`admin/notification.tsx`).
+
+- **Eine Karte pro Benutzer-Intent**, nicht pro technischer Operation. Quick Capture bündelt Core (Kunde+Kontakt+Vorgang) und optionale Aufgabe in einer Karte.
+- **Tones:** `pending` (neutral), `success`, `warning` (= Presentation-`partial`, z. B. Vorgang angelegt, Aufgabe offen), `error`. Farbe ist nie alleiniger Träger — jede Karte hat Icon **und** eigene Wortwahl.
+- **Position:** Desktop/Tablet unten rechts; Mobile volle Breite oberhalb der `MobileNavigation` inkl. Safe Area.
+- **Layering (Endstand Phase 7B.4c):** Statusmeldungen berichten über die *eigene* laufende oder abgeschlossene Aktion des Benutzers. Zwei Regeln gelten gleichzeitig und beide sind verbindlich: sie müssen **lesbar** bleiben, egal welche Oberfläche offen ist, und sie dürfen **niemals die Aktion blockieren, über die sie berichten**.
+  - Nora-Layer-Reihenfolge: `Basisinhalt < Navigation/Popover < Dialog-Overlay + Dialog (z-50) < Statusmeldungen (z-60)` — auf Desktop **und** Mobile.
+  - `60` ist bewusst die kleinste Stufe über der Dialogschicht — kein `999999`. Ein später bewusst eingeführter Critical-/System-Layer kann darüber liegen.
+- **Modal-aware Position:** Solange ein Dialog offen ist, wechselt der Stapel aus der Footer-Zone in den Kopf-/Inhaltsbereich, weil Dialoge ihre Primäraktionen unten führen. Gesteuert allein über Radix' eigenes `data-state="open"` (`body:has([data-slot="dialog-content"][data-state="open"])`) — keine zweite Modal-State-Maschine.
+  - Desktop: oben zentriert. Räumt den Close-Button des Dialogs und die rechts liegenden Aktionen der Vorgangsakte („Archivieren", „Bearbeiten") frei.
+  - Mobile: unterhalb des Dialog-Kopfblocks (Token `--nora-notification-modal-top-mobile`), oberhalb des Dialog-Footers — Kopfzeile, Close und Footer bleiben sichtbar.
+  - Desktop und Mobile dürfen also unterschiedliche Positionen verwenden; entscheidend ist nicht die Position, sondern dass keine kritische Aktion verdeckt wird.
+- **Nur die neueste Karte, solange ein Dialog offen ist.** Ein wachsender Stapel reicht sonst in das Formular hinein (zwei Fehler hintereinander verdeckten Schritt-Tabs *und* das Titel-Feld). Reine Darstellungsgrenze — der Store behält alle Einträge, sie erscheinen wieder, sobald der Dialog schließt.
+- **Click-through bei offenem Dialog (die harte Garantie).** Dann ist der Kartenkörper `pointer-events: none`, nur das Schließen-Ziel bleibt `auto`. Dadurch kann eine Karte unabhängig von jeder Geometrie niemals einen Klick abfangen, der dem Dialog gilt. **Bewusster Preis:** Hover-Pause der Auto-Ausblendung wirkt bei offenem Dialog nicht — dort arbeitet der Benutzer im Dialog. Außerhalb von Dialogen bleibt die Karte `pointer-events: auto`, Hover/Focus-Pause verhält sich unverändert.
+- **Nicht-modal, in jedem Zustand:** Die Region ist immer `pointer-events: none`. Kein Fokusdiebstahl, kein Focus-Trap, kein Autofocus, kein globaler Escape-Handler, keine Dialogsteuerung.
+- **Keine zweite Feedback-Schicht:** 1 Benutzer-Intent = 1 Karte. Kein zusätzliches Inline-Banner, kein Mobile-Sonder-Toast, keine Dublette im Dialog — nur die Position passt sich der Oberfläche an.
+- **Navigation bleibt frei:** Der höhere Layer ändert nichts an der Geometrie — die Karte liegt weiterhin oberhalb der `MobileNavigation` und verdeckt sie nie.
+- **Sichtbarkeit:** max. 3 Karten Desktop, 2 mobil. Fehler und bereits sichtbare `pending`-Karten werden nicht verdrängt.
+- **Timing:** Pending erscheint erst nach kurzer Verzögerung (kein Blitz bei schnellen Requests) und bleibt dann kurz stehen. Success blendet sich aus, Warning später, **Fehler bleiben bis zum Schließen**.
+- **Accessibility:** der sichtbare Stapel ist **keine** Live-Region. Ansagen kommen ausschließlich vom `NoraNotificationAnnouncer` — Fehler assertiv, alles andere polite, nie beides. Karten stehlen keinen Fokus; Close-Ziel mindestens 44×44 px.
+- **Aktionen:** in 7B ausschließlich „Schließen“. Schließen beendet nur die Anzeige — es bricht keine Operation ab. Kein Retry, keine IT-Eskalation (7C bzw. Phase 8).
+- **Texte:** ausschließlich aus `crm.notifications.*`. Keine Literale im UI, keine sichtbaren `NORA_*`-Codes, keine IDs, keine Kontaktdaten außer einem Namen.

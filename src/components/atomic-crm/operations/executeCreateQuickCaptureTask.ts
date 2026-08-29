@@ -32,6 +32,12 @@ export type CreateQuickCaptureTaskParams = {
    * key still conflicts even though the Core write can replay cleanly.
    */
   idempotencyKey?: string | null;
+  /**
+   * Optional caller-supplied correlation id for THIS attempt (Phase 7B.3).
+   * Independent from the paired Core call's operationId — the two operations
+   * stay separately correlatable. Omit to keep the existing behavior.
+   */
+  operationId?: string;
 };
 
 export type CreateQuickCaptureTaskResult = {
@@ -66,7 +72,7 @@ export const executeCreateQuickCaptureTask = async (
 ): Promise<CreateQuickCaptureTaskResult> =>
   manager.execute(
     OPERATION_CATALOG["quickCapture.createTask"],
-    {},
+    { operationId: params.operationId },
     async (context) => {
       const builder = rpc("create_quick_capture_task", {
         p_company_id: params.companyId,

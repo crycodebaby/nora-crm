@@ -196,3 +196,15 @@ Import-Menüpunkt nur bei `CanAccess configuration edit` (Admin).
 | Direkte Logins | `admin@nora.demo`, `office@nora.demo`, `viewer@nora.demo` (Passwort: `demo`) |
 
 Abnahmeprotokoll: `docs/nora/12-role-ux-acceptance.md`
+
+## Notification-i18n (Phase 7B)
+
+- Namespace `crm.notifications.*` in allen registrierten Katalogen: `region_label`, `errors.generic` sowie pro Intent ein Block (aktuell nur `quick_capture_case`) mit `pending|success|partial|error` × `title` / `body` / `body_no_customer`, plus `partial.detail`.
+- **Keine Literal-Texte in Notification-Komponenten.** Titel, Fließtext und Detailzeile kommen immer über `translate()`; die Argumente stammen ausschließlich aus dem whitelisted Display Context (`customerName`, `contactName`, `dealTitle`, `taskTitle`).
+- Fehlt ein Display-Wert, wird ein **anderer Key** gewählt (`body_no_customer`) statt ein leerer Platzhalter gerendert.
+- Fehlerdetails kommen aus dem bestehenden Error Contract (`NORA_ERROR_DEFINITIONS[code].messageKey`); einziger neuer Fallback ist `crm.notifications.errors.generic`.
+
+### Produkt-Locale-Policy
+
+- **Deutsch ist die Primärsprache**, Englisch die unterstützte Zweitsprache. Neue Nora-Texte werden in beiden gepflegt.
+- Der französische Atomic-CRM-Katalog ist **Legacy-/Kompatibilitätsbestand**. Solange er technisch registriert ist, wird seine Katalogstruktur nicht still gebrochen — neue Keys werden also mitgeführt, ohne dass daraus ein Anspruch auf redaktionelle Pflege entsteht. Ein Locale-Cleanup ist eine eigene, bewusst zu entscheidende Welle.

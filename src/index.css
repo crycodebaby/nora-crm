@@ -45,6 +45,10 @@
   --color-nora-brand-hover: var(--nora-brand-hover);
   --color-nora-brand-soft: var(--nora-brand-soft);
   --color-nora-brand-ring: var(--nora-brand-ring);
+  --color-nora-success: var(--nora-success);
+  --color-nora-success-soft: var(--nora-success-soft);
+  --color-nora-warning: var(--nora-warning);
+  --color-nora-warning-soft: var(--nora-warning-soft);
 }
 
 :root {
@@ -97,6 +101,25 @@
   --nora-line-body: 1.55;
   --nora-line-readable: 1.65;
   --nora-touch-min: 2.75rem;
+  /* Status semantics (Phase 7B.2). Nora red is deliberately NOT used for
+     pending — it sits too close to --destructive and would make a running
+     action read as a failure. Pending stays neutral. */
+  --nora-success: oklch(0.52 0.13 150);
+  --nora-success-soft: color-mix(in oklab, oklch(0.52 0.13 150) 10%, white);
+  --nora-warning: oklch(0.55 0.13 75);
+  --nora-warning-soft: color-mix(in oklab, oklch(0.55 0.13 75) 12%, white);
+  /* Modal-aware notification placement (Phase 7B.4c). While a dialog is open
+     the mobile card stack drops below the dialog's whole header block —
+     measured on the Quick Capture dialog at 500x715: dialog top 93px, header
+     incl. step tabs ends at 260px, close control 111–128px, footer starts at
+     447px. 17rem (272px) lands the card in the form area: header, close and
+     footer all stay visible. A heuristic by nature — the hard guarantee that
+     nothing is ever blocked is the click-through rule further down. */
+  --nora-notification-modal-top-mobile: 17rem;
+  /* Motion. Restrained by design — no bounce, no gamification. */
+  --nora-motion-fast: 150ms;
+  --nora-motion-base: 220ms;
+  --nora-motion-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .dark {
@@ -135,6 +158,20 @@
   --nora-brand-hover: #ff5238;
   --nora-brand-soft: color-mix(in oklab, #ff3b1f 18%, transparent);
   --nora-brand-ring: color-mix(in oklab, #ff3b1f 35%, transparent);
+  /* Redefined for dark, never color-mixed against white (same trap that
+     already forced a second --nora-brand-soft definition above). */
+  --nora-success: oklch(0.76 0.15 150);
+  --nora-success-soft: color-mix(
+    in oklab,
+    oklch(0.76 0.15 150) 16%,
+    transparent
+  );
+  --nora-warning: oklch(0.82 0.14 75);
+  --nora-warning-soft: color-mix(
+    in oklab,
+    oklch(0.82 0.14 75) 16%,
+    transparent
+  );
   --avatar-0: oklch(0.35 0.12 240);
   --avatar-1: oklch(0.38 0.14 340);
   --avatar-2: oklch(0.35 0.11 180);
@@ -618,5 +655,268 @@ input[type="time"] {
 
   .nora-product-brand img {
     @apply object-contain;
+  }
+
+  /* ---------------------------------------------------------------------
+     Notification cards (Phase 7B.2)
+     Colour is never the sole carrier of meaning: every tone also has an
+     icon and unambiguous wording. The accent appears as icon colour and a
+     3px left edge only — never as a filled card.
+     --------------------------------------------------------------------- */
+
+  .nora-notification-region {
+    @apply pointer-events-none fixed flex flex-col;
+    /* Desktop / tablet: bottom right, clear of the centred legacy toaster. */
+    @apply right-6 bottom-6 items-end gap-2;
+    /* Nora layer order (Phase 7B.4b — corrects the original 7A/7B rule):
+         base content < navigation & popovers < dialog overlay / dialog (z-50)
+                      < status notifications (z-60)
+       Status notifications report the user's own running or finished action,
+       so they must stay readable no matter which surface is open. The old
+       z-40 put them UNDER the Radix overlay: after a Quick Capture the app
+       redirects into the Vorgangsakte modal, which covered 64% of the card
+       and dimmed the rest (see docs/nora/06-decision-log.md, 7B.4b).
+       60 is deliberately the smallest step above the dialog layer — not a
+       999999 escape hatch — so a later, explicitly introduced critical/system
+       layer can still sit above this one.
+       The region stays non-modal (pointer-events: none) and must never cover
+       MobileNavigation geometrically — that is handled by the mobile offset
+       below. Where the stack sits while a dialog is open is handled by the
+       modal-aware rules further down (7B.4c). */
+    z-index: 60;
+  }
+
+  .nora-notification-region-mobile {
+    /* Above MobileNavigation (fixed bottom-0, h-16) plus the safe area. */
+    @apply right-3 bottom-auto left-3 items-stretch;
+    bottom: calc(4rem + 0.75rem + env(safe-area-inset-bottom));
+  }
+
+  /* -----------------------------------------------------------------------
+     Modal-aware placement (Phase 7B.4c)
+
+     Two rules are in tension and both are non-negotiable:
+       1. a status card must stay readable whatever surface is open, and
+       2. it must never block the action it is reporting on.
+
+     Bottom-anchored placement satisfies (1) but breaks (2) as soon as a
+     dialog is open, because a dialog puts its primary actions in a bottom
+     footer — measured: on desktop at 1424px the error card covered 119 of
+     244px of "Speichern und Vorgang öffnen"; on mobile it covered 36% of the
+     dialog and put its whole footer row behind the card.
+
+     So while a dialog is open the stack moves out of the footer zone into
+     the header/upper area, which carries no primary actions:
+       - desktop: top-centred — clears the dialog's own close control and the
+         Vorgangsakte's "Archivieren"/"Bearbeiten" on the top right;
+       - mobile: below the dialog header, above the form, per the 7B.4c
+         layout sketch.
+     Driven purely by Radix's own `data-state`, so there is no second modal
+     state machine to keep in sync. --------------------------------------- */
+
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-region,
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-region {
+    @apply top-6 right-auto bottom-auto left-1/2 items-center;
+    transform: translateX(-50%);
+  }
+
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-list,
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-list {
+    @apply items-center;
+  }
+
+  /* While a dialog is open only the NEWEST card is shown. A growing stack
+     reaches down into the dialog's form: two consecutive errors (a reachable
+     state — errors never auto-dismiss) covered the step tabs AND the Titel
+     input, i.e. the very field the user has to correct. Capping to one keeps
+     the stack clear of the form while still reporting the action that just
+     happened, which is the newest card by definition. Presentation only —
+     the store keeps every entry and they reappear when the dialog closes. */
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-list
+    > *:not(:last-child),
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-list
+    > *:not(:last-child) {
+    display: none;
+  }
+
+  /* Mobile keeps its full-width geometry, but drops below the dialog header
+     so the header's close/back control stays reachable. The offset is a
+     documented token rather than a magic pixel value. */
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-region-mobile,
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-region-mobile {
+    @apply right-3 left-3 items-stretch;
+    left: 0.75rem;
+    transform: none;
+    top: calc(
+      env(safe-area-inset-top) + var(--nora-notification-modal-top-mobile)
+    );
+  }
+
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-region-mobile
+    .nora-notification-list,
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-region-mobile
+    .nora-notification-list {
+    @apply items-stretch;
+  }
+
+  /* The hard guarantee, independent of any geometry: while a dialog is open
+     the card body is click-through, so it can never take a click meant for
+     the dialog underneath — whatever the dialog's size or position. Only the
+     close control keeps pointer events, because that is the card's single
+     interaction.
+     Placement above is what keeps the card from *visually* hiding the header
+     or the footer; this rule is what makes a misjudged offset harmless.
+     Trade-off, stated: hover-to-pause-auto-dismiss does not work while a
+     dialog is open. That is deliberate — the user is working inside the
+     dialog then, and a status card must never win a click against the action
+     it reports on. Outside dialogs the card keeps pointer-events: auto and
+     hover/focus pause behaves exactly as before. */
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-card,
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-card {
+    pointer-events: none;
+  }
+
+  body:has([data-slot="dialog-content"][data-state="open"])
+    .nora-notification-close,
+  body:has([data-slot="sheet-content"][data-state="open"])
+    .nora-notification-close {
+    pointer-events: auto;
+  }
+
+  .nora-notification-list {
+    @apply flex w-full flex-col items-end gap-2;
+  }
+
+  .nora-notification-region-mobile .nora-notification-list {
+    @apply items-stretch;
+  }
+
+  .nora-notification-card {
+    @apply pointer-events-auto flex w-[380px] max-w-[calc(100vw-2rem)] items-start gap-3;
+    @apply rounded-xl border border-l-[3px] bg-popover p-4 text-popover-foreground shadow-lg;
+    transition:
+      opacity var(--nora-motion-base) var(--nora-motion-ease),
+      transform var(--nora-motion-base) var(--nora-motion-ease);
+  }
+
+  .nora-notification-region-mobile .nora-notification-card {
+    @apply w-full max-w-none;
+  }
+
+  .nora-notification-enter {
+    animation: nora-notification-in var(--nora-motion-base)
+      var(--nora-motion-ease) both;
+  }
+
+  .nora-notification-card[data-tone="pending"] {
+    border-left-color: var(--muted-foreground);
+  }
+
+  .nora-notification-card[data-tone="success"] {
+    border-left-color: var(--nora-success);
+  }
+
+  .nora-notification-card[data-tone="warning"] {
+    border-left-color: var(--nora-warning);
+  }
+
+  .nora-notification-card[data-tone="error"] {
+    border-left-color: var(--destructive);
+  }
+
+  .nora-notification-icon {
+    @apply mt-0.5 size-5 shrink-0;
+  }
+
+  .nora-notification-card[data-tone="pending"] .nora-notification-icon {
+    @apply text-muted-foreground;
+  }
+
+  .nora-notification-card[data-tone="success"] .nora-notification-icon {
+    color: var(--nora-success);
+  }
+
+  .nora-notification-card[data-tone="warning"] .nora-notification-icon {
+    color: var(--nora-warning);
+  }
+
+  .nora-notification-card[data-tone="error"] .nora-notification-icon {
+    @apply text-destructive;
+  }
+
+  .nora-notification-origin {
+    @apply mb-0.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground;
+  }
+
+  .nora-notification-title {
+    @apply truncate text-[15px] font-semibold tracking-tight text-foreground;
+  }
+
+  /* Context line may wrap twice, then clamp — it is orientation, not action. */
+  .nora-notification-body {
+    @apply mt-0.5 line-clamp-2 text-[14px] text-muted-foreground;
+    line-height: 1.5;
+  }
+
+  /* Never clamped: this is the actionable part of a warning or failure. */
+  .nora-notification-detail {
+    @apply mt-1.5 text-[14px] break-words text-foreground;
+    line-height: 1.5;
+  }
+
+  .nora-notification-close {
+    @apply -mt-1 -mr-1 inline-flex shrink-0 items-center justify-center rounded-md;
+    @apply text-muted-foreground hover:text-foreground;
+    @apply focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none;
+    min-width: var(--nora-touch-min);
+    min-height: var(--nora-touch-min);
+  }
+
+  .nora-notification-spin {
+    animation: nora-notification-spin 900ms linear infinite;
+  }
+}
+
+@keyframes nora-notification-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nora-notification-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Respect the OS setting globally — Nora had no such guard before 7B.2. */
+@media (prefers-reduced-motion: reduce) {
+  .nora-notification-card,
+  .nora-notification-enter {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transform: none !important;
+  }
+
+  .nora-notification-spin {
+    animation: none !important;
   }
 }

@@ -9,6 +9,7 @@ import { useConfigurationLoader } from "../root/useConfigurationLoader";
 import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
 import { NoraReadOnlyBanner } from "../misc/NoraReadOnlyBanner";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
+import { NoraNotificationOutlet } from "../notifications/NoraNotificationOutlet";
 import Header from "./Header";
 
 const isDealsKanbanPath = (pathname: string) =>
@@ -37,7 +38,10 @@ export const Layout = ({ children }: { children: ReactNode }) => {
             </Suspense>
           </ErrorBoundary>
         </main>
+        {/* sonner stays mounted for every not-yet-migrated Nora flow. Quick
+            Capture is the only flow that has moved to the card stack. */}
         <Notification />
+        <NoraNotificationOutlet />
       </div>
     </QuickCaptureProvider>
   );

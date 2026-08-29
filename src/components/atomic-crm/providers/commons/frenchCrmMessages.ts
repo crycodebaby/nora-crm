@@ -1048,6 +1048,36 @@ export const frenchCrmMessages = {
       idempotency_conflict:
         "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
     },
+    notifications: {
+      region_label: "Messages d'état",
+      errors: {
+        generic:
+          "Veuillez réessayer. Si le problème persiste, contactez le service informatique.",
+      },
+      quick_capture_case: {
+        pending: {
+          title: "Création du dossier en cours",
+          body: "« %{dealTitle} » pour %{customerName}",
+          body_no_customer: "« %{dealTitle} »",
+        },
+        success: {
+          title: "Dossier créé",
+          body: "« %{dealTitle} » pour %{customerName}",
+          body_no_customer: "« %{dealTitle} »",
+        },
+        partial: {
+          title: "Dossier créé — tâche en attente",
+          body: "« %{dealTitle} » pour %{customerName}",
+          body_no_customer: "« %{dealTitle} »",
+          detail: "La tâche n'a pas pu être créée.",
+        },
+        error: {
+          title: "Le dossier n'a pas pu être créé",
+          body: "« %{dealTitle} » pour %{customerName}",
+          body_no_customer: "« %{dealTitle} »",
+        },
+      },
+    },
     unsaved_changes: {
       title: "Abandonner les modifications ?",
       message:

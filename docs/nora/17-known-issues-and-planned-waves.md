@@ -226,6 +226,41 @@ Vollständige Herleitung: `06-decision-log.md` „2026-08-28 – Residual Securi
 
 Bestätigt read-only in der Phase-6D.1-Closure-Verifikation (2026-08-29) — kein neuer RC-Blocker, siehe `06-decision-log.md` Nachtrag „Phase 6D.1".
 
+## Notification-UI — Stand nach Phase 7B.4
+
+Phase 7B.4 (2026-08-29) hat die Notification-Schicht erstmals produktiv montiert, aber bewusst nur für **einen** Flow.
+
+**Abgeschlossen (lokal verifiziert, nicht Production-verifiziert):**
+
+- Quick Capture zeigt genau eine Karte pro Benutzer-Intent (Core + optionale Aufgabe), inkl. pending / success / partial / error.
+- `NotificationProvider` unterhalb von `OperationProvider`, `NoraNotificationOutlet` in Desktop- und Mobile-Layout.
+- Die vier Quick-Capture-`notify()`-Toasts sind entfernt; sonner bleibt für alle übrigen Flows aktiv.
+
+**Offen, geplant für 7C (nicht Teil von 7B.4):**
+
+- Weitere Intents: `deal.update`, `customer.createWithContact`, `contact.convertToCustomer` — jeweils Policy-Eintrag plus Controller am passenden Aufrufer.
+- Isolierter Task-Retry (Core bereits committed, Aufgabe unter eigenem Idempotency-Scope wiederholen). Braucht eine eigene Entscheidung — Retry ist nie allein aus `errorCode` ableitbar.
+- Migration der `OPERATION_CATALOG`-Literale, die `DealEdit.tsx` heute als Pseudo-i18n-Key benutzt.
+
+**Offen, 7C UX-Polish (LOW, aus der 7B.4a–7B.4c-Abnahme):**
+
+- **Langer Vorgangstitel verdrängt den Kundennamen.** Die Kontextzeile ist auf zwei Zeilen begrenzt (vertragskonform); bei einem sehr langen Titel wird dafür der Kundenname abgeschnitten („… für Immobilienverwaltung…“). Gerade der Kunde unterscheidet aber zwei ähnliche Karten. Kandidat: Kunde gegenüber dem Titel priorisieren, wenn beide nicht passen. Kein Release-Blocker.
+- **Hover-Pause bei offenem Dialog.** Bewusster Preis der Click-through-Garantie (7B.4c): solange ein Dialog offen ist, pausiert Hover die Auto-Ausblendung nicht. Nur relevant für Success/Partial, die ohnehin von selbst gehen; Fehler bleiben stehen. Nur anfassen, falls es sich real störend zeigt.
+- **Ein Schritt-Tab kann bei offenem Quick-Capture-Dialog visuell überlagert werden** (Desktop, schmale Viewports). Funktional folgenlos — die Karte ist click-through, und „Zurück“/„Weiter“ decken dieselbe Navigation ab.
+
+Erledigt und damit geschlossen: die Desktop-Überlappung des Dialog-Footers und die auf Mobile hinter dem Dialog wartende Karte — beide durch das modal-aware Placement in 7B.4c behoben (gemessen: kein Dialog-Control mehr blockiert).
+
+**Offen, Phase 8 oder später:**
+
+- Sichtbare IT-Eskalation (`canEscalateToIT` / `publicErrorRef` existieren im Contract, werden nicht gerendert — es fehlt der auswertende Incident-Workflow, nicht die Technik).
+- Persistente Notification-History, Notification-Sidebar, Browser-Push.
+- Ablösung von sonner. Bis dahin existieren bewusst zwei Feedback-Schichten nebeneinander; jeder Flow gehört genau einer davon.
+
+**Bekannte, akzeptierte Eigenschaften:**
+
+- Eine `pending`-Karte lässt sich schließen. Das blendet nur aus und bricht die Operation nicht ab (die Operation hat weiterhin keinen eigenen Timeout-Lifecycle, siehe Abschnitt „Operation Manager — pendente Operationen ohne eigenen TTL“).
+- `retentionSoftCap` ist kein hartes Limit: gleichzeitig laufende Intents können ihn überschreiten, weil `pending` nie verdrängt wird. Hart begrenzt ist nur die Anzahl gleichzeitig sichtbarer Karten.
+
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 
 Aus einer früheren Analyse vor der Customer & Contact Workflow Wave als „bekannt, nicht Kern des Auftrags" benannt, hier zur Vollständigkeit aufgeführt — **nicht in dieser Session verifiziert oder detailliert**, vor Bearbeitung gegen aktuellen Code/Produktion neu prüfen:

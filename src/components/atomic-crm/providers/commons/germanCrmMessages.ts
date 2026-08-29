@@ -1045,6 +1045,36 @@ export const germanCrmMessages = {
       idempotency_conflict:
         "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
     },
+    notifications: {
+      region_label: "Statusmeldungen",
+      errors: {
+        generic:
+          "Bitte erneut versuchen. Wenn es weiterhin nicht klappt, wenden Sie sich an die IT.",
+      },
+      quick_capture_case: {
+        pending: {
+          title: "Vorgang wird erstellt",
+          body: "„%{dealTitle}“ für %{customerName}",
+          body_no_customer: "„%{dealTitle}“",
+        },
+        success: {
+          title: "Vorgang erstellt",
+          body: "„%{dealTitle}“ für %{customerName}",
+          body_no_customer: "„%{dealTitle}“",
+        },
+        partial: {
+          title: "Vorgang erstellt — Aufgabe offen",
+          body: "„%{dealTitle}“ für %{customerName}",
+          body_no_customer: "„%{dealTitle}“",
+          detail: "Die Aufgabe konnte nicht angelegt werden.",
+        },
+        error: {
+          title: "Vorgang konnte nicht erstellt werden",
+          body: "„%{dealTitle}“ für %{customerName}",
+          body_no_customer: "„%{dealTitle}“",
+        },
+      },
+    },
     unsaved_changes: {
       title: "Änderungen verwerfen?",
       message: "Es gibt ungespeicherte Änderungen. Wirklich verlassen?",

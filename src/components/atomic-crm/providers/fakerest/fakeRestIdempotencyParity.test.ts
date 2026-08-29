@@ -5,6 +5,7 @@ import {
   getDefaultOperationManager,
   resetDefaultOperationManagerForTests,
 } from "../../operations/operationManager";
+import { isValidOperationId } from "../../operations/operationContext";
 
 /**
  * Idempotency Wave (2026-08-29): FakeRest must mirror the real RPCs'
@@ -256,5 +257,73 @@ describe("FakeRest idempotency parity", () => {
       .getOperations()
       .find((entry) => entry.operationType === "quickCapture.createCase");
     expect(op?.execution).toBeUndefined();
+  });
+
+  /**
+   * Phase 7B.3 — operation correlation parity. FakeRest must honour an
+   * explicitly supplied operationId exactly like the Supabase path, and must
+   * keep minting its own when none is given. No demo-only special case.
+   */
+  it("operation correlation — an explicit operationId is used verbatim, Core and Task stay distinct", async () => {
+    const dataProvider = createDataProvider({
+      db: createCrmDb({ companies: [] }),
+      silent: true,
+      latency: 0,
+    });
+
+    const caseOperationId = "11111111-1111-4111-8111-111111111111";
+    const taskOperationId = "22222222-2222-4222-8222-222222222222";
+
+    const created = await dataProvider.createQuickCaptureCase({
+      company: { name: "Korrelation GmbH" },
+      existingCompanyId: null,
+      contact: null,
+      existingContactId: null,
+      selfContactId: null,
+      deal: { name: "Korrelation Deal", category: "fensterservice" },
+      operationId: caseOperationId,
+    });
+
+    await dataProvider.createQuickCaptureTask({
+      companyId: created.company_id,
+      contactId: null,
+      type: "rueckruf",
+      text: "Rückruf",
+      dueDate: null,
+      salesId: null,
+      operationId: taskOperationId,
+    });
+
+    const manager = getDefaultOperationManager();
+    expect(manager.getOperation(caseOperationId)?.operationType).toBe(
+      "quickCapture.createCase",
+    );
+    expect(manager.getOperation(taskOperationId)?.operationType).toBe(
+      "quickCapture.createTask",
+    );
+    expect(caseOperationId).not.toBe(taskOperationId);
+  });
+
+  it("operation correlation — without an operationId FakeRest still mints its own", async () => {
+    const dataProvider = createDataProvider({
+      db: createCrmDb({ companies: [] }),
+      silent: true,
+      latency: 0,
+    });
+
+    await dataProvider.createQuickCaptureCase({
+      company: { name: "Automint GmbH" },
+      existingCompanyId: null,
+      contact: null,
+      existingContactId: null,
+      selfContactId: null,
+      deal: { name: "Automint Deal", category: "fensterservice" },
+    });
+
+    const op = getDefaultOperationManager()
+      .getOperations()
+      .find((entry) => entry.operationType === "quickCapture.createCase");
+    expect(op).toBeDefined();
+    expect(isValidOperationId(op!.operationId)).toBe(true);
   });
 });

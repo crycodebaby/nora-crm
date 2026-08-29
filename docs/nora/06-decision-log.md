@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-29 – Notification Presentation Contract v1 (Phase 7A) | [Springen](#2026-08-29-notification-presentation-contract-v1-phase-7a) |
 | 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice) | [Springen](#2026-08-29-operation-status-contract-wave-v1-createquickcapturecase-slice) |
 | 2026-08-29 – Idempotency Wave | [Springen](#2026-08-29-idempotency-wave) |
 | 2026-08-28 – Kontakterstellung UI-Polish | [Springen](#2026-08-28-kontakterstellung-ui-polish) |
@@ -83,6 +84,107 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-08-29 – Notification Presentation Contract v1 (Phase 7A)
+
+### Kontext
+
+Nach `OPERATION STATUS V1 PRODUCTION VERIFIED` (Phase 6E) existiert die technische Operationswahrheit (`pending|success|error`, `execution`, `errorCode`, `result`), aber keine menschliche Rückmeldung darüber. Eine reine Assessment-Session (Phase 7A, kein Code) hat die reale Feedback-Lage kartiert: einzige Feedback-Schicht ist ra-core `useNotify` → sonner (`admin/notification.tsx`, `position="bottom-center"`, in `Layout.tsx`/`MobileLayout.tsx` montiert), verteilt auf 34 Dateien; `useOperations()`/`useOperation()` sind vorhanden, aber von **keiner** Komponente konsumiert; `OperationRecord` trägt keinen fachlichen Anzeigekontext und keine Herkunft; `index.css` hat kein Success-/Warning-Token, keine Motion-Token und keinen `prefers-reduced-motion`-Guard. Drei Punkte waren Produktentscheidungen und wurden vom Auftraggeber entschieden.
+
+### Entscheidung — Produkt
+
+- **Composite: eine user-visible Notification pro Benutzer-Intent.** Quick Capture erzeugt technisch zwei Operationen (`quickCapture.createCase` + `quickCapture.createTask`, je eigene `operationId`, je eigener `manager.execute`-Eintrag in beiden Providern) — sichtbar wird daraus **eine** Karte. Core success + Task failure ist ein **Presentation**-`partial` mit Tone `warning` innerhalb derselben Karte. **Kein neuer Core-Lifecycle-Status.** `OperationStatus` bleibt `pending | success | error`; `taskFailed` bleibt Feld des Application-Command-Outputs.
+- **IT-Eskalation bleibt Contract-Fähigkeit, kein UI.** `canEscalateToIT` / `publicErrorRef` gehören zum Contract, werden in 7B aber **nicht gerendert**. Sichtbare Eskalation erst mit belastbarem IT-Incident-Workflow. Befund: die Serverseite existiert bereits (`report_operation_error`, `operation_errors.public_ref` = `NORA-E…`, `reported_by_user_at`) — es fehlt die auswertende Stelle, nicht die Technik. Ein Button ohne Adressat ist ein Versprechen ohne Deckung.
+- **Retry in 7B deaktiviert (`{ kind: "none" }`).** Kein halb funktionierender Retry. Der isolierte Task-Retry (Core bereits committed, nur Task-Schritt unter eigenem Idempotency-Scope `quick_capture_case.task` wiederholen) ist frühestens 7C und wird dort separat entschieden. Retry ist nie aus `errorCode` allein ableitbar — er braucht Command-Policy **und** kompatiblen Idempotency-Scope.
+
+### Entscheidung — Architektur-Guardrails (verbindlich ab 7B)
+
+- **Presentation-Registrierung gehört nicht in Application Commands.** Der Delivery-/UI-/Notification-Controller registriert den Intent und reicht die benötigten **Execution**-Metadaten (vorab gemintete `operationId`s) an den Command weiter. Application Commands (`application/commands/*`) bleiben presentation-unabhängig — kein Import aus `notifications/`, kein Display Context, keine i18n-Keys, keine Tone-Entscheidung.
+- **Ein lange laufendes Core-`pending` wird von der Presentation niemals zu `error` umgedeutet.** Zulässig ist später höchstens ein zusätzlicher Hinweis „dauert länger als erwartet" — Lifecycle und Tone bleiben `pending`. Der fehlende Timeout-Lifecycle im Core (bekannter Follow-up, `17-known-issues-and-planned-waves.md`) wird nicht durch eine Presentation-Heuristik kaschiert.
+- **`NotificationLifecycle` und `tone` dürfen keine widersprüchlichen Kombinationen erlauben.** Der Record ist eine Discriminated Union über `lifecycle`; `tone` wird daraus abgeleitet (`pending→pending`, `success→success`, `partial→warning`, `error→error`) und ist kein frei setzbares Feld.
+- **Bedienbarkeit vor Kompaktheit.** Close-Touch-Target mindestens 44×44 px (`--nora-touch-min`). Handlungsrelevante Fehlerdetails werden **nicht** weggeclampt — die Kontextzeile darf auf 2 Zeilen begrenzt werden, die Fehler-/Warnungs-Detailzeile nicht.
+
+### Weitere Contract-Festlegungen (aus dem Assessment übernommen)
+
+- `notificationId` ≠ `operationId`; ein Record hält `operationIds[]` + `primaryOperationId`.
+- Display Context (`customerName`/`contactName`/`dealTitle`/`taskTitle`) kommt beim Start der Aktion mit — nie aus UI-Strings geraten, nie per Extra-Query nachgeladen, nie in `operation_errors.technical_context`.
+- `execution: "replayed"` rendert **identisch** zu `"executed"` — kein eigener Hinweis.
+- Fehlertexte kommen aus `NORA_ERROR_DEFINITIONS[code].messageKey` (bestehende `crm.errors.*`); einziger neuer Fehlertext ist der Fallback `crm.notifications.errors.generic`. Kein neuer Error Contract, kein sichtbarer `NORA_*`-Code.
+- `initiator` ist Pflichtfeld mit Default `{ kind: "human" }` und wird bei `human` nicht gerendert. Ein fehlender Wert darf nie als „nicht-menschlich" interpretiert werden. Keine AI-Funktion in Phase 7.
+- Neuer i18n-Namespace `crm.notifications.*` in allen drei Katalogen. Die Literal-Strings in `OPERATION_CATALOG` werden **nicht** Textquelle (`DealEdit.tsx` nutzt sie heute als Pseudo-i18n-Key — wird in 7C mitmigriert).
+- Beim Settle friert der Notification-Store die Anzeigedaten ein: `OPERATION_RETENTION` entfernt Records nach 8 s (success) / 60 s (error), eine persistente Fehlerkarte überlebt ihren `OperationRecord`.
+- Nicht in der Policy gelistete `CatalogOperationType`s sind still.
+
+### Nicht eingeführt (bewusst)
+
+Produktive Notification-UI, neue DB-Tabellen, Migration, Incident Inbox, Mail-/Ticketsystem, AI-Agent, LLM-generierte Texte, Event Bus, Worker, Queue, persistente Notification-History, Browser-Push, vollständige Retry Engine, Änderung am Operation Status Contract oder an `normalizeCrmError`/`noraErrorCodes`, Ausbau von sonner.
+
+### Verifikation
+
+Phase 7A war eine reine Assessment-Session ohne Code-Änderung; dieser Eintrag hält die getroffenen Entscheidungen fest. Die Umsetzung erfolgt in Phase 7B (Contract + Store + Karte + Quick-Capture-Slice + Toast-Migration der vier `QuickCaptureDialog`-`notify()`-Aufrufe) mit eigener Verifikation.
+
+### Nachtrag (Phase 7B.3, 2026-08-29): Operation-ID-Propagation
+
+Die in den Guardrails geforderte Trennung ist jetzt technisch möglich, ohne dass ein Application Command die Presentation kennt:
+
+- **Ein Aufrufer darf eine `operationId` vorgeben.** `createOperationContext()` respektierte gültige IDs schon seit Foundation Wave 1 (Ownership-Regel); neu ist, dass der Quick-Capture-Pfad sie durchreicht: `CreateQuickCaptureCase{,Task}Params.operationId` → `manager.execute(catalog, { operationId }, …)` → `x-nora-operation-id`. Ohne Vorgabe wird weiterhin automatisch gemintet — unverändertes Verhalten für alle bestehenden Aufrufer.
+- **Application Commands nehmen ausschließlich neutrale Execution-Metadata entgegen.** `createQuickCaptureCase` kennt `operationIds?: { caseOperationId?, taskOperationId? }` und sonst nichts aus der Presentation-Welt (kein `notificationId`, kein Display Context, kein `messageKey`, kein Tone). `application/commands/*` importiert nichts aus `notifications/`.
+- **`operationId` ≠ `idempotencyKey`.** Ersteres identifiziert einen technischen Versuch, Letzteres den fachlichen Intent über Retries hinweg. Ein Retry bekommt eine neue `operationId` und behält den Key.
+- FakeRest besitzt dieselbe Semantik wie Supabase (Pflichtparität); keine Demo-Sonderlogik.
+
+### Nachtrag (Phase 7B.4, 2026-08-29): erster produktiver Vertical Slice — Quick Capture
+
+Die Notification-Schicht ist erstmals real montiert. Umfang bewusst genau ein Flow.
+
+- **Notification Controller.** `notifications/useNotifiedQuickCapture.ts` (Hook + testbare reine Form `submitNotifiedQuickCapture`) sitzt zwischen `QuickCaptureDialog` und `application/commands/createQuickCaptureCase`. Er mintet die `operationId`s, registriert **einen** Intent und reicht die IDs als neutrale Execution-Metadata weiter — mehr nicht. Kein eigener Lifecycle, kein Timer, keine Fehlerinterpretation, kein DB-Read, kein freier Text: Zustand kommt ausschließlich aus `quickCaptureCaseResolver` über den Store.
+- **Kein Phantom-Task-Slot.** Ein `taskOperationId` wird nur gemintet und registriert, wenn der Command den Task-Schritt tatsächlich ausführt (`taskType` gesetzt). Sonst wartet die Karte auf eine Operation, die nie startet.
+- **Provider-Hierarchie.** `CRM → OperationProvider → NotificationProvider → Admin`. Der Store konsumiert denselben `OperationManager` (kein zweiter Manager) und lebt oberhalb von Layout und Dialog — das ist die Bedingung dafür, dass die Karte „Submit → Dialog schließt → Redirect zur Vorgangsakte" überlebt (P37, real getestet). Der Store wird in `NoraNotificationOutlet` in `Layout.tsx` und `MobileLayout.tsx` gerendert.
+- **Toast-Migration.** Die vier Quick-Capture-`notify()`-Pfade (Success, Partial, Business-/Command-Fehler, Unknown) sind entfernt. sonner bleibt für alle anderen Flows montiert und unverändert. `useNotify` wird im Quick-Capture-Pfad nur noch für **eine** Kategorie benutzt: einen Fehler, der eintritt, **bevor** eine technische Operation gestartet ist.
+- **Fehler vor Operation-Start (Kategorie C).** Neu: `QuickCaptureUnnotifiedError`. Wenn der Submit fehlschlägt, ohne dass `manager.getOperation(caseOperationId)` existiert, verwirft der Controller die Karte und meldet das dem Aufrufer, der den Fehler dann selbst anzeigt. Bewusst **kein** synthetischer `OperationRecord` — eine erfundene Operation ohne serverseitiges Gegenstück würde Audit und Error Observatory verfälschen. Der Auth-Precondition-Guard des Dialogs (`not_authenticated`) läuft über genau diesen Pfad. Feld-/Formularvalidierung bleibt unverändert inline.
+- **Keine Karte über offenem Dialog (Befund, keine neue Entscheidung).** Die 7B.2-Z-Layer-Regel (Region `z-index: 40`, Radix-Overlay `z-50`) liefert Variante B ohne Zusatzlogik: während der Dialog offen ist, liegt eine Karte hinter dem Overlay; sichtbar wird sie, sobald der Submit den Dialog verlässt. Kein `z-index`-Hack, keine neue Positionierungslogik.
+- **Close bleibt Presentation-only.** Der Store löscht nur den Karteneintrag; Operation, Audit und Error Observatory bleiben unberührt. Auch eine `pending`-Karte lässt sich schließen — das cancelt nichts, es blendet nur aus. Keine Retry-/IT-Buttons (unverändert 7C bzw. Phase 8).
+- **Replay unsichtbar.** `execution: "replayed"` erzeugt eine gewöhnliche Success-Karte; die Disposition bleibt intern am `OperationRecord`.
+
+Nicht geändert: Idempotency-Semantik, Operation Status Contract, RBAC/RLS, Migrationen, RPCs, Audit-/Observatory-Schema, `x-nora-operation-id`-Plumbing aus 7B.3, französischer Legacy-Katalog.
+
+### Nachtrag (Phase 7B.4b, 2026-08-29): Layer-Regel korrigiert — Statusmeldungen über Dialogen
+
+Die in Phase 7A getroffene und in 7B.2 umgesetzte Regel lautete: *„Notification unter Navigation und unter Dialog-Overlays; eine Karte verdeckt niemals einen offenen Dialog“* (`z-index: 40`). Diese Regel war als Zurückhaltung gedacht und ist bewusst so entschieden worden — die reale UX-Abnahme (Phase 7B.4a) hat sie widerlegt.
+
+**Befund.** Quick Capture endet **immer** mit einem offenen Dialog: bei Erfolg leitet der Flow in die Vorgangsakte, die auf dem Desktop selbst ein Modal ist; bei einem Core-Fehler bleibt der Schnellerfassungs-Dialog absichtlich offen. Gemessen bei 1440×900: das Vorgangsmodal (x162–1262, `z-50`) verdeckte **242 von 380 px (64 %)** der Erfolgskarte inklusive Icon und Titel, der Rest lag unter dem 50-%-Schwarz-Overlay. Die eine Karte, die der Benutzer lesen soll, war im Hauptpfad praktisch nie vollständig lesbar.
+
+**Neue Entscheidung.** Statusmeldungen liegen **über** normalen Nora-Dialogen und Modal-Overlays. Begründung: Eine Statusmeldung berichtet über die *eigene* Aktion des Benutzers; sie muss unabhängig davon lesbar bleiben, welche Oberfläche gerade offen ist. Nora-Layer-Reihenfolge:
+
+`Basisinhalt < Navigation/Popover < Dialog-Overlay + Dialog (z-50) < Statusmeldungen (z-60)`
+
+`60` ist die kleinste saubere Stufe oberhalb der Dialogschicht — kein pauschales `999999`, damit ein später bewusst eingeführter Critical-/System-Layer noch darüber liegen kann.
+
+**Ausnahme Mobile — aus der Abnahme heraus entstanden.** Der erste Wurf hob den Layer global auf 60. Auf Mobile war das messbar schlechter: bei 500×715 verdeckten zwei Karten **36 % des Dialogs**, und „Abbrechen“, „Zurück“ sowie „Speichern und Vorgang öffnen“ trafen im Hit-Test die Karte statt den Dialog — der Benutzer konnte die Aktion, über die die Karte berichtete, nicht mehr abschließen. Deshalb behält `.nora-notification-region-mobile` bewusst `z-index: 40`. Leitsatz: **eine Statusmeldung darf niemals die Aktion blockieren, über die sie berichtet.** Auf dem Desktop steht neben dem Dialog Platz zur Verfügung, auf dem Telefon ist der Dialog der Bildschirm.
+
+**Unverändert.** Reine Stacking-Änderung: keine Store-, Lifecycle-, Timing-, Retention-, Resolver- oder Correlation-Änderung. Die Region bleibt nicht-modal (`pointer-events: none`, nur die Karte `auto`), ohne Focus-Trap, ohne Autofocus, ohne Escape-Handler; der `NoraNotificationAnnouncer` bleibt alleiniger Besitzer der Screenreader-Ansagen.
+
+**Bekannte Restfolge (Desktop).** Unterhalb von ca. 1700 px Viewport-Breite überlappt die Karte die rechte Hälfte des Dialog-Footers; gemessen bei 1424 px verdeckte die Fehlerkarte 119 von 244 px des Buttons „Speichern und Vorgang öffnen“. Linke Hälfte und Mitte des Buttons bleiben klickbar, der Dialog ist vollständig bedienbar; ab ca. 1700 px gibt es keine Überlappung mehr. Als 7C-Punkt notiert.
+
+### Nachtrag (Phase 7B.4c, 2026-08-30): modal-aware Placement — Endstand
+
+Die Layer-Frage brauchte drei Anläufe. Der Verlauf gehört zur Entscheidung dazu:
+
+1. **7A/7B.2 — unter dem Dialog (`z-40`).** Zurückhaltend gedacht. Ergebnis: die Karte war im realen Quick-Capture-Flow zu 64 % vom Vorgangsmodal verdeckt, also praktisch nicht lesbar.
+2. **7B.4b — global über dem Dialog (`z-60`), weiterhin unten rechts.** Löste die Lesbarkeit auf dem Desktop, erzeugte aber auf Mobile einen Blocker: die Karte verdeckte 36 % des Dialogs und fing die Klicks auf „Abbrechen“, „Zurück“ und „Speichern und Vorgang öffnen“ ab. Als Zwischenlösung blieb Mobile auf `z-40` — damit war die Fehlerkarte auf dem Telefon wieder unsichtbar. Beide Zustände waren jeweils nur eine Hälfte der Anforderung.
+3. **7B.4c — modal-aware Placement.** Die eigentliche Ursache war nie der Layer, sondern die **Position**: unten verankert kollidiert die Karte zwangsläufig mit dem Dialog-Footer, weil dort die Primäraktionen liegen.
+
+**Endgültige Regel.** Beide Anforderungen gelten gleichzeitig: eine Statusmeldung muss lesbar bleiben, egal welche Oberfläche offen ist, **und** darf niemals die Aktion blockieren, über die sie berichtet. Umgesetzt in vier Teilen:
+
+- **Ein Layer für beide Breakpoints:** `Basisinhalt < Navigation/Popover < Dialog (z-50) < Statusmeldungen (z-60)`. Die Mobile-Ausnahme aus 7B.4b entfällt.
+- **Modal-aware Position** über Radix' eigenes `data-state="open"` (`body:has([data-slot="dialog-content"][data-state="open"])`, analog für `sheet-content`) — keine zweite Modal-State-Maschine, kein neuer globaler Zustand. Desktop: oben zentriert. Mobile: unterhalb des Dialog-Kopfblocks (Token `--nora-notification-modal-top-mobile`, hergeleitet aus gemessener Dialoggeometrie).
+- **Nur die neueste Karte, solange ein Dialog offen ist.** Zwei Fehler hintereinander sind erreichbar (Fehler blenden sich nie aus) und der wachsende Stapel verdeckte Schritt-Tabs *und* das Titel-Feld. Reine Darstellungsgrenze, der Store bleibt unberührt.
+- **Click-through als harte Garantie:** bei offenem Dialog ist der Kartenkörper `pointer-events: none`, nur das Schließen-Ziel `auto`. Damit kann eine Karte unabhängig von jeder Dialoggeometrie keinen Klick abfangen — die Position ist nur noch eine visuelle Optimierung, kein Funktionsrisiko.
+
+**Bewusster Preis.** Hover-Pause der Auto-Ausblendung wirkt bei offenem Dialog nicht. Das ist die richtige Seite des Tauschs: dort arbeitet der Benutzer im Dialog, und eine Statusmeldung darf einen Klick auf die Aktion nie gewinnen. Außerhalb von Dialogen bleibt alles wie zuvor.
+
+**Verifikation (gestylte App, echtes Hit-Testing).** Desktop 1424 px und 1884 px sowie 150 % Zoom, Mobile 500×715, jeweils Pending / Success über Vorgangsmodal / Error bei offenem Dialog / Partial: **0 von 11 (Mobile) bzw. 0 von 11 (Desktop) Dialog-Controls blockiert**, Karten-Close 47×47 px und bedienbar, MobileNavigation frei, kein sonner-Toast daneben.
+
+**Unverändert.** Kein Store-, Lifecycle-, Timing-, Retention-, Resolver-, Correlation- oder Error-Mapping-Eingriff; Announcer und Live-Region-Architektur unangetastet.
 
 ## 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)
 

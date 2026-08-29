@@ -55,10 +55,11 @@ import {
   type QuickCaptureSourceChannel,
   type QuickCaptureTaskOption,
 } from "./quickCaptureUtils";
+import { QuickCaptureSubmitError } from "../application/commands/createQuickCaptureCase";
 import {
-  createQuickCaptureCase,
-  QuickCaptureSubmitError,
-} from "../application/commands/createQuickCaptureCase";
+  QuickCaptureUnnotifiedError,
+  useNotifiedQuickCapture,
+} from "../notifications/useNotifiedQuickCapture";
 import { createOperationId } from "../operations/operationContext";
 import type { CustomerListEntry } from "./mergeCustomerSearchResults";
 import { useDuplicateCandidateSearch } from "./useDuplicateCandidateSearch";
@@ -368,12 +369,37 @@ export const QuickCaptureDialog = ({
     `crm.quick_capture.sources.${form.sourceChannel}`,
   );
 
+  // Business subject of the notification card, straight from the form the
+  // user just filled in — no extra read, no id, no phone/e-mail/address.
+  // Trimming, clamping and dropping empty values is the store's job
+  // (sanitizeDisplayContext), so nothing is normalized twice here.
+  const notificationDisplayContext = {
+    dealTitle: form.dealTitle,
+    customerName: form.createNewCompany
+      ? form.newCompanyName
+      : form.selectedCompany?.name,
+    contactName:
+      contactMode === "existing" && form.selectedContact
+        ? `${form.selectedContact.first_name} ${form.selectedContact.last_name}`
+        : contactMode === "new"
+          ? `${form.contactFirstName} ${form.contactLastName}`
+          : undefined,
+  };
+
+  const submitQuickCapture = useNotifiedQuickCapture();
+
   const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: () => {
       if (identity?.id == null) {
-        throw new QuickCaptureSubmitError("not_authenticated", "case");
+        // Local precondition, evaluated before any technical operation
+        // starts. Deliberately NOT turned into an OperationRecord and
+        // therefore NOT covered by a notification card — the caller reports
+        // it (Phase 7B.4 §15, category A/C).
+        throw new QuickCaptureUnnotifiedError(
+          new QuickCaptureSubmitError("not_authenticated", "case"),
+        );
       }
-      return createQuickCaptureCase(dataProvider, {
+      return submitQuickCapture({
         customer: form.createNewCompany
           ? { mode: "new", name: form.newCompanyName }
           : { mode: "existing", companyId: form.selectedCompany!.id },
@@ -401,6 +427,7 @@ export const QuickCaptureDialog = ({
         taskType: form.createTask ? form.taskType : "",
         salesId: identity.id,
         idempotencyKey: form.idempotencyKey,
+        displayContext: notificationDisplayContext,
       });
     },
     onSuccess: ({ dealId, taskFailed }) => {
@@ -413,13 +440,10 @@ export const QuickCaptureDialog = ({
         clearQuickCaptureDraft(identity.id);
       }
       resetForm();
-      if (taskFailed) {
-        notify("crm.quick_capture.errors.task_create_failed_partial", {
-          type: "warning",
-        });
-      } else {
-        notify("crm.quick_capture.success", { type: "info" });
-      }
+      // Phase 7B.4: success and partial success are shown by the Quick
+      // Capture notification card (one card per user intent, derived from the
+      // Core + Task operations). The former sonner toasts are gone so the
+      // same fachliche Rückmeldung is not delivered twice.
       onOpenChange(false);
       redirect(
         noraCreatePath({ resource: "deals", type: "show", id: dealId }),
@@ -430,11 +454,19 @@ export const QuickCaptureDialog = ({
       );
     },
     onError: (error) => {
-      if (error instanceof QuickCaptureSubmitError) {
-        notify(`crm.quick_capture.errors.${error.message}`, { type: "error" });
-        return;
+      // Only a failure that never reached a technical operation is unreported
+      // — everything else (business error, transport error, task idempotency
+      // conflict) is already on screen as the Quick Capture notification
+      // card, and must not get a second sonner toast next to it.
+      if (error instanceof QuickCaptureUnnotifiedError) {
+        const reason = error.reason;
+        notify(
+          reason instanceof QuickCaptureSubmitError
+            ? `crm.quick_capture.errors.${reason.message}`
+            : "crm.quick_capture.errors.unknown",
+          { type: "error" },
+        );
       }
-      notify("crm.quick_capture.errors.unknown", { type: "error" });
     },
   });
 

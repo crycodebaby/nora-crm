@@ -6,6 +6,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 import { useConfigurationLoader } from "../root/useConfigurationLoader";
 import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
+import { NoraNotificationOutlet } from "../notifications/NoraNotificationOutlet";
 import { MobileNavigation } from "./MobileNavigation";
 
 export const MobileLayout = ({ children }: { children: ReactNode }) => {
@@ -19,7 +20,10 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
           </Suspense>
         </ErrorBoundary>
         <MobileNavigation />
+        {/* The card stack positions itself above MobileNavigation (7B.2); the
+            legacy toaster keeps its own offset for the unmigrated flows. */}
         <Notification mobileOffset={{ bottom: "72px" }} />
+        <NoraNotificationOutlet />
       </div>
     </QuickCaptureProvider>
   );

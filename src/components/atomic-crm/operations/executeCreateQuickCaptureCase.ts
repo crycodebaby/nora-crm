@@ -43,6 +43,15 @@ export type CreateQuickCaptureCaseParams = {
    * below). Omit for the pre-wave, non-idempotent behavior.
    */
   idempotencyKey?: string | null;
+  /**
+   * Optional caller-supplied correlation id for THIS attempt (Phase 7B.3).
+   * Neutral execution metadata: it lets an outer layer reference the operation
+   * before it starts, without that layer being known down here. Not the same
+   * thing as `idempotencyKey` — that identifies the business intent across
+   * retries, this identifies one technical attempt. Omit to keep the existing
+   * behavior (OperationManager mints its own).
+   */
+  operationId?: string;
 };
 
 export type CreateQuickCaptureCaseResult = {
@@ -80,7 +89,9 @@ export const executeCreateQuickCaptureCase = async (
 ): Promise<CreateQuickCaptureCaseResult> =>
   manager.execute(
     OPERATION_CATALOG["quickCapture.createCase"],
-    {},
+    // An invalid/absent id is normalized away by createOperationContext, which
+    // then mints one — so this stays fully backward compatible.
+    { operationId: params.operationId },
     async (context) => {
       const builder = rpc("create_quick_capture_case", {
         p_company: params.company ?? null,

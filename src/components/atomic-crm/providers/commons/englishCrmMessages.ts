@@ -1033,6 +1033,35 @@ export const englishCrmMessages = {
       idempotency_conflict:
         "This submission was already started with different data. Please reload the page and try again.",
     },
+    notifications: {
+      region_label: "Status messages",
+      errors: {
+        generic: "Please try again. If it keeps failing, contact your IT team.",
+      },
+      quick_capture_case: {
+        pending: {
+          title: "Creating case",
+          body: "“%{dealTitle}” for %{customerName}",
+          body_no_customer: "“%{dealTitle}”",
+        },
+        success: {
+          title: "Case created",
+          body: "“%{dealTitle}” for %{customerName}",
+          body_no_customer: "“%{dealTitle}”",
+        },
+        partial: {
+          title: "Case created — task still open",
+          body: "“%{dealTitle}” for %{customerName}",
+          body_no_customer: "“%{dealTitle}”",
+          detail: "The task could not be created.",
+        },
+        error: {
+          title: "Case could not be created",
+          body: "“%{dealTitle}” for %{customerName}",
+          body_no_customer: "“%{dealTitle}”",
+        },
+      },
+    },
     unsaved_changes: {
       title: "Discard changes?",
       message: "You have unsaved changes. Leave without saving?",
