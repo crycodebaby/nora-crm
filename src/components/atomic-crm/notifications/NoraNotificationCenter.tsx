@@ -1,8 +1,9 @@
 /**
  * Nora notification center (Phase 7B.2).
  *
- * Subscribes to the NotificationStore and renders the visible window. Not
- * mounted into the Nora layouts yet — that is 7B.4.
+ * Subscribes to the NotificationStore and renders the visible window. Mounted
+ * into both Nora layouts since 7B.4 via NoraNotificationOutlet; it keeps its
+ * explicit `store` prop so it stays testable in isolation.
  *
  * Accessibility architecture (7B.2 correction): the visual stack carries NO
  * live semantics. It is a plain labelled region so a screen-reader user can
@@ -10,17 +11,21 @@
  * NoraNotificationAnnouncer, the single owner of the live regions — see the
  * duplicate-announcement analysis in that file.
  *
- * Positioning (docs/nora/06-decision-log.md, Phase 7A section K):
- * - Desktop/tablet: bottom right, so it does not collide with the existing
- *   bottom-centre sonner toaster during the migration.
- * - Mobile: full width above MobileNavigation (fixed bottom-0, h-16) plus the
- *   safe area inset.
- * - z-index 60 (Phase 7B.4b): ABOVE the Radix dialog layer (z-50). Status
- *   notifications report the user's own action and must stay readable
- *   whatever surface is open — the original z-40 left them under the
- *   Vorgangsakte modal the Quick Capture flow redirects into. Stacking only:
- *   the region is pointer-events:none and still never covers
- *   MobileNavigation geometrically (mobile offset in index.css).
+ * Positioning — final rule as of 7B.4c (docs/nora/06-decision-log.md,
+ * "Phase 7B.4c: modal-aware Placement — Endstand"). Two requirements hold at
+ * once: a status card must stay readable whatever surface is open, and it must
+ * never block the action it reports on.
+ * - No dialog open: desktop/tablet bottom right (clear of the bottom-centre
+ *   sonner toaster still used by the unmigrated flows); mobile full width
+ *   above MobileNavigation (fixed bottom-0, h-16) plus the safe area inset.
+ * - Dialog or sheet open: the stack leaves the footer zone for the header area
+ *   (desktop top-centred, mobile below the dialog header), only the newest card
+ *   is shown, and the card body becomes click-through.
+ * - z-index 60 on BOTH breakpoints: above the Radix dialog layer (z-50), the
+ *   smallest clean step above it. The 7B.4b mobile exception (z-40) is gone —
+ *   it only made the card invisible again.
+ * All of the above lives in index.css; nothing is re-declared here. The region
+ * is always pointer-events:none and never covers MobileNavigation.
  */
 
 import { useTranslate } from "ra-core";

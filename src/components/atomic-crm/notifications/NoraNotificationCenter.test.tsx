@@ -561,8 +561,10 @@ describe("NoraNotificationCenter", () => {
       async () => "ok",
     );
 
-    // Explicitly desktop: the mobile variant deliberately keeps the lower
-    // layer (asserted in P34).
+    // Pinned to desktop so this case is unambiguous. Since 7B.4c mobile shares
+    // the very same layer (asserted in P34) — what keeps a card off the
+    // dialog's controls is modal-aware placement plus click-through, not a
+    // lower z-index.
     const screen = await renderCenter({ forceMobile: false });
     const region = screen.getByTestId("nora-notification-region");
     await expect.element(region).toBeVisible();

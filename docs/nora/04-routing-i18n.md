@@ -208,3 +208,5 @@ Abnahmeprotokoll: `docs/nora/12-role-ux-acceptance.md`
 
 - **Deutsch ist die Primärsprache**, Englisch die unterstützte Zweitsprache. Neue Nora-Texte werden in beiden gepflegt.
 - Der französische Atomic-CRM-Katalog ist **Legacy-/Kompatibilitätsbestand**. Solange er technisch registriert ist, wird seine Katalogstruktur nicht still gebrochen — neue Keys werden also mitgeführt, ohne dass daraus ein Anspruch auf redaktionelle Pflege entsteht. Ein Locale-Cleanup ist eine eigene, bewusst zu entscheidende Welle.
+- **Kein schleichendes Auslaufenlassen:** Französische Werte werden nicht nach und nach durch deutsche oder englische Texte ersetzt und der Katalog wird nicht teilweise entfernt. Entweder eine Locale ist registriert und strukturell vollständig, oder sie wird in einer eigenen kontrollierten Welle entfernt — kein Zwischenzustand.
+- Die deutschen Literale in `OPERATION_CATALOG` sind **keine** i18n-Keys und keine Textquelle für die Notification-UI. (`DealEdit.tsx` benutzt sie heute als Pseudo-Key — Migration ist 7C.)

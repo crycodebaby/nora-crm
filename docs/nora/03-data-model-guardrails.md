@@ -632,6 +632,50 @@ historischen Spaltennamens die `operation_id`-Korrelation (befüllt aus dem Requ
 `x-nora-operation-id`, siehe `nora_private.current_operation_id()` in Migration
 `20260810160000_nora_operation_correlation.sql`) — keine zweite, unabhängige Request-ID.
 
+### Falle 37: Presentation erfindet einen Core-Lifecycle (Welle Phase 7B)
+
+Falsch:
+
+```text
+Die Notification braucht einen Zustand "teilweise erfolgreich", also bekommt
+OperationStatus einen vierten Wert 'partial' — oder ein lange laufendes 'pending'
+wird nach n Sekunden als 'error'/'timeout' dargestellt.
+```
+
+Richtig:
+
+```text
+Der technische OperationStatus bleibt 'pending' | 'success' | 'error'. Ein Presentation-
+Lifecycle darf zusätzliche Werte kennen ('partial' = Core committed, optionaler Folgeschritt
+nicht), diese entstehen aber ausschließlich durch Reduktion mehrerer OperationRecords in der
+Presentation und werden NIE in den Core zurückgeschrieben. Ebenso wird ein lange laufendes
+'pending' von der Presentation niemals zu 'error' umgedeutet — der fehlende Timeout-Lifecycle
+ist ein bekannter Core-Follow-up und darf nicht durch eine Anzeige-Heuristik kaschiert werden.
+Zulässig wäre höchstens ein zusätzlicher Hinweis "dauert länger als erwartet" bei
+unverändertem Lifecycle und Tone.
+```
+
+### Falle 38: Eine vorgegebene `operationId` registrieren, ohne die tatsächlich vergebene zu prüfen (Welle Phase 7B)
+
+Falsch:
+
+```text
+Eine äußere Schicht mintet eine ID, meldet sie irgendwo an (z. B. als Korrelationsziel)
+und übergibt sie an manager.execute() — in der Annahme, dass genau diese ID verwendet wird.
+```
+
+Richtig:
+
+```text
+createOperationContext() normalisiert eine vorgegebene operationId: ungültige Werte werden
+verworfen und durch eine frisch geminte ersetzt, gültige werden lowercased. Wer eine ID
+vorab anmeldet und dann auf manager.getOperation(id) wartet, wartet bei einer ungültigen
+oder uppercase-UUID also auf eine ID, die es nie geben wird — der wartende Zustand löst
+sich nie auf. Vorgegebene IDs müssen daher entweder garantiert gültig und lowercase sein
+(so wie createOperationId() sie liefert) oder die anmeldende Schicht muss sich an die
+tatsächlich vergebene Kontext-ID binden statt an die gewünschte.
+```
+
 ## Migrationsregel
 
 Vor einer Migration dokumentieren:

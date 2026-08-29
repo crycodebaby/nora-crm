@@ -242,13 +242,23 @@ Phase 7B.4 (2026-08-29) hat die Notification-Schicht erstmals produktiv montiert
 - Isolierter Task-Retry (Core bereits committed, Aufgabe unter eigenem Idempotency-Scope wiederholen). Braucht eine eigene Entscheidung — Retry ist nie allein aus `errorCode` ableitbar.
 - Migration der `OPERATION_CATALOG`-Literale, die `DealEdit.tsx` heute als Pseudo-i18n-Key benutzt.
 
+**Offen, 7C Hardening (LOW, aus dem Final Adversarial Review 2026-08-30):**
+
+- **Vorgegebene `operationId` ohne Rückkopplung an die tatsächlich vergebene ID.** `createOperationContext()` verwirft eine ungültige ID und lowercased eine gültige. Der Store meldet den Intent aber unter der *gewünschten* ID an — bei einer ungültigen oder uppercase-UUID wartet die Karte damit auf eine Operation, die es nie geben wird, und bleibt für immer `pending`. **Im ausgelieferten Code nicht erreichbar**, weil `useNotifiedQuickCapture` ausschließlich `createOperationId()` benutzt (immer gültig, immer lowercase). Relevant, sobald ein 7C-Aufrufer IDs aus einer anderen Quelle durchreicht. Kandidat: Registrierung an die Kontext-ID binden oder ungültige Vorgaben hart ablehnen. Siehe `03-data-model-guardrails.md`, Falle 38.
+- **`announced`-Set im `NoraNotificationAnnouncer` ist unbegrenzt.** Es merkt sich jede `(notificationId, lifecycle)`-Kombination für die Lebensdauer der Session, um Doppelansagen zu verhindern. Pro Benutzeraktion sind das wenige Einträge, es gibt keinen realen Druck — nur anfassen, falls die Notification-Schicht auf viele Flows ausgeweitet wird.
+
 **Offen, 7C UX-Polish (LOW, aus der 7B.4a–7B.4c-Abnahme):**
 
 - **Langer Vorgangstitel verdrängt den Kundennamen.** Die Kontextzeile ist auf zwei Zeilen begrenzt (vertragskonform); bei einem sehr langen Titel wird dafür der Kundenname abgeschnitten („… für Immobilienverwaltung…“). Gerade der Kunde unterscheidet aber zwei ähnliche Karten. Kandidat: Kunde gegenüber dem Titel priorisieren, wenn beide nicht passen. Kein Release-Blocker.
 - **Hover-Pause bei offenem Dialog.** Bewusster Preis der Click-through-Garantie (7B.4c): solange ein Dialog offen ist, pausiert Hover die Auto-Ausblendung nicht. Nur relevant für Success/Partial, die ohnehin von selbst gehen; Fehler bleiben stehen. Nur anfassen, falls es sich real störend zeigt.
 - **Ein Schritt-Tab kann bei offenem Quick-Capture-Dialog visuell überlagert werden** (Desktop, schmale Viewports). Funktional folgenlos — die Karte ist click-through, und „Zurück“/„Weiter“ decken dieselbe Navigation ab.
 
-Erledigt und damit geschlossen: die Desktop-Überlappung des Dialog-Footers und die auf Mobile hinter dem Dialog wartende Karte — beide durch das modal-aware Placement in 7B.4c behoben (gemessen: kein Dialog-Control mehr blockiert).
+Erledigt und damit geschlossen: die Desktop-Überlappung des Dialog-Footers und die auf Mobile hinter dem Dialog wartende Karte — beide durch das modal-aware Placement in 7B.4c behoben (gemessen: kein Dialog-Control mehr blockiert; im Final Review bei 1212 px unabhängig bestätigt, 0 von 14 Controls blockiert).
+
+**Beobachtet, bewusst NICHT als Follow-up geöffnet:**
+
+- **`drawer-content` (vaul) ist von der modal-aware Regel nicht erfasst** — nur `dialog-content` und `sheet-content` sind es. Aktuell existiert kein Nora-Flow, in dem eine Statusmeldung mit einem Drawer kollidiert (Drawer wird nur in `admin/breadcrumb.tsx` benutzt, ohne Aktionsleiste). Erst relevant, wenn ein Drawer eigene Primäraktionen bekommt.
+- **Nicht Phase-7B-verursacht** und daher hier nur benannt, nicht als Notification-Schuld geführt: eine Prettier-Formatdrift in `providers/fakerest/dataProvider.ts` (besteht schon vor 7B), die Radix-Warnung `Missing Description or aria-describedby for DialogContent`, die `react-refresh`-ESLint-Warnung bei Provider-Dateien (gleiches Muster wie `OperationProvider`), sowie ein einmalig im Demo-Modus beobachtetes Redirect-Race nach Quick Capture (FakeRest liefert die frisch erzeugte Deal-ID noch nicht lesbar zurück → Legacy-sonner „Der Eintrag existiert nicht"). Letzteres betrifft den unveränderten Redirect-Pfad, nicht die Notification-Schicht.
 
 **Offen, Phase 8 oder später:**
 
