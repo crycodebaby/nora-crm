@@ -157,6 +157,24 @@ Unabhängig von der zuvor in einem separaten (inzwischen verworfenen) Worktree d
 
 **Ergebnis: `LOCAL RC APPROVED — NOT YET PRODUCTION VERIFIED`.** Kein Production-Write, keine Production-Migration, kein Push in dieser Session. Der kontrollierte Production-Release-Prozess (RC einfrieren → Production-DB-Migration → DB-Verifikation → Git Push → Deployment → Live-Smoke) steht weiterhin aus.
 
+### Nachtrag (2026-08-29, Phase 6E): Kontrollierter Production Release — OPERATION STATUS V1 PRODUCTION VERIFIED — PHASE 6 COMPLETE
+
+Der zuvor freigegebene RC (`HEAD=80b1ec4b`, Closure-Commit `8a09725c`) wurde in einer eigenen Release-Session kontrolliert nach Production ausgeführt (DB-first, wie bei Error Contract Wave und Idempotency Wave):
+
+- **Git-Preflight:** `origin/main` lag exakt auf der erwarteten Baseline `b433b8f5`; Commit-Kette `b433b8f5 → 80b1ec4b → 8a09725c` bestätigt, `80b1ec4b` enthält ausschließlich den RC (Code+Tests+Migration+Docs), `8a09725c` ausschließlich den Docs-Closure-Schritt, kein `.cursor/mcp.json` in beiden Commits, vorherige Production-Migration `20260829120000_nora_idempotency_core.sql` unverändert.
+- **Migration-Identität:** kanonischer Git-Blob-SHA-256 erneut aus `80b1ec4b` berechnet — identisch zu allen vorherigen Bestätigungen: `ec4eb5b1bb774d452a82b83d82c89deb9a43ceb74baa6899ad06f3ea94e10f5d`.
+- **Production-Target vorab bestätigt:** `nora-crm-prod` (`kixxroxtfzbcbzctohex`), 45 Migrationen, letzte `20260829120000/nora_idempotency_core`, neue Migration noch nicht vorhanden. Pre-Apply Business-Baseline: companies=16, contacts=17, deals=8, tasks=9.
+- **Migration angewendet** gegen `nora-crm-prod` — Erfolg.
+- **Bookkeeping-Drift (viertes Mal, wie erwartet):** `apply_migration` trug den Apply-Zeitstempel `20260829140725` statt des Datei-Zeitstempels `20260829150000` ein. Nach expliziter Nutzerfreigabe transaktional korrigiert (`UPDATE supabase_migrations.schema_migrations SET version = '20260829150000' WHERE version = '20260829140725'`, kein erneutes Apply). Danach verifiziert: Zielversion exakt einmal vorhanden, falsche Version verschwunden, weiterhin 46 Migrationen gesamt.
+- **DB-Contract-Verifikation (read-only):** alle drei RPCs (`create_customer_with_contact`, `create_quick_capture_case`, `create_quick_capture_task`) je genau einmal vorhanden, erwartete Signaturen, keine Overloads, `SECURITY DEFINER`/`search_path=""` unverändert, Grants (`authenticated`/`postgres`/`service_role` EXECUTE) unverändert, Function Bodies enthalten den Disposition-Contract (`'executed'`/`'replayed'`).
+- **Data Integrity:** Business-Counts nach Apply identisch zu vorher (16/17/8/9) — keine Release-Testdaten, keine unerwartete Mutation.
+- **Git Push:** normaler Fast-Forward `origin/main` `b433b8f5..8a09725c`, kein neuer Produktcode-Commit, kein Force-Push. Remote verifiziert: `origin/main == 8a09725c`, `80b1ec4b` als Ancestor bestätigt, `.cursor/mcp.json` weiterhin ausschließlich lokal.
+- **Vercel Deployment:** Production-Deployment `dpl_Cxzp4hVhn69stKHjuf332qegUqox`, Status READY, exakter Commit-SHA `8a09725c916bc0643b9963503daf3248e12c254d`, Domain `nora.ergart.de` im Projekt gelistet.
+- **Live-Smoke (nicht-destruktiv):** Hotboard, Kunden-Liste, Kontakte-Liste, Vorgänge-Kanban, Schnellerfassung-Dialog (ohne Speichern geschlossen), Kontakt-Detail mit Kunden-Kontext — alles fehlerfrei geladen, keine rohen `NORA_*`-Codes, keine rohen i18n-Keys, keine Console-Regression (einzige Konsolen-Meldung: vorbestehende Radix-Dialog-A11y-Warnung, kein Runtime-Fehler, keine Regression durch diese Migration).
+- **Post-Deploy DB-Re-Verifikation:** 46/46 Migrationen, Zielversion weiterhin exakt einmal vorhanden, Business-Counts weiterhin unverändert.
+
+**Ergebnis: `OPERATION STATUS V1 PRODUCTION VERIFIED — PHASE 6 COMPLETE`.** Phase-7-Notification-/Status-UI, die diesen Contract konsumiert, existiert weiterhin nicht — eigene, spätere Welle. Offener Follow-up unverändert: dauerhaft hängende `pending`-Operationen besitzen keinen eigenen Timeout-Lifecycle (LOW, PLANNED, siehe `17-known-issues-and-planned-waves.md`).
+
 ---
 
 ## 2026-08-29 – Idempotency Wave
