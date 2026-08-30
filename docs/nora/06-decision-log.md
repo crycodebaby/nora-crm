@@ -8,6 +8,9 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1) | [Springen](#2026-08-30--premium-update-experience-und-8-sekunden-choreografie-pwa-1c1) |
+| 2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C) | [Springen](#2026-08-30--update-experience-als-anwendungs-systemereignis-pwa-1c) |
+| 2026-08-30 – PWA-Update: wartender Worker statt automatischer Übernahme (PWA-1B) | [Springen](#2026-08-30--pwa-update-wartender-worker-statt-automatischer-übernahme-pwa-1b) |
 | 2026-08-29 – Notification Presentation Contract v1 (Phase 7A) | [Springen](#2026-08-29-notification-presentation-contract-v1-phase-7a) |
 | 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice) | [Springen](#2026-08-29-operation-status-contract-wave-v1-createquickcapturecase-slice) |
 | 2026-08-29 – Idempotency Wave | [Springen](#2026-08-29-idempotency-wave) |
@@ -82,6 +85,140 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1)
+
+### Kontext
+
+PWA-1C war **funktional** abgenommen: Lifecycle, Layer, Dialog-Deferral, Accessibility und Reduced Motion waren geprüft. Die **visuelle** Fassung wurde vom Product Owner abgelehnt — als generisch, zu sehr nach KI-generierter Standard-UI, nicht eigenständig genug für ein besonderes Nora-Systemereignis. Diese Welle ist deshalb ausschließlich Art Direction, Motion Design und Präsentation: kein Eingriff in `vite.config.ts`, den Service-Worker-Lifecycle, `pwaRegistration`, den Operation-/Notification-Store oder die Datenbank.
+
+### Warum der erste Entwurf verworfen wurde
+
+Die konkrete Ursache war nicht Dekoration, sondern **Komposition**. Der Entwurf war eine 30-rem-Zeile: kleines Motiv links, Text rechts, zwei Buttons darunter, `rounded-xl + border + shadow`. Das ist die Standardanatomie jeder Framework-Karte. Sie war korrekt und austauschbar — man hätte sie in jeder beliebigen SaaS-Anwendung wiedererkannt. Ein Systemereignis, das sich vom normalen Statusfeedback unterscheiden soll, kann nicht dieselbe Grundform benutzen wie das Statusfeedback.
+
+Konkrete Befunde aus der Nacharbeit, jeweils in der gestylten App gemessen:
+
+- Der 3,25-rem-Orb war zu klein, um Mittelpunkt zu sein — er las sich als Icon neben Text.
+- Zwei synchron gegenläufig rotierende Schichten lesen sich als *animiertes Icon*, nicht als Organismus. Synchronität ist das Problem, nicht die Geschwindigkeit.
+- Der Glow saß wenige Pixel um die Form; er war Kontur, nicht Aura.
+- 1,25 rem Padding und 30 rem Breite gaben der Komposition keinen Raum, in dem sie hätte wirken können.
+
+### Entscheidung
+
+**Orb-zentrierte Premium-Komposition.** Eine zentrierte Spalte mit dem Orb als exaktem visuellen Mittelpunkt (Orb → Titel → Text → Sicherheitshinweis → Aktionen), 34 rem breit, 2,5 rem Padding, 8,5-rem-Orb. Dieselbe gestalterische DNA auf allen Breakpoints; Mobile ist komprimiert, nicht proportional verkleinert. Vollständige Gestaltungsdokumentation: `02-design-system.md`, Abschnitt „Anwendungs-Systemereignisse / Update-Experience".
+
+**Warum zentrierte Spalte statt Zeile:** eine Zeile hat kein Zentrum — sie hat einen Anfang und ein Ende und liest sich immer als Listeneintrag. Nur eine zentrierte Achse macht ein Element zum Mittelpunkt eines Ereignisses. Das ist die eine Strukturentscheidung, aus der alles Weitere folgt.
+
+**Warum nicht breiter als 34 rem:** die Zeilenlänge des Sicherheitshinweises liegt damit bei rund 65 Zeichen. Mehr Breite hätte die Komposition „großzügiger" gemacht und die Lesbarkeit verschlechtert — das ist kein guter Tausch. „Mehr Raum" wurde stattdessen über Padding (verdoppelt) und Orb-Größe (mehr als verdoppelt) eingelöst.
+
+**Desynchronisation statt mehr Bewegung.** Der Orb hat sieben Ebenen mit Perioden von 9,5 s bis 89 s, von denen keine ein Vielfaches einer anderen ist. Tiefe entsteht dadurch, dass die Ebenen nie wieder zusammenlaufen — nicht dadurch, dass sich mehr oder schneller bewegt. Der Kern fährt bewusst keine Kreisbahn und ist in **keinem** Keyframe zentriert.
+
+**Das Warnsymbol des Product Owners ist verbindlich.** Die Geometrie wurde unverändert übernommen (Original als Design-Asset unter `docs/nora/assets/pwa-update-warning-source.svg` erhalten); entfernt wurde nur Export-Ballast (`fill="#000000"` am Root, Adobe-Entities/Metadata, feste Pixelgröße, leere `<g>`-Hüllen). `viewBox` und alle `d`-Strings sind unverändert. Nicht durch ein Lucide-Icon ersetzt, nicht nachgezeichnet, nicht gerastert.
+
+**Achtsekundenchoreografie als Präsentation, mit lokalem State.** Vier Phasen (`settling` / `converging` / `sustaining` / `committing`), danach genau ein `applyUpdate()`. Der Zustand lebt in `useUpdateChoreography.ts`, **nicht** im `pwaUpdateStore`.
+
+### Warum die acht Sekunden bewusst keinen Fortschritt vortäuschen
+
+Der wartende Service Worker ist zum Zeitpunkt des Klicks **bereits vollständig installiert**. Es gibt technisch nichts zu laden, nichts zu messen und nichts, dessen Fortschritt man anzeigen könnte. Eine Prozentanzeige, eine Fortschrittsleiste oder ein „Installation abgeschlossen" wären damit erfundene Werte — eine Behauptung der Oberfläche über einen Zustand, den sie nicht kennt.
+
+Das ist für Nora kein Stilfrage, sondern dieselbe Regel, die überall sonst gilt (Error Contract, Operation Status, Notification Presentation): die Oberfläche sagt nur, was sie belegen kann. Ein Systemereignis, das über die Anwendung selbst berichtet, wäre der schlechteste Ort, um damit anzufangen. Die Sequenz zeigt deshalb ausschließlich, **dass** etwas vorbereitet wird — getragen von drei ruhigen Punkten, nicht von Zahlen.
+
+Warum es dann überhaupt acht Sekunden gibt: ein sofortiger Reload nach dem Klick fühlt sich an wie ein Absturz. Der Übergang von einer Version zur nächsten ist der eine Moment, in dem eine Arbeitsanwendung zeigen kann, dass sie gepflegt wird. Das ist der einzige Zweck — und deshalb wird er auch so benannt.
+
+### Warum der Choreografie-State nicht in den Store gehört
+
+`pwaUpdateStore` bildet den echten Service-Worker-Lifecycle ab: `idle` / `updateAvailable` / `applying`. Diese drei Zustände sind technische Wahrheit — sie beschreiben, was der Browser tut. Ein vierter Zustand `choreography` daneben wäre eine Präsentationsentscheidung, die als Worker-Zustand auftritt; jeder spätere Leser des Stores müsste dann unterscheiden, welche Zustände real sind und welche erfunden. Der Store bleibt deshalb unverändert bis auf **nichts** — diese Welle fasst ihn nicht an.
+
+Absicherung gegen ein doppeltes `applyUpdate()` auf drei Ebenen: Wiedereintrittssperre in `start()`, Verschwinden der Aktionen aus dem Tab-Index, und ein Lauf-Token am Commit selbst (das auch React StrictMode trägt, weil Refs den doppelten Effekt-Mount derselben Fiber überleben). Unmount während der Sequenz räumt alle Timer ab; der wartende Worker bleibt unangetastet.
+
+### Recovery statt Endlosszene
+
+Bleibt die Aktivierung aus, zeigt Nora nach 1,5 s Schonfrist einen ruhigen Zustand mit „Erneut versuchen". Das ist zulässig, weil der Contract es belastbar liefert: `applyUpdate()` setzt `applying` synchron auf `true` und lässt es dort — es gibt genau zwei Wege zurück (sofortige Ablehnung durch den Store, oder abgelehnte Aktivierung mit `catch`), und beide sind echte Fehlschläge. Ein falsch-positiver Recovery-Zustand ist damit ausgeschlossen. „Erneut versuchen" startet eine vollständige neue Sequenz — bewusst kein zweiter, abgekürzter Pfad, der eigene Zustände und eigene Fehlerfälle mitbrächte.
+
+### Offene Product-Frage: Reduced Motion und die acht Sekunden
+
+Bei `prefers-reduced-motion: reduce` steht die Bewegung still, die **Dauer** bleibt aber bei acht Sekunden. Das ist bewusst nicht eigenmächtig geändert worden.
+
+Argument dafür, sie zu kürzen: ohne Morphing, Wachsen und Aura-Ausbreitung trägt die Zeit weniger — es bleiben ein statischer Orb, ein Titel und drei sanft pulsierende Punkte. Acht Sekunden Warten auf ein Ereignis, dessen Inszenierung man abbestellt hat, könnte als Zumutung statt als Sorgfalt ankommen.
+
+Argument dagegen: Reduced Motion ist eine Aussage über Bewegung, nicht über Zeit. Ein anderer Ablauf für diese Nutzergruppe ist eine Produktentscheidung mit eigener Begründungslast, und die Punkte zeigen weiterhin, dass etwas läuft.
+
+**Empfehlung an den Product Owner:** die Dauer bei Reduced Motion auf etwa 2,5 s zu kürzen und direkt in die ruhige Szene zu springen. Nicht umgesetzt — das ist seine Entscheidung, nicht die des Entwicklers.
+
+### Nebenbefund (nicht in dieser Welle behoben)
+
+`.nora-primary-action` nutzt `@apply`, und Tailwind v4 verschiebt jede Regel, die das tut, in die `utilities`-Layer. Ihr `min-h-10` nagelt jede Primäraktion auf 40 px fest und **überschreibt** sowohl eine `min-h-11`-Klasse am selben Element als auch jede Regel in der `components`-Layer (Layer-Reihenfolge schlägt Spezifität). Damit unterschreitet sie Noras eigenes 44-px-Touch-Minimum. Im Systemereignis über eine bewusst ungelayerte, eng gescopte Regel gelöst; die geteilte Klasse wurde **nicht** angefasst, weil sie zu anderen Wellen gehört. Es ist wahrscheinlich, dass weitere Nora-Primäraktionen davon betroffen sind — eigene Prüfung wert, siehe `17-known-issues-and-planned-waves.md`.
+
+### Bekannter Rest
+
+Designqualität ist kein automatisch prüfbares Kriterium. Tests decken Zustände, Timing, Semantik und Accessibility-Verdrahtung ab und behaupten ausdrücklich **nicht**, dass das Ergebnis hochwertig aussieht. Geometrie, Kontrast (Canvas-aufgelöste sRGB-Werte), Touch-Ziele, Viewport-Matrix, Reduced Motion, Dialog-Deferral und die vollständige Bildfolge der Achtsekundensequenz wurden in der gestylten App gemessen. Ob es sich **hochwertig anfühlt**, entscheidet der Product Owner — Status daher `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.
+
+---
+
+## 2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C)
+
+### Kontext
+
+PWA-1B lieferte den Lifecycle (wartender Worker, benutzergesteuerte Aktivierung) plus einen bewusst ungestalteten Platzhalter-Hinweis. Offen war, wie das Ereignis im Produkt auftreten soll: sichtbar genug, dass ein Mitarbeiter es bemerkt, ohne ihn zu drängen oder mitten in einer Eingabe zu unterbrechen.
+
+### Entscheidung
+
+Ein PWA-Update ist ein **Anwendungs-Systemereignis** — eine eigene Kategorie neben den Statusmeldungen aus Phase 7B, mit eigenem Layer (`z-70`), eigener Position und eigenem visuellen Motiv, aber geteilten Design-Primitiven. Semantisch bleibt es getrennt: kein `operationId`, kein Idempotency-Key, kein OperationManager, kein Notification-Store.
+
+Konkret:
+
+- **Prominentes, nicht-modales Panel** (Variante B), oben zentriert (Desktop) bzw. oben über die volle Breite (Mobile) — gegenläufig zu den Statusmeldungen unten, damit sich beide Schichten nie stapeln.
+- **Bei offenem Dialog/Sheet wird nichts angezeigt.** Gesteuert über dieselbe `body:has(…[data-state="open"])`-Regel wie 7B.
+- **Eigenes Update-Motiv** statt Spinner: ruhige organische CSS-Form.
+- **„Später" von 60 auf 120 Minuten.** Kleine, explizite Änderung am PWA-Store.
+- Copy ohne technische Begriffe, Sicherheitshinweis auf neutraler statt Danger-Fläche.
+
+### Begründung
+
+**Warum nicht modal (Variante A):** ein echtes Modal blockiert die Arbeit, obwohl das Ereignis ausdrücklich aufschiebbar ist — „prominent" und „dauerhaft blockierend" sind nicht dasselbe. Zusätzlich hätte ein zweiter modaler Layer über einem offenen Radix-Dialog Fokus-Kapselung, `aria-hidden` und Escape-Semantik gefährdet — genau die Klasse von Problemen, die 7B.4b/c teuer gelernt hat.
+
+**Warum bei offenem Dialog gar nicht anzeigen:** mitten in Schnellerfassung oder Vorgangsakte ist der schlechteste denkbare Moment, zu einem Reload einzuladen — es ist der Zustand, in dem ungespeicherte Eingaben real existieren. Verschieben statt verdrängen ist die respektvollere und zugleich technisch einfachere Lösung: sie löst die Layer-Kollision vollständig, ohne eine zweite Zustandsmaschine. Der wartende Worker geht dabei nicht verloren.
+
+**Warum 120 statt 60 Minuten:** das Panel ist seit PWA-1C ein prominentes Systemereignis, kein kleiner Toast. Bei 60 Minuten erschiene es an einem Arbeitstag bis zu achtmal — bei dieser Größe wäre das Drängeln. 120 Minuten ergeben drei bis vier Gelegenheiten pro Tag; zusammen mit „erscheint beim nächsten App-Start ohnehin wieder" verschwindet das Update nicht praktisch für immer. Deterministische Einzelregel, bewusst keine Eskalationsstufen und bewusst kein „nie wieder".
+
+**Warum kein Multi-Tab-Hinweis:** dass beim Aktualisieren auch andere Nora-Tabs neu laden, ist ein technischer Randfall. Er gehört in die Engineering-Doku (PWA-1B), nicht in die Oberfläche — eine Warnung darüber würde ein seltenes Detail zu einem Produktthema aufblasen.
+
+### Bekannter Rest
+
+Designqualität ist kein automatisch prüfbares Kriterium. Tests decken Zustände, Semantik, Accessibility-Verdrahtung und Aktionen ab; Geometrie, Layer, Kontrast und Motiv wurden in der gestylten App nachgemessen. Ob es sich **hochwertig anfühlt**, entscheidet der Product Owner — Status daher `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.
+
+---
+
+## 2026-08-30 – PWA-Update: wartender Worker statt automatischer Übernahme (PWA-1B)
+
+### Kontext
+
+PWA-1A hat nachgewiesen (Reproduktion in zwei aufeinanderfolgenden Builds plus Messungen gegen Production), dass `registerType: "autoUpdate"` in Nora einen inkonsistenten Zwischenzustand erzeugt: der Plugin erzwingt für diese Kombination `skipWaiting` + `clientsClaim`, der neue Worker aktiviert sich sofort, übernimmt offene Tabs und räumt beim Aktivieren den Precache des alten Builds weg — während die Seite weiter altes JavaScript ausführt. Ein danach erst angeforderter Lazy Chunk des alten Builds (in Nora: `DealList`) existiert dann weder im Cache noch auf dem Server. Ein Reload nach dem Update kam nie, weil Nora das Client-Modul `virtual:pwa-register` gar nicht lud; das „auto" in `autoUpdate` betrifft nur die Worker-Aktivierung, nicht die laufende Seite.
+
+### Entscheidung
+
+**Der neue Service Worker bleibt WAITING, bis der Benutzer bewusst aktualisiert.**
+
+- `vite.config.ts`: `registerType: "prompt"` statt `"autoUpdate"`.
+- Nora lädt `virtual:pwa-register` explizit (`pwaRegistration.ts`) und besitzt damit das Update-Ereignis selbst.
+- Registriert wird beim App-Start in `src/main.tsx`, **nicht** in einer Komponente: Nora rendert seine Layouts erst nach dem Login, eine Registrierung im Komponentenbaum würde die Login-Seite und abgemeldete Nutzer auslassen.
+- Der Lifecycle liegt in `pwaUpdateStore.ts` (framework- und UI-frei, prozessweit ein Store), die Präsentationsschnittstelle in `usePwaUpdate()`: `{ state, updateAvailable, applying, applyUpdate, dismissForNow }`.
+- „Später" verwirft nichts: der Worker bleibt WAITING, der Hinweis erscheint nach einer Stunde bzw. beim nächsten App-Start erneut. Bewusst kein LocalStorage — die Registration ist die technische Wahrheit.
+
+### Begründung
+
+Solange der alte Worker aktiv bleibt, bleibt auch sein Precache vollständig. Die laufende Version ist damit in sich konsistent, und der ursprüngliche Fehler kann strukturell nicht mehr auftreten — nicht nur „seltener". Gleichzeitig darf ein Reload nicht ungefragt mitten in einem Formular passieren: Nora hat Dirty Forms, Dialoge und laufende Operationen, und es existiert **kein** zentraler, zuverlässiger Mechanismus, der „ein Reload ist jetzt sicher" beantworten könnte (geprüft: `isDirty` liegt nur lokal pro Formular in react-hook-form, `beforeunload` nur im undoable-Pfad der react-admin-Notification). Deshalb wurde bewusst **keine** neue globale Safe-State-Infrastruktur gebaut; die Reload-Entscheidung gehört dem Benutzer.
+
+### Abgrenzung
+
+- Ein PWA-Update ist **keine** Business-Operation: kein `operationId`, kein Idempotency-Key, kein Eintrag im OperationManager, keine Wiederverwendung des Notification-Stores aus Phase 7B. Technische Wahrheit bleibt technisch (siehe `03-data-model-guardrails.md`, Falle 37).
+- PWA-1B liefert bewusst nur einen minimalen, erreichbaren Auslöser. Ohne ihn würde `prompt` bedeuten, dass niemand je aktualisiert. Die eigentliche Update-UX ist PWA-1C.
+
+### Bekannter Rest
+
+Aktualisiert ein Benutzer in einem Tab, laden **alle** anderen offenen Nora-Tabs ebenfalls neu (gemessen). Das ist Verhalten des `virtual:pwa-register`-Clients: jeder Tab, der das Update-Signal bekommen hat, lauscht auf `controlling` und lädt neu. Es verschiebt das ursprüngliche Problem nicht — die anderen Tabs landen sauber auf dem neuen Build, nicht in einem halb-alten Zustand — aber ein zweiter Tab mit ungespeicherter Eingabe verliert sie. Bewusst nicht mit einer eigenen Cross-Tab-Architektur behandelt; Entscheidung liegt bei PWA-1C.
 
 ---
 

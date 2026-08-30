@@ -1048,6 +1048,23 @@ export const frenchCrmMessages = {
       idempotency_conflict:
         "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
     },
+    pwa: {
+      available_title: "Nouvelle version de Nora disponible",
+      available_intro: "Une version actualisée est prête.",
+      available_keeps_running:
+        "Votre version actuelle de Nora continue de fonctionner jusqu'à la mise à jour.",
+      available_unsaved_hint:
+        "Veuillez enregistrer vos saisies en cours avant la mise à jour.",
+      available_unsaved_detail:
+        "Les modifications non enregistrées peuvent être perdues.",
+      applying_title: "Mise à jour de Nora",
+      applying_intro: "La nouvelle version est en cours de préparation.",
+      update_now: "Mettre à jour",
+      update_later: "Plus tard",
+      recovery_title: "La mise à jour n'a pas encore pu démarrer",
+      recovery_intro: "Vous pouvez continuer à utiliser Nora.",
+      retry_action: "Réessayer",
+    },
     notifications: {
       region_label: "Messages d'état",
       errors: {

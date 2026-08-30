@@ -426,3 +426,141 @@ Seit Phase 7B.4 real montiert — vorerst **nur** für Quick Capture. Alle ander
 - **Accessibility:** der sichtbare Stapel ist **keine** Live-Region. Ansagen kommen ausschließlich vom `NoraNotificationAnnouncer` — Fehler assertiv, alles andere polite, nie beides. Karten stehlen keinen Fokus; Close-Ziel mindestens 44×44 px.
 - **Aktionen:** in 7B ausschließlich „Schließen“. Schließen beendet nur die Anzeige — es bricht keine Operation ab. Kein Retry, keine IT-Eskalation (7C bzw. Phase 8).
 - **Texte:** ausschließlich aus `crm.notifications.*`. Keine Literale im UI, keine sichtbaren `NORA_*`-Codes, keine IDs, keine Kontaktdaten außer einem Namen.
+
+## Anwendungs-Systemereignisse / Update-Experience (Wellen PWA-1C, PWA-1C.1)
+
+Neue Kategorie neben den Statusmeldungen aus Phase 7B. Ein **Systemereignis** berichtet über die Anwendung selbst (aktuell genau ein Fall: „neue Nora-Version verfügbar"), eine **Statusmeldung** über eine Aktion, die der Benutzer gerade ausgelöst hat. Beide teilen Typografie, Radius und die Motion-Tokens — sie werden aber **nie** semantisch zusammengelegt: ein Update bekommt keine `operationId`, keinen Idempotency-Key und keinen Eintrag im Notification-/Operation-Store.
+
+**Stand PWA-1C.1:** die erste visuelle Fassung (kleine 30-rem-Zeile, Motiv links neben Text, zwei Buttons darunter) wurde vom Product Owner als generisch verworfen. Sie war technisch korrekt und von einer beliebigen Framework-Karte nicht zu unterscheiden. Ersetzt wurde nicht die Dekoration, sondern die **Komposition** — Begründung im Decision Log, „2026-08-30 – PWA-1C.1".
+
+### Komposition
+
+- **Eine zentrierte Spalte, Orb als Mittelpunkt:** Orb → Titel → Text → Sicherheitshinweis → Aktionen. Der Orb sitzt horizontal **exakt** in der Mitte der Fläche (nachgemessen: 0,0 px Abweichung auf allen geprüften Breiten) und ist der visuelle Mittelpunkt des Ereignisses, kein Icon neben Text.
+- **Maß:** 34 rem breit (vorher 30), Padding 2,5 rem (vorher 1,25), Orb 8,5 rem (vorher 3,25). Nicht breiter als 34 rem: die Zeilenlänge des Sicherheitshinweises liegt damit bei ~65 Zeichen und damit im lesbaren Bereich; mehr Breite würde die Textzeile verschlechtern, nicht die Komposition verbessern.
+- **Surface statt Card:** Radius 1,75 rem, Hairline aus `--nora-system-hairline` (nur ein Hauch Markenwärme — bei 20 % Markenanteil las sich das im Dunkelmodus als roter Rahmen und damit genau als der „bunte Gradient-Rand", den die Art Direction ausschließt), ein flacher Zwei-Stopp-Verlauf für die Aufhellung nach oben, ein `inset`-Lichtkante und **drei** Schattenstopps (Kontakt, Mitte, Ambient). Ein einzelner großer Schatten liest sich als Filter, drei lesen sich als Objekt über einer Fläche.
+- **`overflow: hidden`** am Panel: die Aura wird bewusst an der Panelkante beschnitten. An diesem Radius ist der Verlauf praktisch bei null, der Schnitt also unsichtbar, und die Aura kann nie auf die Seite dahinter auslaufen. **Nicht `hidden auto`** — damit wurde die Aura zu scrollbarer Fläche, das Panel bekam dauerhaft eine Scrollleiste und verlor 17 px Inhaltsbreite (in der gestylten App gemessen und behoben).
+- **Eigener Layer, unverändert:** `Basisinhalt < Navigation/Popover < Dialog (z-50) < Statusmeldungen (z-60) < Systemereignisse (z-70)`.
+- **Position gegenläufig zu den Statusmeldungen:** Statusmeldungen unten rechts (Desktop) bzw. unten (Mobile), das Systemereignis oben zentriert. Dadurch können beide Schichten nie stapeln. `--event-top` ist `clamp(4.5rem, 8vh, 7rem)` — auf hohen Displays rutscht die Komposition etwas nach unten, statt an der Oberkante zu kleben.
+
+### Kurze Viewports
+
+Browser-Zoom verkleinert den CSS-Viewport in **beiden** Achsen, und Höhe ist die Achse, die diese Komposition verbraucht. 1440×900 bei 150 % sind 960×600 CSS-Pixel — dort lief die volle Komposition 50 px unter den Fensterrand und „Jetzt aktualisieren" war nicht mehr erreichbar. Behoben über **höhenbasierte** (nicht breitenbasierte) Regeln, die die beiden höhenbestimmenden Werte skalieren:
+
+| Höhe | `--event-top` | Padding | Orb |
+|---|---|---|---|
+| Standard | `clamp(4.5rem, 8vh, 7rem)` | 2,5 rem | 8,5 rem |
+| ≤ 800 px | 4 rem | 2 rem | 6,75 rem |
+| ≤ 680 px | 3,5 rem | 1,5 rem | 5,25 rem |
+
+Die 4 rem bzw. 3,5 rem sind gegen Noras echten 46-px-Header gemessen (18 px bzw. 10 px bewusster Abstand) — enger, und das Panel liest sich als Dropdown am Header statt als eigene Systemfläche. Erst unterhalb von 520 px Höhe (Telefon im Querformat) wird zusätzlich `max-height` + vertikales Scrollen aktiviert; dort ist eine Scrollleiste der richtige Preis für erreichbare Aktionen.
+
+### Nora Update Orb
+
+Kein Spinner: ein Spinner sagt „warte", dieses Ereignis sagt „Nora erneuert sich". Aufbau von außen nach innen:
+
+```
+Aura (11 s)  →  Halo (17 s)  →  zwei Membranen (19 s / 26 s, Rotation 64 s / 89 s)
+             →  Körper (23 s)  →  Sheen (statisch)  →  Kern (Drift 15 s, Masse 9,5 s, Morph 21 s)
+```
+
+Keine dieser Perioden ist ein Vielfaches einer anderen — die Ebenen laufen deshalb nie wieder synchron zusammen. Genau das trennt „lebendig" von „animiert"; der erste Entwurf hatte zwei synchron rotierende Schichten und las sich als animiertes Icon.
+
+Drei Punkte, die in der gestylten App gefunden und behoben wurden und die man beim Nachbauen leicht wieder einführt:
+
+1. **Zweistopp-Verläufe erzeugen eine Zielscheibe.** Ein `radial-gradient(closest-side, C, transparent 72%)` fällt linear ab und hat dadurch eine sichtbare Kante. Aura und Halo nutzen jetzt sechs bzw. fünf Stopps als Gauß-Näherung.
+2. **Ein Kern mit Kontur ist der dritte konzentrische Kreis.** Der Kern ist deshalb weich gezeichnet (`blur`) und **nie** zentriert — jeder einzelne Drift-Keyframe liegt außerhalb der Mitte. Ein Kern, der durch den Mittelpunkt läuft, stellt die Zielscheibe für einen Moment wieder her.
+3. **Der Körper darf nicht konzentrisch gefüllt sein.** Sein Verlauf ist gerichtet (Licht von oben links, Vertiefung nach unten rechts zum dunkleren Markenton) — diese eine Asymmetrie gibt der Form Volumen.
+
+Die Aura ist rund 2,5-mal so breit wie der Orb und läuft weich in die Fläche aus. Die **phasengesteuerte** Ausdehnung liegt auf einem eigenen Wrapper (`.nora-orb-field`), das Atmen auf den Verläufen darin: eine Animation schlägt eine Transition auf derselben Eigenschaft immer, die Aura wäre sonst in Phase 2 aufgesprungen statt sich auszubreiten.
+
+Technisch: reines CSS über `transform`, `opacity` und kontrolliert `border-radius`. Keine Animationsbibliothek, kein Canvas, kein JavaScript pro Frame.
+
+### Warnsymbol
+
+Die Geometrie stammt **unverändert** aus dem SVG des Product Owners (Original als Design-Asset unter `docs/nora/assets/pwa-update-warning-source.svg`, wird nicht überschrieben). Entfernt wurde nur Export-Ballast: das `fill="#000000"` am Wurzelelement, Adobe-Entities/Metadata/Namespaces, die feste 800×800-Größe und die vier leeren `<g>`-Hüllen. `viewBox` und jeder `d`-String sind byteweise identisch. **Nicht** durch ein Lucide-Icon ersetzt, nicht nachgezeichnet, nicht gerastert.
+
+Das Original zerfällt in genau die vier Teile, die die Choreografie braucht — `frame`, `bar`, `ring`, `dot` — die beim Erscheinen in dieser Reihenfolge um je 100 ms versetzt einblenden und **danach stillstehen**. Ein dauerhaft pulsierendes Warnsymbol erzeugt Nervosität statt Aufmerksamkeit.
+
+Farbe über eigene Tokens, nicht über `--nora-warning`: der Status-Token ist für kleinen Text auf einem Badge abgestimmt und wird bei 32 px zu einem matschigen Graubraun. `--nora-system-warning` ist wärmer und chromatischer (hell `oklch(0.58 0.17 52)`, dunkel `oklch(0.82 0.14 62)`). **Nie `--destructive`**: ein verfügbares Update ist kein Fehler und darf nicht als solcher auftreten. Die Fläche ist entsprechend warm-ruhig, kein Danger-State.
+
+Das Symbol ist `aria-hidden="true"` — der Text unmittelbar daneben sagt bereits vollständig, dass offene Eingaben gespeichert werden sollen. Eine Bezeichnung wäre eine zweite Screenreader-Ansage derselben Warnung.
+
+### Update-Choreografie (8 Sekunden)
+
+„Jetzt aktualisieren" lädt **nicht** sofort neu. Es startet eine rund achtsekündige Übergangsinszenierung; erst danach fällt genau ein `applyUpdate()`.
+
+| Phase | Zeit | Was passiert |
+|---|---|---|
+| `settling` | 0–1,2 s | Aktionen, Zusicherung und Sicherheitshinweis falten sich weg, das Panel proportioniert sich neu, der Orb gewinnt leicht an Präsenz |
+| `converging` | 1,2–2,8 s | Die Komposition zieht sich aufs Zentrum zusammen, der Orb wächst, die Aura breitet sich aus, der Titel löst sich in Unschärfe auf |
+| `sustaining` | 2,8–7,5 s | Ruhige Update-Szene: Orb, „Nora wird aktualisiert", eine kurze Zeile, drei Punkte |
+| `committing` | 7,5–8,0 s | Der Orb stabilisiert sich, die Aura zieht leicht nach innen; danach `applyUpdate()` |
+
+Regeln, die dabei nicht verhandelbar sind:
+
+- **Keine Fortschrittsbehauptung.** Der wartende Worker ist zu diesem Zeitpunkt bereits vollständig installiert — es gibt technisch nichts zu messen. Deshalb keine Prozente, keine Schritte, kein „Installation abgeschlossen". Eine Fortschrittsanzeige ohne Messgröße wäre eine Lüge über den eigenen Zustand.
+- **Eine Fläche, kein Komponententausch.** Alle Zustände leben im selben DOM-Baum. Was verschwindet, faltet sich weg (`grid-template-rows: 1fr → 0fr` plus negativer Margin, der den Flex-Gap schluckt); der Orb wächst, statt ersetzt zu werden. Es wird kein zweites Fenster montiert.
+- **Der Titel wechselt erst, wenn er unsichtbar ist.** Der Textwechsel hängt an der Phase, nicht am Klick: während `converging` fährt der Titel auf Deckkraft 0, erst ab `sustaining` steht dort der neue Text und löst sich aus der Unschärfe. Hinge er am Klick, spränge er bei voller Deckkraft um — genau der harte Wechsel, den die Auflösung vermeiden soll. (In der Bildfolge gefunden und behoben.)
+- **Eigene Motion-Kurve.** `--nora-choreo-ease: cubic-bezier(0.33, 0.06, 0.26, 1)` und `--nora-choreo-slow: 900ms`. `--nora-motion-ease` ist bewusst front-loaded — richtig für eine 220-ms-UI-Antwort, falsch hier: gemessen legte es zwei Drittel des Faltwegs in die ersten 200 ms, die Aktionen „verschwanden sanft" also nicht, sie fielen und krochen dann.
+- **Die Szene läuft weiter**, bis der Browser tatsächlich neu lädt. Nach Sekunde acht kein leeres Fenster.
+- **Drei Punkte statt bewegtem Text.** Deckkraft 0,25 → 1 → 0,25 mit versetzten Phasen über 2,4 s, `ease-in-out`. Sie tragen die fortlaufende Aktivitätssemantik, damit der Text vollkommen still stehen kann — kein Typewriter, keine springenden Buchstaben. Rein dekorativ (`aria-hidden`), der Titel sagt bereits alles.
+
+### Recovery
+
+Schlägt die Aktivierung fehl, bleibt Nora **nicht** ewig auf „wird aktualisiert" stehen. Der Contract dafür ist belastbar: `pwaUpdateStore.applyUpdate()` setzt `applying` synchron auf `true` und lässt es dort — auf dem Erfolgspfad lädt die Seite neu. Es gibt genau zwei Wege zurück (Store lehnt sofort ab, oder die Aktivierung wird abgelehnt und der `catch` setzt zurück), beide sind echte Fehlschläge. Nach 1,5 s Schonfrist erscheint ein ruhiger Zustand mit „Erneut versuchen", der eine neue vollständige Sequenz startet. Keine technischen Details in der Oberfläche.
+
+### Reduced Motion
+
+Bei `prefers-reduced-motion: reduce` (in echtem Chromium mit gesetztem Flag nachgemessen): alle Orb-Animationen `none`, der Orb behält Skalierung 1 (kein Wachsen), das Warnsymbol ist sofort vollständig sichtbar statt gestaffelt, Zustandswechsel laufen über einfache Fades. **Zwei Dinge überleben bewusst:**
+
+1. Die Achtsekundensequenz selbst — sie ist eine Produktentscheidung, keine Dekoration; sie zu kürzen gäbe Reduced-Motion-Nutzern einen anderen Update-Ablauf.
+2. Die drei Punkte, auf einer reinen Deckkraft-Keyframe (`nora-system-event-dot-fade`, ohne Scale). Sie sind das einzige verbleibende Lebenszeichen; ohne sie bliebe ein eingefrorener Bildschirm.
+
+### Accessibility
+
+`role="status"` mit verknüpftem `aria-labelledby` (genau **ein** `h2` im Baum — der Crossfade nutzt keinen zweiten Titel) und `aria-describedby`. Kein Fokusdiebstahl, kein Focus-Trap, kein Scrim. Escape wirkt nur, wenn der Fokus im Panel liegt und noch etwas zu verwerfen ist — kein globaler Handler, der Dialogen Escape wegnimmt; während der Sequenz gibt es kein Zurück.
+
+**Bei offenem Dialog/Sheet wird gar nichts angezeigt** (`display: none` über dieselbe `body:has([data-slot="dialog-content"][data-state="open"])`-Regel wie in 7B — keine zweite Modal-Zustandsmaschine). In der echten App mit einem echten Radix-Dialog verifiziert: `display: none`, 0 fokussierbare Elemente, nach dem Schließen wieder `flex` mit 2 fokussierbaren Elementen und `body { pointer-events: auto }`.
+
+Touch-Ziele ≥ 44 px — **mit einer Falle**, die projektweit gilt: `.nora-primary-action` nutzt `@apply`, und Tailwind v4 verschiebt jede Regel, die das tut, in die `utilities`-Layer, wo sie nach `.min-h-*` einsortiert wird und gewinnt. Ihr `min-h-10` nagelt die Primäraktion auf 40 px fest, und **weder** eine `min-h-11`-Klasse am Element **noch** eine Regel in der `components`-Layer kann das überschreiben (Layer-Reihenfolge schlägt Spezifität). Gelöst über eine bewusst **ungelayerte** Regel — die einzige in `index.css`. Gemessen: vorher 164×40, jetzt 144×44 und 164×44 (Desktop) bzw. 422×47 (Mobile).
+
+### Kontrast (nachgemessen, gestylte App, Canvas-aufgelöste sRGB-Werte)
+
+| Element | Hell | Dunkel |
+|---|---|---|
+| Titel | 19,80 | 16,50 |
+| Einleitungszeile | 4,74 | 6,67 |
+| Warnhinweis (Handlungsanweisung) | 17,96 | 14,87 |
+| Warnhinweis (Begründung) | 6,35 | 7,48 |
+| Warnsymbol Kontur | 4,22 | 6,67 |
+| Warnsymbol Akzent | 4,13 | 8,47 |
+
+Alle Textwerte ≥ 4,5 (AA), alle grafischen ≥ 3,0 (1.4.11). Die Begründungszeile im Warnhinweis nutzt **nicht** `--muted-foreground`: gegen die warme Fläche gemessen kam sie auf 4,33 und damit knapp unter AA; sie ist so weit Richtung `--foreground` gemischt, bis 4,5 erreicht ist, bleibt aber klar der Handlungsanweisung untergeordnet.
+
+Hell und Dunkel sind **eigene Materialien**, keine Invertierung: die Panelfläche ist im Hellen reines Weiß (bei 0,995 las sie sich als leicht schmutziges Rechteck auf Noras weißem Hintergrund — Trennung kommt dort aus Schatten und Hairline), im Dunkeln liegt sie mit 0,222 leicht **über** `--popover`; die Aura trägt im Dunkeln mehr Alpha, weil derselbe Wert auf dunklem Grund verschwindet; das Warnsymbol bekommt nur im Dunkeln einen kontrollierten Ein-Stopp-Glow, der auf Weiß nur die Kontur verschmieren würde.
+
+### Mobile
+
+Dieselbe DNA, komprimiert: weiterhin eine zentrierte Spalte mit dem Orb als Mittelpunkt, nur kleiner und enger (Orb 5,25 rem, Padding 1,5 rem, Radius 1,375 rem). Bewusst **nicht** die Desktop-Komposition proportional verkleinert — Padding, Orb und Typografie gehen jeweils unterschiedlich weit herunter. Die Aktionen stapeln sich über die volle Breite mit der Primäraktion oben (`flex-col-reverse`); ein umbrechender Button-Zweizeiler liest sich bei dieser Breite schlechter als ein ehrlicher Stapel.
+
+### Tokens
+
+Alle themenabhängigen Werte liegen als `--nora-system-*` in `:root` und `.dark` (Surface, Surface-Lift, Hairline, Inner-Light, Shadow, Aura-Alpha, Halo-Alpha, Warning, Warning-Frame, Warning-Surface, Warning-Border, Warning-Glow). Keine verstreuten Hex-/OKLCH-Literale. Alle kompositionsabhängigen Werte (`--event-top`, `--event-pad`, `--event-pad-focus`, `--event-gap`, `--orb-size`, `--orb-scale`, `--orb-aura-spread`, `--orb-aura-opacity`, `--title-opacity`, `--title-blur`, `--title-shift`) liegen als lokale Variablen auf `.nora-system-event`; die Kinder lesen sie nur. Die gesamte Achtsekundenchoreografie sind dadurch vier Selektoren statt einer Zustandskaskade durch den Baum.
+
+### Texte
+
+Ausschließlich aus `crm.pwa.*` (de/en/fr). Keine technischen Begriffe in der Oberfläche — kein „Service Worker", „Cache", „Build", „Deployment", „Chunk", „Reload".
+
+### Wie man das Ereignis lokal ansieht
+
+Im echten Betrieb erscheint es frühestens nach einem Deployment. Für die Gestaltungsarbeit gibt es deshalb ein **Dev-Werkzeug**: `pwa/devUpdateTrigger.ts` blendet im Dev-Server unten links ein kleines Panel ein mit
+
+`Update anzeigen` · `Replay` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Neu laden`
+
+- **Replay** lässt die Aktivierung absichtlich fehlschlagen. Nach der Sequenz erscheint dann „Erneut versuchen" statt des Reloads — ein Klick spielt die vollen acht Sekunden erneut ab, beliebig oft.
+- **Orb-Tempo ×8** setzt die `playbackRate` aller zehn Orb-Animationen hoch. Die Perioden reichen bis 89 s; bei ×8 sieht man den vollständigen Morph-Zyklus in Sekunden.
+- **Reduced Motion** liest die **echte** `@media (prefers-reduced-motion: reduce)`-Regel aus dem geladenen Stylesheet und injiziert sie ohne die Bedingung — sie kann dadurch nie von der tatsächlichen CSS abweichen. Nachgemessen ergibt das dasselbe Bild wie die Browsereinstellung. Grenze: es simuliert die CSS-Regel, nicht die Einstellung; `matchMedia`-Abfragen im JavaScript sehen davon nichts.
+
+Das Werkzeug fasst ausschließlich `pwaUpdateStore` an (dieselbe Schnittstelle wie die echte Oberfläche), übernimmt die Registrierung **erst beim Klick** und ist reines DOM ohne Eintrag in `index.css`.
+
+**Production-Freiheit ist verifiziert, nicht angenommen.** Geladen wird es nur über einen dynamischen Import innerhalb von `if (import.meta.env.DEV)` — in `src/main.tsx` **und** in `demo/main.tsx` (der Demo-Modus hat einen eigenen Einstiegspunkt; ohne den zweiten Block fehlte das Panel unter `npm run dev:demo`). Nach `npm run build` enthält `dist/` null Treffer für `nora-dev-pwa-panel`, `devUpdateTrigger`, `mountUpdateDevTrigger` und die Button-Texte. Im `build:demo`-Artefakt taucht der Modulname noch in einer `.js.map` auf (dort ist `sourcemap: true`), im ausgelieferten JavaScript jedoch nicht; der echte Production-Build baut ohne Sourcemaps.

@@ -239,7 +239,7 @@ Phase 7B.4 (2026-08-29) hat die Notification-Schicht erstmals produktiv montiert
 **Noch nicht live nachgewiesen (kein Defekt, offener Nachweis):**
 
 - Der echte Live-**Write**-Smoke (Schnellerfassung in Production absenden) wurde nicht durchgeführt, weil es keinen freigegebenen Production-Testdatensatz gibt und dafür echte Geschäftsdaten hätten entstehen müssen. Gedeckt durch Browser-Integrationstests und die lokale UX-Abnahme; die Live-Bestätigung ergibt sich aus der nächsten regulären Nutzeraktion.
-- Der PWA-Service-Worker liefert unmittelbar nach jedem Deployment beim ersten Aufruf noch die Assets des Vorgänger-Builds aus und aktualisiert sich erst beim Reload. **Nicht 7B-verursacht**, bestehendes `vite-plugin-pwa`-Verhalten — hier nur festgehalten, damit ein künftiger Release-Smoke nicht versehentlich den alten Build prüft.
+- Der PWA-Service-Worker liefert unmittelbar nach jedem Deployment beim ersten Aufruf noch die Assets des Vorgänger-Builds aus und aktualisiert sich erst beim Reload. **Nicht 7B-verursacht**, bestehendes `vite-plugin-pwa`-Verhalten — hier nur festgehalten, damit ein künftiger Release-Smoke nicht versehentlich den alten Build prüft. Ursache seit 2026-08-30 nachgewiesen, siehe „PWA-Update-Verhalten nach Deployment" weiter unten.
 
 **Offen, geplant für 7C (nicht Teil von 7B.4):**
 
@@ -275,6 +275,105 @@ Erledigt und damit geschlossen: die Desktop-Überlappung des Dialog-Footers und 
 
 - Eine `pending`-Karte lässt sich schließen. Das blendet nur aus und bricht die Operation nicht ab (die Operation hat weiterhin keinen eigenen Timeout-Lifecycle, siehe Abschnitt „Operation Manager — pendente Operationen ohne eigenen TTL“).
 - `retentionSoftCap` ist kein hartes Limit: gleichzeitig laufende Intents können ihn überschreiten, weil `pending` nie verdrängt wird. Hart begrenzt ist nur die Anzahl gleichzeitig sichtbarer Karten.
+
+## PWA-Update-Verhalten nach Deployment — Ursache bewiesen (PWA-1A, 2026-08-30)
+
+**Severity:** MEDIUM (operativ/UX, kein Daten- oder Sicherheitsrisiko; im Deployment-Fenster mit sichtbarem Fehlerpotenzial — siehe Benutzerwirkung)
+**Status:** **URSACHE GESCHLOSSEN durch PWA-1B (2026-08-30, lokal implementiert und verifiziert — noch kein Production-Release).** Der Abschnitt bleibt als Ursachen- und Reproduktionsprotokoll stehen. Was sich geändert hat, steht am Ende unter „Behebung (PWA-1B)".
+
+**Symptom:** Nach einem Vercel-Deployment rendert der erste Aufruf noch den Vorgänger-Build. Prüft man die Asset-URLs dieses Aufrufs gegen den Server, liefern sie 404. Ein Reload heilt den Zustand.
+
+**Ursache (nachgewiesen, nicht geraten):** `vite.config.ts` nutzt `VitePWA({ registerType: "autoUpdate" })` ohne `injectRegister`-Angabe. Das hat zwei Konsequenzen, die zusammen das Verhalten erzeugen:
+
+1. Der Plugin erzwingt für diese Kombination `workbox.skipWaiting = true` und `workbox.clientsClaim = true` (`node_modules/vite-plugin-pwa/dist/index.js`, Auflösung von `injectRegister: "auto"`). Der generierte `dist/sw.js` enthält entsprechend `self.skipWaiting()`, `clientsClaim()`, `cleanupOutdatedCaches()` und `NavigationRoute(createHandlerBoundToURL("index.html"))`.
+2. Weil **keine** Datei unter `src/` `virtual:pwa-register` importiert, injiziert der Plugin nur das schlanke `dist/registerSW.js`: `navigator.serviceWorker.register('./sw.js', { scope: './' })` — ohne Reload-Logik. Der Reload nach einem Update steckt ausschließlich im virtuellen Client-Modul (`dist/client/build/register.js`: im `autoUpdate`-Zweig `wb.addEventListener("activated", … window.location.reload())`), das Nora nicht lädt.
+
+Das „auto" in `autoUpdate` bezieht sich also nur auf die **Aktivierung des Workers**, nicht auf die **Aktualisierung der laufenden Seite**. Zusätzlich beantwortet die `NavigationRoute` jede Navigation aus dem Precache — der Browser sieht das neue `index.html` erst, nachdem der neue Worker aktiv ist.
+
+**Reproduziert (lokal, zwei aufeinanderfolgende Builds auf demselben Origin, `http://localhost:4177`):**
+
+| Schritt | Beobachtung |
+|---|---|
+| Build A installiert | SW aktiv, 38 Precache-Einträge, `index-CSEIzXGx.js` |
+| Build B „deployed" (Server serviert nur noch B) | alte Asset-URLs liefern am Server 404 |
+| Aufruf #1 danach | rendert **Build A** (`index-CSEIzXGx.js`) — Symptom reproduziert |
+| Aufruf #2 (Reload) | rendert Build B, Precache enthält A nicht mehr |
+| Offener Tab + `registration.update()` | neuer Worker geht ohne `waiting` direkt auf `activated`, ein `controllerchange`, **kein** Reload — die Seite läuft weiter auf A |
+| Alte Chunk-URL aus der laufenden A-Seite | `fetch` = 200 (nur wegen HTTP-Cache), mit `cache: "reload"` = **404** |
+
+**Gegen Production nachgemessen (2026-08-30, read-only, `nora.ergart.de`):**
+
+- Der live ausgelieferte `/sw.js` hat exakt dieselbe Struktur wie der lokale Build: `skipWaiting()`, `clientsClaim()`, `cleanupOutdatedCaches()`, `NavigationRoute` auf `index.html`, 38 Precache-Einträge, darunter der gehashte Lazy-Chunk `assets/DealList-CUiVL1zD.js`. Das lokale Reproduktionsmodell entspricht damit dem echten Production-Worker.
+- Eine Asset-URL, die nicht zum aktuellen Deployment gehört, liefert einen **harten 404** (`x-vercel-error: NOT_FOUND`), **kein** SPA-Fallback.
+- **Wichtig — Annahme widerlegt:** Vercel liefert `/assets/*` hier **nicht** `immutable`, sondern `cache-control: public, max-age=0, must-revalidate` (gemessen an `assets/inter-greek-wght-normal-CkhJZR-_.woff2`). Es gibt keine `vercel.json`, und die automatische Immutable-Regel greift nur bei Framework-erkannten Build-Outputs, nicht bei einem reinen Vite-`dist`. **Der HTTP-Cache ist in Production also kein Schutzschild** — jede Asset-Anfrage revalidiert gegen den Origin und bekommt nach einem Deploy 404.
+
+**Benutzerwirkung:** Zwei Effekte, unterschiedlich schwer.
+
+1. **Sicher und bei jedem Release (gesichert):** der erste Aufruf nach einem Deployment zeigt den Vorgänger-Build. Mitarbeiter arbeiten ohne jedes Signal eine Session lang auf dem alten Stand weiter; ein Release-Smoke misst ohne Reload den falschen Build. Kein Absturz, kein Datenverlust.
+2. **Realer Fehlerfall im Deployment-Fenster:** der einzige dynamisch nachgeladene Chunk ist `DealList` (`src/components/atomic-crm/deals/index.ts`, `React.lazy`). Läuft eine Seite noch auf Build A, ist Worker B bereits aktiv (Precache-Eintrag von A nachweislich entfernt) und öffnet der Nutzer *in dieser Sitzung erstmals* die Vorgangsliste, geht die Chunk-Anfrage ins Netz und läuft in einen 404 → `React.lazy` schlägt fehl, die Vorgangsliste rendert nicht. Weil Production **nicht** `immutable` ausliefert, fängt der HTTP-Cache das anders als im lokalen Versuch **nicht** verlässlich ab. Heilt durch Reload, ist aber ein sichtbarer Defekt und keine reine Messartefakt-Frage.
+
+Der Fehlerfall wurde in dieser Session **nicht** live in Production ausgelöst (das hätte ein zusätzliches Production-Deployment erfordert). Nachgewiesen sind alle vier Einzelbedingungen: Precache-Eviction (lokal reproduziert), fehlender Reload (lokal reproduziert), harter 404 auf nicht mehr existente Asset-URLs (Production gemessen), fehlender `immutable`-Schutz (Production gemessen).
+
+**Nicht die Ursache** (geprüft und ausgeschlossen): fehlendes `cleanupOutdatedCaches` (ist aktiv), `base: "./"`/Scope (HashRouter, Dokument-URL immer Root), Phase 7B.
+
+### Behebung (PWA-1B, 2026-08-30) — lokal verifiziert, noch nicht deployed
+
+`registerType: "prompt"` + explizit geladenes `virtual:pwa-register`. Der neue Worker bleibt WAITING, bis der Benutzer aktualisiert; der Precache des laufenden Builds bleibt damit vollständig. Details und Begründung: `06-decision-log.md`, „2026-08-30 – PWA-Update: wartender Worker statt automatischer Übernahme (PWA-1B)".
+
+**Am generierten Build bewiesen:** `dist/sw.js` enthält jetzt `self.addEventListener("message", … "SKIP_WAITING" … self.skipWaiting())` statt eines top-level `self.skipWaiting()`; `clientsClaim()` ist verschwunden; `registerSW.js` wird nicht mehr injiziert.
+
+**Am Zwei-Build-Test bewiesen** (Build A installiert → Build B deployed, alte Chunk-URL am Server 404):
+
+| Beobachtung | vorher (`autoUpdate`) | nachher (`prompt`) |
+|---|---|---|
+| Neuer Worker | sofort `activated` | **`waiting`/`installed`** |
+| Laufende Seite | wird stillschweigend übernommen | bleibt unangetastet auf Build A |
+| Precache | A wird beim Aktivieren geräumt (38 Einträge, nur B) | **A und B koexistieren (42 Einträge)** |
+| `DealList`-Chunk A, HTTP-Cache umgangen | 404 | **200 aus dem Precache** |
+| Dynamischer Import von Chunk A | schlägt fehl | **erfolgreich** |
+| Nach „Jetzt aktualisieren" | — | Worker B aktiv, Reload, Build B, Precache wieder 38 Einträge, A sauber entfernt |
+
+**Verbleibendes Risiko:** aktualisiert ein Benutzer in einem Tab, laden alle anderen offenen Nora-Tabs ebenfalls neu (gemessen). Sie landen sauber auf dem neuen Build — der ursprüngliche Fehler wird also nicht auf den zweiten Tab verschoben —, aber ungespeicherte Eingaben in einem zweiten Tab gehen verloren. Bewusst offen für PWA-1C.
+
+### PWA-1C — Update-Experience (2026-08-30): `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`
+
+Der Platzhalter aus PWA-1B ist durch ein **Anwendungs-Systemereignis** ersetzt: eigener Layer `z-70`, prominentes nicht-modales Panel (`pwa/NoraUpdateEvent.tsx`), eigenes organisches Update-Motiv (`pwa/NoraUpdateOrb.tsx`, reines CSS), und **bei offenem Dialog/Sheet gar nicht sichtbar**. „Später" verschiebt um 2 Stunden. Die Lifecycle-Logik wurde nicht angefasst — nur die Wiederanzeige-Konstante. Details: `02-design-system.md` („Anwendungs-Systemereignisse / Update-Experience") und `06-decision-log.md` („2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C)").
+
+**In der gestylten App nachgemessen:** Layer `z-index: 70`; Panel `top: 5rem` (Desktop) räumt den 46 px hohen Header inkl. globaler Suche und „Schnellerfassung" frei — **kein persistentes Bedienelement wird verdeckt** (bei `top: 1.5rem` waren es zwei); alle 84 Hit-Test-Punkte im Panel erreichen das Panel; bei offener Schnellerfassung `display: none`, Fläche 0, nicht fokussierbar, danach wieder sichtbar; Kontrast hell 4,74–19,8 / dunkel 6,94–17,2; Touch-Ziele 44 px (Desktop) bzw. 47 px (Mobile); Mobile 500×615 ohne Overflow und frei von der `MobileNavigation`.
+
+**Zwei echte Befunde, die erst der Lauf in der echten App zeigte** — beide behoben: das Panel verdeckte in der ersten Fassung Header-Controls, und das Update-Motiv zerfiel bei `prefers-reduced-motion: reduce` zu Rechtecken, weil seine Rundung nur aus Keyframes kam.
+
+**Offen und bewusst nicht entschieden:** die Designqualität selbst. Automatische Tests belegen Zustände, Semantik, Accessibility-Verdrahtung und Aktionen; „fühlt sich hochwertig an" kann nur der Product Owner abnehmen. Ebenfalls offen: das Mehr-Tab-Verhalten aus PWA-1B (andere Tabs laden beim Aktualisieren ebenfalls neu) — bewusst ohne Nutzer-Copy und ohne Cross-Tab-Architektur belassen.
+
+**Kein Production-Release.** Nächste Schritte: Product-Owner-UX-Abnahme → Final Review → RC Freeze → kontrollierter Production Release.
+
+### Nachtrag PWA-1C.1 (2026-08-30): visuelle Ablehnung und Neufassung
+
+Die visuelle Fassung aus PWA-1C wurde vom Product Owner **nicht abgenommen** (generisch, zu sehr nach Standard-UI). PWA-1C.1 ist die daraus folgende reine Art-Direction-/Motion-Welle: Orb-zentrierte Komposition, mehrschichtiger Orb, Warnsymbol des Product Owners, 8-Sekunden-Choreografie, Recovery-Zustand. Kein Eingriff in Service-Worker-Lifecycle, Store, Build-Konfiguration oder Datenbank. Status weiterhin `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`, weiterhin kein Production-Release und kein Commit. Details: `06-decision-log.md`, „2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1)".
+
+**Vier echte Befunde, die erst die Messung in der gestylten App zeigte** — alle behoben:
+
+1. Der Orb las sich als **Zielscheibe**: drei konzentrische Kreise durch Zweistopp-Verläufe mit linearem Abfall, einen konturierten zentrierten Kern und eine flach gefüllte Innenform.
+2. Bei **150 % Browser-Zoom** (960×600 CSS-Pixel) lief die Komposition 50 px unter den Fensterrand — „Jetzt aktualisieren" war unerreichbar. Behoben über höhenbasierte Regeln; Browser-Zoom verkleinert den Viewport in beiden Achsen, und Höhe ist die Achse, die diese Komposition verbraucht.
+3. `overflow: hidden auto` machte die **Aura zu scrollbarer Fläche**: dauerhafte Scrollleiste am Panel, 17 px Inhaltsbreite verloren, Komposition aus der Mitte gezogen.
+4. Der **Titeltext wechselte beim Klick** statt in der unsichtbaren Phase — ein harter Sprung, der die gesamte Auflösung-per-Unschärfe wirkungslos machte.
+
+**Offene Product-Frage:** Dauer der Choreografie bei `prefers-reduced-motion: reduce`. Empfehlung: von 8 s auf ~2,5 s kürzen und direkt in die ruhige Szene springen. Bewusst nicht eigenmächtig umgesetzt.
+
+## `nora-primary-action` unterschreitet das 44-px-Touch-Minimum (LOW, projektweit, 2026-08-30)
+
+**Befund.** `.nora-primary-action` in `src/index.css` nutzt `@apply min-h-10 …`. Tailwind v4 verschiebt **jede** Regel, die `@apply` verwendet, in die `utilities`-Layer, wo sie nach `.min-h-*` einsortiert wird und diese gewinnt. Ergebnis: die Klasse nagelt jede Primäraktion auf 40 px fest und überschreibt dabei
+
+- eine `min-h-11`/`min-h-12`-Utility-Klasse am selben Element **und**
+- jede Regel in der `components`-Layer (Layer-Reihenfolge schlägt Spezifität)
+
+Damit unterschreitet die Nora-Primäraktion Noras eigenes Touch-Minimum von 44 px (`--nora-touch-min`). Gemessen im Systemereignis: Primärbutton 164×**40**, Ghost-Button daneben 144×**44**.
+
+**Betroffen sind vermutlich weitere Stellen.** Mehrere bestehende Aufrufe kombinieren `nora-primary-action` mit einer `min-h-*`-Klasse in der Annahme, dass diese greift — z. B. `ContactCreateSheet.tsx` (`min-h-12`) und `DealProductionChecklistSection.tsx` (`nora-touch-target`, das ebenfalls `@apply` nutzt). Ob sie tatsächlich zu klein rendern, ist **nicht** nachgemessen worden; die Mechanik legt es nahe.
+
+**Aktueller Stand.** In PWA-1C.1 nur lokal gelöst, über eine bewusst ungelayerte, eng auf `.nora-system-event-action` gescopte Regel — die einzige ungelayerte Regel in `index.css`. Die geteilte Klasse wurde **nicht** angefasst, weil sie zu anderen Wellen gehört und eine Änderung dort jede Primäraktion in Nora betrifft.
+
+**Empfohlener Fix (eigene kleine Welle).** `min-h-10` aus `.nora-primary-action` entfernen und die Höhe dort über `--nora-touch-min` setzen, dann alle Aufrufstellen einmal nachmessen. Vorher prüfen, ob irgendwo bewusst ein 40-px-Button gewollt ist.
 
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 

@@ -116,10 +116,73 @@
      footer all stay visible. A heuristic by nature — the hard guarantee that
      nothing is ever blocked is the click-through rule further down. */
   --nora-notification-modal-top-mobile: 17rem;
+  /* Application system event (PWA-1C.1). A system event is not a card: it gets
+     its own surface vocabulary so it can never be mistaken for a 7B status
+     card, a popover or a dialog. Tokens rather than inline values — light and
+     dark are genuinely different materials here, not one palette with a filter
+     over it. */
+  /* Lighter than the page, not darker. Nora's light background is pure white,
+     so a 0.995 surface made the event read as a slightly dirty rectangle. The
+     separation has to come from the shadow and the hairline instead. */
+  --nora-system-surface: oklch(1 0 0);
+  --nora-system-surface-lift: oklch(1 0 0);
+  --nora-system-hairline: color-mix(
+    in oklab,
+    var(--nora-brand) 13%,
+    oklch(0.88 0 0)
+  );
+  /* The thin lit edge along the top: what separates a designed surface from a
+     div with a border. Bright in light mode, barely-there in dark. */
+  --nora-system-inner-light: oklch(1 0 0 / 0.9);
+  /* Three stops, not one blur: contact, mid, ambient. A single large shadow
+     reads as a drop-shadow filter; three read as an object above a plane. */
+  --nora-system-shadow:
+    0 1px 2px oklch(0.22 0 0 / 0.05), 0 10px 24px -10px oklch(0.22 0 0 / 0.16),
+    0 36px 72px -32px oklch(0.22 0 0 / 0.3);
+  --nora-system-aura: var(--nora-brand);
+  /* Aura strength is a token because it is the one value that must differ per
+     theme: the same alpha that reads as a soft halo on white glows on black. */
+  --nora-system-aura-alpha: 0.34;
+  --nora-system-aura-halo-alpha: 0.16;
+  /* Warning treatment. Its own value, not --nora-warning: the status token is
+     tuned for small text on a badge and turns muddy grey-brown at 32px. This
+     is warmer and higher in chroma so the mark reads as amber at a glance.
+     Deliberately NOT --destructive — the update is not a failure and must not
+     be dressed as one. */
+  --nora-system-warning: oklch(0.58 0.17 52);
+  --nora-system-warning-frame: color-mix(
+    in oklab,
+    var(--nora-system-warning) 42%,
+    var(--muted-foreground)
+  );
+  --nora-system-warning-surface: color-mix(
+    in oklab,
+    var(--nora-system-warning) 8%,
+    var(--card)
+  );
+  --nora-system-warning-border: color-mix(
+    in oklab,
+    var(--nora-system-warning) 26%,
+    transparent
+  );
+  /* No glow in light mode — on white it only muddies the contour. */
+  --nora-system-warning-glow: none;
   /* Motion. Restrained by design — no bounce, no gamification. */
   --nora-motion-fast: 150ms;
   --nora-motion-base: 220ms;
   --nora-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  /* Deliberately far slower than every other transition in Nora. It belongs to
+     the update choreography only, where the point is that the surface is seen
+     changing shape rather than having changed. Reusing --nora-motion-base here
+     made the panel snap between phases. */
+  --nora-choreo-slow: 900ms;
+  /* Its own curve, too. `--nora-motion-ease` is deliberately front-loaded —
+     right for a 220ms UI response, wrong here: measured, it put two thirds of
+     the fold's travel into the first 200ms, so the actions did not "gently
+     begin to disappear", they dropped and then crept. This curve eases in as
+     well as out, so the surface is watched changing rather than caught having
+     changed. */
+  --nora-choreo-ease: cubic-bezier(0.33, 0.06, 0.26, 1);
 }
 
 .dark {
@@ -171,6 +234,50 @@
     in oklab,
     oklch(0.82 0.14 75) 16%,
     transparent
+  );
+  /* Application system event (PWA-1C.1) — a different material, not the light
+     palette inverted. The surface sits slightly ABOVE --popover so the event
+     separates from the page without a scrim; the aura carries more alpha
+     because on a dark ground the same value disappears; the warning gets a
+     controlled glow that would only smear the contour on white. */
+  --nora-system-surface: oklch(0.222 0 0);
+  --nora-system-surface-lift: oklch(0.262 0 0);
+  /* Only a hint of warmth. At 20% brand this read as a red rim around the
+     panel — exactly the "coloured gradient border" the brief rules out.
+     Measured in the styled app against the dark page. */
+  --nora-system-hairline: color-mix(
+    in oklab,
+    var(--nora-brand) 8%,
+    oklch(1 0 0 / 15%)
+  );
+  --nora-system-inner-light: oklch(1 0 0 / 0.08);
+  --nora-system-shadow:
+    0 1px 2px oklch(0 0 0 / 0.45), 0 12px 28px -12px oklch(0 0 0 / 0.6),
+    0 44px 88px -36px oklch(0 0 0 / 0.75);
+  --nora-system-aura-alpha: 0.48;
+  --nora-system-aura-halo-alpha: 0.24;
+  /* Lighter and slightly less saturated than in light mode: on a dark ground
+     the same amber reads as brown, and pushing chroma instead of lightness
+     would tip it into neon. */
+  --nora-system-warning: oklch(0.82 0.14 62);
+  --nora-system-warning-frame: color-mix(
+    in oklab,
+    var(--nora-system-warning) 28%,
+    var(--muted-foreground)
+  );
+  --nora-system-warning-surface: color-mix(
+    in oklab,
+    var(--nora-system-warning) 9%,
+    var(--card)
+  );
+  --nora-system-warning-border: color-mix(
+    in oklab,
+    var(--nora-system-warning) 20%,
+    transparent
+  );
+  /* Controlled: one soft stop, no neon halo. */
+  --nora-system-warning-glow: drop-shadow(
+    0 0 6px color-mix(in oklab, var(--nora-system-warning) 24%, transparent)
   );
   --avatar-0: oklch(0.35 0.12 240);
   --avatar-1: oklch(0.38 0.14 340);
@@ -918,5 +1025,956 @@ input[type="time"] {
 
   .nora-notification-spin {
     animation: none !important;
+  }
+
+  /* --- Application system event (PWA-1C.1) -----------------------------
+     The orb carries no information that only motion conveys — the title and
+     the body text say everything. So every living layer stands still, the
+     panel changes state through plain fades instead of morphing and growing,
+     and the warning symbol appears at once instead of assembling itself.
+
+     Two things deliberately survive:
+
+     1. The eight-second sequence itself. It is a product decision, not a
+        decoration, and cutting it short here would give reduced-motion users
+        a materially different update flow. (Whether a shorter functional
+        transition would in fact serve them better is raised as an open
+        product question in the PWA-1C.1 report, not decided here.)
+     2. The three dots. Section 23 explicitly allows them to keep working
+        "very gently over opacity" — they are the only remaining signal that
+        something is still in progress, and removing them would leave a frozen
+        screen with no sign of life at all. They keep their opacity cycle and
+        lose only the scale component. */
+  .nora-system-event,
+  .nora-orb-field,
+  .nora-orb-aura,
+  .nora-orb-halo,
+  .nora-orb-membrane,
+  .nora-orb-body,
+  .nora-orb-core,
+  .nora-orb-core-mass,
+  .nora-safety-mark [data-mark-part] {
+    animation: none !important;
+  }
+
+  .nora-system-event,
+  .nora-system-event-fold,
+  .nora-system-event-title,
+  .nora-system-event-lede,
+  .nora-orb,
+  .nora-orb-field,
+  .nora-orb-aura,
+  .nora-orb-halo {
+    transition-duration: 1ms !important;
+  }
+
+  /* No growing, no contracting: the composition keeps one size and only its
+     contents fade. */
+  .nora-system-event {
+    --orb-scale: 1 !important;
+    --orb-aura-spread: 1 !important;
+  }
+
+  .nora-safety-mark [data-mark-part] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .nora-system-event-dot {
+    animation-name: nora-system-event-dot-fade !important;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Application system event (Wellen PWA-1C / PWA-1C.1)
+
+   A PWA update reports on the APPLICATION, not on something the user just
+   did. That is a different kind of event from a Phase 7B status card, so it
+   gets its own layer, its own placement and — since PWA-1C.1 — its own
+   surface vocabulary, while still sharing Nora's typography, radius and
+   motion tokens.
+
+   Layer: the 7B rule reserved exactly this step ("60 is deliberately the
+   smallest step above the dialog layer ... so a later, explicitly introduced
+   critical/system layer can still sit above this one"). This is that layer:
+       base < navigation/popovers < dialog (z-50) < status cards (z-60)
+            < system events (z-70)
+
+   Placement: status cards live bottom-right (desktop) / bottom (mobile).
+   System events deliberately take the opposite anchor — top centre — so the
+   two can never stack on top of each other and are told apart at a glance.
+
+   WHY THIS WAS REDESIGNED (PWA-1C.1). The first draft was a 30rem row: small
+   orb on the left, text on the right, two buttons underneath. Correct, and
+   indistinguishable from every other framework card. The product owner
+   rejected it as generic. The rebuild changes the composition itself, not its
+   decoration: one centred column with the orb as the actual midpoint, roughly
+   a third more width, more than double the padding, a layered surface instead
+   of border+shadow, and an aura that reaches into the surrounding space
+   instead of hugging the shape.
+   ------------------------------------------------------------------------- */
+@layer components {
+  .nora-system-event {
+    /* --- Composition variables ---------------------------------------
+       Every phase-dependent value is a variable on this one element. The
+       children only read them, so the whole 8-second choreography is four
+       selectors below instead of a state cascade through the tree. */
+    --event-pad: 2.5rem;
+    /* The padding the composition opens up to once only the orb, the title
+       and the dots are left. Its own variable so the short-viewport rules can
+       scale it too — as a literal inside the phase selectors it outranked
+       them on specificity and re-expanded a panel that had just been made to
+       fit. */
+    --event-pad-focus: 3rem;
+    --event-gap: 1.5rem;
+    --orb-size: 8.5rem;
+    --orb-scale: 1;
+    --orb-aura-spread: 1;
+    --orb-aura-opacity: 0.85;
+    --title-opacity: 1;
+    --title-blur: 0px;
+    --title-shift: 0px;
+    /* A variable, not a literal, because `max-height` has to subtract it. */
+    --event-top: clamp(4.5rem, 8vh, 7rem);
+
+    @apply fixed flex flex-col items-center text-center;
+    /* Wider and airier than the rejected 30rem box, but still a surface and
+       not a takeover. 34rem is the point where the safety block reads as two
+       comfortable lines rather than four cramped ones. */
+    width: min(34rem, calc(100vw - 3rem));
+    left: 50%;
+    /* Drops slightly on tall screens so the composition is not pinned to the
+       very top edge of a 1440-tall display, while still clearing the 46px
+       desktop header (global search + Schnellerfassung) on a short laptop. */
+    top: var(--event-top);
+    transform: translateX(-50%);
+    z-index: 70;
+    gap: var(--event-gap);
+    padding: var(--event-pad);
+    border-radius: 1.75rem;
+    /* Hairline, not a 1px grey box: a brand-tinted edge that is only just
+       visible is what makes the surface read as machined rather than drawn. */
+    border: 1px solid var(--nora-system-hairline);
+    /* Two-stop vertical lift + the surface colour. The gradient is what stops
+       this reading as a flat div; it is deliberately shallow enough that no
+       banding is visible on an 8-bit display. */
+    background:
+      linear-gradient(
+        180deg,
+        var(--nora-system-surface-lift) 0%,
+        var(--nora-system-surface) 42%
+      ),
+      var(--nora-system-surface);
+    color: var(--popover-foreground);
+    box-shadow:
+      inset 0 1px 0 var(--nora-system-inner-light),
+      var(--nora-system-shadow);
+    /* The aura reaches well past the orb; clipping it at the panel edge is
+       intentional. At that radius the gradient is already near zero, so the
+       cut is invisible, and it guarantees the glow can never bleed onto the
+       page behind the surface.
+
+       `hidden`, deliberately not `hidden auto`. Measured in the styled app:
+       with `auto` the aura's 160px of downward overflow became scrollable
+       area and the panel grew a permanent scrollbar — which also ate 17px of
+       the content width and pulled the composition off centre. `hidden` does
+       not scroll, so it simply clips, which is what the aura wants anyway.
+       Reachability is instead guaranteed by the height-based rules further
+       down; the one viewport where scaling is not enough re-enables scrolling
+       explicitly. */
+    overflow: hidden;
+    transition:
+      padding var(--nora-choreo-slow) var(--nora-choreo-ease),
+      gap var(--nora-choreo-slow) var(--nora-choreo-ease);
+    animation: nora-system-event-in 420ms var(--nora-motion-ease) both;
+  }
+
+  /* Never invite a reload in the middle of Quick Capture or a Vorgangsakte:
+     while any Radix dialog or sheet is open the event is not shown at all.
+     `display: none` (not just visual hiding) keeps it out of the tab order,
+     so focus can never land on something invisible. It reappears the moment
+     the user is back on a normal surface — the waiting worker is untouched
+     meanwhile. Same `data-state` signal as the 7B modal-aware rules, so
+     there is no second modal state machine. */
+  body:has([data-slot="dialog-content"][data-state="open"]) .nora-system-event,
+  body:has([data-slot="sheet-content"][data-state="open"]) .nora-system-event {
+    display: none;
+  }
+
+  /* --- The 8-second choreography, as four variable sets ------------------
+     Phase 1 `settling` (0–1.2s): the orb gains a little presence while the
+     actions, the reassurance and the safety block fold away. Nothing snaps. */
+  .nora-system-event[data-phase="settling"] {
+    --orb-scale: 1.06;
+    --orb-aura-spread: 1.06;
+    --orb-aura-opacity: 0.95;
+  }
+
+  /* Phase 2 `converging` (1.2–2.8s): the composition contracts onto its
+     centre. The orb grows properly, the aura spreads, the title dissolves so
+     the swap to the update wording happens while nothing is visible. */
+  .nora-system-event[data-phase="converging"] {
+    --event-gap: 1.25rem;
+    --orb-scale: 1.3;
+    --orb-aura-spread: 1.2;
+    --orb-aura-opacity: 1;
+    --title-opacity: 0;
+    --title-blur: 5px;
+    --title-shift: -0.375rem;
+  }
+
+  /* Phase 3 `sustaining` (2.8–7.5s): the calm update scene. Orb, one line,
+     three dots. The title settles back in out of the blur. */
+  .nora-system-event[data-phase="sustaining"] {
+    --event-pad: var(--event-pad-focus);
+    --event-gap: 1.375rem;
+    --orb-scale: 1.32;
+    --orb-aura-spread: 1.22;
+    --orb-aura-opacity: 1;
+  }
+
+  /* Phase 4 `committing` (7.5–8.0s): the orb steadies, the aura draws inward
+     and brightens. Optical preparation for the hand-off — no new element, no
+     announcement, just a settling. */
+  .nora-system-event[data-phase="committing"] {
+    --event-pad: var(--event-pad-focus);
+    --event-gap: 1.375rem;
+    --orb-scale: 1.22;
+    --orb-aura-spread: 0.94;
+    --orb-aura-opacity: 1;
+  }
+
+  /* Recovery reuses the resting composition: after a failed activation the
+     event must look like something the user can act on again, not like a
+     sequence frozen mid-flight. */
+  .nora-system-event[data-presentation="recovery"] {
+    --event-pad: 2.5rem;
+    --orb-scale: 1;
+    --orb-aura-spread: 1;
+    --orb-aura-opacity: 0.85;
+  }
+
+  /* --- Stage ------------------------------------------------------------
+     Taller than the orb so the aura has room to breathe before the surface
+     clips it. */
+  .nora-system-event-stage {
+    @apply relative flex shrink-0 items-center justify-center;
+    width: 100%;
+    height: calc(var(--orb-size) * 1.15);
+    transition: height var(--nora-choreo-slow) var(--nora-choreo-ease);
+  }
+
+  .nora-system-event-copy {
+    @apply flex w-full flex-col items-center;
+    gap: 0.5rem;
+  }
+
+  /* A fold nested inside the copy block: it collapses the copy block's own
+     0.5rem gap, not the composition gap. */
+  .nora-system-event-fold-tight {
+    --fold-gap: 0.5rem;
+  }
+
+  .nora-system-event-title {
+    @apply text-xl font-semibold tracking-tight;
+    line-height: var(--nora-line-body);
+    opacity: var(--title-opacity);
+    filter: blur(var(--title-blur));
+    transform: translateY(var(--title-shift));
+    /* Slow settling, not a snap: entering takes noticeably longer than
+       leaving, which is what makes the new wording feel like it resolved
+       rather than appeared. */
+    transition:
+      opacity 900ms var(--nora-choreo-ease),
+      filter 900ms var(--nora-choreo-ease),
+      transform 900ms var(--nora-choreo-ease);
+  }
+
+  .nora-system-event-lede {
+    @apply text-sm text-muted-foreground;
+    max-width: 26rem;
+    line-height: var(--nora-line-readable);
+    opacity: var(--title-opacity);
+    transition: opacity 700ms var(--nora-choreo-ease);
+  }
+
+  .nora-system-event-reassure {
+    @apply text-sm text-muted-foreground;
+    line-height: var(--nora-line-readable);
+  }
+
+  /* --- Fold -------------------------------------------------------------
+     How content leaves without a hard `display: none`. The row collapses
+     from 1fr to 0fr, which animates the real height, and the negative margin
+     cancels the flex gap so the panel does not keep a phantom slot. Where
+     `grid-template-rows` interpolation is unsupported the row simply snaps —
+     a graceful loss of the animation, never a broken layout. */
+  .nora-system-event-fold {
+    /* How much gap the fold has to swallow when it collapses. Defaults to the
+       composition gap; nested folds override it with their own container's
+       gap, otherwise collapsing one would tear a hole in its parent. */
+    --fold-gap: var(--event-gap);
+
+    display: grid;
+    grid-template-rows: 1fr;
+    width: 100%;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition:
+      grid-template-rows var(--nora-choreo-slow) var(--nora-choreo-ease),
+      opacity 520ms var(--nora-choreo-ease),
+      transform var(--nora-choreo-slow) var(--nora-choreo-ease),
+      margin-top var(--nora-choreo-slow) var(--nora-choreo-ease);
+  }
+
+  .nora-system-event-fold[data-open="false"] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-0.375rem) scale(0.98);
+    margin-top: calc(var(--fold-gap) * -1);
+    /* Belt and braces against a second `applyUpdate()`: the moment the
+       sequence starts, the actions stop accepting pointer input, and
+       `visibility: hidden` on the inner row takes them out of the tab order
+       and the accessibility tree while they are still visually folding. */
+    pointer-events: none;
+  }
+
+  .nora-system-event-fold-inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .nora-system-event-fold[data-open="false"] .nora-system-event-fold-inner {
+    visibility: hidden;
+    /* Delayed so the fold is actually watched leaving, not blinked away. */
+    transition: visibility 0s linear 520ms;
+  }
+
+  /* --- Safety block -----------------------------------------------------
+     Symbol left, copy right, both inside one warm surface. The eye has to
+     land on WARNING and continue straight into READ THIS — so the mark is
+     large enough to register on its own and the text starts on the mark's
+     first baseline. */
+  .nora-system-event-safety {
+    @apply flex items-start gap-4 text-left;
+    padding: 1rem 1.125rem;
+    border-radius: 1rem;
+    background: var(--nora-system-warning-surface);
+    border: 1px solid var(--nora-system-warning-border);
+  }
+
+  .nora-system-event-safety-copy {
+    @apply flex min-w-0 flex-col gap-1;
+  }
+
+  .nora-system-event-safety-lead {
+    @apply text-sm font-medium;
+    line-height: var(--nora-line-readable);
+  }
+
+  /* Not plain --muted-foreground: measured against the warm safety surface it
+     came out at 4.33:1, just under AA for normal text. Nudged towards the
+     foreground until it clears 4.5:1 while staying clearly subordinate to the
+     instruction above it. */
+  .nora-system-event-safety-note {
+    @apply text-sm;
+    line-height: var(--nora-line-readable);
+    color: color-mix(in oklab, var(--muted-foreground) 78%, var(--foreground));
+  }
+
+  .nora-system-event-actions {
+    @apply flex flex-wrap items-center justify-center gap-3;
+  }
+
+  .nora-system-event-action {
+    min-width: 9rem;
+    padding-inline: 1.25rem;
+  }
+
+  /* --- Warning mark ------------------------------------------------------
+     The product owner's geometry, coloured through Nora tokens. The outer
+     contour stays neutral-warm so it does not compete with the accent; the
+     bar and the dot carry the amber. Never --destructive: an available update
+     is not a failure. */
+  .nora-safety-mark {
+    @apply shrink-0;
+    width: 2rem;
+    height: 2rem;
+    /* Optical alignment with the first text line rather than the box top. */
+    margin-top: 0.0625rem;
+    filter: var(--nora-system-warning-glow);
+  }
+
+  .nora-safety-mark [data-mark-part] {
+    /* Each part scales about its own centre, otherwise the staged entrance
+       would slide the pieces across the mark instead of settling them. */
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0;
+    animation: nora-safety-mark-in 520ms var(--nora-motion-ease) both;
+  }
+
+  .nora-safety-mark [data-mark-part="frame"] {
+    fill: var(--nora-system-warning-frame);
+  }
+
+  /* The warm parts, in the order section 11 asks for: contour, bar, ring,
+     dot. Each delay is short enough that the whole mark is complete in under
+     three quarters of a second — attention, not suspense. */
+  .nora-safety-mark [data-mark-part="bar"],
+  .nora-safety-mark [data-mark-part="ring"],
+  .nora-safety-mark [data-mark-part="dot"] {
+    fill: var(--nora-system-warning);
+  }
+
+  .nora-safety-mark [data-mark-part="bar"] {
+    animation-delay: 130ms;
+  }
+
+  .nora-safety-mark [data-mark-part="ring"] {
+    animation-delay: 230ms;
+  }
+
+  .nora-safety-mark [data-mark-part="dot"] {
+    animation-delay: 320ms;
+  }
+
+  /* --- Animated ellipsis -------------------------------------------------
+     Not a loading indicator. Three dots that swell and fade on offset
+     phases, slow enough to read as breathing rather than ticking. They carry
+     the ongoing-activity semantics so the text above can stay perfectly
+     still. */
+  .nora-system-event-dots {
+    @apply mt-2 flex items-center justify-center;
+    gap: 0.5rem;
+    height: 0.5rem;
+  }
+
+  .nora-system-event-dot {
+    @apply block rounded-full;
+    /* 6px, not 5: at 5px the dots read as dust on the surface rather than as
+       a deliberate element. Measured in the styled app. */
+    width: 0.375rem;
+    height: 0.375rem;
+    background: color-mix(in oklab, var(--nora-brand) 78%, transparent);
+    animation: nora-system-event-dot-pulse 2400ms ease-in-out infinite;
+  }
+
+  .nora-system-event-dot:nth-child(2) {
+    animation-delay: 300ms;
+  }
+
+  .nora-system-event-dot:nth-child(3) {
+    animation-delay: 600ms;
+  }
+
+  /* --- The Nora Update Orb ----------------------------------------------
+     Seven layers, no two on the same period. Depth here comes from
+     desynchronisation, not from speed: 11s / 17s / 19s / 26s / 23s / 15s /
+     9.5s / 21s share no common multiple within any session anyone will sit
+     through, so the layers never visibly line up again. Perfectly
+     synchronised motion is what made the first draft read as an animated
+     icon rather than as something alive.
+
+     Everything animates `transform`, `opacity` or (deliberately, and only on
+     the morphing layers) `border-radius`. No JavaScript touches this per
+     frame. */
+  .nora-orb {
+    @apply relative block;
+    width: var(--orb-size);
+    height: var(--orb-size);
+    transform: scale(var(--orb-scale));
+    /* Slower than every UI transition in Nora on purpose: the orb growing is
+       the single motion the eye is meant to follow through phase 2. */
+    transition: transform 1200ms var(--nora-choreo-ease);
+  }
+
+  /* The aura field carries the PHASE-driven spread, the two gradients inside
+     carry their own breathing. They have to be separate elements: an
+     animation always beats a transition on the same property, so putting the
+     phase scale on the animated gradients themselves would make the aura
+     jump open in phase 2 instead of spreading. */
+  .nora-orb-field {
+    @apply pointer-events-none absolute inset-0;
+    transform: scale(var(--orb-aura-spread));
+    transition: transform 1200ms var(--nora-choreo-ease);
+  }
+
+  /* The aura: a broad, soft field that reaches into the surrounding space.
+     The rejected draft had a few pixels of glow hugging the shape; this is
+     roughly 2.5x the orb across, and it is what turns a decorated circle into
+     something that occupies the composition. */
+  .nora-orb-aura,
+  .nora-orb-halo {
+    @apply pointer-events-none absolute rounded-full;
+    opacity: var(--orb-aura-opacity);
+    transition: opacity 1200ms var(--nora-choreo-ease);
+  }
+
+  /* Six stops, not two. A two-stop radial gradient falls off linearly, and a
+     linear falloff has a visible boundary — the first build read as a
+     bullseye for exactly that reason. This ramp approximates a gaussian, so
+     the field has no edge anywhere. */
+  .nora-orb-aura {
+    inset: -85%;
+    background: radial-gradient(
+      closest-side,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura) calc(var(--nora-system-aura-alpha) * 100%),
+          transparent
+        )
+        0%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura) calc(var(--nora-system-aura-alpha) * 58%),
+          transparent
+        )
+        20%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura) calc(var(--nora-system-aura-alpha) * 27%),
+          transparent
+        )
+        38%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura) calc(var(--nora-system-aura-alpha) * 11%),
+          transparent
+        )
+        57%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura) calc(var(--nora-system-aura-alpha) * 3%),
+          transparent
+        )
+        76%,
+      transparent 100%
+    );
+    animation: nora-orb-aura-breathe 11s ease-in-out infinite;
+  }
+
+  /* A second, larger and slower field, counter-phased. Two overlapping
+     gradients at different periods keep the glow from ever looking like a
+     single pulsing blur. */
+  .nora-orb-halo {
+    inset: -130%;
+    background: radial-gradient(
+      closest-side,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura)
+            calc(var(--nora-system-aura-halo-alpha) * 100%),
+          transparent
+        )
+        0%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura)
+            calc(var(--nora-system-aura-halo-alpha) * 44%),
+          transparent
+        )
+        26%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura)
+            calc(var(--nora-system-aura-halo-alpha) * 16%),
+          transparent
+        )
+        50%,
+      color-mix(
+          in oklab,
+          var(--nora-system-aura) calc(var(--nora-system-aura-halo-alpha) * 5%),
+          transparent
+        )
+        72%,
+      transparent 100%
+    );
+    animation: nora-orb-aura-breathe 17s ease-in-out infinite reverse;
+  }
+
+  /* Outer morphing membrane, twice. Slow rotation plus a drifting radius: the
+     silhouette is never the same twice, but nothing ever moves fast enough to
+     read as spinning. */
+  /* The drifting outer contours. Blurred on purpose: a crisp morphing edge
+     reads as a shape being animated, a soft one reads as the boundary of
+     something. They sit just outside the body so the silhouette is never
+     quite the body's own. */
+  .nora-orb-membrane {
+    @apply absolute;
+    /* Reaching past the body, not sitting under it: the membranes ARE the
+       silhouette. Tucked behind the body they only produced a faint pink ring
+       and the orb read as a plain circle. */
+    inset: -4%;
+    /* Also the resting shape, not only a keyframe: with reduced motion the
+       animation is off, and without this the layers would fall back to sharp
+       squares. Matches the 0% keyframe. */
+    border-radius: 68% 32% 41% 59% / 46% 63% 37% 54%;
+    background: linear-gradient(
+      142deg,
+      color-mix(in oklab, var(--nora-brand) 62%, transparent),
+      color-mix(in oklab, var(--nora-brand) 8%, transparent) 74%
+    );
+    filter: blur(calc(var(--orb-size) * 0.018));
+    animation:
+      nora-orb-morph-a 19s ease-in-out infinite,
+      nora-orb-turn 64s linear infinite;
+  }
+
+  .nora-orb-membrane-b {
+    inset: 1%;
+    opacity: 0.6;
+    border-radius: 37% 63% 59% 41% / 62% 39% 61% 38%;
+    background: linear-gradient(
+      312deg,
+      color-mix(in oklab, var(--nora-brand) 52%, transparent),
+      transparent 64%
+    );
+    animation:
+      nora-orb-morph-b 26s ease-in-out infinite,
+      nora-orb-turn 89s linear infinite reverse;
+  }
+
+  /* The mass. A directional gradient, not a flat fill: lit from the upper
+     left, deepening to the brand's darker tone at the lower right. That
+     single asymmetry is what gives the form volume — a concentric fill would
+     put a bullseye back. */
+  .nora-orb-body {
+    @apply absolute;
+    inset: 17%;
+    border-radius: 61% 39% 47% 53% / 44% 58% 42% 56%;
+    background: radial-gradient(
+      128% 128% at 30% 22%,
+      color-mix(in oklab, var(--nora-brand) 74%, white) 0%,
+      var(--nora-brand) 42%,
+      color-mix(in oklab, var(--nora-brand) 55%, var(--nora-brand-hover)) 100%
+    );
+    animation: nora-orb-morph-c 23s ease-in-out infinite;
+  }
+
+  /* Specular highlight: small, high on the form, off to one side. Static —
+     light does not wander. */
+  .nora-orb-sheen {
+    @apply pointer-events-none absolute;
+    inset: 17%;
+    border-radius: 61% 39% 47% 53% / 44% 58% 42% 56%;
+    background: radial-gradient(
+      42% 34% at 31% 23%,
+      oklch(1 0 0 / 0.42) 0%,
+      transparent 70%
+    );
+  }
+
+  /* --- The living core --------------------------------------------------
+     Split in two on purpose. The outer element carries an irregular drift,
+     the inner one an independent swell and a slow radius morph. Composited,
+     the core never repeats a position-and-size pairing within any plausible
+     viewing time, which is what separates "alive" from "a dot going round in
+     a circle". */
+  .nora-orb-core {
+    @apply absolute;
+    inset: 31%;
+    animation: nora-orb-core-drift 15s ease-in-out infinite;
+  }
+
+  /* Blurred and edgeless on purpose. A core with a defined outline is a third
+     concentric circle, and three concentric circles are a target — which is
+     precisely what the first build looked like. Blurred, it reads as a denser
+     region inside the mass instead. */
+  .nora-orb-core-mass {
+    @apply block h-full w-full;
+    border-radius: 58% 42% 46% 54% / 52% 48% 52% 48%;
+    background: radial-gradient(
+      circle at 44% 38%,
+      color-mix(in oklab, var(--nora-brand) 22%, white) 0%,
+      color-mix(in oklab, var(--nora-brand) 62%, white) 40%,
+      transparent 78%
+    );
+    filter: blur(calc(var(--orb-size) * 0.05));
+    opacity: 0.8;
+    animation:
+      nora-orb-core-swell 9.5s ease-in-out infinite,
+      nora-orb-core-morph 21s ease-in-out infinite;
+  }
+
+  /* --- Short viewports --------------------------------------------------
+     Browser zoom shrinks the CSS viewport, and it shrinks the HEIGHT just as
+     much as the width — which is the axis this composition actually spends.
+     A 1440x900 laptop at 150 % is 960x600 CSS px, and at 600 px the full
+     composition ran 50 px past the bottom of the window: the actions were
+     unreachable. Measured, then fixed by scaling the two values that
+     dominate the height (the orb and the padding) rather than by scrolling.
+
+     Deliberately height-based, not width-based: a 1024x768 iPad in landscape
+     and a zoomed 1152x720 laptop have very different widths and the same
+     problem. */
+  @media (max-height: 800px) {
+    .nora-system-event {
+      /* 64px: measured against Nora's real 46px desktop header, that is 18px
+         of deliberate air. Any tighter and the panel reads as a dropdown
+         hanging off the header instead of a separate system surface. */
+      --event-top: 4rem;
+      --event-pad: 2rem;
+      --event-pad-focus: 2.25rem;
+      --event-gap: 1.25rem;
+      --orb-size: 6.75rem;
+    }
+  }
+
+  @media (max-height: 680px) {
+    .nora-system-event {
+      /* The floor. 56px still clears the 46px header; below this the panel
+         would start to sit on the global search. */
+      --event-top: 3.5rem;
+      --event-pad: 1.5rem;
+      --event-pad-focus: 1.75rem;
+      --event-gap: 1rem;
+      --orb-size: 5.25rem;
+    }
+
+    .nora-system-event-title {
+      @apply text-lg;
+    }
+  }
+
+  /* Below this the composition cannot be made to fit by scaling alone — a
+     phone held in landscape is about 390 CSS px tall. Only here is scrolling
+     re-enabled, and only here is the aura's overflow allowed to produce a
+     scrollbar: a scrollbar is recoverable, an unreachable „Jetzt
+     aktualisieren" is not. Above 520px this rule never applies, so the normal
+     case stays scrollbar-free. */
+  @media (max-height: 520px) {
+    .nora-system-event {
+      max-height: calc(100dvh - var(--event-top) - 1rem);
+      overflow: hidden auto;
+      overscroll-behavior: contain;
+    }
+  }
+
+  /* --- Mobile -----------------------------------------------------------
+     Same DNA, compressed: still one centred column with the orb as the
+     midpoint, only smaller and tighter. Deliberately NOT the desktop
+     composition scaled down — the padding, the orb and the type each step
+     down by a different amount so the small panel stays balanced. */
+  @media (max-width: 767px) {
+    .nora-system-event {
+      --event-pad: 1.5rem;
+      --event-pad-focus: 1.875rem;
+      --event-gap: 1.125rem;
+      --orb-size: 5.25rem;
+
+      width: auto;
+      left: 0.75rem;
+      right: 0.75rem;
+      top: calc(env(safe-area-inset-top) + 0.75rem);
+      transform: none;
+      border-radius: 1.375rem;
+    }
+
+    .nora-system-event-title {
+      @apply text-lg;
+    }
+
+    /* Full-width, stacked, primary on top: at this size a wrapped button row
+       reads worse than an honest stack. */
+    .nora-system-event-actions {
+      @apply w-full flex-col-reverse;
+    }
+
+    .nora-system-event-action {
+      @apply w-full;
+    }
+  }
+}
+
+/* Deliberately UNLAYERED, and the only such rule in this file.
+   `.nora-primary-action` uses `@apply`, and Tailwind v4 emits any rule that
+   does into the `utilities` layer — where it is ordered after `.min-h-*` and
+   therefore wins. Its `min-h-10` pins the primary action to 40px, four pixels
+   under Nora's 44px touch minimum, and neither a `min-h-11` class on the
+   element nor a components-layer rule can override it: layer order beats
+   specificity outright. Unlayered declarations beat every layer, so this is
+   the one construction that reliably holds.
+
+   Measured, not assumed: before this rule the primary read 164x40 and the
+   ghost 144x44 in the styled app. Scoped to this component on purpose —
+   `.nora-primary-action` is shared with other waves and is not this wave's to
+   change. The same trap almost certainly affects other Nora primary buttons;
+   that is reported as a separate finding, not fixed here. */
+.nora-system-event-action.nora-system-event-action {
+  min-height: var(--nora-touch-min);
+}
+
+@keyframes nora-system-event-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-0.5rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 767px) {
+  @keyframes nora-system-event-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.5rem) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+/* Staged entrance of the warning geometry: contour, bar, ring, dot. A single
+   settle each — the mark is static afterwards. A permanently pulsing warning
+   produces nervousness, not attention. */
+@keyframes nora-safety-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Opacity 0.25 → 1 → 0.25 with a barely-there swell, per section 18. */
+@keyframes nora-system-event-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.86);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Reduced-motion variant: the same rhythm, opacity only. */
+@keyframes nora-system-event-dot-fade {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+/* The aura scales rather than changing its gradient stops: a transform stays
+   on the compositor, a repainted gradient would not. The phase multiplier
+   lives on the wrapping `.nora-orb-field`, so this stays a pure breath. */
+@keyframes nora-orb-aura-breathe {
+  0%,
+  100% {
+    transform: scale(0.94);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* Three morph tracks, all different — sharing one would resynchronise the
+   layers every cycle and undo the point of the different periods. */
+@keyframes nora-orb-morph-a {
+  0%,
+  100% {
+    border-radius: 68% 32% 41% 59% / 46% 63% 37% 54%;
+  }
+  27% {
+    border-radius: 38% 62% 67% 33% / 41% 68% 32% 59%;
+  }
+  61% {
+    border-radius: 59% 41% 31% 69% / 69% 33% 67% 31%;
+  }
+  84% {
+    border-radius: 47% 53% 56% 44% / 34% 61% 39% 66%;
+  }
+}
+
+@keyframes nora-orb-morph-b {
+  0%,
+  100% {
+    border-radius: 37% 63% 59% 41% / 62% 39% 61% 38%;
+  }
+  34% {
+    border-radius: 66% 34% 36% 64% / 39% 67% 33% 61%;
+  }
+  71% {
+    border-radius: 32% 68% 63% 37% / 58% 33% 67% 42%;
+  }
+}
+
+@keyframes nora-orb-morph-c {
+  0%,
+  100% {
+    border-radius: 61% 39% 47% 53% / 44% 58% 42% 56%;
+  }
+  38% {
+    border-radius: 43% 57% 39% 61% / 61% 41% 59% 39%;
+  }
+  73% {
+    border-radius: 56% 44% 61% 39% / 39% 62% 38% 61%;
+  }
+}
+
+@keyframes nora-orb-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Deliberately not a circular path, and deliberately never centred: the
+   keyframes sit at uneven times and uneven distances, and every single one of
+   them is offset from the middle. A core that passes through dead centre puts
+   the bullseye back for a moment each cycle. */
+@keyframes nora-orb-core-drift {
+  0%,
+  100% {
+    transform: translate(-8%, -6%);
+  }
+  23% {
+    transform: translate(2%, -14%);
+  }
+  41% {
+    transform: translate(-13%, -9%);
+  }
+  62% {
+    transform: translate(-17%, 4%);
+  }
+  81% {
+    transform: translate(-4%, 2%);
+  }
+}
+
+@keyframes nora-orb-core-swell {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  36% {
+    transform: scale(1.13);
+  }
+  74% {
+    transform: scale(0.93);
+  }
+}
+
+@keyframes nora-orb-core-morph {
+  0%,
+  100% {
+    border-radius: 58% 42% 46% 54% / 52% 48% 52% 48%;
+  }
+  44% {
+    border-radius: 44% 56% 57% 43% / 46% 58% 42% 54%;
+  }
+  79% {
+    border-radius: 53% 47% 41% 59% / 59% 43% 57% 41%;
   }
 }

@@ -1045,6 +1045,29 @@ export const germanCrmMessages = {
       idempotency_conflict:
         "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
     },
+    pwa: {
+      available_title: "Neue Nora-Version verfügbar",
+      available_intro: "Eine aktualisierte Version ist bereit.",
+      available_keeps_running:
+        "Ihre aktuelle Nora-Version läuft weiter, bis Sie aktualisieren.",
+      // Zweigeteilt seit PWA-1C.1: Handlungsanweisung zuerst, Begründung
+      // darunter. Als ein Satzblock las sich beides gleich wichtig — das Auge
+      // musste den ganzen Absatz lesen, um die eigentliche Aufforderung zu
+      // finden.
+      available_unsaved_hint:
+        "Bitte speichern Sie offene Eingaben, bevor Sie aktualisieren.",
+      available_unsaved_detail:
+        "Ungespeicherte Änderungen können dabei verloren gehen.",
+      applying_title: "Nora wird aktualisiert",
+      // Bewusst keine Fortschrittsaussage: die acht Sekunden sind eine
+      // Übergangsinszenierung, kein gemessener Vorgang.
+      applying_intro: "Die neue Version wird vorbereitet.",
+      update_now: "Jetzt aktualisieren",
+      update_later: "Später",
+      recovery_title: "Aktualisierung konnte noch nicht gestartet werden",
+      recovery_intro: "Nora kann weiterhin verwendet werden.",
+      retry_action: "Erneut versuchen",
+    },
     notifications: {
       region_label: "Statusmeldungen",
       errors: {

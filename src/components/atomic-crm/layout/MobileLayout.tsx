@@ -7,6 +7,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { useConfigurationLoader } from "../root/useConfigurationLoader";
 import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
 import { NoraNotificationOutlet } from "../notifications/NoraNotificationOutlet";
+import { NoraUpdateEvent } from "../pwa/NoraUpdateEvent";
 import { MobileNavigation } from "./MobileNavigation";
 
 export const MobileLayout = ({ children }: { children: ReactNode }) => {
@@ -24,6 +25,7 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
             legacy toaster keeps its own offset for the unmigrated flows. */}
         <Notification mobileOffset={{ bottom: "72px" }} />
         <NoraNotificationOutlet />
+        <NoraUpdateEvent />
       </div>
     </QuickCaptureProvider>
   );

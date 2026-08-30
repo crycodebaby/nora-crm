@@ -28,7 +28,15 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       // Keep production PWA behavior; E2E should not register a service worker.
       disable: mode === "e2e",
-      registerType: "autoUpdate",
+      // "prompt" statt "autoUpdate" (PWA-1B): ein neuer Worker bleibt WAITING,
+      // bis der Benutzer bewusst aktualisiert. Mit "autoUpdate" erzwingt der
+      // Plugin skipWaiting + clientsClaim — der neue Worker uebernimmt dann
+      // sofort offene Tabs und raeumt den Precache des alten Builds weg,
+      // waehrend die Seite noch altes JavaScript ausfuehrt. Ein danach erst
+      // angeforderter Lazy Chunk des alten Builds existiert weder im Cache
+      // noch auf dem Server (404). Siehe docs/nora/17, "PWA-Update-Verhalten
+      // nach Deployment", und den Decision-Log-Eintrag zu PWA-1B.
+      registerType: "prompt",
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB

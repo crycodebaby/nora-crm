@@ -1033,6 +1033,21 @@ export const englishCrmMessages = {
       idempotency_conflict:
         "This submission was already started with different data. Please reload the page and try again.",
     },
+    pwa: {
+      available_title: "New Nora version available",
+      available_intro: "An updated version is ready.",
+      available_keeps_running:
+        "Your current version of Nora keeps running until you update.",
+      available_unsaved_hint: "Please save any open entries before you update.",
+      available_unsaved_detail: "Unsaved changes can be lost in the process.",
+      applying_title: "Updating Nora",
+      applying_intro: "The new version is being prepared.",
+      update_now: "Update now",
+      update_later: "Later",
+      recovery_title: "The update could not be started yet",
+      recovery_intro: "You can keep using Nora.",
+      retry_action: "Try again",
+    },
     notifications: {
       region_label: "Status messages",
       errors: {

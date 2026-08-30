@@ -10,6 +10,7 @@ import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
 import { NoraReadOnlyBanner } from "../misc/NoraReadOnlyBanner";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
 import { NoraNotificationOutlet } from "../notifications/NoraNotificationOutlet";
+import { NoraUpdateEvent } from "../pwa/NoraUpdateEvent";
 import Header from "./Header";
 
 const isDealsKanbanPath = (pathname: string) =>
@@ -42,6 +43,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
             Capture is the only flow that has moved to the card stack. */}
         <Notification />
         <NoraNotificationOutlet />
+        <NoraUpdateEvent />
       </div>
     </QuickCaptureProvider>
   );
