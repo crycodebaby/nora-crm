@@ -150,6 +150,37 @@ export interface PwaUpdateStore {
    * des Wechsels in den Recovery-Zustand.
    */
   hasWaitingWorker: () => boolean;
+  /**
+   * Beendet den Aktivierungsversuch, dessen Uebernahme ausgeblieben ist, und
+   * meldet, ob ein zweiter Versuch technisch ueberhaupt etwas bewirken kann.
+   *
+   * **Warum es das geben muss.** `applyUpdate()` sperrt auf `applying`, und
+   * `applying` fiel auf dem Watchdog-Pfad nie wieder auf `false`: das Promise
+   * lehnt in Production praktisch nie ab (siehe Modulkopf), und `reset()` wird
+   * dort nie aufgerufen. „Erneut versuchen" lief damit in genau diesen Guard
+   * und schickte kein zweites SKIP_WAITING — der Knopf spielte acht Sekunden
+   * Choreografie ab und tat nichts. Genau dieser Uebergang schliesst das.
+   *
+   * **Bewusst kein `reset()`.** Beendet wird ausschliesslich der eine Versuch.
+   * `needRefresh`, die Registration, der wartende Worker, die Listener und die
+   * Update-Callbacks bleiben unangetastet — ein Retry darf keinen technischen
+   * Zustand verlieren.
+   *
+   * Fall A, ein Worker wartet weiterhin: der Versuch endet, `applying` faellt
+   * kontrolliert auf `false`, ein zweiter `applyUpdate()` ist wieder moeglich.
+   * Rueckgabe `true`.
+   *
+   * Fall B, kein wartender Worker mehr: ein zweites SKIP_WAITING waere
+   * nachweislich wirkungslos (`messageSkipWaiting()` tut dann gar nichts). Der
+   * Versuch bleibt stehen, und die Oberflaeche bietet den kontrollierten
+   * Reload an. Rueckgabe `false`. Ebenso, wenn die Uebernahme doch noch
+   * eingetreten ist — dann gibt es nichts zu wiederholen.
+   *
+   * Idempotent: der Rueckgabewert haengt am Weltzustand, nicht daran, ob
+   * dieser Aufruf etwas veraendert hat. React StrictMode ruft Effekte doppelt
+   * auf, und der zweite Aufruf muss dieselbe Antwort geben wie der erste.
+   */
+  endStalledActivation: () => boolean;
   /** Hinweis vorerst ausblenden; der wartende Worker bleibt erhalten. */
   dismissForNow: () => void;
   /** Timer/Listener abbauen (Tests, HMR). */
@@ -319,6 +350,19 @@ export const createPwaUpdateStore = (
   const hasWaitingWorker: PwaUpdateStore["hasWaitingWorker"] = () =>
     Boolean(registration?.waiting);
 
+  const endStalledActivation: PwaUpdateStore["endStalledActivation"] = () => {
+    // Die Uebernahme ist doch noch eingetreten: dann ist nichts steckengeblieben.
+    // `activated` gewinnt, und die Praesentation verlaesst den Recovery-Zustand
+    // ohnehin von selbst.
+    if (activated) return false;
+    const retryable = hasWaitingWorker();
+    if (retryable && applying) {
+      applying = false;
+      refresh();
+    }
+    return retryable;
+  };
+
   const dismissForNow: PwaUpdateStore["dismissForNow"] = () => {
     if (!needRefresh || applying) return;
     dismissedUntil = now() + DISMISS_RESHOW_AFTER_MS;
@@ -362,6 +406,7 @@ export const createPwaUpdateStore = (
     start,
     applyUpdate,
     hasWaitingWorker,
+    endStalledActivation,
     dismissForNow,
     stop,
     reset,

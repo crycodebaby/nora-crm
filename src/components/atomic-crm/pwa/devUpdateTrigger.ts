@@ -34,6 +34,30 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
  */
 
 /**
+ * Der wartende Worker als Attrappe.
+ *
+ * Bis PWA-1C.2 reichte das Werkzeug `undefined` als Registration durch. Damit
+ * lieferte `hasWaitingWorker()` immer `false`, und die Recovery-Variante mit
+ * „Erneut versuchen" war weder fuer QA noch fuer die Tests jemals erreichbar —
+ * genau dort sass der BLOCKER, den niemand sehen konnte. Jetzt gibt es eine
+ * Registration mit derselben Aussagekraft wie im Browser: ein `waiting`, das
+ * verschwindet, sobald die Uebernahme stattfindet.
+ *
+ * Bewusst nur die zwei Eigenschaften, die der Store liest — kein nachgebauter
+ * Browser. `update()` muss dabei sein, weil die stuendliche Pruefung des Stores
+ * sie sonst auf `undefined` aufruft.
+ */
+const FAKE_WAITING_WORKER = {} as ServiceWorker;
+
+const createFakeRegistration = (state: { waiting: boolean }) =>
+  ({
+    get waiting() {
+      return state.waiting ? FAKE_WAITING_WORKER : null;
+    },
+    update: () => Promise.resolve(),
+  }) as unknown as ServiceWorkerRegistration;
+
+/**
  * Ersatz für `virtual:pwa-register`.
  *
  * Im Dev-Server ist in `vite.config.ts` kein `devOptions` gesetzt, es wird also
@@ -41,12 +65,20 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
  * `onNeedRefresh` nie aufruft. Diese Fälschung zu setzen kostet deshalb nichts
  * Echtes, holt aber den Verfügbar-Zustand her.
  */
-const createFakeRegisterSw = (state: { reject: boolean }): RegisterSwLike => {
+const createFakeRegisterSw = (state: {
+  reject: boolean;
+  waiting: boolean;
+  requests: number;
+}): RegisterSwLike => {
   return (options) => {
     needRefresh = options.onNeedRefresh;
-    options.onRegisteredSW?.("/sw.js", undefined);
-    return () =>
-      state.reject
+    options.onRegisteredSW?.("/sw.js", createFakeRegistration(state));
+    return () => {
+      // Die technische Beobachtungsgröße: jeder Aufruf ist genau ein
+      // Aktivierungsversuch (SKIP_WAITING). Ein Retry, der diese Zahl nicht
+      // erhöht, hat nichts getan — egal wie vollständig die Animation lief.
+      state.requests += 1;
+      return state.reject
         ? // Der theoretische Zweig: das Promise lehnt ab. Im ausgelieferten
           // Production-Client passiert das praktisch nie (siehe Modulkopf von
           // `pwaUpdateStore.ts`) — der Zweig existiert als Absicherung und
@@ -58,6 +90,7 @@ const createFakeRegisterSw = (state: { reject: boolean }): RegisterSwLike => {
           // Ohne simulierte Übernahme bleibt `controllerchange` aus, und nach
           // der Watchdog-Frist muss der Recovery-Zustand erscheinen.
           new Promise<void>(() => {});
+    };
   };
 };
 
@@ -69,7 +102,11 @@ const createFakeRegisterSw = (state: { reject: boolean }): RegisterSwLike => {
  * auch in Production benutzt. Dadurch lässt sich der Erfolgspfad prüfen, ohne
  * eine einzige Zeile Production-Logik zu verändern oder aufzuweichen.
  */
-const simulateTakeover = () => {
+const simulateTakeover = (state: { waiting: boolean }) => {
+  // Eine echte Übernahme räumt den wartenden Worker weg. Ohne diese Zeile
+  // behauptete das Werkzeug einen Zustand, den es im Browser nicht gibt:
+  // „übernommen, und trotzdem wartet noch einer".
+  state.waiting = false;
   navigator.serviceWorker?.dispatchEvent(new Event("controllerchange"));
 };
 
@@ -166,7 +203,16 @@ export const mountUpdateDevTrigger = () => {
   if (!import.meta.env.DEV) return;
   if (document.getElementById("nora-dev-pwa-panel")) return;
 
-  const state = { reject: false, hijacked: false, fast: false };
+  const state = {
+    reject: false,
+    hijacked: false,
+    fast: false,
+    // Standard: ein Worker wartet. Das ist der reale Fehlerfall, für den der
+    // Watchdog gebaut wurde, und damit die Recovery-Variante „Erneut
+    // versuchen" — bis PWA-1C.2 war genau sie hier nicht herstellbar.
+    waiting: true,
+    requests: 0,
+  };
 
   const panel = document.createElement("div");
   panel.id = "nora-dev-pwa-panel";
@@ -208,9 +254,19 @@ export const mountUpdateDevTrigger = () => {
     needRefresh?.();
   });
 
-  const takeoverButton = addButton(
-    "✔  Übernahme simulieren",
-    simulateTakeover,
+  const waitingButton = addButton("⏻  Wartender Worker: an", () => {
+    state.waiting = !state.waiting;
+    waitingButton.textContent = state.waiting
+      ? "⏻  Wartender Worker: an"
+      : "⏻  Wartender Worker: aus";
+  });
+  waitingButton.title =
+    "Steuert registration.waiting. An → Recovery bietet Erneut versuchen " +
+    "(Variante A, der reale Fehlerfall). Aus → Recovery bietet Nora neu laden " +
+    "(Variante B), weil ein zweites SKIP_WAITING dann nachweislich nichts täte.";
+
+  const takeoverButton = addButton("✔  Übernahme simulieren", () =>
+    simulateTakeover(state),
   );
   takeoverButton.title =
     "Setzt ein echtes „controllerchange“ ab — der Erfolgsfall. Ohne diesen " +
@@ -278,7 +334,11 @@ export const mountUpdateDevTrigger = () => {
         : "bereit";
     status.textContent =
       `Store: ${snapshot.state}` +
-      `${snapshot.activated ? " +übernommen" : ""} — Panel: ${shown}`;
+      `${snapshot.activated ? " +übernommen" : ""} — Panel: ${shown}` +
+      // Ohne diese Zahl lässt sich am Bildschirm nicht unterscheiden, ob
+      // „Erneut versuchen" wirklich einen zweiten Aktivierungsversuch
+      // ausgelöst oder nur die Choreografie noch einmal abgespielt hat.
+      ` — Anfragen: ${state.requests}`;
   };
 
   const unsubscribe = pwaUpdateStore.subscribe(render);

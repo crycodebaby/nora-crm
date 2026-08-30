@@ -12,6 +12,11 @@ export interface PwaUpdate {
   applyUpdate: () => void;
   /** Kann ein erneuter Aktivierungsversuch ueberhaupt etwas anstossen? */
   hasWaitingWorker: () => boolean;
+  /**
+   * Beendet den steckengebliebenen Versuch und meldet, ob ein Retry technisch
+   * etwas bewirken kann. Aufzurufen genau beim Ablauf des Watchdogs.
+   */
+  endStalledActivation: () => boolean;
   dismissForNow: () => void;
 }
 
@@ -40,6 +45,10 @@ export const usePwaUpdate = (): PwaUpdate => {
     () => pwaUpdateStore.hasWaitingWorker(),
     [],
   );
+  const endStalledActivation = useCallback(
+    () => pwaUpdateStore.endStalledActivation(),
+    [],
+  );
 
   return {
     state: snapshot.state,
@@ -48,6 +57,7 @@ export const usePwaUpdate = (): PwaUpdate => {
     activated: snapshot.activated,
     applyUpdate,
     hasWaitingWorker,
+    endStalledActivation,
     dismissForNow,
   };
 };

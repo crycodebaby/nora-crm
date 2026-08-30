@@ -379,6 +379,148 @@ describe("pwaUpdateStore", () => {
     storeB.stop();
   });
 
+  // --------------------------------------------------------------------------
+  // Der steckengebliebene Versuch (PWA-1C.2).
+  //
+  // Vorher fiel `applying` auf dem Watchdog-Pfad nie wieder auf `false`, und
+  // weil `applyUpdate()` genau darauf sperrt, war „Erneut versuchen" ein Knopf
+  // ohne technische Wirkung. Diese Tests halten den Uebergang fest, der das
+  // schliesst — und die Grenzen, an denen er ausdruecklich NICHT greifen darf.
+  // --------------------------------------------------------------------------
+
+  /** Eine Registration, deren `waiting` sich wie im Browser aendern kann. */
+  const stallHarness = (options: { waiting: boolean }) => {
+    const swTarget = listenerTarget();
+    const worker = {} as ServiceWorker;
+    const registration = {
+      get waiting() {
+        return options.waiting ? worker : null;
+      },
+    } as unknown as ServiceWorkerRegistration;
+    const { registerSw, handle } = createFakeRegisterSW({ registration });
+    const store = createPwaUpdateStore({
+      now,
+      serviceWorkerTarget: swTarget.target,
+    });
+    store.start(registerSw);
+    handle.needRefresh!();
+    return { store, handle, swTarget, options };
+  };
+
+  it("beendet den steckengebliebenen Versuch, solange ein Worker wartet", () => {
+    const { store, handle } = stallHarness({ waiting: true });
+
+    store.applyUpdate();
+    expect(handle.updateCalls).toBe(1);
+    expect(store.getSnapshot().applying).toBe(true);
+
+    expect(store.endStalledActivation()).toBe(true);
+
+    expect(store.getSnapshot().applying).toBe(false);
+    // Kein Reset: das Update ist weiterhin verfuegbar, der Hinweis bleibt.
+    expect(store.getSnapshot().updateAvailable).toBe(true);
+    store.stop();
+  });
+
+  it("laesst danach einen echten zweiten Aktivierungsversuch zu", () => {
+    const { store, handle } = stallHarness({ waiting: true });
+
+    store.applyUpdate();
+    expect(handle.updateCalls).toBe(1);
+    store.endStalledActivation();
+
+    store.applyUpdate();
+
+    // Das ist der eigentliche BLOCKER-Regressionstest: nicht ein neuer
+    // Animationslauf, sondern eine zweite Anfrage an den Worker.
+    expect(handle.updateCalls).toBe(2);
+    expect(store.getSnapshot().applying).toBe(true);
+    store.stop();
+  });
+
+  it("erlaubt beliebig viele Versuche, solange wirklich ein Worker wartet", () => {
+    const { store, handle } = stallHarness({ waiting: true });
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      store.applyUpdate();
+      expect(handle.updateCalls).toBe(attempt);
+      expect(store.endStalledActivation()).toBe(true);
+    }
+    // Bewusst keine kuenstliche Versuchsgrenze: die Wahrheit ist der wartende
+    // Worker, nicht ein Zaehler.
+    store.stop();
+  });
+
+  it("blockiert Doppelklicks waehrend eines laufenden Versuchs weiterhin", () => {
+    const { store, handle } = stallHarness({ waiting: true });
+
+    store.applyUpdate();
+    store.applyUpdate();
+    store.applyUpdate();
+
+    expect(handle.updateCalls).toBe(1);
+    store.stop();
+  });
+
+  it("beendet nichts, wenn die Uebernahme doch noch eingetreten ist", () => {
+    const { store, handle, swTarget } = stallHarness({ waiting: true });
+
+    store.applyUpdate();
+    swTarget.dispatch("controllerchange");
+    expect(store.getSnapshot().activated).toBe(true);
+
+    // `activated` gewinnt: es gibt nichts zu wiederholen, und der laufende
+    // Versuch darf nicht nachtraeglich fuer gescheitert erklaert werden.
+    expect(store.endStalledActivation()).toBe(false);
+    expect(store.getSnapshot().applying).toBe(true);
+    expect(handle.updateCalls).toBe(1);
+    store.stop();
+  });
+
+  it("macht ohne wartenden Worker nicht faelschlich retryable", () => {
+    const { store, handle } = stallHarness({ waiting: false });
+
+    store.applyUpdate();
+    expect(handle.updateCalls).toBe(1);
+
+    // Fall B: ein zweites SKIP_WAITING taete nachweislich nichts. Der Versuch
+    // bleibt stehen, und die Oberflaeche bietet stattdessen den Reload an.
+    expect(store.endStalledActivation()).toBe(false);
+    expect(store.getSnapshot().applying).toBe(true);
+    store.stop();
+  });
+
+  it("verliert den wartenden Worker zwischen Recovery und Retry nicht still", () => {
+    const harness = stallHarness({ waiting: true });
+    const { store, handle } = harness;
+
+    store.applyUpdate();
+    expect(store.endStalledActivation()).toBe(true);
+
+    // Der Worker verschwindet, bevor der Benutzer klickt.
+    harness.options.waiting = false;
+
+    expect(store.hasWaitingWorker()).toBe(false);
+    // Der Store wuerde die Anfrage zwar durchlassen — deshalb liest die
+    // Oberflaeche `hasWaitingWorker()` im Moment des Klicks noch einmal und
+    // laedt dann statt zu wiederholen (siehe `NoraUpdateEvent`).
+    expect(handle.updateCalls).toBe(1);
+    store.stop();
+  });
+
+  it("antwortet bei doppeltem Aufruf gleich (StrictMode)", () => {
+    const { store } = stallHarness({ waiting: true });
+
+    store.applyUpdate();
+
+    expect(store.endStalledActivation()).toBe(true);
+    // Der zweite Aufruf veraendert nichts mehr, muss aber dieselbe Antwort
+    // geben — sonst kippte die Recovery-Aktion im StrictMode auf „reload".
+    expect(store.endStalledActivation()).toBe(true);
+    expect(store.getSnapshot().applying).toBe(false);
+    store.stop();
+  });
+
   it("baut auch den controllerchange-Listener bei stop wieder ab", () => {
     const swTarget = listenerTarget();
     const { registerSw } = createFakeRegisterSW();

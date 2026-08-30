@@ -103,6 +103,7 @@ export const NoraUpdateEvent = () => {
     activated,
     applyUpdate,
     hasWaitingWorker,
+    endStalledActivation,
     dismissForNow,
   } = usePwaUpdate();
   const { phase, presentation, start, retry } = useUpdateChoreography({
@@ -119,11 +120,10 @@ export const NoraUpdateEvent = () => {
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const recoveryActionRef = useRef<HTMLButtonElement | null>(null);
-  // Nur uebernehmen, was ohnehin uns gehoert: der Fokus wird ausschliesslich
-  // dann verschoben, wenn er beim Ausloesen bereits im Panel lag. Ein Klick
-  // fokussiert den Button in Chrome mit, also deckt das Maus wie Tastatur ab —
-  // ohne dass das Ereignis jemandem den Fokus wegnehmen kann.
-  const focusWasOursRef = useRef(false);
+  // Nur uebernehmen, was uns AKTUELL gehoert — siehe den Besitz-Effekt weiter
+  // unten. Der Besitz beginnt mit der vom Benutzer ausgeloesten Aktion und
+  // endet, sobald der Benutzer den Fokus selbst nach draussen traegt.
+  const focusOwnedRef = useRef(false);
 
   // Die Sequenz haelt das Panel offen, auch wenn der Store schon weiter ist:
   // zwischen Klick und `applyUpdate()` steht er noch auf `updateAvailable`,
@@ -187,20 +187,52 @@ export const NoraUpdateEvent = () => {
   const [recoveryAction, setRecoveryAction] = useState<RecoveryAction>("retry");
   useEffect(() => {
     if (presentation !== "recovery") return;
-    // Wartet noch ein Worker, kann ein zweiter Anlauf die Aktivierung erneut
-    // anstossen. Ist keiner mehr da, laeuft `messageSkipWaiting()` nachweislich
-    // ins Leere — dann ist ein kontrollierter Reload die ehrlichere Aktion.
-    setRecoveryAction(hasWaitingWorker() ? "retry" : "reload");
-  }, [presentation, hasWaitingWorker]);
+    // Ein Aufruf, zwei Wirkungen — und beide gehoeren in genau diesen Moment:
+    // der steckengebliebene Versuch wird beendet (nur dann kann `applyUpdate()`
+    // ueberhaupt wieder greifen), und die Antwort sagt, welche Aktion hier
+    // ehrlich ist. Wartet noch ein Worker, kann ein zweiter Anlauf die
+    // Aktivierung erneut anstossen. Ist keiner mehr da, laeuft
+    // `messageSkipWaiting()` nachweislich ins Leere — dann ist ein
+    // kontrollierter Reload die ehrlichere Aktion.
+    setRecoveryAction(endStalledActivation() ? "retry" : "reload");
+  }, [presentation, endStalledActivation]);
+
+  // --- Fokus-Besitz --------------------------------------------------------
+  //
+  // Nora fuehrt den Fokus nur weiter, solange er dem Systemereignis GEHOERT.
+  // Der Besitz beginnt mit der vom Benutzer ausgeloesten Aktion und endet in
+  // dem Moment, in dem der Benutzer ihn selbst nach draussen traegt — nicht
+  // erst beim naechsten Zustandswechsel. Vorher wurde nur einmal beim Klick
+  // gemessen; wer danach weiterarbeitete, bekam den Fokus dreizehn Sekunden
+  // spaeter aus dem Eingabefeld gerissen, sobald der Watchdog zuschlug.
+  //
+  // Eine Pruefung von `panel.contains(document.activeElement)` erst im Moment
+  // des Verschiebens waere zu grob: faellt der Fokus beim Wegfalten der
+  // Aktionen auf `<body>` zurueck, ist das keine Entscheidung des Benutzers.
+  // Deshalb wird der Besitz laufend aus echten Fokuszielen gefuehrt und
+  // `<body>` ausdruecklich ignoriert.
+  useEffect(() => {
+    if (!mounted) return;
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target as Node | null;
+      if (!target || target === document.body) return;
+      focusOwnedRef.current = rootRef.current?.contains(target) ?? false;
+    };
+    // Capture-Phase: der Besitz muss auch dann stimmen, wenn ein Widget das
+    // Ereignis auf seinem Weg nach oben abfaengt.
+    document.addEventListener("focusin", handleFocusIn, true);
+    return () => document.removeEventListener("focusin", handleFocusIn, true);
+  }, [mounted]);
 
   // --- Fokus nach der vom Benutzer ausgeloesten Aktion ---------------------
   //
   // Die Aktionszeile faltet sich ab Phase 2 weg; ohne Zutun faellt der Fokus
   // auf `<body>` und der Benutzer steht nach der Sequenz — und erst recht im
   // Recovery-Zustand — am Dokumentanfang. Kein unerwarteter Autofokus: der
-  // Benutzer hat den Zustandswechsel gerade selbst ausgeloest.
+  // Benutzer hat den Zustandswechsel gerade selbst ausgeloest und den Fokus
+  // seitdem nicht aus dem Ereignis herausgetragen.
   useEffect(() => {
-    if (!mounted || !focusWasOursRef.current) return;
+    if (!mounted || !focusOwnedRef.current) return;
     if (presentation === "recovery") recoveryActionRef.current?.focus();
     else if (presentation === "choreography") rootRef.current?.focus();
   }, [presentation, mounted]);
@@ -234,9 +266,25 @@ export const NoraUpdateEvent = () => {
   }, [announcementKey, translate]);
 
   const beginSequence = (action: () => void) => {
-    focusWasOursRef.current =
+    // Der Klick hat den Knopf im Panel mitfokussiert, bei Tastaturbedienung lag
+    // er ohnehin dort. Ein von aussen ausgeloester Aufruf erhaelt keinen Besitz.
+    focusOwnedRef.current =
       rootRef.current?.contains(document.activeElement) ?? false;
     action();
+  };
+
+  // Zwischen dem Ablauf des Watchdogs und dem Klick koennen Sekunden liegen:
+  // der wartende Worker von damals muss jetzt nicht mehr existieren. Deshalb
+  // wird die technische Wahrheit im Moment der Aktion noch einmal gelesen,
+  // statt der zehn Sekunden alten zu vertrauen. Ist die Uebernahme inzwischen
+  // eingetreten, ist dieser Knopf ohnehin nicht mehr montiert — `activated`
+  // nimmt den Recovery-Zustand von selbst zurueck.
+  const runRecoveryAction = () => {
+    if (recoveryAction === "reload" || !hasWaitingWorker()) {
+      reloadPage();
+      return;
+    }
+    beginSequence(retry);
   };
 
   if (!mounted) return <UpdateAnnouncer announcement={null} />;
@@ -355,11 +403,7 @@ export const NoraUpdateEvent = () => {
                     ref={recoveryActionRef}
                     size="lg"
                     className="nora-system-event-action nora-primary-action"
-                    onClick={
-                      recoveryAction === "reload"
-                        ? reloadPage
-                        : () => beginSequence(retry)
-                    }
+                    onClick={runRecoveryAction}
                     data-testid="nora-pwa-update-retry"
                     data-recovery-action={recoveryAction}
                   >

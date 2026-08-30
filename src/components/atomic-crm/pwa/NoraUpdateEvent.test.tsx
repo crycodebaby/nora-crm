@@ -39,6 +39,30 @@ let applyCalls = 0;
 let rejectApply = false;
 
 /**
+ * Wartet nach der Anfrage noch ein Worker?
+ *
+ * Bis PWA-1C.2 reichte dieser Fake `undefined` als Registration durch. Damit
+ * war `hasWaitingWorker()` immer `false` und die Recovery-Variante A („Erneut
+ * versuchen") in der gesamten Suite unerreichbar — der BLOCKER konnte deshalb
+ * gar nicht auffallen. Jetzt ist es eine echte Aussage, die pro Test gesetzt
+ * wird: `true` ist der reale Fehlerfall (SKIP_WAITING raus, Worker wartet
+ * weiter), `false` der Fall, in dem nur noch ein Reload hilft.
+ */
+let waitingWorker = true;
+
+/**
+ * Nur die zwei Eigenschaften, die der Store liest — kein nachgebauter Browser.
+ * `update()` muss existieren, weil die Registration jetzt truthy ist und die
+ * gedrosselte Pruefung des Stores sie sonst auf `undefined` aufriefe.
+ */
+const fakeRegistration = {
+  get waiting() {
+    return waitingWorker ? ({} as ServiceWorker) : null;
+  },
+  update: () => Promise.resolve(),
+} as unknown as ServiceWorkerRegistration;
+
+/**
  * Bildet den echten Client nach, nicht eine Wunschvorstellung von ihm.
  *
  * `updateServiceWorker()` aus `vite-plugin-pwa` 1.2.0 schickt SKIP_WAITING und
@@ -46,10 +70,13 @@ let rejectApply = false;
  * daran ist der erste RC gescheitert: er hat aus „resolved" auf Erfolg und aus
  * „rejected" auf Fehlschlag geschlossen. Der Fake resolved deshalb standard-
  * maessig und ueberlaesst die Wahrheit dem `controllerchange`-Ereignis.
+ *
+ * `applyCalls` ist dabei die technische Beobachtungsgroesse fuer den zweiten
+ * Aktivierungsversuch: jeder Aufruf ist genau ein SKIP_WAITING.
  */
 const fakeRegisterSW: RegisterSwLike = (opts) => {
   needRefresh = opts.onNeedRefresh;
-  opts.onRegisteredSW?.("/sw.js", undefined);
+  opts.onRegisteredSW?.("/sw.js", fakeRegistration);
   return () => {
     applyCalls += 1;
     if (rejectApply) return Promise.reject(new Error("activation refused"));
@@ -158,6 +185,7 @@ describe("NoraUpdateEvent", () => {
     pwaUpdateStore.reset();
     applyCalls = 0;
     rejectApply = false;
+    waitingWorker = true;
     pwaUpdateStore.start(fakeRegisterSW);
   });
 
@@ -381,6 +409,24 @@ describe("NoraUpdateEvent", () => {
     await screen.unmount();
   });
 
+  it("waehlt die Recovery-Aktion auch unter StrictMode stabil", async () => {
+    useSequenceTimers();
+    const screen = await renderStrict();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await advance(CHOREOGRAPHY_COMMIT_MS);
+    await advance(ACTIVATION_WATCHDOG_MS);
+
+    // Der Effekt laeuft doppelt, und der erste Durchlauf hat `applying` bereits
+    // beendet. Beantwortet der zweite Aufruf die Frage anders, kippte die
+    // Aktion still auf „Nora neu laden" — obwohl ein Worker wartet.
+    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
+      "retry",
+    );
+
+    await screen.unmount();
+  });
+
   // ------------------------------------------------------------------------
   // Der reale Production-Fehlerfall. Genau hier war der erste RC blind: die
   // Anfrage geht raus, das Promise resolved, und die Uebernahme bleibt aus.
@@ -478,23 +524,146 @@ describe("NoraUpdateEvent", () => {
     await screen.unmount();
   });
 
-  it("startet mit „Erneut versuchen“ eine vollstaendige neue Sequenz", async () => {
+  /** Bis zum Recovery-Zustand. Commit und Watchdog bewusst getrennt. */
+  const runFailedAttempt = async () => {
+    await advance(CHOREOGRAPHY_COMMIT_MS);
+    await advance(ACTIVATION_WATCHDOG_MS);
+  };
+
+  it("bietet bei wartendem Worker „Erneut versuchen“ an (Variante A)", async () => {
     useSequenceTimers();
     const screen = await renderEvent();
     await announceUpdate();
     await click("nora-pwa-update-apply");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
+    await runFailedAttempt();
+
     expect(panel()?.dataset.presentation).toBe("recovery");
-    // Ein wartender Worker ist im Fake vorhanden? Nein — deshalb ist die
-    // ehrliche Aktion hier der kontrollierte Reload, nicht ein zweiter
-    // Aktivierungsversuch ins Leere.
+    // SKIP_WAITING ist raus, der Worker wartet weiterhin: ein zweiter Anlauf
+    // kann hier tatsaechlich etwas anstossen.
     expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
-      "reload",
+      "retry",
+    );
+    expect(testId("nora-pwa-update-retry")?.textContent).toContain(
+      "Erneut versuchen",
     );
 
     await screen.unmount();
   });
+
+  it("bietet ohne wartenden Worker „Nora neu laden“ an (Variante B)", async () => {
+    waitingWorker = false;
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await runFailedAttempt();
+
+    // Ohne wartenden Worker taete `messageSkipWaiting()` nachweislich nichts —
+    // dann ist der kontrollierte Reload die ehrlichere Aktion.
+    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
+      "reload",
+    );
+    expect(testId("nora-pwa-update-retry")?.textContent).toContain(
+      "Nora neu laden",
+    );
+
+    await screen.unmount();
+  });
+
+  // --------------------------------------------------------------------------
+  // Der BLOCKER-Regressionstest (PWA-1C.2).
+  //
+  // Vorher lief „Erneut versuchen" acht Sekunden Choreografie ab und schickte
+  // dann NICHTS: `applyUpdate()` sperrte auf `applying`, das auf diesem Pfad
+  // nie wieder auf `false` fiel. Der Test misst deshalb nicht die Animation,
+  // sondern die Anfragen an den Worker.
+  // --------------------------------------------------------------------------
+
+  it("schickt mit „Erneut versuchen“ einen echten zweiten Aktivierungsversuch", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await runFailedAttempt();
+
+    expect(applyCalls).toBe(1);
+    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
+      "retry",
+    );
+
+    await click("nora-pwa-update-retry");
+
+    // Die Sequenz beginnt wirklich von vorn: erste Phase, nicht ein Sprung
+    // mitten in die Update-Szene.
+    expect(panel()?.dataset.presentation).toBe("choreography");
+    expect(panel()?.dataset.phase).toBe("settling");
+
+    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
+    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
+
+    // Und sie commitet keine Sekunde frueher als beim ersten Mal.
+    await advance(
+      CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining - 1,
+    );
+    expect(applyCalls).toBe(1);
+
+    await advance(1);
+    // Das ist der Punkt: eine zweite echte Anfrage, nicht nur ein zweiter Lauf.
+    expect(applyCalls).toBe(2);
+
+    await screen.unmount();
+  });
+
+  it("nimmt den Recovery-Zustand zurueck, wenn der zweite Anlauf gelingt", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await runFailedAttempt();
+    await click("nora-pwa-update-retry");
+    await advance(CHOREOGRAPHY_COMMIT_MS);
+    expect(applyCalls).toBe(2);
+
+    await flush(() => simulateTakeover());
+
+    // Bewusst nur bis kurz vor die Reload-Frist: den Reload selbst prueft
+    // `useUpdateChoreography.test.tsx`, wo er injizierbar ist.
+    await advance(RELOAD_FALLBACK_MS - 1);
+    expect(panel()?.dataset.presentation).toBe("choreography");
+    expect(testId("nora-pwa-update-retry")).toBeNull();
+    expect(applyCalls).toBe(2);
+
+    await screen.unmount();
+  });
+
+  it("bleibt nach einem zweiten Fehlschlag wiederholbar", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await runFailedAttempt();
+
+    await click("nora-pwa-update-retry");
+    await runFailedAttempt();
+    expect(applyCalls).toBe(2);
+    expect(panel()?.dataset.presentation).toBe("recovery");
+
+    // Keine kuenstliche Versuchsgrenze: solange wirklich ein Worker wartet,
+    // bleibt der Ausweg offen.
+    await click("nora-pwa-update-retry");
+    await advance(CHOREOGRAPHY_COMMIT_MS);
+    expect(applyCalls).toBe(3);
+
+    await screen.unmount();
+  });
+
+  // Der Gegenfall — wartender Worker verschwindet ZWISCHEN Watchdog und Klick,
+  // die Aktion laedt dann statt zu wiederholen — laesst sich hier bewusst nicht
+  // pruefen: er endet in `window.location.reload()`, und das ist in einem
+  // echten Browser nicht ersetzbar (siehe Kopf von
+  // `useUpdateChoreography.test.tsx`). Geprueft ist stattdessen die Wahrheit,
+  // auf der die Entscheidung beruht — `hasWaitingWorker()` in
+  // `pwaUpdateStore.test.ts` — plus der Laufzeitnachweis in der echten App.
 
   it("bietet in Recovery bewusst kein „Spaeter“ an", async () => {
     useSequenceTimers();
@@ -534,6 +703,112 @@ describe("NoraUpdateEvent", () => {
 
     // Im Recovery-Zustand liegt er auf der einzigen Aktion — per Tastatur
     // sofort bedienbar, ohne vom Dokumentanfang aus suchen zu muessen.
+    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
+    await advance(ACTIVATION_WATCHDOG_MS);
+    expect(document.activeElement).toBe(testId("nora-pwa-update-retry"));
+
+    await screen.unmount();
+  });
+
+  // --------------------------------------------------------------------------
+  // Fokus-Besitz (PWA-1C.2).
+  //
+  // Vorher wurde der Besitz einmal beim Klick gemessen und nie wieder geprueft.
+  // Wer danach weiterarbeitete, bekam den Fokus dreizehn Sekunden spaeter aus
+  // dem Eingabefeld gerissen, sobald der Watchdog zuschlug.
+  // --------------------------------------------------------------------------
+
+  it("gibt den Fokus nicht mehr her, wenn der Benutzer inzwischen woanders arbeitet", async () => {
+    useSequenceTimers();
+    const field = document.createElement("input");
+    document.body.append(field);
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    // Start aus dem Panel heraus: der Besitz beginnt bei Nora.
+    const apply = testId("nora-pwa-update-apply")!;
+    apply.focus();
+    await flush(() => apply.click());
+
+    // Der Benutzer geht zurueck an die Arbeit.
+    await flush(() => field.focus());
+    expect(document.activeElement).toBe(field);
+
+    await runFailedAttempt();
+
+    // Recovery ist da — der Fokus bleibt trotzdem, wo der Benutzer ihn hat.
+    expect(panel()?.dataset.presentation).toBe("recovery");
+    expect(document.activeElement).toBe(field);
+
+    await screen.unmount();
+    field.remove();
+  });
+
+  it("gibt den Fokus auch dann nicht her, wenn der Benutzer bewusst weggetabbt ist", async () => {
+    useSequenceTimers();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    const apply = testId("nora-pwa-update-apply")!;
+    apply.focus();
+    await flush(() => apply.click());
+
+    // Wie ein Tabulatorschritt aus dem Panel heraus.
+    await flush(() => outside.focus());
+    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
+    expect(document.activeElement).toBe(outside);
+
+    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
+    await advance(ACTIVATION_WATCHDOG_MS);
+    expect(document.activeElement).toBe(outside);
+
+    await screen.unmount();
+    outside.remove();
+  });
+
+  it("uebernimmt den Fokus wieder, wenn der Benutzer freiwillig zurueckkehrt", async () => {
+    useSequenceTimers();
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    const apply = testId("nora-pwa-update-apply")!;
+    apply.focus();
+    await flush(() => apply.click());
+    await flush(() => outside.focus());
+
+    // Der Benutzer kehrt von sich aus in das Systemereignis zurueck: der
+    // Besitz folgt dem echten Fokus, nicht einer einmaligen Momentaufnahme.
+    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
+    await flush(() => panel()!.focus());
+
+    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
+    await advance(ACTIVATION_WATCHDOG_MS);
+    expect(document.activeElement).toBe(testId("nora-pwa-update-retry"));
+
+    await screen.unmount();
+    outside.remove();
+  });
+
+  it("wertet den Rueckfall auf <body> nicht als Fokusaufgabe", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    const apply = testId("nora-pwa-update-apply")!;
+    apply.focus();
+    await flush(() => apply.click());
+
+    // Der Knopf verschwindet mit der Faltung; der Browser setzt den Fokus dabei
+    // von sich aus auf <body>. Das ist KEINE Entscheidung des Benutzers, und
+    // eine reine `contains(document.activeElement)`-Pruefung waere hier falsch
+    // abgebogen.
+    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
+    expect(document.activeElement).toBe(panel());
+
     await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
     await advance(ACTIVATION_WATCHDOG_MS);
     expect(document.activeElement).toBe(testId("nora-pwa-update-retry"));

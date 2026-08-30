@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-30 – Ein Retry muss etwas senden: der beendete Aktivierungsversuch (PWA-1C.2 Closure) | [Springen](#2026-08-30--ein-retry-muss-etwas-senden-der-beendete-aktivierungsversuch-pwa-1c2-closure) |
 | 2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2) | [Springen](#2026-08-30--aktivierungsanfrage-ist-kein-erfolgssignal-watchdog-statt-promise-pwa-1c2) |
 | 2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1) | [Springen](#2026-08-30--premium-update-experience-und-8-sekunden-choreografie-pwa-1c1) |
 | 2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C) | [Springen](#2026-08-30--update-experience-als-anwendungs-systemereignis-pwa-1c) |
@@ -89,6 +90,50 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 ---
 
+## 2026-08-30 – Ein Retry muss etwas senden: der beendete Aktivierungsversuch (PWA-1C.2 Closure)
+
+### Kontext
+
+Der Delta Final Review des Fix-RC (`6718d772`) hat den Kandidaten abgelehnt: 1 BLOCKER, 1 MEDIUM, 1 LOW. Der Watchdog aus dem Eintrag darunter war korrekt — der Ausweg aus dem Zustand, den er erzeugt, war es nicht.
+
+### Problem
+
+`applyUpdate()` sperrt bewusst auf `applying` (Doppelklick, Mehrfachanfragen, StrictMode). Auf dem Watchdog-Pfad fiel `applying` aber nie wieder auf `false`: das Promise von `updateServiceWorker()` lehnt in Production praktisch nie ab, und `reset()` wird dort nie aufgerufen. „Erneut versuchen" lief damit in genau diesen Guard — acht Sekunden Choreografie, danach **keine** Anfrage, nach fünf Sekunden wieder Recovery. Eine Endlosschleife ohne technische Wirkung, und ausgerechnet in dem Zweig, den der reale Fehlerfall zeigt: wenn die Übernahme ausbleibt, wartet der Worker per Definition noch, also greift `hasWaitingWorker()` und Nora bietet den wirkungslosen Knopf an.
+
+Dieselbe Fehlerklasse, die den ersten RC gekippt hat: die Oberfläche behauptet etwas, das die technische Schicht nicht einlöst.
+
+Aufgefallen ist es niemandem, weil beide Fakes — Test und DEV-Werkzeug — `registration === undefined` durchreichten. Variante A war dadurch weder testbar noch am Bildschirm herstellbar; ein Test trug sogar den Titel „startet mit ‚Erneut versuchen' eine vollständige neue Sequenz" und prüfte etwas anderes.
+
+### Entscheidung
+
+**Ein eng geschnittener Übergang statt eines Resets.** `endStalledActivation()` beendet beim Ablauf des Watchdogs genau den einen steckengebliebenen Versuch und meldet zurück, ob ein zweiter überhaupt etwas bewirken kann. `needRefresh`, Registration, wartender Worker, Listener und Update-Callbacks bleiben unangetastet — ein Retry darf keinen technischen Zustand verlieren. `reset()` bleibt, was es war: Test- und Lifecycle-Hygiene, nie ein Retry-Mechanismus.
+
+**Zwei Fälle, bewusst nicht vermischt.** Wartet noch ein Worker, endet der Versuch, `applying` fällt kontrolliert auf `false`, und die Aktion ist „Erneut versuchen". Wartet keiner mehr, wäre ein zweites SKIP_WAITING nachweislich wirkungslos — dann bleibt der Versuch stehen und die Aktion ist „Nora neu laden". Ist die Übernahme doch noch eingetreten, gibt es nichts zu wiederholen: `activated` gewinnt, und der Recovery-Zustand verschwindet von selbst.
+
+**Idempotent, weil StrictMode Effekte doppelt aufruft.** Der Rückgabewert hängt am Weltzustand, nicht daran, ob der Aufruf etwas verändert hat. Sonst kippte die Aktion beim zweiten Effektlauf still auf „Nora neu laden", obwohl ein Worker wartet.
+
+**Die Wahrheit wird beim Klick noch einmal gelesen.** Zwischen Watchdog und Klick können Sekunden liegen. Ist der wartende Worker inzwischen weg, lädt Nora, statt eine Anfrage ins Leere zu schicken.
+
+**Kein Versuchslimit.** Die Grenze ist der wartende Worker, nicht ein Zähler. Solange wirklich einer da ist, bleibt der Ausweg offen.
+
+**Der Doppelklickschutz bleibt.** Während eines laufenden Versuchs wird weiterhin genau eine Anfrage gesendet — der Guard wurde nicht entfernt, sondern der Zustand davor korrekt zurückgeführt.
+
+### Fokus-Besitz statt Momentaufnahme
+
+Das MEDIUM: der Besitz wurde einmal beim Klick gemessen und nie wieder geprüft. Wer danach in ein Kundenfeld klickte, bekam den Fokus dreizehn Sekunden später herausgerissen, sobald der Watchdog zuschlug. Jetzt führt ein `focusin`-Beobachter den Besitz mit, solange das Ereignis montiert ist. Der Rückfall auf `<body>` beim Wegfalten der Aktionen zählt ausdrücklich nicht als Aufgabe — er ist keine Entscheidung des Benutzers, und genau deshalb reicht eine `contains(document.activeElement)`-Prüfung im Moment des Verschiebens nicht. Kein globaler FocusManager, Listener nur zur Laufzeit des Ereignisses.
+
+### Nachweis
+
+Die Beobachtungsgröße ist die Zahl der gesendeten Aktivierungsanfragen, nicht die Animation. Nach dem Retry steigt sie von 1 auf 2 — in der Testsuite (`applyCalls`) wie in der echten App (Statuszeile „Anfragen" des DEV-Werkzeugs).
+
+Gegen das echte generierte `sw.js` gemessen: ein Worker, der die erste SKIP_WAITING-Anfrage nicht beantwortet hat, übernimmt bei der zweiten (`controllerchange`, 61 ms). Der zweite Versuch ist also nicht nur gesendet, sondern auch wirksam.
+
+### Bewusst nicht geändert
+
+`data-state` trägt im Recovery-Zustand weiterhin `"available"`. In Fall A stimmt das jetzt mit dem Store überein (`applying` ist beendet); in Fall B bleibt der Widerspruch bestehen. Konsistenz erforderte, das Attribut an den Store zu koppeln — ein State-Refactor ohne Konsumenten. Bleibt als NOTE.
+
+---
+
 ## 2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2)
 
 ### Kontext
@@ -143,7 +188,7 @@ Ebenfalls nicht geändert: die Reduced-Motion-Dauer (weiterhin offene Product-Fr
 ### Begleitende Accessibility-Korrekturen
 
 - **Live-Region getrennt.** Das Panel trug `role="status"` und damit `aria-atomic="true"`; jede Mutation im Teilbaum hätte die komplette Fläche erneut vorlesen lassen — während der Sequenz mehrfach. Die Fläche ist jetzt `role="group"` ohne Live-Semantik, daneben steht ein winziger `sr-only`-Announcer mit genau einer Ansage pro Zustandswechsel. Konzeptionell wie 7B, aber ohne dessen Store.
-- **Fokus nach der Primäraktion.** Die Aktionszeile faltet sich weg; ohne Zutun fiel der Fokus auf `<body>`. Er wandert jetzt auf die Fläche selbst und im Recovery-Zustand auf deren Aktion — aber nur, wenn er beim Auslösen ohnehin schon im Panel lag, damit daraus kein Fokusdiebstahl werden kann.
+- **Fokus nach der Primäraktion.** Die Aktionszeile faltet sich weg; ohne Zutun fiel der Fokus auf `<body>`. Er wandert jetzt auf die Fläche selbst und im Recovery-Zustand auf deren Aktion — aber nur, wenn er beim Auslösen ohnehin schon im Panel lag, damit daraus kein Fokusdiebstahl werden kann. *(Überholt: diese einmalige Messung war selbst ein Fokusdiebstahl, wenn der Benutzer danach weiterarbeitete — siehe „Ein Retry muss etwas senden", Abschnitt „Fokus-Besitz statt Momentaufnahme".)*
 
 ### Verifikation
 
