@@ -192,6 +192,28 @@ Die Layer-Frage brauchte drei Anläufe. Der Verlauf gehört zur Entscheidung daz
 
 **Unverändert.** Kein Store-, Lifecycle-, Timing-, Retention-, Resolver-, Correlation- oder Error-Mapping-Eingriff; Announcer und Live-Region-Architektur unangetastet.
 
+### Nachtrag (2026-08-30): Kontrollierter Production Release — PHASE 7B PRODUCTION VERIFIED
+
+Keine neue Architekturentscheidung — nur die Dokumentation des durchgeführten Releases.
+
+**Release Candidate.** `9db08c4b35991b4f0d08a898d11a23a1fcba65bc` (Dokumentations-/Kommentar-Hygiene auf dem Feature-Commit `d21c3de7`). Der Hygiene-Commit wurde vor dem Release erneut gegen `d21c3de7` geprüft: er ändert ausschließlich Markdown sowie zwei Kommentarblöcke in `NoraNotificationCenter.tsx`/`.test.tsx` — keine einzige ausführbare Zeile, also nachweislich keine Verhaltensänderung.
+
+**Scope-Freeze gegen die Production-Basis `f46ce06a`.** Der Diff berührt keine Datei unter `supabase/` und keine `*.sql`-Datei. Damit: **keine Migration angewandt**, keine RLS-, RPC-Signatur-, `SECURITY DEFINER`-, Audit- oder Error-Observatory-Schemaänderung. Die bekannte `supabase_migrations`-Bookkeeping-Thematik war für diesen Release folglich gegenstandslos; es wurde bewusst **keine** Production-DB-Aktion durchgeführt. Phase 7B ist ein reiner Frontend-/Presentation-Release mit neutraler `operationId`-Propagation.
+
+**Pre-Push-Gates (alle grün).** `npm run typecheck`, `npm run build`, vollständige Vitest-Suite (80 Dateien, 644 bestanden, 1 übersprungen — exakt der erwartete Stand), ESLint auf den geänderten Dateien (0 Fehler; die eine `react-refresh/only-export-components`-Warnung in `NotificationProvider.tsx` ist eine DX-Warnung ohne Production-Wirkung), `git diff --check` sauber. Hygiene-Scan über den RC: kein `__uxFail`, kein `debugger`, kein `console.log` in den Notification-/Quick-Capture-/Layout-/Root-Pfaden, keine Testinstrumentierung im Production Path, `.cursor/mcp.json` blieb unversioniert und wurde nicht gepusht.
+
+**Push.** Fast-Forward `f46ce06a..9db08c4b` auf `origin/main`, kein Force Push, kein Fremdcommit dazwischen.
+
+**Deployment.** Vercel-Projekt `nora-crm`, Deployment `dpl_B6T7F6Ugmuaq1hbtCpburrfmMr6F`, Target production, Status **READY**, Commit exakt `9db08c4b…`, Domain `nora.ergart.de`.
+
+**Live-Smoke (nicht-schreibend).** Hotboard, Kunden, Kontakte, Vorgänge und die Vorgangsakte-Detailansicht laden mit echten Produktionsdaten; keine weiße Seite, keine Console-Fehler, keine unbehandelten Promise-Rejections. Das ausgelieferte Bundle enthält den 7B-Code nachweislich (`nora-notification-*`-Klassen, `nora-notification-region`/`-card`-Test-IDs, `quickCapture.createCase`). Der Notification-Contract wurde live nachgemessen: Region montiert mit `role="region"` / `aria-label="Statusmeldungen"` / `aria-live="off"` (Live-Semantik korrekt beim Announcer), `z-index: 60`, `pointer-events: none`; **beide** dokumentierten Placement-Zustände real bestätigt — ohne Dialog unten rechts (24 px), bei offener Vorgangsakte per modal-aware Placement im Kopfbereich (`top: 23 px`). Mobile (622 px effektive Breite): Variante `nora-notification-region-mobile` aktiv, MobileNavigation vorhanden, Schnellerfassung über den FAB erreichbar, kein Layout-Crash, kein horizontaler Overflow. sonner ist im Production-Bundle weiterhin enthalten — es gab **keine** globale sonner-Ablösung.
+
+**Bewusst nicht durchgeführt.** Ein echter Live-**Write**-Smoke (Schnellerfassung absenden) fand nicht statt: auf Production existiert kein freigegebener Testdatensatz-Pfad, und ein erzwungener Smoke hätte echte Geschäftsdaten erzeugt. Der Schreibpfad ist durch die Browser-Integrationstests (echter `QuickCaptureDialog`) und die lokale UX-Abnahme gedeckt; die endgültige Live-Bestätigung erfolgt bei der nächsten regulären Nutzeraktion. Ebenso wurde bewusst **keine** Production-Fehlerinstrumentierung vorgenommen — Error/Partial sind lokal vollständig geprüft.
+
+**NOTE, nicht 7B-verursacht.** Unmittelbar nach dem Deployment lieferte der PWA-Service-Worker beim ersten Aufruf noch die Assets des Vorgänger-Builds aus (deren URLs inzwischen 404 sind); nach einem Reload aktualisierte sich der Worker selbst. Das ist bestehendes `vite-plugin-pwa`-Verhalten bei jedem Deployment und kein Notification-Defekt. Wer direkt nach einem Release smoke-testet, muss einmal neu laden, sonst prüft er den alten Build.
+
+**Ergebnis.** Keine BLOCKER, keine HIGH, keine MEDIUM. **PHASE 7B PRODUCTION VERIFIED.** Quick Capture ist und bleibt der einzige migrierte Intent; `deal.update`, `customer.createWithContact` und `contact.convertToCustomer` bleiben Phase 7C.
+
 ## 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)
 
 ### Kontext

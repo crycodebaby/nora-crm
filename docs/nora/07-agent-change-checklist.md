@@ -229,6 +229,7 @@ Bei Notification-/Feedback-Änderungen (ab Phase 7B.4, 2026-08-29) zusätzlich:
 - [ ] Bei kritischen Overlay-Änderungen **echter Hit-Test** (`document.elementFromPoint()` o. ä.) auf jedes betroffene Control der darunterliegenden Oberfläche — „sieht richtig aus" ist kein Nachweis
 - [ ] Nach einer finalen UX-Entscheidung werden Design-System-, Decision-Log- und Current-State-Doku **im selben Zug** nachgezogen; überholte Zwischenstände werden als überholt markiert statt gelöscht
 - [ ] `npm run typecheck` / `npm run build` / `npx vitest run`
+- [ ] **Live-Smoke direkt nach einem Deployment: erst neu laden, dann prüfen.** Nora ist eine PWA (`vite-plugin-pwa`, `generateSW`). Unmittelbar nach einem Release liefert der bereits installierte Service Worker beim ersten Aufruf noch die Assets des **Vorgänger-Builds** aus; deren URLs sind auf dem neuen Deployment 404. Wer sofort smoke-testet, prüft sonst den alten Build und hält das Ergebnis fälschlich für den Release. Verlässlicher Nachweis, dass wirklich der neue Build läuft: die Asset-Hashes aus dem live ausgelieferten `index.html` gegen das DOM prüfen bzw. auf einen release-spezifischen Marker im Bundle testen (bestätigt beim Phase-7B-Release 2026-08-30)
 
 Wenn ein Fehler entsteht:
 

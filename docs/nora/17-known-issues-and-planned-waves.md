@@ -228,13 +228,18 @@ Bestätigt read-only in der Phase-6D.1-Closure-Verifikation (2026-08-29) — kei
 
 ## Notification-UI — Stand nach Phase 7B.4
 
-Phase 7B.4 (2026-08-29) hat die Notification-Schicht erstmals produktiv montiert, aber bewusst nur für **einen** Flow.
+Phase 7B.4 (2026-08-29) hat die Notification-Schicht erstmals produktiv montiert, aber bewusst nur für **einen** Flow. Seit dem kontrollierten Release am 2026-08-30 (Commit `9db08c4b`, Vercel READY, `nora.ergart.de`) ist dieser Stand **PRODUCTION VERIFIED** — siehe Decision Log, Nachtrag „Kontrollierter Production Release — PHASE 7B PRODUCTION VERIFIED". Der Release enthielt keine Migration und keine Änderung unter `supabase/`.
 
-**Abgeschlossen (lokal verifiziert, nicht Production-verifiziert):**
+**Abgeschlossen (PRODUCTION VERIFIED seit 2026-08-30):**
 
 - Quick Capture zeigt genau eine Karte pro Benutzer-Intent (Core + optionale Aufgabe), inkl. pending / success / partial / error.
 - `NotificationProvider` unterhalb von `OperationProvider`, `NoraNotificationOutlet` in Desktop- und Mobile-Layout.
-- Die vier Quick-Capture-`notify()`-Toasts sind entfernt; sonner bleibt für alle übrigen Flows aktiv.
+- Die vier Quick-Capture-`notify()`-Toasts sind entfernt; sonner bleibt für alle übrigen Flows aktiv — live bestätigt, sonner ist weiterhin im Production-Bundle enthalten.
+
+**Noch nicht live nachgewiesen (kein Defekt, offener Nachweis):**
+
+- Der echte Live-**Write**-Smoke (Schnellerfassung in Production absenden) wurde nicht durchgeführt, weil es keinen freigegebenen Production-Testdatensatz gibt und dafür echte Geschäftsdaten hätten entstehen müssen. Gedeckt durch Browser-Integrationstests und die lokale UX-Abnahme; die Live-Bestätigung ergibt sich aus der nächsten regulären Nutzeraktion.
+- Der PWA-Service-Worker liefert unmittelbar nach jedem Deployment beim ersten Aufruf noch die Assets des Vorgänger-Builds aus und aktualisiert sich erst beim Reload. **Nicht 7B-verursacht**, bestehendes `vite-plugin-pwa`-Verhalten — hier nur festgehalten, damit ein künftiger Release-Smoke nicht versehentlich den alten Build prüft.
 
 **Offen, geplant für 7C (nicht Teil von 7B.4):**
 
