@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2) | [Springen](#2026-08-30--aktivierungsanfrage-ist-kein-erfolgssignal-watchdog-statt-promise-pwa-1c2) |
 | 2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1) | [Springen](#2026-08-30--premium-update-experience-und-8-sekunden-choreografie-pwa-1c1) |
 | 2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C) | [Springen](#2026-08-30--update-experience-als-anwendungs-systemereignis-pwa-1c) |
 | 2026-08-30 – PWA-Update: wartender Worker statt automatischer Übernahme (PWA-1B) | [Springen](#2026-08-30--pwa-update-wartender-worker-statt-automatischer-übernahme-pwa-1b) |
@@ -85,6 +86,70 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2)
+
+### Kontext
+
+Der unabhängige Final Review des ersten PWA-RC (`0329c0ae`) hat den Kandidaten abgelehnt. Keine BLOCKER, keine HIGH — aber ein MEDIUM, und zwar an der Stelle, an der die Welle sich am sichersten fühlte: der Recovery-Zustand.
+
+### Der Befund
+
+`pwaUpdateStore.applyUpdate()` setzte `applying` synchron auf `true` und nahm es nur in einem Fall zurück: wenn das Promise von `updateServiceWorker()` ablehnt. Daraus leitete die Präsentation nach 1,5 s Schonfrist den Recovery-Zustand ab. Die Begründung im Code war intern schlüssig — und trotzdem falsch, weil sie eine Annahme über eine fremde Bibliothek enthielt, die niemand nachgelesen hatte.
+
+Der ausgelieferte Production-Client von `vite-plugin-pwa` 1.2.0 (`dist/client/build/register.js`) ist:
+
+```js
+const updateServiceWorker = async (_reloadPage = true) => {
+  await registerPromise;            // register() fängt jeden Fehler ab, wirft nie
+  if (!auto) sendSkipWaitingMessage?.();   // void postMessage, kein await
+};
+```
+
+und `Workbox.messageSkipWaiting()` verwirft das Promise von `messageSW()` und tut ohne wartenden Worker **gar nichts**. Das Promise lehnt also praktisch nie ab. Folge:
+
+- Der `catch`-Zweig im Store war toter Code.
+- Der Recovery-Zustand war auf dem Production-Pfad **unerreichbar** — erreichbar nur über den Fake des Dev-Werkzeugs und den Fake im Test.
+- Der Fall, den Production wirklich erzeugen kann — Anfrage raus, `controllerchange` kommt nie — hätte Nora **dauerhaft** auf „Nora wird aktualisiert" stehen lassen, ohne Aktion und ohne Timeout.
+
+Die Dokumentation behauptete an zwei Stellen ausdrücklich das Gegenteil („bleibt **nicht** ewig auf ‚wird aktualisiert' stehen", „Bleibt die Aktivierung aus, zeigt Nora nach 1,5 s …").
+
+### Entscheidung
+
+**Zwei getrennte Wahrheiten im Store.** `applying` heißt „Aktivierung wurde angefordert". Neu daneben `activated` — „der Browser hat die Übernahme vollzogen", gespeist aus `controllerchange` auf `navigator.serviceWorker`. Das ist das einzige belastbare Erfolgssignal; derselbe Listener, an dem auch der Client von `virtual:pwa-register` seinen Reload aufhängt. Nirgendwo im Code gilt fortan „Promise resolved = aktiviert".
+
+**Watchdog statt Promise-Semantik.** Die Frist läuft ab `applyUpdate()` — die acht Sekunden Choreografie zählen ausdrücklich nicht mit. Trifft `controllerchange` ein, wird der Timer abgeräumt; bleibt er aus, erscheint Recovery. Trifft die Übernahme verspätet doch ein, verschwindet Recovery wieder: die Oberfläche behauptet nie etwas, das gerade nicht mehr stimmt, und ein zweites `applyUpdate()` findet dabei nicht statt.
+
+**Fünf Sekunden, gemessen statt geschätzt.** Gegen das echte generierte `sw.js` in Chromium 148, `postMessage(SKIP_WAITING)` → `controllerchange`: ohne Drosselung 2–3 ms (n=6), bei 4× CPU-Drosselung 2–34 ms (n=5), bei 20× CPU-Drosselung 9–26 ms (n=4). Schlechtester beobachteter Wert 34 ms. Fünf Sekunden sind rund das 150-Fache und decken zusätzlich die Zeitgeber-Drosselung eines Hintergrund-Tabs ab. Ein falsch-positiver Recovery-Zustand ist damit praktisch ausgeschlossen, ohne nach den ohnehin vergangenen acht Sekunden noch minutenlang zu warten.
+
+**Zweiter Befund während der Reparatur: der Reload gehört Nora.** Beim Messen des Watchdogs im Zwei-Build-Harness zeigte sich, dass nach `SKIP_WAITING` zwar `controllerchange` genau einmal feuert, der neue Worker übernimmt und der alte Precache aufgeräumt wird — die Seite aber **nicht** neu lädt. Ursache: der Client aus `virtual:pwa-register` hängt seinen Reload an das `controlling`-Ereignis, aber nur wenn es `isUpdate` trägt; Workbox lässt das weg, sobald es den Fund als extern einstuft (u. a. bei mehr als einer Minute Abstand zur Registrierung — bei Noras stündlicher bzw. tabbasierter Prüfung der Normalfall). Identisch am Code vor dieser Korrektur gemessen: kein Regressionseffekt, sondern ein Zustand, den niemand geprüft hatte.
+
+Ohne Gegenmaßnahme hätte der Fix das Problem sogar verschoben statt gelöst: der Watchdog greift ja gerade nicht mehr, weil die Übernahme stattgefunden hat — die Szene wäre trotzdem stehen geblieben. Deshalb: **„übernommen" ist nicht „fertig"**. Trifft `controllerchange` ein und lebt die Seite 1,5 s später noch, lädt Nora selbst neu. Lädt der Client doch selbst (synchron im `controlling`-Handler), kommt der Timer nie zum Zug — kein doppelter Reload. Der Reload ist als Parameter in die Choreografie hineingereicht, weil `window.location.reload` in einem echten Browser nicht ersetzbar ist und der Fall sonst untestbar wäre.
+
+**Copy ohne Fehlerbehauptung.** „Aktualisierung dauert länger als erwartet" statt „konnte nicht gestartet werden". Belegt ist das Ausbleiben, nicht das Scheitern. Ein Zustandsbericht darf nicht mehr behaupten, als er weiß — dieselbe Regel wie im Error Contract und in der Notification Presentation.
+
+**Aktion nach echtem Worker-Zustand.** Wartet noch ein Worker, ist „Erneut versuchen" sinnvoll; ist keiner mehr da, liefe ein zweiter Versuch nachweislich ins Leere und „Nora neu laden" ist die ehrlichere Aktion. Entschieden wird beim Eintritt in den Zustand über `registration.waiting`, nicht geraten.
+
+**Kein „Später" in Recovery — und das ist kein Versehen.** Der Review hat zu Recht bemängelt, dass der Recovery-Zustand keinen Ausweg hatte. Der naheliegende Ausweg wäre falsch: SKIP_WAITING ist gesendet, den Worker verlässlich wieder auf WAITING zu setzen ist keine Fähigkeit, die Nora hat. Ein „Später" wäre hier eine Lüge über den eigenen Zustand. Der Ausweg ist stattdessen die Aktion selbst, und sie bekommt beim Eintritt in den Zustand den Fokus.
+
+### Was bewusst NICHT geändert wurde
+
+Orb, Aura, Warnsymbol, Panelkomposition, Timeline, die acht Sekunden im normalen Motion-Modus, Hell/Dunkel-Art-Direction, die Service-Worker-Strategie (`registerType: "prompt"`), das Deferral-Verhalten von „Später" im Verfügbar-Zustand. Der Product Owner hat die visuelle Fassung abgenommen; diese Welle ist eine technische Korrektur, keine zweite Designrunde.
+
+Ebenfalls nicht geändert: die Reduced-Motion-Dauer (weiterhin offene Product-Frage) und die globale `.nora-primary-action`-Farbe (Kontrast 3,56, projektweit — siehe `02-design-system.md` und `17-known-issues-and-planned-waves.md`).
+
+### Begleitende Accessibility-Korrekturen
+
+- **Live-Region getrennt.** Das Panel trug `role="status"` und damit `aria-atomic="true"`; jede Mutation im Teilbaum hätte die komplette Fläche erneut vorlesen lassen — während der Sequenz mehrfach. Die Fläche ist jetzt `role="group"` ohne Live-Semantik, daneben steht ein winziger `sr-only`-Announcer mit genau einer Ansage pro Zustandswechsel. Konzeptionell wie 7B, aber ohne dessen Store.
+- **Fokus nach der Primäraktion.** Die Aktionszeile faltet sich weg; ohne Zutun fiel der Fokus auf `<body>`. Er wandert jetzt auf die Fläche selbst und im Recovery-Zustand auf deren Aktion — aber nur, wenn er beim Auslösen ohnehin schon im Panel lag, damit daraus kein Fokusdiebstahl werden kann.
+
+### Verifikation
+
+Neuer Regressionstest für genau den Fall, der vorher ungetestet war: Anfrage gesendet, Promise resolved, kein `controllerchange` → nach der Frist Recovery. Dazu: rechtzeitige Übernahme → kein Recovery; verspätete Übernahme → Recovery wird zurückgenommen, kein zweiter Apply; abgelehnte Anfrage → ebenfalls Recovery; Fokusverlauf; Announcer-Sequenz. Der Store-Test deckt `activated`, das Ignorieren eines `controllerchange` vor `applyUpdate()`, `hasWaitingWorker()` und den Listener-Abbau ab.
+
+Das Dev-Werkzeug simuliert die Übernahme über ein echtes `controllerchange` auf `navigator.serviceWorker` — dieselbe Schnittstelle wie in Production, ohne dafür Production-Logik aufzuweichen.
 
 ---
 

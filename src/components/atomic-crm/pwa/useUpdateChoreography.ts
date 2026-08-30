@@ -66,19 +66,65 @@ export const CHOREOGRAPHY_TIMELINE = {
 export const CHOREOGRAPHY_COMMIT_MS = 8000;
 
 /**
- * Schonfrist nach dem Commit, bevor ein ausbleibender `applying`-Zustand als
- * Fehlschlag gilt.
+ * Wartezeit NACH `applyUpdate()`, bevor eine ausbleibende Uebernahme als
+ * „dauert laenger als erwartet" gilt.
  *
- * Der Contract ist eindeutig: `pwaUpdateStore.applyUpdate()` setzt `applying`
- * **synchron** auf `true` und laesst es dort — auf dem Erfolgspfad laedt die
- * Seite neu, bevor sich daran etwas aendert. Es gibt genau zwei Wege zurueck:
- * der Store lehnt den Aufruf sofort ab (kein wartender Worker mehr), oder die
- * Aktivierung wird abgelehnt und der `catch` setzt `applying` zurueck. Beide
- * sind echte Fehlschlaege. Ein falsch-positiver Recovery-Zustand ist damit
- * ausgeschlossen — die Schonfrist deckt nur die Latenz einer schnellen
- * Ablehnung ab.
+ * **Warum es diesen Watchdog ueberhaupt braucht.** Die erste Fassung hat den
+ * Fehlschlag am Zurueckfallen von `applying` erkannt, also am `catch` des
+ * Promise von `updateServiceWorker()`. Der Final Review hat gezeigt, dass der
+ * ausgelieferte Production-Client dieses Promise praktisch nie ablehnt (siehe
+ * Modulkopf von `pwaUpdateStore.ts`) — die Erkennung lief damit ins Leere, und
+ * der reale Fall „SKIP_WAITING gesendet, Uebernahme kommt nie" haette Nora
+ * dauerhaft auf „wird aktualisiert" stehen lassen. Der Watchdog haengt deshalb
+ * am einzigen belastbaren Erfolgssignal: `activated` (`controllerchange`).
+ *
+ * **Warum 5 Sekunden.** Gemessen gegen das echte generierte `sw.js` (38
+ * Precache-Eintraege, `cleanupOutdatedCaches`) in Chromium 148, jeweils vom
+ * `postMessage(SKIP_WAITING)` bis zum `controllerchange`:
+ *
+ *   ohne Drosselung      n=6   2–3 ms   (Median 2 ms)
+ *   CPU-Drosselung 4x    n=5   2–34 ms  (Median 3 ms)
+ *   CPU-Drosselung 20x   n=4   9–26 ms  (Median 11 ms)
+ *
+ * Der schlechteste beobachtete Wert liegt bei 34 ms. Fuenf Sekunden sind davon
+ * rund das 150-Fache und decken zusaetzlich die Zeitgeber-Drosselung eines
+ * Hintergrund-Tabs ab (Chrome rastert dort auf etwa eine Sekunde). Ein
+ * falsch-positiver Recovery-Zustand ist damit praktisch ausgeschlossen, ohne
+ * den Benutzer nach der ohnehin schon vergangenen Achtsekundensequenz noch
+ * einmal minutenlang warten zu lassen.
+ *
+ * Die Frist beginnt bewusst erst NACH `applyUpdate()` — die acht Sekunden
+ * Choreografie sind nicht eingerechnet.
  */
-export const CHOREOGRAPHY_RECOVERY_GRACE_MS = 1500;
+export const ACTIVATION_WATCHDOG_MS = 5000;
+
+/**
+ * Kurze Frist nach der Uebernahme, bevor Nora selbst neu laedt.
+ *
+ * **Warum Nora sich darauf nicht verlassen darf, dass der Client neu laedt.**
+ * Der Client aus `virtual:pwa-register` haengt seinen Reload an das
+ * `controlling`-Ereignis von Workbox — aber nur, wenn dieses `isUpdate` traegt.
+ * Workbox setzt das nicht, sobald es die gefundene Aktualisierung als *extern*
+ * einstuft (u. a. wenn seit der Registrierung mehr als eine Minute vergangen
+ * ist — bei Nora der Normalfall, weil die eigene Pruefung stuendlich bzw. bei
+ * Tab-Rueckkehr laeuft, also lange nach dem Seitenaufbau).
+ *
+ * Real gemessen im Zwei-Build-Harness (Chromium 148, echtes generiertes
+ * `sw.js`): nach `SKIP_WAITING` feuert `controllerchange` genau einmal, der
+ * neue Worker uebernimmt, der Precache des alten Builds wird aufgeraeumt — und
+ * die Seite laedt **nicht** von selbst neu. Identisch gemessen am Code vor
+ * dieser Korrektur; es ist also kein Regressionseffekt, sondern der Zustand,
+ * den niemand geprueft hatte.
+ *
+ * Ohne diese Frist bliebe die Oberflaeche danach dauerhaft auf „Nora wird
+ * aktualisiert" stehen: der Watchdog greift nicht, weil die Uebernahme ja
+ * stattgefunden hat. „Uebernommen" ist eben nicht „fertig" — fertig ist erst
+ * das neu geladene Dokument.
+ *
+ * 1,5 s reichen mit grossem Abstand: laedt der Client selbst neu, tut er das
+ * synchron im `controlling`-Handler, und dieser Timer kommt nie zum Zug.
+ */
+export const RELOAD_FALLBACK_MS = 1500;
 
 export interface UpdateChoreography {
   phase: ChoreographyPhase;
@@ -92,14 +138,21 @@ export interface UpdateChoreography {
 export const useUpdateChoreography = ({
   applyUpdate,
   applying,
+  activated,
+  reload,
 }: {
   applyUpdate: () => void;
+  /** Aktivierung wurde angefordert. */
   applying: boolean;
+  /** Uebernahme ist tatsaechlich eingetreten. Das einzige Erfolgssignal. */
+  activated: boolean;
+  /** Letzter Schritt, falls der Client nicht selbst neu laedt. */
+  reload: () => void;
 }): UpdateChoreography => {
   const [phase, setPhase] = useState<ChoreographyPhase>("idle");
   const [runToken, setRunToken] = useState(0);
   const [commitRequested, setCommitRequested] = useState(false);
-  const [graceElapsed, setGraceElapsed] = useState(false);
+  const [watchdogElapsed, setWatchdogElapsed] = useState(false);
 
   const runningRef = useRef(false);
   const committedRunRef = useRef(0);
@@ -110,6 +163,11 @@ export const useUpdateChoreography = ({
   useEffect(() => {
     applyRef.current = applyUpdate;
   }, [applyUpdate]);
+
+  const reloadRef = useRef(reload);
+  useEffect(() => {
+    reloadRef.current = reload;
+  }, [reload]);
 
   const begin = useCallback(() => setRunToken((token) => token + 1), []);
 
@@ -129,7 +187,7 @@ export const useUpdateChoreography = ({
 
     setPhase("settling");
     setCommitRequested(false);
-    setGraceElapsed(false);
+    setWatchdogElapsed(false);
 
     const timers = [
       window.setTimeout(
@@ -160,16 +218,35 @@ export const useUpdateChoreography = ({
     return () => timers.forEach(window.clearTimeout);
   }, [runToken]);
 
+  // Der Watchdog laeuft nur, solange die Uebernahme noch aussteht. Trifft sie
+  // ein, wird der Timer abgeraeumt — auf dem Erfolgspfad laedt die Seite
+  // ohnehin gleich neu, aber so kann selbst ein langsamer Reload keinen
+  // Recovery-Zustand aufblitzen lassen.
   useEffect(() => {
-    if (!commitRequested) return;
+    if (!commitRequested || activated) return;
     const timer = window.setTimeout(
-      () => setGraceElapsed(true),
-      CHOREOGRAPHY_RECOVERY_GRACE_MS,
+      () => setWatchdogElapsed(true),
+      ACTIVATION_WATCHDOG_MS,
     );
     return () => window.clearTimeout(timer);
-  }, [commitRequested]);
+  }, [commitRequested, activated]);
 
-  const failed = commitRequested && graceElapsed && !applying;
+  // Uebernahme da, Seite immer noch hier: dann laedt Nora selbst neu. Genau
+  // einmal pro Lauf — der Effekt haengt nur an zwei Booleschen, die nach dem
+  // Wechsel stehen bleiben, und der Reload beendet das Dokument ohnehin.
+  useEffect(() => {
+    if (!commitRequested || !activated) return;
+    const timer = window.setTimeout(
+      () => reloadRef.current(),
+      RELOAD_FALLBACK_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [commitRequested, activated]);
+
+  // `activated` ist das Erfolgssignal — nicht `applying`. Ein spaeter doch noch
+  // eintreffendes `controllerchange` macht diesen Zustand von selbst wieder
+  // rueckgaengig, statt eine widerspruechliche Oberflaeche stehen zu lassen.
+  const failed = commitRequested && watchdogElapsed && !activated;
 
   // Nach einem Fehlschlag ist die Sperre wieder offen: „Erneut versuchen" darf
   // eine neue Sequenz starten. Bewusst im Effekt und nicht im Render-Koerper —

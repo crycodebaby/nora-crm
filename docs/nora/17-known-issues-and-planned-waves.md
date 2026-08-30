@@ -335,7 +335,7 @@ Der Fehlerfall wurde in dieser Session **nicht** live in Production ausgelöst (
 
 **Verbleibendes Risiko:** aktualisiert ein Benutzer in einem Tab, laden alle anderen offenen Nora-Tabs ebenfalls neu (gemessen). Sie landen sauber auf dem neuen Build — der ursprüngliche Fehler wird also nicht auf den zweiten Tab verschoben —, aber ungespeicherte Eingaben in einem zweiten Tab gehen verloren. Bewusst offen für PWA-1C.
 
-### PWA-1C — Update-Experience (2026-08-30): `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`
+### PWA-1C — Update-Experience (2026-08-30): `LOCAL VERIFIED` (UX-Abnahme inzwischen erteilt, siehe Nachtrag PWA-1C.2)
 
 Der Platzhalter aus PWA-1B ist durch ein **Anwendungs-Systemereignis** ersetzt: eigener Layer `z-70`, prominentes nicht-modales Panel (`pwa/NoraUpdateEvent.tsx`), eigenes organisches Update-Motiv (`pwa/NoraUpdateOrb.tsx`, reines CSS), und **bei offenem Dialog/Sheet gar nicht sichtbar**. „Später" verschiebt um 2 Stunden. Die Lifecycle-Logik wurde nicht angefasst — nur die Wiederanzeige-Konstante. Details: `02-design-system.md` („Anwendungs-Systemereignisse / Update-Experience") und `06-decision-log.md` („2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C)").
 
@@ -349,7 +349,9 @@ Der Platzhalter aus PWA-1B ist durch ein **Anwendungs-Systemereignis** ersetzt: 
 
 ### Nachtrag PWA-1C.1 (2026-08-30): visuelle Ablehnung und Neufassung
 
-Die visuelle Fassung aus PWA-1C wurde vom Product Owner **nicht abgenommen** (generisch, zu sehr nach Standard-UI). PWA-1C.1 ist die daraus folgende reine Art-Direction-/Motion-Welle: Orb-zentrierte Komposition, mehrschichtiger Orb, Warnsymbol des Product Owners, 8-Sekunden-Choreografie, Recovery-Zustand. Kein Eingriff in Service-Worker-Lifecycle, Store, Build-Konfiguration oder Datenbank. Status weiterhin `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`, weiterhin kein Production-Release und kein Commit. Details: `06-decision-log.md`, „2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1)".
+Die visuelle Fassung aus PWA-1C wurde vom Product Owner **nicht abgenommen** (generisch, zu sehr nach Standard-UI). PWA-1C.1 ist die daraus folgende reine Art-Direction-/Motion-Welle: Orb-zentrierte Komposition, mehrschichtiger Orb, Warnsymbol des Product Owners, 8-Sekunden-Choreografie, Recovery-Zustand. Kein Eingriff in Service-Worker-Lifecycle, Store, Build-Konfiguration oder Datenbank. Details: `06-decision-log.md`, „2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1)".
+
+**Diese visuelle Fassung ist inzwischen vom Product Owner abgenommen.** Orb, Aura, Warnsymbol, Panelkomposition, Timeline und Art Direction gelten damit als fixiert und wurden in PWA-1C.2 nicht mehr angefasst.
 
 **Vier echte Befunde, die erst die Messung in der gestylten App zeigte** — alle behoben:
 
@@ -358,7 +360,31 @@ Die visuelle Fassung aus PWA-1C wurde vom Product Owner **nicht abgenommen** (ge
 3. `overflow: hidden auto` machte die **Aura zu scrollbarer Fläche**: dauerhafte Scrollleiste am Panel, 17 px Inhaltsbreite verloren, Komposition aus der Mitte gezogen.
 4. Der **Titeltext wechselte beim Klick** statt in der unsichtbaren Phase — ein harter Sprung, der die gesamte Auflösung-per-Unschärfe wirkungslos machte.
 
-**Offene Product-Frage:** Dauer der Choreografie bei `prefers-reduced-motion: reduce`. Empfehlung: von 8 s auf ~2,5 s kürzen und direkt in die ruhige Szene springen. Bewusst nicht eigenmächtig umgesetzt.
+**Offene Product-Frage:** Dauer der Choreografie bei `prefers-reduced-motion: reduce`. Empfehlung: von 8 s auf ~2,5 s kürzen und direkt in die ruhige Szene springen. Bewusst nicht eigenmächtig umgesetzt. PWA-1C.2 hat daran nichts geändert.
+
+### Nachtrag PWA-1C.2 (2026-08-30): abgelehnter RC und Recovery-Contract-Korrektur
+
+Der **Final Adversarial Review** des ersten PWA-RC (`0329c0aedb7b250436ab43b651a9577ced10b0af`) hat den Kandidaten mit `PWA UPDATE RC REJECTED — FIX REQUIRED` abgelehnt: 0 BLOCKER, 0 HIGH, **1 MEDIUM**, mehrere LOW. Unabhängig bestätigt hat derselbe Review u. a. den Zwei-Build-Lifecycle (Worker B WAITING, A bleibt Controller, A-Lazy-Chunk 200 aus dem Precache während der Server 404 liefert, genau ein Reload, alter Cache danach aufgeräumt), den generierten `sw.js` (kein `skipWaiting()`, kein `clientsClaim()`), die vollständige Abwesenheit des Dev-Harness im Production-Build und die Choreografie-Grenze (`applyUpdate()` erst nach acht Sekunden, genau einmal).
+
+**Der MEDIUM.** Der Recovery-Zustand hing am Promise von `updateServiceWorker()`. Der ausgelieferte Client von `vite-plugin-pwa` 1.2.0 lehnt dieses Promise praktisch nie ab — es wartet nur auf die Registrierung (die alle Fehler abfängt) und feuert dann ein `postMessage` ohne `await`. Damit war der `catch`-Zweig toter Code, der Recovery-Zustand in Production unerreichbar, und der reale Fehlerfall — Anfrage gesendet, `controllerchange` kommt nie — hätte Nora **dauerhaft** auf „Nora wird aktualisiert" stehen lassen, ohne Aktion und ohne Timeout. Die Doku behauptete an zwei Stellen ausdrücklich das Gegenteil.
+
+**Zweiter Befund, erst bei der Reparatur gemessen.** Nach `SKIP_WAITING` feuert `controllerchange` genau einmal und der neue Worker übernimmt — die Seite lädt aber **nicht** neu. Der Client von `vite-plugin-pwa` lädt nur bei Funden, die Workbox als „intern" führt; Noras eigene Prüfung (stündlich bzw. bei Tab-Rückkehr, also lange nach dem Seitenaufbau) zählt nicht dazu. Am unveränderten RC-Code identisch gemessen. Ohne Gegenmaßnahme hätte der Watchdog das Problem sogar verdeckt, weil die Übernahme ja stattgefunden hat. Nora lädt deshalb 1,5 s nach der Übernahme selbst neu.
+
+**Behoben in PWA-1C.2** (lokal implementiert und verifiziert, kein Production-Release): `activated` aus `controllerchange` als einziges Erfolgssignal, 5-Sekunden-Watchdog ab `applyUpdate()` (empirisch begründet: gemessene Übernahme 2–3 ms normal, max. 34 ms bei 20× CPU-Drosselung), Copy ohne Fehlerbehauptung, Recovery-Aktion nach echtem Worker-Zustand, verspätete Übernahme nimmt Recovery zurück. Details: `06-decision-log.md`, „2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2)".
+
+**Ebenfalls geschlossen** (LOW aus demselben Review): Fokus fiel nach der Primäraktion auf `<body>`; `role="status"` auf der sich mehrfach umbauenden Fläche hätte Screenreader-Wiederholungsansagen erzeugt; `src/index.css` bestand Prettier nicht; das SVG-Design-Asset hatte gemischte Zeilenenden; der Kommentar „byteweise identisch" war zu stark; der Verweis auf „Falle 37" in `pwaUpdateStore.ts` passte nicht.
+
+**Offen geblieben und bewusst nicht in dieser Welle gelöst:** der Kontrast der Primäraktion (siehe nächster Abschnitt) und die Reduced-Motion-Dauer.
+
+## Kontrast der Nora-Primäraktion unterschreitet AA (LOW, projektweit, 2026-08-30)
+
+**Befund.** `.nora-primary-action` trägt Weiß auf `--nora-brand` (`#ff3b1f`). Canvas-aufgelöst gemessen: **3,56:1** — unter den 4,5:1, die WCAG 1.4.3 für normalen Text verlangt (14 px bei Schriftschnitt 600 zählt nicht als „large text"). Der Wert ist in Hell und Dunkel identisch, weil die Markenfarbe in beiden Modi dieselbe ist.
+
+**Nicht von der PWA-Welle verursacht.** Dieselben 3,56 wurden am bestehenden Header-Button „Neue Anfrage erfassen" nachgemessen. Betroffen ist jede Primäraktion in Nora.
+
+**Warum in PWA-1C.2 nicht lokal korrigiert.** Technisch ginge es (rund 15 % Schwarz in den Markenton mischen ergibt 4,76 — gerechnet, nicht gemessen). Das hätte aber genau einen Knopf anders eingefärbt als jede andere Primäraktion in Nora, direkt neben dem markenroten Orb, an einer vom Product Owner abgenommenen Komposition — und das eigentliche, globale Problem trotzdem nicht gelöst.
+
+**Empfohlener Fix (eigene kleine Welle, zusammen mit dem 44-px-Punkt unten).** Markenton für Flächen mit weißem Text einmal projektweit auf ≥ 4,5 absenken oder eine eigene `--nora-brand-on-white`-Variante einführen, dann alle Primäraktionen nachmessen. Product-Owner-Entscheidung, weil es die Markenfarbe berührt.
 
 ## `nora-primary-action` unterschreitet das 44-px-Touch-Minimum (LOW, projektweit, 2026-08-30)
 

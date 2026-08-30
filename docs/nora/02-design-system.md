@@ -505,9 +505,38 @@ Regeln, die dabei nicht verhandelbar sind:
 - **Die Szene läuft weiter**, bis der Browser tatsächlich neu lädt. Nach Sekunde acht kein leeres Fenster.
 - **Drei Punkte statt bewegtem Text.** Deckkraft 0,25 → 1 → 0,25 mit versetzten Phasen über 2,4 s, `ease-in-out`. Sie tragen die fortlaufende Aktivitätssemantik, damit der Text vollkommen still stehen kann — kein Typewriter, keine springenden Buchstaben. Rein dekorativ (`aria-hidden`), der Titel sagt bereits alles.
 
-### Recovery
+### Recovery (korrigiert nach dem Final Review, 2026-08-30)
 
-Schlägt die Aktivierung fehl, bleibt Nora **nicht** ewig auf „wird aktualisiert" stehen. Der Contract dafür ist belastbar: `pwaUpdateStore.applyUpdate()` setzt `applying` synchron auf `true` und lässt es dort — auf dem Erfolgspfad lädt die Seite neu. Es gibt genau zwei Wege zurück (Store lehnt sofort ab, oder die Aktivierung wird abgelehnt und der `catch` setzt zurück), beide sind echte Fehlschläge. Nach 1,5 s Schonfrist erscheint ein ruhiger Zustand mit „Erneut versuchen", der eine neue vollständige Sequenz startet. Keine technischen Details in der Oberfläche.
+**Anfrage ≠ Übernahme.** Nach der Achtsekundensequenz fällt genau ein `applyUpdate()`. Das bedeutet: SKIP_WAITING wurde **angefordert** — nicht, dass der neue Worker die Kontrolle bekommen hat. Die beiden Wahrheiten sind im Store getrennt:
+
+| Signal | Bedeutung |
+|---|---|
+| `applying` | Die Aktivierung wurde angefordert |
+| `activated` | Der Browser hat die Übernahme vollzogen (`controllerchange`) |
+
+Die erste Fassung leitete den Fehlschlag aus dem Promise von `updateServiceWorker()` ab. Das war falsch: der ausgelieferte Client (`vite-plugin-pwa` 1.2.0) wartet nur auf die Registrierung und feuert dann ein `postMessage` ohne `await`; `messageSkipWaiting()` verwirft sein eigenes Promise und tut ohne wartenden Worker sogar gar nichts. Das Promise resolved also **immer** und trägt keine Information. Damit war der dokumentierte Ausweg unerreichbar, und der reale Fall „Anfrage raus, Übernahme kommt nie" hätte Nora dauerhaft auf „wird aktualisiert" stehen lassen.
+
+**Der Watchdog.** Ab `applyUpdate()` — die acht Sekunden zählen ausdrücklich nicht mit — läuft eine Frist von **5 Sekunden**. Trifft `controllerchange` ein, wird sie abgeräumt (der Client lädt dann ohnehin neu). Bleibt sie aus, erscheint der Recovery-Zustand. Trifft die Übernahme *danach* doch noch ein, verschwindet er wieder — die Oberfläche behauptet nie etwas, das gerade nicht mehr stimmt.
+
+Die 5 Sekunden sind gemessen, nicht geraten. Gegen das echte generierte `sw.js` (38 Precache-Einträge, `cleanupOutdatedCaches`) in Chromium 148, jeweils `postMessage(SKIP_WAITING)` → `controllerchange`:
+
+| Bedingung | n | min | Median | max |
+|---|---|---|---|---|
+| ohne Drosselung | 6 | 2 ms | 2 ms | 3 ms |
+| CPU-Drosselung 4× | 5 | 2 ms | 3 ms | 34 ms |
+| CPU-Drosselung 20× | 4 | 9 ms | 11 ms | 26 ms |
+
+Schlechtester beobachteter Wert 34 ms; 5 s sind davon rund das 150-Fache und decken zusätzlich die Zeitgeber-Drosselung eines Hintergrund-Tabs ab (Chrome rastert dort auf ca. eine Sekunde).
+
+**Der Reload gehört Nora, nicht dem Plugin.** Beim Messen des Watchdogs fiel ein zweiter, größerer Punkt auf: der Client aus `virtual:pwa-register` lädt nur neu, wenn Workbox die gefundene Aktualisierung als *intern* führt. Bei Noras eigener Prüfung ist das nicht der Fall (sie läuft stündlich bzw. bei Tab-Rückkehr, also lange nach dem Seitenaufbau — Workbox stuft solche Funde als extern ein und lässt `isUpdate` weg). Im Zwei-Build-Harness real gemessen: nach `SKIP_WAITING` feuert `controllerchange` genau einmal, der neue Worker übernimmt, der alte Precache verschwindet — **und die Seite bleibt stehen**. Identisch am Code vor dieser Korrektur gemessen, also kein Regressionseffekt, sondern ein ungeprüfter Zustand.
+
+„Übernommen" ist deshalb nicht „fertig": fertig ist erst das neu geladene Dokument. Trifft `controllerchange` ein und lebt die Seite 1,5 s später immer noch, lädt Nora selbst neu. Lädt der Client doch selbst (er tut das synchron im `controlling`-Handler), kommt dieser Timer nie zum Zug — ein doppelter Reload ist damit ausgeschlossen.
+
+**Die Copy behauptet keinen Fehler.** Titel „Aktualisierung dauert länger als erwartet", darunter „Nora konnte die neue Version noch nicht vollständig übernehmen. Sie können weiterarbeiten." Belegt ist nur das Ausbleiben, nicht das endgültige Scheitern. Keine technischen Begriffe in der Oberfläche.
+
+**Die Aktion richtet sich nach dem echten Worker-Zustand.** Wartet noch ein Worker (`registration.waiting`), kann ein zweiter Anlauf etwas bewirken → „Erneut versuchen" startet eine vollständige neue Sequenz. Ist keiner mehr da, liefe `messageSkipWaiting()` nachweislich ins Leere → „Nora neu laden" ist dann die ehrlichere Aktion.
+
+**Bewusst kein „Später" in Recovery.** SKIP_WAITING ist zu diesem Zeitpunkt gesendet; den Worker verlässlich wieder auf WAITING zu setzen, ist keine Fähigkeit, die Nora hat. Ein Knopf, der das verspräche, wäre eine Lüge über den eigenen Zustand. Der Ausweg ist deshalb die Aktion selbst — sie bekommt beim Eintritt in den Zustand den Fokus und ist damit sofort per Tastatur bedienbar.
 
 ### Reduced Motion
 
@@ -518,7 +547,13 @@ Bei `prefers-reduced-motion: reduce` (in echtem Chromium mit gesetztem Flag nach
 
 ### Accessibility
 
-`role="status"` mit verknüpftem `aria-labelledby` (genau **ein** `h2` im Baum — der Crossfade nutzt keinen zweiten Titel) und `aria-describedby`. Kein Fokusdiebstahl, kein Focus-Trap, kein Scrim. Escape wirkt nur, wenn der Fokus im Panel liegt und noch etwas zu verwerfen ist — kein globaler Handler, der Dialogen Escape wegnimmt; während der Sequenz gibt es kein Zurück.
+**Sichtbare Fläche und Ansage sind getrennt** (korrigiert nach dem Final Review). Das Panel trug `role="status"`; damit kam `aria-atomic="true"`, und jede Mutation im Teilbaum ließ Screenreader die komplette Fläche erneut vorlesen — während der Achtsekundensequenz mehrfach, weil Sicherheitshinweis und Aktionen verschwinden, die Punkte auftauchen und der Titel wechselt.
+
+Jetzt: die Fläche ist `role="group"` mit `aria-labelledby` (genau **ein** `h2` im Baum — der Crossfade nutzt keinen zweiten Titel) und `aria-describedby`, **ohne** Live-Semantik. Die einzige Live-Region ist ein winziger `sr-only`-Announcer, der pro Zustandswechsel genau eine kurze Ansage trägt: „Neue Nora-Version verfügbar" → „Nora wird aktualisiert" → ggf. „Aktualisierung dauert länger als erwartet". Konzeptionell dieselbe Trennung wie in Phase 7B (`NoraNotificationAnnouncer`), aber ohne dessen Store — hier gibt es genau drei mögliche Ansagen. Die Identität der Ansage ist eine Sequenznummer als React-Key, kein Whitespace-Trick.
+
+**Fokus.** Kein Fokusdiebstahl, kein Focus-Trap, kein Scrim: solange das Ereignis nur dasteht, fasst es den Fokus nicht an. Löst der Benutzer die Primäraktion aus, faltet sich die Aktionszeile weg — ohne Zutun fiele der Fokus auf `<body>`. Deshalb wandert er in genau diesem Fall auf die Fläche selbst (`tabindex="-1"`, schmaler `:focus-visible`-Ring) und im Recovery-Zustand auf dessen einzige Aktion. Gesteuert über eine Bedingung, die kein Fokusdiebstahl sein kann: verschoben wird nur, wenn der Fokus beim Auslösen ohnehin schon im Panel lag.
+
+Escape wirkt nur, wenn der Fokus im Panel liegt und noch etwas zu verwerfen ist — kein globaler Handler, der Dialogen Escape wegnimmt; während der Sequenz gibt es kein Zurück.
 
 **Bei offenem Dialog/Sheet wird gar nichts angezeigt** (`display: none` über dieselbe `body:has([data-slot="dialog-content"][data-state="open"])`-Regel wie in 7B — keine zweite Modal-Zustandsmaschine). In der echten App mit einem echten Radix-Dialog verifiziert: `display: none`, 0 fokussierbare Elemente, nach dem Schließen wieder `flex` mit 2 fokussierbaren Elementen und `body { pointer-events: auto }`.
 
@@ -534,8 +569,13 @@ Touch-Ziele ≥ 44 px — **mit einer Falle**, die projektweit gilt: `.nora-prim
 | Warnhinweis (Begründung) | 6,35 | 7,48 |
 | Warnsymbol Kontur | 4,22 | 6,67 |
 | Warnsymbol Akzent | 4,13 | 8,47 |
+| Zusicherungszeile | 4,74 | 6,67 |
+| Sekundäraktion „Später" | 19,80 | 16,50 |
+| **Primäraktion „Jetzt aktualisieren"** | **3,56** | **3,56** |
 
-Alle Textwerte ≥ 4,5 (AA), alle grafischen ≥ 3,0 (1.4.11). Die Begründungszeile im Warnhinweis nutzt **nicht** `--muted-foreground`: gegen die warme Fläche gemessen kam sie auf 4,33 und damit knapp unter AA; sie ist so weit Richtung `--foreground` gemischt, bis 4,5 erreicht ist, bleibt aber klar der Handlungsanweisung untergeordnet.
+Alle Werte in der Panelfläche liegen ≥ 4,5 (AA), alle grafischen ≥ 3,0 (1.4.11). Die Begründungszeile im Warnhinweis nutzt **nicht** `--muted-foreground`: gegen die warme Fläche gemessen kam sie auf 4,33 und damit knapp unter AA; sie ist so weit Richtung `--foreground` gemischt, bis 4,5 erreicht ist, bleibt aber klar der Handlungsanweisung untergeordnet.
+
+**Eine Ausnahme, und sie ist projektweit.** Die Primäraktion trägt Weiß auf `--nora-brand` (`#ff3b1f`) und kommt damit auf **3,56** — unter AA für normalen Text (14 px / 600 zählt nicht als „large text"). Das ist **nicht** die Farbe dieser Welle, sondern die etablierte `.nora-primary-action`: dieselbe 3,56 wurde am bestehenden Header-Button „Neue Anfrage erfassen" nachgemessen. Ein lokaler Fix wäre technisch möglich (rund 15 % Schwarz in den Markenton mischen ergibt 4,76), wurde aber bewusst **nicht** gemacht: er hätte diesen einen Knopf anders eingefärbt als jede andere Primäraktion in Nora, direkt neben dem markenroten Orb, und hätte an einer vom Product Owner abgenommenen Komposition gedreht, ohne das eigentliche — globale — Problem zu lösen. Als eigener Design-System-Punkt geführt: `17-known-issues-and-planned-waves.md`.
 
 Hell und Dunkel sind **eigene Materialien**, keine Invertierung: die Panelfläche ist im Hellen reines Weiß (bei 0,995 las sie sich als leicht schmutziges Rechteck auf Noras weißem Hintergrund — Trennung kommt dort aus Schatten und Hairline), im Dunkeln liegt sie mit 0,222 leicht **über** `--popover`; die Aura trägt im Dunkeln mehr Alpha, weil derselbe Wert auf dunklem Grund verschwindet; das Warnsymbol bekommt nur im Dunkeln einen kontrollierten Ein-Stopp-Glow, der auf Weiß nur die Kontur verschmieren würde.
 
@@ -555,9 +595,11 @@ Ausschließlich aus `crm.pwa.*` (de/en/fr). Keine technischen Begriffe in der Ob
 
 Im echten Betrieb erscheint es frühestens nach einem Deployment. Für die Gestaltungsarbeit gibt es deshalb ein **Dev-Werkzeug**: `pwa/devUpdateTrigger.ts` blendet im Dev-Server unten links ein kleines Panel ein mit
 
-`Update anzeigen` · `Replay` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Neu laden`
+`Update anzeigen` · `Übernahme simulieren` · `Ablehnung` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Neu laden`
 
-- **Replay** lässt die Aktivierung absichtlich fehlschlagen. Nach der Sequenz erscheint dann „Erneut versuchen" statt des Reloads — ein Klick spielt die vollen acht Sekunden erneut ab, beliebig oft.
+- **Der Standardweg ist der reale Fehlerfall.** Ohne weiteren Klick verhält sich das Werkzeug wie Production: die Anfrage geht raus, das Promise resolved, `controllerchange` bleibt aus — nach der Watchdog-Frist muss der Recovery-Zustand erscheinen. Genau dieser Fall war im ersten RC ungetestet.
+- **Übernahme simulieren** setzt ein echtes `controllerchange` auf `navigator.serviceWorker` ab — derselbe Weg, den auch der Browser nimmt, und derselbe Listener, den der Store in Production benutzt. Kein Production-Code wird dafür verändert oder aufgeweicht.
+- **Ablehnung** lässt das Promise von `updateServiceWorker()` ablehnen. In Production passiert das praktisch nie; der Schalter hält nur den Absicherungszweig im Store am Leben.
 - **Orb-Tempo ×8** setzt die `playbackRate` aller zehn Orb-Animationen hoch. Die Perioden reichen bis 89 s; bei ×8 sieht man den vollständigen Morph-Zyklus in Sekunden.
 - **Reduced Motion** liest die **echte** `@media (prefers-reduced-motion: reduce)`-Regel aus dem geladenen Stylesheet und injiziert sie ohne die Bedingung — sie kann dadurch nie von der tatsächlichen CSS abweichen. Nachgemessen ergibt das dasselbe Bild wie die Browsereinstellung. Grenze: es simuliert die CSS-Regel, nicht die Einstellung; `matchMedia`-Abfragen im JavaScript sehen davon nichts.
 

@@ -13,8 +13,30 @@
  * - kein direkter Zugriff auf `navigator.serviceWorker` aus der UI
  *
  * WICHTIG: Ein PWA-Update ist KEINE Business-Operation. Es wird bewusst nicht
- * ueber den OperationManager, `operationId` oder Idempotency-Keys modelliert —
- * siehe docs/nora/03-data-model-guardrails.md, Falle 37.
+ * ueber den OperationManager, `operationId` oder Idempotency-Keys modelliert:
+ * es berichtet ueber die Anwendung, nicht ueber eine Aktion des Benutzers, und
+ * hat weder fachliches Ergebnis noch Wiederholbarkeit im Sinne eines Commands.
+ *
+ * ZWEI GETRENNTE WAHRHEITEN (Korrektur nach dem Final Review des ersten RC):
+ *
+ *   `applying`  — die Aktivierung wurde ANGEFORDERT (SKIP_WAITING gesendet).
+ *   `activated` — der Browser hat die Uebernahme tatsaechlich VOLLZOGEN
+ *                 (`controllerchange` auf `navigator.serviceWorker`).
+ *
+ * Das eine folgt nicht aus dem anderen. `updateServiceWorker()` aus
+ * `virtual:pwa-register` sieht im ausgelieferten Production-Client
+ * (vite-plugin-pwa 1.2.0, `dist/client/build/register.js`) so aus:
+ *
+ *     const updateServiceWorker = async () => {
+ *       await registerPromise;            // lehnt nie ab: register() faengt alles
+ *       if (!auto) sendSkipWaitingMessage?.();   // void postMessage, kein await
+ *     };
+ *
+ * und `Workbox.messageSkipWaiting()` verwirft das Promise von `messageSW()`
+ * und tut ohne wartenden Worker sogar gar nichts. Das Promise traegt also
+ * KEINE Information darueber, ob aktiviert wurde. Wer daraus „erfolgreich"
+ * ableitet, baut eine Luege in den Contract — genau das war der Defekt, den
+ * der Review gefunden hat.
  */
 
 /** Registrierungsfunktion aus `virtual:pwa-register` (injiziert, s. `pwaRegistration.ts`). */
@@ -34,7 +56,14 @@ export type PwaUpdateState = "idle" | "updateAvailable" | "applying";
 export interface PwaUpdateSnapshot {
   state: PwaUpdateState;
   updateAvailable: boolean;
+  /** Die Aktivierung wurde angefordert — nicht: sie ist gelungen. */
   applying: boolean;
+  /**
+   * Der Browser hat einen neuen Worker die Kontrolle uebernehmen lassen.
+   * Einziges belastbares Erfolgssignal; im Normalfall laedt der Client die
+   * Seite unmittelbar danach neu.
+   */
+  activated: boolean;
 }
 
 export interface PwaUpdateStoreOptions {
@@ -45,6 +74,15 @@ export interface PwaUpdateStoreOptions {
    * Rueckkehr auf den Tab eine (gedrosselte) Update-Pruefung ausloesen kann.
    */
   target?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
+  /**
+   * Nur fuer Tests: sonst `navigator.serviceWorker`. Traegt
+   * `controllerchange` — das einzige Signal, das eine tatsaechliche
+   * Worker-Uebernahme belegt.
+   */
+  serviceWorkerTarget?: Pick<
+    EventTarget,
+    "addEventListener" | "removeEventListener"
+  >;
   /** Nur fuer Tests: sonst `() => navigator.onLine`. */
   isOnline?: () => boolean;
 }
@@ -86,6 +124,7 @@ const IDLE_SNAPSHOT: PwaUpdateSnapshot = {
   state: "idle",
   updateAvailable: false,
   applying: false,
+  activated: false,
 };
 
 export interface PwaUpdateStore {
@@ -93,8 +132,24 @@ export interface PwaUpdateStore {
   getSnapshot: () => PwaUpdateSnapshot;
   /** Registriert den Service Worker. Mehrfachaufrufe sind wirkungslos. */
   start: (registerSw: RegisterSwLike) => void;
-  /** Aktiviert den wartenden Worker; der Reload erfolgt danach durch den Client. */
+  /**
+   * Fordert die Aktivierung des wartenden Workers an (SKIP_WAITING).
+   *
+   * Bewusst nicht „aktiviert den Worker": ob die Uebernahme gelingt, sagt erst
+   * `activated`. Der Reload erfolgt danach durch den Client von
+   * `virtual:pwa-register`, sobald `controllerchange` eintritt.
+   */
   applyUpdate: () => void;
+  /**
+   * Steht aktuell ein Worker WAITING?
+   *
+   * Fuer die Recovery-Oberflaeche: nur dann kann ein erneuter
+   * Aktivierungsversuch ueberhaupt etwas anstossen — `messageSkipWaiting()`
+   * tut ohne wartenden Worker nachweislich gar nichts. Bewusst eine Abfrage
+   * und kein Snapshot-Feld: der Wert wird genau einmal gebraucht, im Moment
+   * des Wechsels in den Recovery-Zustand.
+   */
+  hasWaitingWorker: () => boolean;
   /** Hinweis vorerst ausblenden; der wartende Worker bleibt erhalten. */
   dismissForNow: () => void;
   /** Timer/Listener abbauen (Tests, HMR). */
@@ -117,12 +172,18 @@ export const createPwaUpdateStore = (
   const isOnline = options.isOnline ?? (() => navigator.onLine);
   const target =
     options.target ?? (typeof window === "undefined" ? undefined : window);
+  const serviceWorkerTarget =
+    options.serviceWorkerTarget ??
+    (typeof navigator === "undefined" || !("serviceWorker" in navigator)
+      ? undefined
+      : navigator.serviceWorker);
 
   const listeners = new Set<() => void>();
 
   let started = false;
   let needRefresh = false;
   let applying = false;
+  let activated = false;
   let dismissedUntil = 0;
   let registration: ServiceWorkerRegistration | undefined;
   let updateServiceWorker:
@@ -151,15 +212,31 @@ export const createPwaUpdateStore = (
     if (
       snapshot.state === state &&
       snapshot.updateAvailable === visible &&
-      snapshot.applying === applying
+      snapshot.applying === applying &&
+      snapshot.activated === activated
     ) {
       return;
     }
     snapshot =
-      state === "idle"
+      state === "idle" && !activated
         ? IDLE_SNAPSHOT
-        : { state, updateAvailable: visible, applying };
+        : { state, updateAvailable: visible, applying, activated };
     emit();
+  };
+
+  /**
+   * Das einzige belastbare Erfolgssignal.
+   *
+   * Der Client von `virtual:pwa-register` haengt seinen Reload an dasselbe
+   * Ereignis; im Normalfall ist die Seite deshalb Sekundenbruchteile spaeter
+   * ohnehin weg. Der Store haelt es trotzdem fest, damit der Watchdog in der
+   * Praesentation den Erfolgsfall sicher vom Ausbleiben unterscheiden kann —
+   * auch wenn der Reload selbst noch etwas braucht.
+   */
+  const handleControllerChange = () => {
+    if (activated) return;
+    activated = true;
+    refresh();
   };
 
   const checkForUpdate = () => {
@@ -184,6 +261,14 @@ export const createPwaUpdateStore = (
     // registriert werden.
     if (started) return;
     started = true;
+
+    // Bewusst hier und nicht erst in `onRegisteredSW`: `controllerchange` ist
+    // ein Ereignis des Containers, nicht der Registrierung, und muss auch dann
+    // ankommen, wenn der Client keine Registration durchreicht.
+    serviceWorkerTarget?.addEventListener(
+      "controllerchange",
+      handleControllerChange,
+    );
 
     updateServiceWorker = registerSw({
       onNeedRefresh: () => {
@@ -212,15 +297,27 @@ export const createPwaUpdateStore = (
     // in allen drei Faellen darf nichts passieren.
     if (applying || !needRefresh || !updateServiceWorker) return;
     applying = true;
+    // Ab hier zaehlt nur, was NACH der Anfrage passiert. Ein frueheres
+    // `controllerchange` (etwa aus einem anderen Tab) darf den Erfolg dieses
+    // Versuchs nicht vorwegnehmen.
+    activated = false;
     refresh();
     // Der Client aus `virtual:pwa-register` schickt SKIP_WAITING und laedt die
     // Seite neu, sobald der neue Worker die Kontrolle uebernimmt. Ein eigener
     // Reload wuerde damit kollidieren.
+    //
+    // Das Promise wird bewusst NICHT als Erfolg gelesen — es resolved auch
+    // dann, wenn gar kein Worker wartete und `messageSkipWaiting()` nichts
+    // getan hat (siehe Modulkopf). Der `catch` bleibt trotzdem stehen: lehnt
+    // es doch einmal ab, ist das ein echter, sofort bekannter Fehlschlag.
     void updateServiceWorker().catch(() => {
       applying = false;
       refresh();
     });
   };
+
+  const hasWaitingWorker: PwaUpdateStore["hasWaitingWorker"] = () =>
+    Boolean(registration?.waiting);
 
   const dismissForNow: PwaUpdateStore["dismissForNow"] = () => {
     if (!needRefresh || applying) return;
@@ -236,6 +333,10 @@ export const createPwaUpdateStore = (
     intervalId = undefined;
     reshowTimeoutId = undefined;
     target?.removeEventListener("visibilitychange", handleVisibility);
+    serviceWorkerTarget?.removeEventListener(
+      "controllerchange",
+      handleControllerChange,
+    );
   };
 
   const reset: PwaUpdateStore["reset"] = () => {
@@ -243,6 +344,7 @@ export const createPwaUpdateStore = (
     started = false;
     needRefresh = false;
     applying = false;
+    activated = false;
     dismissedUntil = 0;
     registration = undefined;
     updateServiceWorker = undefined;
@@ -259,6 +361,7 @@ export const createPwaUpdateStore = (
     getSnapshot: () => snapshot,
     start,
     applyUpdate,
+    hasWaitingWorker,
     dismissForNow,
     stop,
     reset,

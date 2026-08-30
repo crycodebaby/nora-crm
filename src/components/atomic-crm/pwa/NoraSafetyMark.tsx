@@ -14,8 +14,12 @@
  * - die vier verschachtelten `<g>`-Huellen aufgeloest (sie trugen keine
  *   Transformation)
  *
- * Die `viewBox="0 0 24 24"` und jeder Pfad-`d`-String sind byteweise identisch
- * zum Original. Es wurde nichts nachgezeichnet, nichts gerastert und nichts
+ * Pfadgeometrie und `viewBox="0 0 24 24"` sind unveraendert uebernommen: jede
+ * Koordinate, jedes Segment und jeder Radius stehen exakt wie im Original.
+ * Abweichend ist ausschliesslich die Einrueckung innerhalb der umbrochenen
+ * `d`-Strings — fuer SVG bedeutungsloser Weissraum. (Frueher stand hier
+ * „byteweise identisch"; das stimmte fuer die Zahlen, nicht fuer den
+ * Weissraum.) Es wurde nichts nachgezeichnet, nichts gerastert und nichts
  * durch ein Lucide-Icon ersetzt.
  *
  * **Vier Teile, vier Auftritte.** Das Original zerfaellt in genau die Teile, die

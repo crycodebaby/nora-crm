@@ -82,6 +82,7 @@ describe("pwaUpdateStore", () => {
       state: "idle",
       updateAvailable: false,
       applying: false,
+      activated: false,
     });
     store.stop();
   });
@@ -286,5 +287,110 @@ describe("pwaUpdateStore", () => {
 
     expect(store.getSnapshot().state).toBe("idle");
     store.stop();
+  });
+
+  // --- Aktivierungsanfrage vs. tatsaechliche Uebernahme --------------------
+  //
+  // Der Defekt aus dem Final Review des ersten RC: das Promise von
+  // `updateServiceWorker()` wurde als Erfolgssignal gelesen, obwohl der
+  // ausgelieferte Client es praktisch nie ablehnt. Diese Tests halten die
+  // Trennung fest.
+
+  it("meldet nach applyUpdate NICHT aktiviert, solange keine Uebernahme kam", async () => {
+    const swTarget = listenerTarget();
+    const { registerSw, handle } = createFakeRegisterSW({
+      // Genau wie der echte Client: resolved sofort, sagt nichts ueber Erfolg.
+      updateServiceWorker: () => Promise.resolve(),
+    });
+    const store = createPwaUpdateStore({
+      now,
+      serviceWorkerTarget: swTarget.target,
+    });
+    store.start(registerSw);
+    handle.needRefresh!();
+
+    store.applyUpdate();
+    await vi.waitFor(() => expect(handle.updateCalls).toBe(1));
+
+    expect(store.getSnapshot().applying).toBe(true);
+    // Das ist der Kern: die Anfrage ist raus, die Uebernahme nicht bestaetigt.
+    expect(store.getSnapshot().activated).toBe(false);
+    store.stop();
+  });
+
+  it("meldet aktiviert, sobald controllerchange eintrifft", () => {
+    const swTarget = listenerTarget();
+    const { registerSw, handle } = createFakeRegisterSW();
+    const store = createPwaUpdateStore({
+      now,
+      serviceWorkerTarget: swTarget.target,
+    });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.start(registerSw);
+    handle.needRefresh!();
+    store.applyUpdate();
+
+    expect(store.getSnapshot().activated).toBe(false);
+    swTarget.dispatch("controllerchange");
+
+    expect(store.getSnapshot().activated).toBe(true);
+    expect(listener).toHaveBeenCalled();
+    store.stop();
+  });
+
+  it("wertet ein controllerchange VOR applyUpdate nicht als Erfolg dieses Versuchs", () => {
+    const swTarget = listenerTarget();
+    const { registerSw, handle } = createFakeRegisterSW();
+    const store = createPwaUpdateStore({
+      now,
+      serviceWorkerTarget: swTarget.target,
+    });
+    store.start(registerSw);
+    handle.needRefresh!();
+
+    // Etwa aus einem anderen Tab, bevor der Benutzer hier entschieden hat.
+    swTarget.dispatch("controllerchange");
+    expect(store.getSnapshot().activated).toBe(true);
+
+    store.applyUpdate();
+
+    // Der neue Versuch startet mit unbeantworteter Uebernahme.
+    expect(store.getSnapshot().activated).toBe(false);
+    store.stop();
+  });
+
+  it("meldet, ob ein erneuter Versuch ueberhaupt etwas anstossen kann", () => {
+    const waiting = {} as ServiceWorker;
+    const withWaiting = createFakeRegisterSW({
+      registration: { waiting } as unknown as ServiceWorkerRegistration,
+    });
+    const storeA = createPwaUpdateStore({ now });
+    storeA.start(withWaiting.registerSw);
+    expect(storeA.hasWaitingWorker()).toBe(true);
+    storeA.stop();
+
+    const withoutWaiting = createFakeRegisterSW({
+      registration: {} as unknown as ServiceWorkerRegistration,
+    });
+    const storeB = createPwaUpdateStore({ now });
+    storeB.start(withoutWaiting.registerSw);
+    expect(storeB.hasWaitingWorker()).toBe(false);
+    storeB.stop();
+  });
+
+  it("baut auch den controllerchange-Listener bei stop wieder ab", () => {
+    const swTarget = listenerTarget();
+    const { registerSw } = createFakeRegisterSW();
+    const store = createPwaUpdateStore({
+      now,
+      serviceWorkerTarget: swTarget.target,
+    });
+    store.start(registerSw);
+    expect(swTarget.count("controllerchange")).toBe(1);
+
+    store.stop();
+
+    expect(swTarget.count("controllerchange")).toBe(0);
   });
 });

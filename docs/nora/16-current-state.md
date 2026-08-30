@@ -157,14 +157,30 @@ Nora ist eine installierbare PWA. Der Service Worker wird von `vite-plugin-pwa` 
 - **Orb-zentrierte Komposition** (34 rem, 2,5 rem Padding, 8,5-rem-Orb, Orb exakt in der Mitte), mehrschichtiger Update-Orb mit desynchronisierten Perioden, weit auslaufende Aura.
 - **Warnsymbol des Product Owners** (`pwa/NoraSafetyMark.tsx`) — Geometrie unverändert aus dem gelieferten SVG, Original als Design-Asset unter `docs/nora/assets/pwa-update-warning-source.svg`.
 - **8-Sekunden-Update-Choreografie** (`pwa/useUpdateChoreography.ts`) mit vier Phasen, danach genau ein `applyUpdate()`. **Bewusst reine Präsentation** — keine Fortschrittsbehauptung, weil der wartende Worker zu diesem Zeitpunkt bereits installiert ist und es nichts zu messen gibt. Der Choreografie-State ist lokal zur Komponente; `pwaUpdateStore` bleibt **unverändert**.
-- **Recovery-Zustand** mit „Erneut versuchen", falls die Aktivierung ausbleibt.
+- **Recovery-Zustand**, falls die Übernahme ausbleibt (Semantik seit PWA-1C.2 korrigiert, siehe unten).
 - Neue `--nora-system-*`-Tokens für Surface, Hairline, Schatten, Aura und Warnfarben (hell/dunkel getrennt).
 
 Details: `02-design-system.md`, Abschnitt „Anwendungs-Systemereignisse / Update-Experience"; Begründung: `06-decision-log.md`, „2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1)".
 
-**Status PWA-1C.1: `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.** In der gestylten App nachgemessen: Viewport-Matrix 1024/1180/1280/1440/1920 plus die Zoom-Äquivalente 1152 (125 %) und 960 (150 %) und Mobile, jeweils hell und dunkel — alle passen in den Viewport, kein horizontaler Overflow, Orb-Abweichung von der Panelmitte 0,0 px; Kontrast Text ≥ 4,5 und Grafik ≥ 3,0 in beiden Modi; Touch-Ziele 44 px Desktop / 47 px Mobile; Reduced Motion in echtem Chromium mit gesetztem Flag; Dialog-Deferral gegen einen echten Radix-Dialog in der laufenden App; die vollständige Achtsekundensequenz als Bildfolge und Messreihe. Die Bewertung „fühlt sich hochwertig an" liegt beim Product Owner. **Kein Production-Deployment, kein Commit.**
+**Seit PWA-1C.2 (lokal implementiert und verifiziert, noch kein Production-Release):** technische Korrektur aus dem Final Review des ersten RC. Der Recovery-Pfad hing am Promise von `updateServiceWorker()` — der ausgelieferte `vite-plugin-pwa`-Client lehnt das aber praktisch nie ab, wodurch Recovery in Production unerreichbar war und der reale Fall „Anfrage raus, Übernahme kommt nie" Nora dauerhaft auf „wird aktualisiert" stehen gelassen hätte. Neu:
 
-**Offene Product-Frage aus dieser Welle:** ob die Achtsekundendauer bei `prefers-reduced-motion: reduce` gekürzt werden soll (Empfehlung: ja, auf ~2,5 s). Bewusst nicht eigenmächtig umgesetzt — siehe Decision Log.
+- `pwaUpdateStore` trennt `applying` (**angefordert**) von `activated` (**vollzogen**, aus `controllerchange`). Nirgendwo gilt noch „Promise resolved = aktiviert".
+- **Watchdog von 5 s ab `applyUpdate()`** (die acht Sekunden zählen nicht mit), Wert empirisch begründet: gemessene Übernahme 2–3 ms normal, max. 34 ms bei 20× CPU-Drosselung.
+- **Nora besitzt den Reload.** Zweiter Befund aus der Reparatur: nach `SKIP_WAITING` übernimmt der neue Worker zwar (`controllerchange` feuert genau einmal, alter Precache wird aufgeräumt), aber der Client von `vite-plugin-pwa` lädt die Seite **nicht** neu — er tut das nur bei „internen" Funden, und Noras stündliche bzw. tabbasierte Prüfung zählt für Workbox nicht dazu. Am Code vor der Korrektur identisch gemessen. Nora lädt deshalb 1,5 s nach der Übernahme selbst neu, falls die Seite dann noch steht.
+- Recovery-Copy ohne Fehlerbehauptung: „Aktualisierung dauert länger als erwartet". Aktion nach echtem Worker-Zustand: „Erneut versuchen" bzw. „Nora neu laden". Kein „Später" — SKIP_WAITING ist gesendet, ein Zurück wäre nicht zusicherbar.
+- A11y: sichtbare Fläche `role="group"` **ohne** Live-Semantik plus eigener `sr-only`-Announcer (genau eine Ansage pro Zustandswechsel); Fokus fällt nach der Primäraktion nicht mehr auf `<body>`.
+
+Begründung: `06-decision-log.md`, „2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2)".
+
+**Status PWA-1C.1/1C.2: `LOCAL VERIFIED + PRODUCT OWNER UX ACCEPTED — ERSTER RC ABGELEHNT, RECOVERY-FIX LOKAL VERIFIZIERT, NEUER RC OFFEN — NICHT PRODUCTION VERIFIED`.**
+
+- **UX abgenommen:** die visuelle Fassung aus PWA-1C.1 ist vom Product Owner akzeptiert. Orb, Aura, Warnsymbol, Panelkomposition, Timeline und Art Direction wurden in PWA-1C.2 **nicht** angefasst.
+- **Erster RC `0329c0ae` abgelehnt** (Final Adversarial Review, 2026-08-30): 0 BLOCKER, 0 HIGH, 1 MEDIUM (Recovery-Contract), mehrere LOW. Der Review hat u. a. den Zwei-Build-Lifecycle, den generierten `sw.js`, die Dev-Harness-Freiheit des Production-Builds und die Choreografie-Grenze unabhängig bestätigt.
+- **In der gestylten App nachgemessen** (Stand PWA-1C.1): Viewport-Matrix 1024/1180/1280/1440/1920 plus die Zoom-Äquivalente 1152 (125 %) und 960 (150 %) und Mobile 390/430/500, jeweils hell und dunkel — alle passen in den Viewport, kein horizontaler Overflow, Orb-Abweichung von der Panelmitte 0,0 px; Touch-Ziele 44 px Desktop / 46,8 px Mobile; Reduced Motion in echtem Chromium; Dialog-Deferral gegen einen echten Radix-Dialog (0 von 10 Dialog-Controls blockiert); die vollständige Achtsekundensequenz als Bildfolge und Messreihe.
+- **Kontrast:** alle Texte in der Panelfläche ≥ 4,5, alle Grafiken ≥ 3,0 in beiden Modi — **mit einer Ausnahme:** die Primäraktion liegt bei 3,56 (Weiß auf `--nora-brand`). Das ist die projektweite `.nora-primary-action` (identisch am bestehenden Header-Button gemessen), bewusst nicht lokal umgefärbt. Siehe `02-design-system.md` und `17-known-issues-and-planned-waves.md`.
+- **Kein Production-Deployment.**
+
+**Offene Product-Frage aus dieser Welle:** ob die Achtsekundendauer bei `prefers-reduced-motion: reduce` gekürzt werden soll (Empfehlung: ja, auf ~2,5 s). Bewusst nicht eigenmächtig umgesetzt — siehe Decision Log. PWA-1C.2 hat daran nichts geändert.
 
 **Weiterhin gültige Production-Eigenschaften (2026-08-30 read-only gemessen):** nicht mehr existente Asset-URLs liefern einen harten 404 (kein SPA-Fallback); `/assets/*` wird **nicht** `immutable` ausgeliefert, sondern `max-age=0, must-revalidate` (es gibt keine `vercel.json`) — der HTTP-Cache ist also kein Schutznetz. Genau deshalb muss der Precache des laufenden Builds intakt bleiben.
 

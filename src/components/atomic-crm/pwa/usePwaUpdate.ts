@@ -5,8 +5,13 @@ import { pwaUpdateStore, type PwaUpdateState } from "./pwaUpdateStore";
 export interface PwaUpdate {
   state: PwaUpdateState;
   updateAvailable: boolean;
+  /** Die Aktivierung wurde angefordert. NICHT: sie ist gelungen. */
   applying: boolean;
+  /** Die Uebernahme ist tatsaechlich eingetreten (`controllerchange`). */
+  activated: boolean;
   applyUpdate: () => void;
+  /** Kann ein erneuter Aktivierungsversuch ueberhaupt etwas anstossen? */
+  hasWaitingWorker: () => boolean;
   dismissForNow: () => void;
 }
 
@@ -31,12 +36,18 @@ export const usePwaUpdate = (): PwaUpdate => {
 
   const applyUpdate = useCallback(() => pwaUpdateStore.applyUpdate(), []);
   const dismissForNow = useCallback(() => pwaUpdateStore.dismissForNow(), []);
+  const hasWaitingWorker = useCallback(
+    () => pwaUpdateStore.hasWaitingWorker(),
+    [],
+  );
 
   return {
     state: snapshot.state,
     updateAvailable: snapshot.updateAvailable,
     applying: snapshot.applying,
+    activated: snapshot.activated,
     applyUpdate,
+    hasWaitingWorker,
     dismissForNow,
   };
 };

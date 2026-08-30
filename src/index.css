@@ -1189,6 +1189,15 @@ input[type="time"] {
     animation: nora-system-event-in 420ms var(--nora-motion-ease) both;
   }
 
+  /* After the primary action the actions fold away and the surface itself
+     takes the focus (see `NoraUpdateEvent`), so that it does not fall to
+     `<body>`. `:focus-visible` only, and a soft ring rather than a hard rule
+     around 34rem: it has to be findable, not shouty. */
+  .nora-system-event:focus-visible {
+    outline: 3px solid var(--nora-brand-ring);
+    outline-offset: 2px;
+  }
+
   /* Never invite a reload in the middle of Quick Capture or a Vorgangsakte:
      while any Radix dialog or sheet is open the event is not shown at all.
      `display: none` (not just visual hiding) keeps it out of the tab order,
@@ -1570,15 +1579,13 @@ input[type="time"] {
         0%,
       color-mix(
           in oklab,
-          var(--nora-system-aura)
-            calc(var(--nora-system-aura-halo-alpha) * 44%),
+          var(--nora-system-aura) calc(var(--nora-system-aura-halo-alpha) * 44%),
           transparent
         )
         26%,
       color-mix(
           in oklab,
-          var(--nora-system-aura)
-            calc(var(--nora-system-aura-halo-alpha) * 16%),
+          var(--nora-system-aura) calc(var(--nora-system-aura-halo-alpha) * 16%),
           transparent
         )
         50%,

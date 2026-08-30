@@ -1044,9 +1044,11 @@ export const englishCrmMessages = {
       applying_intro: "The new version is being prepared.",
       update_now: "Update now",
       update_later: "Later",
-      recovery_title: "The update could not be started yet",
-      recovery_intro: "You can keep using Nora.",
+      recovery_title: "The update is taking longer than expected",
+      recovery_intro:
+        "Nora could not switch to the new version yet. You can keep working.",
       retry_action: "Try again",
+      reload_action: "Reload Nora",
     },
     notifications: {
       region_label: "Status messages",

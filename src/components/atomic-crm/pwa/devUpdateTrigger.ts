@@ -41,20 +41,36 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
  * `onNeedRefresh` nie aufruft. Diese Fälschung zu setzen kostet deshalb nichts
  * Echtes, holt aber den Verfügbar-Zustand her.
  */
-const createFakeRegisterSw = (state: { fail: boolean }): RegisterSwLike => {
+const createFakeRegisterSw = (state: { reject: boolean }): RegisterSwLike => {
   return (options) => {
     needRefresh = options.onNeedRefresh;
     options.onRegisteredSW?.("/sw.js", undefined);
     return () =>
-      state.fail
-        ? // Führt in den Recovery-Zustand („Erneut versuchen"), von dem aus sich
-          // die Choreografie beliebig oft wiederholen lässt.
-          Promise.reject(new Error("devUpdateTrigger: simulierter Fehlschlag"))
-        : // Im echten Betrieb lädt der Client an dieser Stelle die Seite neu.
-          // Hier bleibt der Store in „applying", damit die Szene stehen bleibt
-          // und beurteilt werden kann.
+      state.reject
+        ? // Der theoretische Zweig: das Promise lehnt ab. Im ausgelieferten
+          // Production-Client passiert das praktisch nie (siehe Modulkopf von
+          // `pwaUpdateStore.ts`) — der Zweig existiert als Absicherung und
+          // wird hier nur geprüft, damit er nicht ungetestet verrottet.
+          Promise.reject(new Error("devUpdateTrigger: simulierte Ablehnung"))
+        : // DER REALE PRODUCTION-FEHLERFALL, und deshalb der Standardweg
+          // dieses Werkzeugs: die Anfrage geht raus und das Promise verhält
+          // sich genau wie in Production — es sagt nichts über den Erfolg.
+          // Ohne simulierte Übernahme bleibt `controllerchange` aus, und nach
+          // der Watchdog-Frist muss der Recovery-Zustand erscheinen.
           new Promise<void>(() => {});
   };
+};
+
+/**
+ * Simuliert die echte Worker-Übernahme.
+ *
+ * `navigator.serviceWorker` ist ein normales `EventTarget`; ein hier
+ * abgesetztes `controllerchange` erreicht denselben Listener, den der Store
+ * auch in Production benutzt. Dadurch lässt sich der Erfolgspfad prüfen, ohne
+ * eine einzige Zeile Production-Logik zu verändern oder aufzuweichen.
+ */
+const simulateTakeover = () => {
+  navigator.serviceWorker?.dispatchEvent(new Event("controllerchange"));
 };
 
 let needRefresh: (() => void) | undefined;
@@ -150,7 +166,7 @@ export const mountUpdateDevTrigger = () => {
   if (!import.meta.env.DEV) return;
   if (document.getElementById("nora-dev-pwa-panel")) return;
 
-  const state = { fail: false, hijacked: false, fast: false };
+  const state = { reject: false, hijacked: false, fast: false };
 
   const panel = document.createElement("div");
   panel.id = "nora-dev-pwa-panel";
@@ -192,13 +208,26 @@ export const mountUpdateDevTrigger = () => {
     needRefresh?.();
   });
 
-  const replayButton = addButton("⟲  Replay: aus", () => {
-    state.fail = !state.fail;
-    replayButton.textContent = state.fail ? "⟲  Replay: an" : "⟲  Replay: aus";
+  const takeoverButton = addButton(
+    "✔  Übernahme simulieren",
+    simulateTakeover,
+  );
+  takeoverButton.title =
+    "Setzt ein echtes „controllerchange“ ab — der Erfolgsfall. Ohne diesen " +
+    "Klick bleibt die Übernahme aus, und genau das ist der reale " +
+    "Production-Fehlerfall: nach der Watchdog-Frist muss der " +
+    "Recovery-Zustand erscheinen.";
+
+  const rejectButton = addButton("⟲  Ablehnung: aus", () => {
+    state.reject = !state.reject;
+    rejectButton.textContent = state.reject
+      ? "⟲  Ablehnung: an"
+      : "⟲  Ablehnung: aus";
   });
-  replayButton.title =
-    "An: nach der Sequenz erscheint „Erneut versuchen“ statt des Reloads — " +
-    "damit lässt sich die Choreografie beliebig oft ansehen.";
+  rejectButton.title =
+    "An: das Promise von updateServiceWorker() lehnt ab. In Production " +
+    "passiert das praktisch nie — der Schalter prüft nur, dass der " +
+    "Absicherungszweig im Store nicht verrottet.";
 
   addButton("◐  Hell / Dunkel", () => {
     document.documentElement.classList.toggle("dark");
@@ -247,7 +276,9 @@ export const mountUpdateDevTrigger = () => {
       : state.hijacked
         ? "nicht sichtbar"
         : "bereit";
-    status.textContent = `Store: ${snapshot.state} — Panel: ${shown}`;
+    status.textContent =
+      `Store: ${snapshot.state}` +
+      `${snapshot.activated ? " +übernommen" : ""} — Panel: ${shown}`;
   };
 
   const unsubscribe = pwaUpdateStore.subscribe(render);

@@ -1064,9 +1064,14 @@ export const germanCrmMessages = {
       applying_intro: "Die neue Version wird vorbereitet.",
       update_now: "Jetzt aktualisieren",
       update_later: "Später",
-      recovery_title: "Aktualisierung konnte noch nicht gestartet werden",
-      recovery_intro: "Nora kann weiterhin verwendet werden.",
+      // Bewusst keine Fehlerbehauptung: technisch ist nur belegt, dass die
+      // erwartete Uebernahme ausgeblieben ist — nicht, dass sie endgueltig
+      // fehlgeschlagen waere.
+      recovery_title: "Aktualisierung dauert länger als erwartet",
+      recovery_intro:
+        "Nora konnte die neue Version noch nicht vollständig übernehmen. Sie können weiterarbeiten.",
       retry_action: "Erneut versuchen",
+      reload_action: "Nora neu laden",
     },
     notifications: {
       region_label: "Statusmeldungen",

@@ -1061,9 +1061,11 @@ export const frenchCrmMessages = {
       applying_intro: "La nouvelle version est en cours de préparation.",
       update_now: "Mettre à jour",
       update_later: "Plus tard",
-      recovery_title: "La mise à jour n'a pas encore pu démarrer",
-      recovery_intro: "Vous pouvez continuer à utiliser Nora.",
+      recovery_title: "La mise à jour prend plus de temps que prévu",
+      recovery_intro:
+        "Nora n'a pas encore pu basculer vers la nouvelle version. Vous pouvez continuer à travailler.",
       retry_action: "Réessayer",
+      reload_action: "Recharger Nora",
     },
     notifications: {
       region_label: "Messages d'état",

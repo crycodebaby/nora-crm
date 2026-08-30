@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslate } from "ra-core";
 
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,55 @@ import { NoraSafetyMark } from "./NoraSafetyMark";
 import { NoraUpdateOrb } from "./NoraUpdateOrb";
 import { usePwaUpdate } from "./usePwaUpdate";
 import { useUpdateChoreography } from "./useUpdateChoreography";
+
+/**
+ * Die einzige Live-Region dieser Schicht.
+ *
+ * Das sichtbare Panel ist bewusst KEINE Live-Region mehr. Es trug frueher
+ * `role="status"`, und `role="status"` bringt `aria-atomic="true"` mit: jede
+ * Mutation im Teilbaum liess Screenreader die komplette Flaeche erneut
+ * vorlesen — waehrend der Achtsekundensequenz gleich mehrfach, weil
+ * Sicherheitshinweis und Aktionen verschwinden, die Punkte auftauchen und der
+ * Titel wechselt. Angesagt wird deshalb nur noch der Zustandswechsel selbst,
+ * aus einer eigenen, winzigen Region.
+ *
+ * Dieselbe Trennung wie in Phase 7B (`NoraNotificationAnnouncer`), aber ohne
+ * deren Store: hier gibt es genau drei moegliche Ansagen.
+ *
+ * `sequence` ist die Identitaet des EREIGNISSES, nicht des Wortlauts, und wird
+ * als React-Key des einzigen Kindes gerendert — eine Wiederholung tauscht den
+ * Knoten aus und die Region feuert erneut, ohne dass ein Zeichen am Text
+ * geaendert werden muesste (kein Whitespace-Trick).
+ */
+const UpdateAnnouncer = ({
+  announcement,
+}: {
+  announcement: { sequence: number; text: string } | null;
+}) => (
+  <div
+    data-testid="nora-pwa-update-announcer"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    className="sr-only"
+  >
+    {announcement ? (
+      <span key={announcement.sequence}>{announcement.text}</span>
+    ) : null}
+  </div>
+);
+
+/** Was in der Recovery-Flaeche wirklich helfen kann. */
+type RecoveryAction = "retry" | "reload";
+
+/**
+ * Der letzte Schritt eines Updates, an genau einer Stelle.
+ *
+ * Modulweit und stabil, damit die Choreografie-Abhaengigkeiten sich nicht bei
+ * jedem Render aendern. Ausgelagert vor allem, damit im Test eine Attrappe an
+ * dieselbe Stelle tritt statt `window.location` zu ersetzen.
+ */
+const reloadPage = () => window.location.reload();
 
 /**
  * Nora-Systemereignis „neue Version verfuegbar" (Wellen PWA-1C / PWA-1C.1).
@@ -48,19 +97,38 @@ import { useUpdateChoreography } from "./useUpdateChoreography";
  */
 export const NoraUpdateEvent = () => {
   const translate = useTranslate();
-  const { updateAvailable, applying, applyUpdate, dismissForNow } =
-    usePwaUpdate();
+  const {
+    updateAvailable,
+    applying,
+    activated,
+    applyUpdate,
+    hasWaitingWorker,
+    dismissForNow,
+  } = usePwaUpdate();
   const { phase, presentation, start, retry } = useUpdateChoreography({
     applyUpdate,
     applying,
+    activated,
+    // Der Client aus `virtual:pwa-register` laedt nur neu, wenn Workbox die
+    // Aktualisierung als „intern" fuehrt — bei Noras eigener Pruefung ist das
+    // messbar nicht der Fall. Also besitzt Nora den letzten Schritt selbst.
+    reload: reloadPage,
   });
   const titleId = useId();
   const bodyId = useId();
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const recoveryActionRef = useRef<HTMLButtonElement | null>(null);
+  // Nur uebernehmen, was ohnehin uns gehoert: der Fokus wird ausschliesslich
+  // dann verschoben, wenn er beim Ausloesen bereits im Panel lag. Ein Klick
+  // fokussiert den Button in Chrome mit, also deckt das Maus wie Tastatur ab —
+  // ohne dass das Ereignis jemandem den Fokus wegnehmen kann.
+  const focusWasOursRef = useRef(false);
+
   // Die Sequenz haelt das Panel offen, auch wenn der Store schon weiter ist:
   // zwischen Klick und `applyUpdate()` steht er noch auf `updateAvailable`,
   // danach auf `applying`. Beides zeigt dieselbe Szene.
-  if (!updateAvailable && !applying && phase === "idle") return null;
+  const mounted = updateAvailable || applying || phase !== "idle";
 
   const running = presentation === "choreography";
   const recovery = presentation === "recovery";
@@ -110,143 +178,226 @@ export const NoraUpdateEvent = () => {
       ? "crm.pwa.applying_intro"
       : "crm.pwa.available_intro";
 
-  return (
-    <div
-      className="nora-system-event"
-      role="status"
-      aria-labelledby={titleId}
-      aria-describedby={bodyId}
-      data-presentation={presentation}
-      data-phase={phase}
-      // Bestandsvertrag aus PWA-1C: „applying" heisst fuer jeden Leser dieses
-      // Attributs unveraendert „der Benutzer hat das Update ausgeloest".
-      data-state={running ? "applying" : "available"}
-      data-testid="nora-pwa-update-event"
-      onKeyDown={handleKeyDown}
-    >
-      <div className="nora-system-event-stage">
-        <NoraUpdateOrb phase={phase} />
-      </div>
+  // --- Recovery: welche Aktion hier ueberhaupt etwas bewirken kann ---------
+  //
+  // Bewusst KEIN „Spaeter": SKIP_WAITING ist zu diesem Zeitpunkt bereits
+  // gesendet: den Worker wieder verlaesslich auf WAITING zu setzen, ist keine
+  // Faehigkeit, die Nora hat. Ein Knopf, der das verspraeche, waere eine Luege
+  // ueber den eigenen Zustand. Der Ausweg ist deshalb die Aktion selbst.
+  const [recoveryAction, setRecoveryAction] = useState<RecoveryAction>("retry");
+  useEffect(() => {
+    if (presentation !== "recovery") return;
+    // Wartet noch ein Worker, kann ein zweiter Anlauf die Aktivierung erneut
+    // anstossen. Ist keiner mehr da, laeuft `messageSkipWaiting()` nachweislich
+    // ins Leere — dann ist ein kontrollierter Reload die ehrlichere Aktion.
+    setRecoveryAction(hasWaitingWorker() ? "retry" : "reload");
+  }, [presentation, hasWaitingWorker]);
 
-      <div className="nora-system-event-copy">
-        {/* Ein einziges h2 — der Textwechsel faellt in das Fenster, in dem der
+  // --- Fokus nach der vom Benutzer ausgeloesten Aktion ---------------------
+  //
+  // Die Aktionszeile faltet sich ab Phase 2 weg; ohne Zutun faellt der Fokus
+  // auf `<body>` und der Benutzer steht nach der Sequenz — und erst recht im
+  // Recovery-Zustand — am Dokumentanfang. Kein unerwarteter Autofokus: der
+  // Benutzer hat den Zustandswechsel gerade selbst ausgeloest.
+  useEffect(() => {
+    if (!mounted || !focusWasOursRef.current) return;
+    if (presentation === "recovery") recoveryActionRef.current?.focus();
+    else if (presentation === "choreography") rootRef.current?.focus();
+  }, [presentation, mounted]);
+
+  // --- Screenreader: genau eine Ansage pro Zustandswechsel -----------------
+  const announcementKey = !mounted
+    ? null
+    : recovery
+      ? "crm.pwa.recovery_title"
+      : focused
+        ? "crm.pwa.applying_title"
+        : "crm.pwa.available_title";
+  const announcedKeyRef = useRef<string | null>(null);
+  const announcementSequence = useRef(0);
+  const [announcement, setAnnouncement] = useState<{
+    sequence: number;
+    text: string;
+  } | null>(null);
+  useEffect(() => {
+    if (announcedKeyRef.current === announcementKey) return;
+    announcedKeyRef.current = announcementKey;
+    if (!announcementKey) {
+      setAnnouncement(null);
+      return;
+    }
+    announcementSequence.current += 1;
+    setAnnouncement({
+      sequence: announcementSequence.current,
+      text: translate(announcementKey),
+    });
+  }, [announcementKey, translate]);
+
+  const beginSequence = (action: () => void) => {
+    focusWasOursRef.current =
+      rootRef.current?.contains(document.activeElement) ?? false;
+    action();
+  };
+
+  if (!mounted) return <UpdateAnnouncer announcement={null} />;
+
+  return (
+    <>
+      <UpdateAnnouncer announcement={announcement} />
+      <div
+        ref={rootRef}
+        className="nora-system-event"
+        // Bewusst NICHT `role="status"`: das brachte `aria-atomic` mit und
+        // liess die ganze Flaeche bei jeder Mutation erneut vorlesen. Die
+        // Live-Semantik liegt jetzt allein beim Announcer oben.
+        role="group"
+        // Programmatisch fokussierbar, damit der Fokus nach der Primaeraktion
+        // nicht ins Nichts faellt. Nicht in der Tab-Reihenfolge.
+        tabIndex={-1}
+        aria-labelledby={titleId}
+        aria-describedby={bodyId}
+        data-presentation={presentation}
+        data-phase={phase}
+        // Bestandsvertrag aus PWA-1C: „applying" heisst fuer jeden Leser dieses
+        // Attributs unveraendert „der Benutzer hat das Update ausgeloest".
+        data-state={running ? "applying" : "available"}
+        data-testid="nora-pwa-update-event"
+        onKeyDown={handleKeyDown}
+      >
+        <div className="nora-system-event-stage">
+          <NoraUpdateOrb phase={phase} />
+        </div>
+
+        <div className="nora-system-event-copy">
+          {/* Ein einziges h2 — der Textwechsel faellt in das Fenster, in dem der
             Titel ohnehin auf Deckkraft 0 steht (Phase „converging"). Dadurch
             gibt es keinen sichtbaren Sprung, keinen zweiten Titel im
             Accessibility-Baum und keine Typewriter-Spielerei. */}
-        <h2 id={titleId} className="nora-system-event-title">
-          {translate(title)}
-        </h2>
+          <h2 id={titleId} className="nora-system-event-title">
+            {translate(title)}
+          </h2>
 
-        <p id={bodyId} className="nora-system-event-lede">
-          {translate(lede)}
-        </p>
+          <p id={bodyId} className="nora-system-event-lede">
+            {translate(lede)}
+          </p>
 
-        {/* Inside the copy block, not a sibling of it: as a top-level fold the
+          {/* Inside the copy block, not a sibling of it: as a top-level fold the
             reassurance sat a full composition gap away from the sentence it
             belongs to and read as a third, unrelated statement. */}
-        {safetyMounted ? (
-          <div
-            className="nora-system-event-fold nora-system-event-fold-tight"
-            data-open={safetyOpen}
-          >
-            <div className="nora-system-event-fold-inner">
-              <p className="nora-system-event-reassure">
-                {translate("crm.pwa.available_keeps_running")}
-              </p>
+          {safetyMounted ? (
+            <div
+              className="nora-system-event-fold nora-system-event-fold-tight"
+              data-open={safetyOpen}
+            >
+              <div className="nora-system-event-fold-inner">
+                <p className="nora-system-event-reassure">
+                  {translate("crm.pwa.available_keeps_running")}
+                </p>
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {focused ? (
-          /* Die drei Punkte tragen die fortlaufende Aktivitaetssemantik,
+          {focused ? (
+            /* Die drei Punkte tragen die fortlaufende Aktivitaetssemantik,
              damit der Text stabil lesbar bleiben kann. Sie treten mit dem
              neuen Titel auf, nicht schon beim Klick: waehrend sich die
              Komposition noch zusammenzieht, traegt der wachsende Orb das
              Ereignis allein. Rein dekorativ — der Titel sagt bereits
              vollstaendig, dass aktualisiert wird, eine zweite Ansage waere
              Laerm. */
-          <span
-            className="nora-system-event-dots"
-            aria-hidden="true"
-            data-testid="nora-pwa-update-dots"
-          >
-            <span className="nora-system-event-dot" />
-            <span className="nora-system-event-dot" />
-            <span className="nora-system-event-dot" />
-          </span>
-        ) : null}
-      </div>
+            <span
+              className="nora-system-event-dots"
+              aria-hidden="true"
+              data-testid="nora-pwa-update-dots"
+            >
+              <span className="nora-system-event-dot" />
+              <span className="nora-system-event-dot" />
+              <span className="nora-system-event-dot" />
+            </span>
+          ) : null}
+        </div>
 
-      {/* Kein Danger-State: das Update ist kein Fehler. Warme, ruhige Flaeche —
+        {/* Kein Danger-State: das Update ist kein Fehler. Warme, ruhige Flaeche —
           „bitte beachten", nicht „Gefahr". Das Symbol steht links neben dem
           Text, damit das Auge in einem Zug von der Warnung zur
           Handlungsanweisung liest. */}
-      {safetyMounted ? (
-        <div
-          className="nora-system-event-fold"
-          data-open={safetyOpen}
-          data-testid="nora-pwa-update-safety"
-        >
-          <div className="nora-system-event-fold-inner">
-            <div className="nora-system-event-safety">
-              <NoraSafetyMark />
-              <div className="nora-system-event-safety-copy">
-                <p className="nora-system-event-safety-lead">
-                  {translate("crm.pwa.available_unsaved_hint")}
-                </p>
-                <p className="nora-system-event-safety-note">
-                  {translate("crm.pwa.available_unsaved_detail")}
-                </p>
+        {safetyMounted ? (
+          <div
+            className="nora-system-event-fold"
+            data-open={safetyOpen}
+            data-testid="nora-pwa-update-safety"
+          >
+            <div className="nora-system-event-fold-inner">
+              <div className="nora-system-event-safety">
+                <NoraSafetyMark />
+                <div className="nora-system-event-safety-copy">
+                  <p className="nora-system-event-safety-lead">
+                    {translate("crm.pwa.available_unsaved_hint")}
+                  </p>
+                  <p className="nora-system-event-safety-note">
+                    {translate("crm.pwa.available_unsaved_detail")}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      {actionsMounted ? (
-        <div
-          className="nora-system-event-fold"
-          data-open={safetyOpen || recovery}
-        >
-          <div className="nora-system-event-fold-inner">
-            <div className="nora-system-event-actions">
-              {recovery ? (
-                <Button
-                  size="lg"
-                  className="nora-system-event-action nora-primary-action"
-                  onClick={retry}
-                  data-testid="nora-pwa-update-retry"
-                >
-                  {translate("crm.pwa.retry_action")}
-                </Button>
-              ) : (
-                <>
+        {actionsMounted ? (
+          <div
+            className="nora-system-event-fold"
+            data-open={safetyOpen || recovery}
+          >
+            <div className="nora-system-event-fold-inner">
+              <div className="nora-system-event-actions">
+                {recovery ? (
                   <Button
-                    size="lg"
-                    variant="ghost"
-                    className="nora-system-event-action"
-                    onClick={dismissForNow}
-                    data-testid="nora-pwa-update-later"
-                  >
-                    {translate("crm.pwa.update_later")}
-                  </Button>
-                  {/* Nora's established primary treatment, not the shadcn
-                      default: the update is the same kind of affirmative
-                      action as „Speichern" elsewhere and must look like it. */}
-                  <Button
+                    ref={recoveryActionRef}
                     size="lg"
                     className="nora-system-event-action nora-primary-action"
-                    onClick={start}
-                    data-testid="nora-pwa-update-apply"
+                    onClick={
+                      recoveryAction === "reload"
+                        ? reloadPage
+                        : () => beginSequence(retry)
+                    }
+                    data-testid="nora-pwa-update-retry"
+                    data-recovery-action={recoveryAction}
                   >
-                    {translate("crm.pwa.update_now")}
+                    {translate(
+                      recoveryAction === "reload"
+                        ? "crm.pwa.reload_action"
+                        : "crm.pwa.retry_action",
+                    )}
                   </Button>
-                </>
-              )}
+                ) : (
+                  <>
+                    <Button
+                      size="lg"
+                      variant="ghost"
+                      className="nora-system-event-action"
+                      onClick={dismissForNow}
+                      data-testid="nora-pwa-update-later"
+                    >
+                      {translate("crm.pwa.update_later")}
+                    </Button>
+                    {/* Nora's established primary treatment, not the shadcn
+                      default: the update is the same kind of affirmative
+                      action as „Speichern" elsewhere and must look like it. */}
+                    <Button
+                      size="lg"
+                      className="nora-system-event-action nora-primary-action"
+                      onClick={() => beginSequence(start)}
+                      data-testid="nora-pwa-update-apply"
+                    >
+                      {translate("crm.pwa.update_now")}
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+      </div>
+    </>
   );
 };
