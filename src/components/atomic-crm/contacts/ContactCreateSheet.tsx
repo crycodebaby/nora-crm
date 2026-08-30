@@ -24,8 +24,8 @@ export const ContactCreateSheet = ({
       title={translate("resources.contacts.action.new")}
       saveLabel="resources.contacts.action.create"
       contentClassName="gap-0 bg-muted [&>[data-slot=sheet-header]]:bg-background"
-      bodyClassName="mx-auto w-full max-w-6xl gap-4 p-3 sm:p-5"
-      saveButtonClassName="nora-primary-action min-h-12 transition-transform duration-150 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+      bodyClassName="mx-auto w-full max-w-4xl gap-4 p-3 sm:p-5"
+      saveButtonClassName="nora-primary-action nora-contact-create-save transition-transform duration-150 active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
       defaultValues={{
         sales_id: identity?.id,
         email_jsonb: defaultEmailJsonb,

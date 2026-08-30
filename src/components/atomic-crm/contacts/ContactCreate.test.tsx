@@ -1,10 +1,14 @@
 import { render } from "vitest-browser-react";
 
-import { ContactCreateBasic } from "./ContactCreate.stories";
+import "@/index.css";
+import {
+  ContactCreateBasic,
+  ContactCreateMobile,
+} from "./ContactCreate.stories";
 import { page } from "vitest/browser";
 
 describe("ContactCreate", () => {
-  beforeAll(() => {
+  beforeEach(() => {
     page.viewport(1600, 900);
   });
   it("shows empty email and phone placeholder inputs", async () => {
@@ -17,15 +21,58 @@ describe("ContactCreate", () => {
       .element(screen.getByText("Person", { exact: true }))
       .toBeInTheDocument();
     await expect
-      .element(screen.getByText("Customer association"))
+      .element(screen.getByText("Customer and role"))
       .toBeInTheDocument();
-    await expect
-      .element(screen.getByText("Contact details"))
-      .toBeInTheDocument();
+    await expect.element(screen.getByText("Reachability")).toBeInTheDocument();
     await expect.element(screen.getByPlaceholder("Email")).toBeInTheDocument();
     await expect
       .element(screen.getByPlaceholder("Phone number"))
       .toBeInTheDocument();
+  });
+
+  it("presents one calm, sequential contact-entry flow", async () => {
+    const screen = await render(<ContactCreateBasic />);
+
+    const person = screen.getByText("Person", { exact: true });
+    await expect.element(person).toBeInTheDocument();
+    const personHeading = person.element() as HTMLElement;
+    const flow = personHeading.closest(".nora-contact-create-flow");
+    const sections = Array.from(
+      flow?.querySelectorAll<HTMLElement>("[data-contact-create-section]") ??
+        [],
+    ).map((section) => section.dataset.contactCreateSection);
+
+    expect(flow).not.toBeNull();
+    expect(sections).toEqual([
+      "person",
+      "customer",
+      "contact-methods",
+      "additional",
+    ]);
+    expect(
+      flow?.parentElement?.querySelectorAll(".nora-contact-create-flow"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps the same hierarchy and touch-safe primary action on mobile", async () => {
+    page.viewport(390, 844);
+    const screen = await render(<ContactCreateMobile />);
+
+    const firstName = screen.getByLabelText(/first name/i);
+    const lastName = screen.getByLabelText(/last name/i);
+    await expect.element(firstName).toBeInTheDocument();
+
+    const firstRect = firstName.element().getBoundingClientRect();
+    const lastRect = lastName.element().getBoundingClientRect();
+    expect(Math.abs(firstRect.left - lastRect.left)).toBeLessThan(3);
+    expect(lastRect.top).toBeGreaterThanOrEqual(firstRect.bottom);
+
+    await expect.element(screen.getByText("Required")).toBeVisible();
+    await expect.element(screen.getByText("Optional").first()).toBeVisible();
+    const save = screen.getByRole("button", { name: /create contact/i });
+    expect(
+      save.element().getBoundingClientRect().height,
+    ).toBeGreaterThanOrEqual(44);
   });
 
   it("keeps contact method type selection separate from row deletion", async () => {

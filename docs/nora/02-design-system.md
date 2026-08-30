@@ -123,6 +123,21 @@ Alle in `src/index.css` unter `@layer utilities`:
 
 **Einsatz:** Klassen gezielt an Layout-Wrapper und Listen/Form-Komponenten — nicht willkürlich in jedem Element.
 
+## Kontakterstellung – ruhige Erfassungsfläche (Iteration 2026-08-31)
+
+Die Kontakterstellung folgt einer festen, von oben nach unten lesbaren Reihenfolge: **Person → Kunde und Rolle → Erreichbarkeit → Interne Angaben**. Alle Bereiche liegen in einer gemeinsamen, maximal `max-w-4xl` breiten Erfassungsfläche. Dezente Haarlinien trennen die Abschnitte; gestapelte Karten, konkurrierende Schatten und ein zweispaltiger Seiten-Lesepfad werden vermieden.
+
+| Element | Regel |
+|---------|-------|
+| Abschnittstitel | 17 px, semibold; Hilfstext 14 px und gedämpft |
+| Wichtigkeit | „Erforderlich“ bzw. „Optional“ als neutraler 12-px-Metahinweis |
+| Farbakzent | Icons neutral; Nora-Rot nur für Fokus, Auswahl und Primäraktion |
+| Feldanordnung | Sektionen immer einspaltig; eng zusammengehörige Felder erst ab `sm` nebeneinander |
+| Interne Angaben | Standardmäßig eingeklappt, leicht neutral hinterlegt |
+| Speichern | Auf Seite und im mobilen Sheet mindestens 44 px hoch |
+
+Die Regel gilt nur für `ContactInputs variant="create"`. Kontakt-Bearbeitung und -Detailansicht behalten ihre vorhandene Struktur.
+
 ## Auth-Navigation (Welle 6a-Polish)
 
 Öffentliche Anmelde- und Registrierungsseiten nutzen `AuthPageNav` für Querverweise; der Formular-Submit bleibt die einzige Nora-rote Primäraktion.

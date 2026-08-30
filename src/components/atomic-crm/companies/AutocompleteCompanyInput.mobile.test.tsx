@@ -14,7 +14,7 @@ describe("AutocompleteCompanyInput mobile customer search", () => {
     await expect
       .element(
         screen.getByRole("button", {
-          name: /additional details/i,
+          name: /internal details/i,
         }),
       )
       .toHaveAttribute("aria-expanded", "false");

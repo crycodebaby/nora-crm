@@ -391,6 +391,79 @@ input[type="time"] {
     @apply text-base font-semibold tracking-tight text-foreground;
   }
 
+  /* Contact creation is one calm work surface with one reading direction.
+     Sections are separated by rhythm and hairlines instead of four competing
+     cards. Nora red appears only while a section is actively being used. */
+  .nora-contact-create-flow {
+    overflow: hidden;
+    border: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+    border-radius: calc(var(--radius-xl) + 0.25rem);
+    background: var(--card);
+    box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 5%, transparent);
+  }
+
+  .nora-contact-create-section {
+    padding: 1.25rem 1rem;
+    background: var(--card);
+  }
+
+  .nora-contact-create-section + .nora-contact-create-section,
+  .nora-contact-create-additional {
+    border-top: 1px solid color-mix(in oklab, var(--border) 74%, transparent);
+  }
+
+  .nora-contact-create-additional {
+    background: color-mix(in oklab, var(--muted) 24%, var(--card));
+  }
+
+  .nora-contact-create-icon {
+    display: flex;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    color: color-mix(in oklab, var(--muted-foreground) 88%, var(--foreground));
+    background: color-mix(in oklab, var(--muted) 76%, var(--card));
+    transition:
+      color var(--nora-motion-fast) var(--nora-motion-ease),
+      background-color var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-contact-create-section:focus-within .nora-contact-create-icon,
+  .nora-contact-create-additional:focus-within .nora-contact-create-icon {
+    color: var(--nora-brand);
+    background: color-mix(in oklab, var(--nora-brand) 7%, var(--card));
+  }
+
+  .nora-contact-create-section-title {
+    color: var(--foreground);
+    font-size: 1.0625rem;
+    font-weight: 600;
+    line-height: 1.375rem;
+    letter-spacing: -0.01em;
+  }
+
+  .nora-contact-create-section-meta {
+    display: inline-flex;
+    min-height: 1.375rem;
+    align-items: center;
+    border-radius: 9999px;
+    padding-inline: 0.5rem;
+    color: color-mix(in oklab, var(--muted-foreground) 86%, var(--foreground));
+    background: color-mix(in oklab, var(--muted) 78%, var(--card));
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  @media (min-width: 640px) {
+    .nora-contact-create-section {
+      padding: 1.5rem;
+    }
+  }
+
   .nora-muted {
     @apply text-sm font-normal leading-snug text-muted-foreground;
   }
@@ -1809,6 +1882,13 @@ input[type="time"] {
    change. The same trap almost certainly affects other Nora primary buttons;
    that is reported as a separate finding, not fixed here. */
 .nora-system-event-action.nora-system-event-action {
+  min-height: var(--nora-touch-min);
+}
+
+/* Same Tailwind layer-order trap as the system-event action above. The
+   contact-create CTA must keep Nora's 44px touch minimum in both the page and
+   the mobile sheet, regardless of `.nora-primary-action`'s internal min-h-10. */
+.nora-contact-create-save.nora-contact-create-save {
   min-height: var(--nora-touch-min);
 }
 

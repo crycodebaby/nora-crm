@@ -67,61 +67,69 @@ const ContactCreateInputs = () => {
   }, [hasAdditionalErrors, submitCount]);
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2 xl:gap-5">
-      <div className="flex min-w-0 flex-col gap-4 xl:gap-5">
-        <CreateFormSection
-          icon={UserRound}
-          title="resources.contacts.create_form.person"
-          description="resources.contacts.create_form.person_help"
-        >
-          <ContactIdentityInputs showHeading={false} />
-        </CreateFormSection>
-        <CreateFormSection
-          icon={Building2}
-          title="resources.contacts.create_form.customer"
-          description="resources.contacts.create_form.customer_help"
-        >
-          <ContactPositionInputs />
-        </CreateFormSection>
-      </div>
+    <div className="nora-contact-create-flow">
+      <CreateFormSection
+        sectionKey="person"
+        importance="required"
+        icon={UserRound}
+        title="resources.contacts.create_form.person"
+        description="resources.contacts.create_form.person_help"
+      >
+        <ContactIdentityInputs showHeading={false} layout="create" />
+      </CreateFormSection>
 
-      <div className="flex min-w-0 flex-col gap-4 xl:gap-5">
-        <CreateFormSection
-          icon={Mail}
-          title="resources.contacts.create_form.contact_methods"
-          description="resources.contacts.create_form.contact_methods_help"
-        >
-          <ContactPersonalInformationInputs
-            showHeading={false}
-            showLinks={false}
-            descriptiveAddButtons
-          />
-        </CreateFormSection>
+      <CreateFormSection
+        sectionKey="customer"
+        importance="optional"
+        icon={Building2}
+        title="resources.contacts.create_form.customer"
+        description="resources.contacts.create_form.customer_help"
+      >
+        <ContactPositionInputs layout="create" />
+      </CreateFormSection>
 
-        <Accordion
-          type="single"
-          collapsible
-          value={additionalValue}
-          onValueChange={setAdditionalValue}
-          className="rounded-xl border bg-card shadow-sm"
+      <CreateFormSection
+        sectionKey="contact-methods"
+        importance="optional"
+        icon={Mail}
+        title="resources.contacts.create_form.contact_methods"
+        description="resources.contacts.create_form.contact_methods_help"
+      >
+        <ContactPersonalInformationInputs
+          showHeading={false}
+          showLinks={false}
+          descriptiveAddButtons
+        />
+      </CreateFormSection>
+
+      <Accordion
+        type="single"
+        collapsible
+        value={additionalValue}
+        onValueChange={setAdditionalValue}
+        className="nora-contact-create-additional"
+      >
+        <AccordionItem
+          value="additional"
+          className="border-b-0"
+          data-contact-create-section="additional"
         >
-          <AccordionItem value="additional" className="border-b-0">
-            <AccordionTrigger className="min-h-16 px-4 py-3 hover:no-underline sm:px-5">
-              <SectionHeading
-                icon={Ellipsis}
-                title="resources.contacts.create_form.additional"
-                description="resources.contacts.create_form.additional_help"
-              />
-            </AccordionTrigger>
-            <AccordionContent className="px-4 pb-5 sm:px-5">
-              <div className="nora-form-section border-t pt-5">
-                <ContactLinksInputs descriptiveAddButton />
-                <ContactMiscInputs showHeading={false} />
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </div>
+          <AccordionTrigger className="min-h-20 px-4 py-5 hover:no-underline sm:px-6">
+            <SectionHeading
+              icon={Ellipsis}
+              title="resources.contacts.create_form.additional"
+              description="resources.contacts.create_form.additional_help"
+              importance="optional"
+            />
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-6 sm:px-6">
+            <div className="nora-form-section border-t border-border/70 pt-5">
+              <ContactLinksInputs descriptiveAddButton />
+              <ContactMiscInputs showHeading={false} />
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 };
@@ -152,18 +160,30 @@ const ContactDefaultInputs = () => {
 };
 
 const CreateFormSection = ({
+  sectionKey,
+  importance,
   icon,
   title,
   description,
   children,
 }: {
+  sectionKey: string;
+  importance: "required" | "optional";
   icon: LucideIcon;
   title: string;
   description: string;
   children: ReactNode;
 }) => (
-  <section className="rounded-xl border bg-card p-4 shadow-sm transition-shadow duration-200 sm:p-5 motion-reduce:transition-none">
-    <SectionHeading icon={icon} title={title} description={description} />
+  <section
+    className="nora-contact-create-section"
+    data-contact-create-section={sectionKey}
+  >
+    <SectionHeading
+      icon={icon}
+      title={title}
+      description={description}
+      importance={importance}
+    />
     <div className="mt-5">{children}</div>
   </section>
 );
@@ -172,21 +192,28 @@ const SectionHeading = ({
   icon: Icon,
   title,
   description,
+  importance,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
+  importance: "required" | "optional";
 }) => {
   const translate = useTranslate();
 
   return (
     <div className="flex min-w-0 items-start gap-3 text-left">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_oklab,var(--nora-brand)_12%,transparent)] text-[var(--nora-brand)] dark:bg-[color-mix(in_oklab,var(--nora-brand)_18%,transparent)]">
+      <span className="nora-contact-create-icon">
         <Icon className="size-[18px]" aria-hidden="true" />
       </span>
-      <span className="min-w-0">
-        <span className="block text-base font-semibold leading-5 text-foreground">
-          {translate(title)}
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="nora-contact-create-section-title">
+            {translate(title)}
+          </span>
+          <span className="nora-contact-create-section-meta">
+            {translate(`resources.contacts.create_form.${importance}`)}
+          </span>
         </span>
         <span className="mt-1 block text-sm font-normal leading-5 text-muted-foreground">
           {translate(description)}
@@ -196,8 +223,46 @@ const SectionHeading = ({
   );
 };
 
-const ContactIdentityInputs = ({ showHeading = true }) => {
+const ContactIdentityInputs = ({
+  showHeading = true,
+  layout = "default",
+}: {
+  showHeading?: boolean;
+  layout?: "default" | "create";
+}) => {
   const translate = useTranslate();
+
+  if (layout === "create") {
+    return (
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <RadioButtonGroupInput
+          className="sm:col-span-2"
+          label={false}
+          row
+          source="gender"
+          choices={contactGender}
+          helperText={false}
+          optionText={(choice) =>
+            translateContactGenderLabel(choice, translate)
+          }
+          translateChoice={false}
+          optionValue="value"
+          defaultValue={contactGender[0].value}
+        />
+        <TextInput
+          source="first_name"
+          validate={required()}
+          helperText={false}
+        />
+        <TextInput
+          source="last_name"
+          validate={required()}
+          helperText={false}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="nora-form-section">
       {showHeading ? (
@@ -220,8 +285,32 @@ const ContactIdentityInputs = ({ showHeading = true }) => {
   );
 };
 
-const ContactPositionInputs = () => {
+const ContactPositionInputs = ({
+  layout = "default",
+}: {
+  layout?: "default" | "create";
+}) => {
   const companyId = useWatch({ name: "company_id" });
+
+  if (layout === "create") {
+    return (
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <ReferenceInput source="company_id" reference="companies" perPage={10}>
+          <AutocompleteCompanyInput label="resources.contacts.fields.company_id" />
+        </ReferenceInput>
+        <TextInput source="title" helperText={false} />
+        {companyId !== undefined && companyId !== null && companyId !== "" ? (
+          <div className="sm:col-span-2">
+            <BooleanInput
+              source="is_primary"
+              helperText="resources.contacts.helper.is_primary"
+            />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     // Keine Sektionsüberschrift hier: "Position" wäre nur eine Wiederholung
     // des title-Feld-Labels selbst (Root Cause der doppelten "Position"-
