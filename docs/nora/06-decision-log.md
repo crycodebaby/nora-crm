@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-08-30 – Eine bestätigte Übernahme ist endgültig: `activated` ist monoton (PWA-1C.3) | [Springen](#2026-08-30--eine-bestätigte-übernahme-ist-endgültig-activated-ist-monoton-pwa-1c3) |
 | 2026-08-30 – Ein Retry muss etwas senden: der beendete Aktivierungsversuch (PWA-1C.2 Closure) | [Springen](#2026-08-30--ein-retry-muss-etwas-senden-der-beendete-aktivierungsversuch-pwa-1c2-closure) |
 | 2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2) | [Springen](#2026-08-30--aktivierungsanfrage-ist-kein-erfolgssignal-watchdog-statt-promise-pwa-1c2) |
 | 2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1) | [Springen](#2026-08-30--premium-update-experience-und-8-sekunden-choreografie-pwa-1c1) |
@@ -87,6 +88,38 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-08-30 – Eine bestätigte Übernahme ist endgültig: `activated` ist monoton (PWA-1C.3)
+
+### Kontext
+
+Der unabhängige Last Delta Review des Closure-RC (`2861a602`) hat den Kandidaten abgelehnt: 1 MEDIUM. Der Retry aus dem Eintrag darunter sendet nachweislich wieder — aber er konnte eine bereits bestätigte Übernahme wieder wegwerfen.
+
+### Problem
+
+`applyUpdate()` setzte als erste Amtshandlung `activated = false`, mit der Begründung, ein früheres `controllerchange` dürfe den Erfolg *dieses* Versuchs nicht vorwegnehmen.
+
+Die Begründung verwechselte zwei Dinge. `applying` beschreibt einen **Versuch** und darf enden. `activated` beschreibt das **Dokument**: es hat eine echte Worker-Übernahme beobachtet. Diese Beobachtung wird durch einen neuen Versuch nicht falsch.
+
+Gemessen am abgelehnten RC: trifft die Übernahme während einer laufenden Retry-Choreografie ein (vor deren Commit), dann steht `activated` korrekt auf `true` — und der Commit acht Sekunden später löscht sie wieder, schickt ein zweites SKIP_WAITING an einen Worker, der längst übernommen hat, und lässt Nora anschließend in den Watchdog und damit in einen falschen Recovery-Zustand laufen. Der Nora-eigene Reload feuerte nie, obwohl das Update erfolgreich war.
+
+### Entscheidung
+
+**`activated` ist innerhalb einer Dokument-Lebensdauer monoton.** Einmal `true`, bleibt es `true` — kein Retry, kein Commit, kein Watchdog, kein Präsentationszustand nimmt es zurück. Der Reload beendet das Dokument ohnehin und erzeugt einen frischen Store; `reset()` ist die Testentsprechung dazu und bleibt die einzige Stelle, die zurücksetzen darf.
+
+**`applyUpdate()` ist ein No-op bei bestätigter Übernahme.** Der Guard prüft jetzt auch `activated`: es gibt dann nichts mehr anzufordern. Die Choreografie läuft normal bis zu ihrem Commit; `commitRequested && activated` greift, und der bestehende Nora-eigene Reload-Pfad schließt den Vorgang ab. Genau ein Reload, keine zweite Anfrage, kein falsches Recovery.
+
+Die drei anderen Guard-Bedingungen bleiben unverändert: Doppelklick und Mehrfachanfragen während eines laufenden Versuchs sind weiterhin gesperrt.
+
+### Was das zusätzlich verbessert
+
+Der Fall, für den das alte `activated = false` ursprünglich geschrieben war — ein anderer Tab aktiviert den Worker, bevor der Benutzer hier entscheidet —, wird dadurch nicht schlechter, sondern besser. Vorher: Klick → acht Sekunden Choreografie → Anfrage ins Leere → fünf Sekunden Watchdog → Recovery → der Benutzer muss „Nora neu laden" klicken. Jetzt: Klick → Choreografie → Commit ohne Anfrage → Reload. Gemessen: 0 Aktivierungsanfragen, genau ein Reload, keine Sackgasse.
+
+### Bewusst nicht geändert
+
+Die Choreografie (`useUpdateChoreography.ts`) bleibt unangetastet: sie commitet weiterhin unbedingt und trifft keine Entscheidung über Worker-Zustände. Die Unterscheidung gehört in den Store, der die technische Wahrheit hält.
 
 ---
 

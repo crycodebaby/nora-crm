@@ -636,6 +636,74 @@ describe("NoraUpdateEvent", () => {
     await screen.unmount();
   });
 
+  // --------------------------------------------------------------------------
+  // Der Race aus dem Last Delta Review (PWA-1C.3).
+  //
+  // Die Uebernahme trifft WAEHREND der Retry-Choreografie ein, vor deren
+  // Commit. Vorher loeschte der Commit sie wieder (`applyUpdate()` setzte
+  // `activated = false`), schickte ein zweites SKIP_WAITING ins Leere und liess
+  // Nora anschliessend faelschlich in den Recovery-Zustand laufen.
+  // --------------------------------------------------------------------------
+
+  it("fordert nichts mehr an, wenn dieses Dokument die Uebernahme schon gesehen hat", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    // Etwa aus einem anderen Tab: der neue Worker kontrolliert dieses Dokument
+    // bereits, bevor der Benutzer hier ueberhaupt entschieden hat.
+    waitingWorker = false;
+    await flush(() => simulateTakeover());
+    expect(panel()?.dataset.presentation).toBe("available");
+
+    await click("nora-pwa-update-apply");
+    await advance(CHOREOGRAPHY_COMMIT_MS);
+
+    // Es gibt nichts zu aktivieren — also geht auch nichts raus. Frueher lief
+    // hier eine Anfrage ins Leere und danach dreizehn Sekunden bis Recovery.
+    expect(applyCalls).toBe(0);
+    await advance(RELOAD_FALLBACK_MS - 1);
+    expect(panel()?.dataset.presentation).toBe("choreography");
+    expect(testId("nora-pwa-update-retry")).toBeNull();
+
+    await screen.unmount();
+  });
+
+  it("verwirft eine Uebernahme nicht, die waehrend des zweiten Laufs eintrifft", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await runFailedAttempt();
+    expect(applyCalls).toBe(1);
+
+    await click("nora-pwa-update-retry");
+    await advance(2000);
+
+    // Die verspaetete Uebernahme von Versuch 1 — mitten im zweiten Lauf. Ein
+    // echtes `controllerchange`, wie im Browser; der Worker ist damit weg.
+    waitingWorker = false;
+    await flush(() => simulateTakeover());
+    expect(panel()?.dataset.presentation).toBe("choreography");
+
+    // Der Commit des zweiten Laufs darf jetzt nichts mehr anfordern.
+    await advance(CHOREOGRAPHY_COMMIT_MS - 2000);
+    expect(applyCalls).toBe(1);
+
+    // Und die Szene kippt nicht in Recovery. Bewusst nur bis kurz vor die
+    // Reload-Frist: danach wuerde Nora hier wirklich neu laden und die
+    // Testseite abraeumen. Dass der Reload dann genau einmal faellt und der
+    // Watchdog schweigt, prueft `useUpdateChoreography.test.tsx`, wo der
+    // Reload injizierbar ist.
+    await advance(RELOAD_FALLBACK_MS - 1);
+    expect(panel()?.dataset.presentation).toBe("choreography");
+    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
+    expect(testId("nora-pwa-update-retry")).toBeNull();
+    expect(applyCalls).toBe(1);
+
+    await screen.unmount();
+  });
+
   it("bleibt nach einem zweiten Fehlschlag wiederholbar", async () => {
     useSequenceTimers();
     const screen = await renderEvent();

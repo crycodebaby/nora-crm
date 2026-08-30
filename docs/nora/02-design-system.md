@@ -538,6 +538,8 @@ Schlechtester beobachteter Wert 34 ms; 5 s sind davon rund das 150-Fache und dec
 
 **„Erneut versuchen" ist ein echter zweiter Aktivierungsversuch** (korrigiert in PWA-1C.2, siehe Decision-Log). Beim Ablauf des Watchdogs endet der steckengebliebene Versuch kontrolliert — nur so lässt `applyUpdate()` überhaupt eine zweite Anfrage zu. Die Wirkung ist an einer technischen Größe messbar, nicht an der Animation: die Zahl der gesendeten SKIP_WAITING-Anfragen steigt.
 
+**Eine bestätigte Übernahme beendet den Vorgang, egal wann sie eintrifft** (PWA-1C.3). Trifft sie mitten in einer laufenden Retry-Choreografie ein, läuft die Szene ruhig zu Ende, der Commit fordert nichts mehr an, und Nora lädt selbst neu — kein zweiter Versuch ins Leere und kein Recovery-Zustand, der ein bereits erfolgreiches Update als „dauert länger" ausgibt.
+
 **Bewusst kein „Später" in Recovery.** SKIP_WAITING ist zu diesem Zeitpunkt gesendet; den Worker verlässlich wieder auf WAITING zu setzen, ist keine Fähigkeit, die Nora hat. Ein Knopf, der das verspräche, wäre eine Lüge über den eigenen Zustand. Der Ausweg ist deshalb die Aktion selbst — sie bekommt beim Eintritt in den Zustand den Fokus und ist damit sofort per Tastatur bedienbar.
 
 ### Reduced Motion

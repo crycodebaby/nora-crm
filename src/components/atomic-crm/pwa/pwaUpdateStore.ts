@@ -23,6 +23,16 @@
  *   `activated` — der Browser hat die Uebernahme tatsaechlich VOLLZOGEN
  *                 (`controllerchange` auf `navigator.serviceWorker`).
  *
+ * `applying` ist die Eigenschaft eines VERSUCHS und darf enden — siehe
+ * `endStalledActivation()`. `activated` ist die Eigenschaft des DOKUMENTS und
+ * ist MONOTON: einmal `true`, bleibt es bis zum Reload `true` (PWA-1C.3). Kein
+ * Retry, kein Commit, kein Watchdog und kein Praesentationszustand darf es
+ * zuruecknehmen — die Beobachtung „dieses Dokument hat eine Uebernahme
+ * gesehen" wird durch nichts davon falsch. Der Reload beendet das Dokument
+ * ohnehin und erzeugt einen frischen Store; `reset()` ist die Testentsprechung
+ * dazu und deshalb die einzige Stelle, die `activated` wieder auf `false`
+ * setzen darf.
+ *
  * Das eine folgt nicht aus dem anderen. `updateServiceWorker()` aus
  * `virtual:pwa-register` sieht im ausgelieferten Production-Client
  * (vite-plugin-pwa 1.2.0, `dist/client/build/register.js`) so aus:
@@ -62,6 +72,9 @@ export interface PwaUpdateSnapshot {
    * Der Browser hat einen neuen Worker die Kontrolle uebernehmen lassen.
    * Einziges belastbares Erfolgssignal; im Normalfall laedt der Client die
    * Seite unmittelbar danach neu.
+   *
+   * MONOTON innerhalb einer Dokument-Lebensdauer: einmal `true`, nie wieder
+   * `false` (siehe Modulkopf).
    */
   activated: boolean;
 }
@@ -138,6 +151,9 @@ export interface PwaUpdateStore {
    * Bewusst nicht „aktiviert den Worker": ob die Uebernahme gelingt, sagt erst
    * `activated`. Der Reload erfolgt danach durch den Client von
    * `virtual:pwa-register`, sobald `controllerchange` eintritt.
+   *
+   * Wirkungsloser No-op, sobald `activated` gilt: dann ist die Uebernahme
+   * bereits vollzogen und es gibt nichts mehr anzufordern.
    */
   applyUpdate: () => void;
   /**
@@ -324,14 +340,26 @@ export const createPwaUpdateStore = (
   };
 
   const applyUpdate: PwaUpdateStore["applyUpdate"] = () => {
-    // Doppelklick, bereits laufendes Update oder gar kein wartender Worker:
-    // in allen drei Faellen darf nichts passieren.
-    if (applying || !needRefresh || !updateServiceWorker) return;
+    // Vier Faelle, in denen nichts passieren darf: Doppelklick, bereits
+    // laufender Versuch, kein wartendes Update — und die bereits vollzogene
+    // Uebernahme.
+    //
+    // `activated` gehoert seit PWA-1C.3 in diesen Guard. Vorher stand hier
+    // stattdessen ein `activated = false` als erste Amtshandlung, mit der
+    // Begruendung, ein frueheres `controllerchange` (etwa aus einem anderen
+    // Tab) duerfe den Erfolg DIESES Versuchs nicht vorwegnehmen. Die
+    // Begruendung verwechselte zwei Dinge: `activated` sagt nichts ueber einen
+    // Versuch aus, sondern ueber das DOKUMENT — dass es eine echte Uebernahme
+    // gesehen hat. Traf sie waehrend einer laufenden Retry-Choreografie ein,
+    // loeschte deren Commit die Beobachtung wieder, schickte ein zweites
+    // SKIP_WAITING ins Leere und liess Nora anschliessend faelschlich in den
+    // Recovery-Zustand laufen — obwohl das Update laengst uebernommen war.
+    //
+    // Jetzt ist der Fall ein sauberer No-op: es gibt nichts mehr zu
+    // aktivieren. `commitRequested` setzt die Choreografie ohnehin, und mit
+    // dem erhaltenen `activated` greift der Nora-eigene Reload.
+    if (applying || activated || !needRefresh || !updateServiceWorker) return;
     applying = true;
-    // Ab hier zaehlt nur, was NACH der Anfrage passiert. Ein frueheres
-    // `controllerchange` (etwa aus einem anderen Tab) darf den Erfolg dieses
-    // Versuchs nicht vorwegnehmen.
-    activated = false;
     refresh();
     // Der Client aus `virtual:pwa-register` schickt SKIP_WAITING und laedt die
     // Seite neu, sobald der neue Worker die Kontrolle uebernimmt. Ein eigener

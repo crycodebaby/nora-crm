@@ -1,6 +1,8 @@
 import { act, useState } from "react";
 import { render } from "vitest-browser-react";
 
+import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
+import { usePwaUpdate } from "./usePwaUpdate";
 import {
   ACTIVATION_WATCHDOG_MS,
   CHOREOGRAPHY_COMMIT_MS,
@@ -60,6 +62,73 @@ const Harness = ({
     </div>
   );
 };
+
+/**
+ * Derselbe Hook, aber an den ECHTEN Store gekoppelt (PWA-1C.3).
+ *
+ * **Warum es diesen zweiten Harness braucht.** Der obige `Harness` haelt
+ * `activated` in lokalem React-State und uebergibt ein `vi.fn()` als
+ * `applyUpdate`. Genau diese Vereinfachung hat den Race verdeckt, den der Last
+ * Delta Review gefunden hat: in Production setzte `applyUpdate()` selbst
+ * `activated` zurueck, und ein Harness, in dem die beiden Groessen nichts
+ * miteinander zu tun haben, kann das per Konstruktion nicht sehen.
+ *
+ * Hier kommen `applying`, `activated` und `applyUpdate` deshalb aus
+ * `usePwaUpdate()` — also aus `pwaUpdateStore` selbst, mit derselben
+ * Kopplung wie in der Anwendung. `controllerchange` wird ueber
+ * `navigator.serviceWorker` abgesetzt, den echten Weg. Nur der Reload bleibt
+ * injizierbar, weil `window.location.reload` im Browser nicht ersetzbar ist —
+ * und genau deswegen wird dieser Fall hier geprueft und nicht in
+ * `NoraUpdateEvent.test.tsx`.
+ *
+ * Wuerde jemand `activated = false` in `applyUpdate()` wieder einfuehren,
+ * faellt der Test rot: der Commit des zweiten Laufs saehe dann `activated`
+ * false, `reload` bliebe ungerufen und der Watchdog brachte Recovery zurueck.
+ */
+let storeControls: { start: () => void; retry: () => void } | null = null;
+
+const StoreHarness = ({ reload }: { reload: () => void }) => {
+  const { applying, activated, applyUpdate } = usePwaUpdate();
+  const { phase, presentation, start, retry } = useUpdateChoreography({
+    applyUpdate,
+    applying,
+    activated,
+    reload,
+  });
+  storeControls = { start, retry };
+  return (
+    <div
+      data-testid="probe"
+      data-phase={phase}
+      data-presentation={presentation}
+      data-applying={String(applying)}
+      data-activated={String(activated)}
+    />
+  );
+};
+
+/** Zaehlt die Aktivierungsanfragen: ein Aufruf ist genau ein SKIP_WAITING. */
+let storeApplyCalls = 0;
+let storeNeedRefresh: (() => void) | undefined;
+let storeWaiting = true;
+
+const storeRegisterSw: RegisterSwLike = (opts) => {
+  storeNeedRefresh = opts.onNeedRefresh;
+  opts.onRegisteredSW?.("/sw.js", {
+    get waiting() {
+      return storeWaiting ? ({} as ServiceWorker) : null;
+    },
+    update: () => Promise.resolve(),
+  } as unknown as ServiceWorkerRegistration);
+  return () => {
+    storeApplyCalls += 1;
+    return Promise.resolve();
+  };
+};
+
+/** Die echte Uebernahme, auf demselben EventTarget wie in Production. */
+const dispatchControllerChange = () =>
+  navigator.serviceWorker.dispatchEvent(new Event("controllerchange"));
 
 const probe = () =>
   document.querySelector<HTMLElement>('[data-testid="probe"]');
@@ -243,8 +312,14 @@ describe("useUpdateChoreography — Reload-Verantwortung", () => {
       <Harness applyUpdate={applyUpdate} reload={reload} />,
     );
 
+    // Getrennte Schritte, sonst entsteht der Watchdog-Timer nie und der Lauf
+    // startet gar nicht aus Recovery — die fruehere Fassung sprang mit einem
+    // einzigen `advance()` ueber beides und bewies deshalb nichts.
     await click("go");
-    await advance(CHOREOGRAPHY_COMMIT_MS + ACTIVATION_WATCHDOG_MS);
+    await runFailedAttempt();
+    expect(probe()?.dataset.presentation).toBe("recovery");
+    expect(applyUpdate).toHaveBeenCalledTimes(1);
+
     await click("again");
 
     // Mitten in der zweiten Choreografie trifft die Uebernahme des ERSTEN
@@ -252,21 +327,179 @@ describe("useUpdateChoreography — Reload-Verantwortung", () => {
     await advance(2000);
     await flush(() => controls!.setActivated(true));
 
-    // Nichts passiert, solange nicht commitet wurde — und danach genau ein
-    // Reload, kein Recovery.
+    // Vor dem Commit passiert nichts — der Reload haengt an `commitRequested`.
     await advance(RELOAD_FALLBACK_MS * 2);
     expect(reload).not.toHaveBeenCalled();
 
-    await advance(CHOREOGRAPHY_COMMIT_MS);
+    // Dann faellt der Commit. Der Store liefert `activated` weiterhin (die
+    // Groesse ist monoton, siehe `pwaUpdateStore`), also greift der
+    // Reload-Pfad statt des Watchdogs.
+    await advance(CHOREOGRAPHY_COMMIT_MS - RELOAD_FALLBACK_MS * 2 - 2000);
     await advance(RELOAD_FALLBACK_MS);
     expect(reload).toHaveBeenCalledTimes(1);
     expect(probe()?.dataset.presentation).toBe("choreography");
 
+    // Kein zweiter Reload, und auch nach der vollen Frist kein Recovery.
     await advance(ACTIVATION_WATCHDOG_MS * 3);
     expect(reload).toHaveBeenCalledTimes(1);
     expect(probe()?.dataset.presentation).toBe("choreography");
 
     await screen.unmount();
+  });
+
+  // --------------------------------------------------------------------------
+  // Gegen den echten Store (PWA-1C.3). Siehe den Kommentar an `StoreHarness`:
+  // dieselbe Kopplung von `applyUpdate`, `applying` und `activated` wie in der
+  // Anwendung — nur der Reload bleibt injizierbar.
+  // --------------------------------------------------------------------------
+
+  describe("am echten Store", () => {
+    beforeEach(() => {
+      pwaUpdateStore.reset();
+      storeApplyCalls = 0;
+      storeWaiting = true;
+      storeControls = null;
+      pwaUpdateStore.start(storeRegisterSw);
+    });
+
+    afterEach(() => {
+      pwaUpdateStore.reset();
+    });
+
+    /** Bis in den Recovery-Zustand: Anfrage raus, Uebernahme bleibt aus. */
+    const toRecovery = async () => {
+      await flush(() => storeNeedRefresh!());
+      await flush(() => storeControls!.start());
+      await advance(CHOREOGRAPHY_COMMIT_MS);
+      expect(storeApplyCalls).toBe(1);
+      await advance(ACTIVATION_WATCHDOG_MS);
+      expect(probe()?.dataset.presentation).toBe("recovery");
+    };
+
+    it("haelt eine Uebernahme, die waehrend des zweiten Laufs eintrifft", async () => {
+      const reload = vi.fn();
+      const screen = await render(<StoreHarness reload={reload} />);
+
+      await toRecovery();
+      // Der Watchdog macht den Versuch wiederholbar — sonst liefe der Retry in
+      // den `applying`-Guard (das war der BLOCKER aus PWA-1C.2).
+      await flush(() => pwaUpdateStore.endStalledActivation());
+      await flush(() => storeControls!.retry());
+
+      // Mitten im zweiten Lauf trifft die Uebernahme des ERSTEN Versuchs ein.
+      await advance(2000);
+      await flush(() => dispatchControllerChange());
+      expect(probe()?.dataset.activated).toBe("true");
+      expect(probe()?.dataset.presentation).toBe("choreography");
+
+      // Die Choreografie laeuft sauber zu Ende — kein abrupter Abbruch, kein
+      // vorgezogener Reload. Der Commit bleibt der Uebergabepunkt.
+      await advance(CHOREOGRAPHY_COMMIT_MS - 2000 - 1);
+      expect(reload).not.toHaveBeenCalled();
+      expect(probe()?.dataset.presentation).toBe("choreography");
+
+      await advance(1);
+      // Der Commit fordert nichts mehr an, und die Uebernahme steht noch.
+      expect(storeApplyCalls).toBe(1);
+      expect(probe()?.dataset.activated).toBe("true");
+
+      await advance(RELOAD_FALLBACK_MS);
+      expect(reload).toHaveBeenCalledTimes(1);
+
+      // Weit ueber die Watchdog-Frist hinaus: kein Recovery, kein zweiter
+      // Reload, keine zweite Anfrage.
+      await advance(ACTIVATION_WATCHDOG_MS * 3);
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(storeApplyCalls).toBe(1);
+      expect(probe()?.dataset.presentation).toBe("choreography");
+
+      await screen.unmount();
+    });
+
+    it("laesst den legitimen Retry weiterhin senden", async () => {
+      const reload = vi.fn();
+      const screen = await render(<StoreHarness reload={reload} />);
+
+      await toRecovery();
+      await flush(() => pwaUpdateStore.endStalledActivation());
+      await flush(() => storeControls!.retry());
+
+      // Keine Uebernahme diesmal: der `activated`-Guard darf den echten
+      // zweiten Versuch nicht blockieren.
+      await advance(CHOREOGRAPHY_COMMIT_MS);
+      expect(storeApplyCalls).toBe(2);
+      expect(reload).not.toHaveBeenCalled();
+
+      await screen.unmount();
+    });
+
+    it("laedt nach einem erfolgreichen zweiten Versuch genau einmal", async () => {
+      const reload = vi.fn();
+      const screen = await render(<StoreHarness reload={reload} />);
+
+      await toRecovery();
+      await flush(() => pwaUpdateStore.endStalledActivation());
+      await flush(() => storeControls!.retry());
+      await advance(CHOREOGRAPHY_COMMIT_MS);
+      expect(storeApplyCalls).toBe(2);
+
+      // Die Uebernahme kommt NACH Anfrage 2.
+      storeWaiting = false;
+      await flush(() => dispatchControllerChange());
+      await advance(RELOAD_FALLBACK_MS);
+      expect(reload).toHaveBeenCalledTimes(1);
+
+      await advance(ACTIVATION_WATCHDOG_MS * 3);
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(probe()?.dataset.presentation).toBe("choreography");
+
+      await screen.unmount();
+    });
+
+    it("bringt bei bestaetigter Uebernahme keinen Watchdog mehr zurueck", async () => {
+      const reload = vi.fn();
+      const screen = await render(<StoreHarness reload={reload} />);
+
+      await flush(() => storeNeedRefresh!());
+      await flush(() => storeControls!.start());
+      await advance(CHOREOGRAPHY_COMMIT_MS);
+      storeWaiting = false;
+      await flush(() => dispatchControllerChange());
+
+      // Ab hier darf keine Frist mehr Recovery erzeugen.
+      await advance(ACTIVATION_WATCHDOG_MS * 4);
+      expect(probe()?.dataset.presentation).toBe("choreography");
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(storeApplyCalls).toBe(1);
+
+      await screen.unmount();
+    });
+
+    it("sendet nach bestaetigter Uebernahme auch bei weiteren Commits nichts", async () => {
+      const reload = vi.fn();
+      const screen = await render(<StoreHarness reload={reload} />);
+
+      await flush(() => storeNeedRefresh!());
+      storeWaiting = false;
+      await flush(() => dispatchControllerChange());
+      expect(probe()?.dataset.activated).toBe("true");
+
+      // Dreifacher Start, danach noch ein Retry: jeder Lauf commitet, und
+      // trotzdem geht keine einzige Anfrage raus.
+      await flush(() => {
+        storeControls!.start();
+        storeControls!.start();
+        storeControls!.start();
+      });
+      await advance(CHOREOGRAPHY_COMMIT_MS);
+      await flush(() => storeControls!.retry());
+      await advance(CHOREOGRAPHY_COMMIT_MS);
+
+      expect(storeApplyCalls).toBe(0);
+      expect(probe()?.dataset.activated).toBe("true");
+
+      await screen.unmount();
+    });
   });
 
   it("raeumt den Reload-Timer beim Unmount ab", async () => {

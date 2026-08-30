@@ -339,7 +339,18 @@ describe("pwaUpdateStore", () => {
     store.stop();
   });
 
-  it("wertet ein controllerchange VOR applyUpdate nicht als Erfolg dieses Versuchs", () => {
+  // --------------------------------------------------------------------------
+  // `activated` ist monoton (PWA-1C.3).
+  //
+  // Frueher setzte `applyUpdate()` es als erste Amtshandlung wieder auf `false`
+  // — mit der Begruendung, ein frueheres `controllerchange` duerfe den Erfolg
+  // dieses Versuchs nicht vorwegnehmen. Das verwechselte den VERSUCH mit dem
+  // DOKUMENT: die Beobachtung „hier hat eine Uebernahme stattgefunden" wird
+  // durch einen neuen Versuch nicht falsch. Traf sie waehrend einer laufenden
+  // Retry-Choreografie ein, loeschte deren Commit sie wieder.
+  // --------------------------------------------------------------------------
+
+  it("nimmt eine bestaetigte Uebernahme nie wieder zurueck", () => {
     const swTarget = listenerTarget();
     const { registerSw, handle } = createFakeRegisterSW();
     const store = createPwaUpdateStore({
@@ -354,9 +365,31 @@ describe("pwaUpdateStore", () => {
     expect(store.getSnapshot().activated).toBe(true);
 
     store.applyUpdate();
+    store.applyUpdate();
 
-    // Der neue Versuch startet mit unbeantworteter Uebernahme.
-    expect(store.getSnapshot().activated).toBe(false);
+    expect(store.getSnapshot().activated).toBe(true);
+    store.stop();
+  });
+
+  it("schickt keinen Aktivierungsversuch mehr, wenn schon uebernommen wurde", () => {
+    const swTarget = listenerTarget();
+    const { registerSw, handle } = createFakeRegisterSW();
+    const store = createPwaUpdateStore({
+      now,
+      serviceWorkerTarget: swTarget.target,
+    });
+    store.start(registerSw);
+    handle.needRefresh!();
+    swTarget.dispatch("controllerchange");
+
+    store.applyUpdate();
+
+    // Es gibt nichts mehr zu aktivieren: sauberer No-op statt einer Anfrage
+    // ins Leere. `applying` bleibt unberuehrt, damit die Praesentation nicht
+    // faelschlich in eine Wartelage geraet — der Reload-Pfad haengt an
+    // `commitRequested && activated` und greift ohnehin.
+    expect(handle.updateCalls).toBe(0);
+    expect(store.getSnapshot().applying).toBe(false);
     store.stop();
   });
 
@@ -505,6 +538,41 @@ describe("pwaUpdateStore", () => {
     // Oberflaeche `hasWaitingWorker()` im Moment des Klicks noch einmal und
     // laedt dann statt zu wiederholen (siehe `NoraUpdateEvent`).
     expect(handle.updateCalls).toBe(1);
+    store.stop();
+  });
+
+  it("laesst eine Uebernahme mitten im zweiten Versuch stehen", () => {
+    const { store, handle, swTarget } = stallHarness({ waiting: true });
+
+    // Versuch 1 bleibt stecken, der Watchdog macht ihn wiederholbar.
+    store.applyUpdate();
+    expect(handle.updateCalls).toBe(1);
+    expect(store.endStalledActivation()).toBe(true);
+
+    // Die Uebernahme von Versuch 1 trifft verspaetet ein — waehrend die
+    // Retry-Choreografie schon laeuft, aber vor ihrem Commit.
+    swTarget.dispatch("controllerchange");
+    expect(store.getSnapshot().activated).toBe(true);
+
+    // Der Commit des zweiten Laufs. Vorher loeschte genau dieser Aufruf die
+    // Uebernahme und schickte ein zweites SKIP_WAITING ins Leere.
+    store.applyUpdate();
+
+    expect(store.getSnapshot().activated).toBe(true);
+    expect(handle.updateCalls).toBe(1);
+    store.stop();
+  });
+
+  it("erklaert einen Versuch nach bestaetigter Uebernahme nicht fuer steckengeblieben", () => {
+    const { store, swTarget } = stallHarness({ waiting: true });
+
+    store.applyUpdate();
+    swTarget.dispatch("controllerchange");
+
+    // `activated` gewinnt: es gibt nichts zu wiederholen, und der Versuch darf
+    // nicht nachtraeglich fuer gescheitert erklaert werden.
+    expect(store.endStalledActivation()).toBe(false);
+    expect(store.getSnapshot().activated).toBe(true);
     store.stop();
   });
 
