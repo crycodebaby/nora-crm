@@ -14,6 +14,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1) | [Springen](#2026-08-30--premium-update-experience-und-8-sekunden-choreografie-pwa-1c1) |
 | 2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C) | [Springen](#2026-08-30--update-experience-als-anwendungs-systemereignis-pwa-1c) |
 | 2026-08-30 – PWA-Update: wartender Worker statt automatischer Übernahme (PWA-1B) | [Springen](#2026-08-30--pwa-update-wartender-worker-statt-automatischer-übernahme-pwa-1b) |
+| 2026-08-30 – Vorgänge-Kanban Navigation Rail | [Springen](#2026-08-30-vorgänge-kanban-navigation-rail) |
 | 2026-08-29 – Notification Presentation Contract v1 (Phase 7A) | [Springen](#2026-08-29-notification-presentation-contract-v1-phase-7a) |
 | 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice) | [Springen](#2026-08-29-operation-status-contract-wave-v1-createquickcapturecase-slice) |
 | 2026-08-29 – Idempotency Wave | [Springen](#2026-08-29-idempotency-wave) |
@@ -362,6 +363,41 @@ Solange der alte Worker aktiv bleibt, bleibt auch sein Precache vollständig. Di
 ### Bekannter Rest
 
 Aktualisiert ein Benutzer in einem Tab, laden **alle** anderen offenen Nora-Tabs ebenfalls neu (gemessen). Das ist Verhalten des `virtual:pwa-register`-Clients: jeder Tab, der das Update-Signal bekommen hat, lauscht auf `controlling` und lädt neu. Es verschiebt das ursprüngliche Problem nicht — die anderen Tabs landen sauber auf dem neuen Build, nicht in einem halb-alten Zustand — aber ein zweiter Tab mit ungespeicherter Eingabe verliert sie. Bewusst nicht mit einer eigenen Cross-Tab-Architektur behandelt; Entscheidung liegt bei PWA-1C.
+
+---
+
+## 2026-08-30 – Vorgänge-Kanban Navigation Rail
+
+### Kontext
+
+Die reale Demo-Ansicht unter `/vorgaenge` hat 12 sichtbare Statusspalten und ist bei 1280 px rund 4.060 px breit. Die erste lokale Horizontalnavigations-Wave war funktional, wurde visuell aber ausdrücklich nicht akzeptiert: Edge-Fades, zwei Pfeiltasten in der Toolbar und eine behauptete kontrastreichere Browser-Scrollbar wirkten wie ergänzte Overflow-Hilfen, nicht wie ein bewusst gestaltetes Arbeitswerkzeug.
+
+Die Browser-Messung erklärte insbesondere den Scrollbar-Widerspruch: Die Regeln griffen auf dem richtigen `.nora-kanban-scroll`-Element (Chromium meldete 16 px Höhe und die Nora-Farben), dessen physisches Ende lag bei 1280×720 jedoch bei `y=841` und damit 121 px unter dem sichtbaren Viewport. Die Leiste war technisch gestylt, im eigentlichen Arbeitsschritt aber nicht sichtbar. Das frühere Verdict `LOCAL VERIFIED + UX ACCEPTED` war daher falsch und ist widerrufen.
+
+### Entscheidung
+
+- **Eine native Wahrheit:** Alle Wege — Trackpad, horizontales Wheel/Shift+Wheel, Touch, Board-Pan, Pfeile, Tastatur, Track-Klick und Thumb-Drag — verändern ausschließlich dasselbe native `scrollLeft`. Es gibt keine zweite künstliche Position.
+- **Proportionaler Viewport-Thumb:** Die Thumb-Breite folgt `clientWidth / scrollWidth`, mit einem 44-px-Mindestgriff auf schmalen Touch-Geräten; die Position folgt über den verbleibenden Track-Weg weiterhin exakt `scrollLeft / (scrollWidth - clientWidth)`. Scroll, Resize und Inhaltsmutation werden per `requestAnimationFrame`, `ResizeObserver` und `MutationObserver` synchronisiert. Die Marker entstehen aus den realen Spaltenmitten.
+- **Direkter Drag:** Pointer-Delta wird über den verfügbaren Thumb-Weg proportional in nativen Scrollweg übersetzt. Während des Ziehens gibt es bewusst kein Smooth-Scrolling. Pointer Capture und zusätzliche Window-Fallbacks räumen Up, Cancel, Lost Capture, Mouse-Up außerhalb, Fensterverlust und Unmount auf.
+- **Track-Entscheidung A:** Ein Klick auf freie Track-Fläche zentriert den Viewport ungefähr an der real angeklickten Position. Bei einer 12-spaltigen Übersicht entspricht das dem räumlichen Modell des Rails besser als wiederholtes seitenweises Klicken. Die programmatische Bewegung ist smooth, außer bei Reduced Motion.
+- **Integrierte Pfeile:** Links/Rechts sind Bestandteile derselben Rail-Oberfläche, haben 44×44 px Hit Targets, klare `aria-label`s und scrollen ungefähr eine Spalte. Die frühere Platzierung in der Toolbar entfällt.
+- **Sticky innerhalb der Arbeitsfläche:** Das Rail liegt als bottom-sticky Element am unteren sichtbaren Rand. Es bleibt bei langen Spalten erreichbar, wird am Ende durch den Kanban-Container begrenzt und erhält ausreichend unteren Innenraum, damit Karten nicht dauerhaft verdeckt werden.
+- **Eine sichtbare Steuerung:** Der natürliche Anschnitt der nächsten Spalte und schmale Edge-Fades ergänzen das Rail. Die native Browser-Scrollbar wird visuell ausgeblendet, weil sie direkt hinter dem Rail als konkurrierende zweite Steuerung gelesen wurde; native Scrollfläche, Touch-Momentum, Trackpad und `scrollLeft` bleiben erhalten.
+- **Accessibility und Touch:** Der Thumb verwendet die korrekte horizontale `scrollbar`-Semantik mit `aria-controls`, `aria-valuemin`, `aria-valuemax` und `aria-valuenow`. Track, Thumb und Pfeile bieten mindestens 44 px Höhe; der Thumb wird auch bei sehr breitem Board nicht schmaler als 44 px. Direkter Touch-Drag nutzt Pointer Capture. Pfeile, Page Up/Down und Home/End sind per Tastatur verfügbar; Fokus wird am Rail sichtbar statt als dominanter Rahmen um das ganze Board.
+- **Mouse-Pan nur auf freier Fläche:** `grab`/`grabbing` startet ausschließlich mit der linken Maustaste auf markierten freien Board-Flächen. Karten (`data-rfd-draggable-id`), Spaltenköpfe und interaktive Elemente sind harte Ausschlüsse. Pointer Capture wird bei Up, Cancel, Lost Capture und Unmount bereinigt.
+- **Native Gesten bleiben führend:** Kein Wheel-Listener mehr am Vorgangs-Kanban. Vertikales Mausrad scrollt die Seite; horizontales Trackpad, diagonale Gesten, Touch-Momentum und Shift+Wheel bleiben Browser-/Plattformverhalten. Der bestehende Wheel-Helper bleibt unverändert für das kleine Hotboard-Fokusboard.
+- **Kein Scroll-Snap:** Freie Navigation bleibt erhalten.
+- **Scope:** reine Frontend-/UX-Änderung; keine Domain-, Routing-, Backend-, Datenbank-, RLS-, DnD-Library- oder Persistenzänderung. Kein Production-Deployment in dieser Wave.
+
+### Begründung
+
+Das Rail macht Größe, Ausschnitt und Position der horizontalen Arbeitsfläche gleichzeitig sichtbar. Es bleibt in Reichweite, ohne die Kanban-Kartenlogik zu übernehmen. Der natürliche Content Peek, schwache Edge-Fades und die reale Spaltensegmentierung bilden mehrere ruhige Signale statt eines dominanten Pfeils. Native Wheel-/Trackpad-Semantik reduziert weiterhin Überraschungen, während Board-Pan und Rail-Drag klar voneinander und von Karten-DnD getrennt sind.
+
+### Verifikation
+
+- Automatisiert: reale Rail-/Thumb-Geometrie inklusive 44-px-Minimum, proportionaler Maus- und Touch-Drag, ausgeblendete Browser-Scrollbar bei weiter nativer Scrollfläche, Track-Ziel, Start/Mitte/Ende, Pfeile, Keyboard, Resize, Inhaltsmutation, Reduced Motion, Pointer-Cleanup und DnD-/Pan-Isolation.
+- Gestylter Localhost: technische und visuelle Prüfung von Anfang/Mitte/Ende, sticky Containergrenze, Pfeil, Track-Klick und direktem Thumb-Drag. Weitere dokumentierte Breiten-/Zoom-/Theme-Matrix gehört zur Session-Abnahme.
+- Status: **LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE**. Kein Production-Deployment; automatisierte Tests oder Agenten-Screenshots setzen den Status niemals auf `UX ACCEPTED`.
 
 ---
 

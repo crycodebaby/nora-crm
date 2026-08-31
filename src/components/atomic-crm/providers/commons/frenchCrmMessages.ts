@@ -355,6 +355,12 @@ export const frenchCrmMessages = {
         view_hausmeisterdienst: "Service conciergerie",
         no_fensterservice_deals: "Aucune affaire service fenêtres",
         no_hausmeisterdienst_deals: "Aucune affaire service conciergerie",
+        scroll_controls_label: "Navigation horizontale des affaires",
+        scroll_region_label:
+          "Parcourir les affaires horizontalement par statut",
+        scroll_left: "Faire défiler les affaires vers la gauche",
+        scroll_right: "Faire défiler les affaires vers la droite",
+        scroll_thumb: "Déplacer la zone visible des affaires",
       },
     },
     notes: {

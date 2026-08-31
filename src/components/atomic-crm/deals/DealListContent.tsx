@@ -10,9 +10,9 @@ import {
 import { useEffect, useState } from "react";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
-import { useHorizontalWheelScroll } from "../misc/useHorizontalWheelScroll";
 import type { Deal } from "../types";
 import { DealColumn } from "./DealColumn";
+import { KanbanNavigationRail } from "./KanbanNavigationRail";
 import {
   countHiddenEmptyStages,
   filterDealsByKanbanView,
@@ -23,6 +23,7 @@ import { DealKanbanToolbar } from "./DealKanbanToolbar";
 import type { DealsByStage } from "./stages";
 import { getDealsByStage } from "./stages";
 import { useDealKanbanView } from "./useDealKanbanView";
+import { useKanbanScrollNavigation } from "./useKanbanScrollNavigation";
 import { useShowAllDealStages } from "./useShowAllDealStages";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
 
@@ -33,7 +34,7 @@ export const DealListContent = () => {
   const translate = useTranslate();
   const { showAllStages, toggleShowAllStages } = useShowAllDealStages();
   const { kanbanView, setKanbanView } = useDealKanbanView();
-  const kanbanScrollRef = useHorizontalWheelScroll<HTMLDivElement>();
+  const kanbanNavigation = useKanbanScrollNavigation<HTMLDivElement>();
   const { canAccess: canEditDeals } = useCanAccess({
     resource: "deals",
     action: "edit",
@@ -143,16 +144,46 @@ export const DealListContent = () => {
             {translate("resources.deals.kanban.no_deals")}
           </p>
         ) : (
-          <div className="nora-kanban-scroll" ref={kanbanScrollRef}>
-            <div className="nora-kanban-board">
-              {visibleStages.map((stage) => (
-                <DealColumn
-                  stage={stage.value}
-                  deals={dealsByStage[stage.value]}
-                  key={stage.value}
-                />
-              ))}
+          <div
+            className="nora-kanban-viewport"
+            data-can-scroll-left={kanbanNavigation.canScrollLeft}
+            data-can-scroll-right={kanbanNavigation.canScrollRight}
+          >
+            <div
+              className="nora-kanban-edge nora-kanban-edge-left"
+              aria-hidden
+            />
+            <div
+              className="nora-kanban-edge nora-kanban-edge-right"
+              aria-hidden
+            />
+            <div
+              id="nora-deals-kanban"
+              className="nora-kanban-scroll"
+              ref={kanbanNavigation.ref}
+              role="region"
+              aria-label={translate(
+                "resources.deals.kanban.scroll_region_label",
+              )}
+              tabIndex={0}
+              {...kanbanNavigation.scrollerProps}
+            >
+              <div className="nora-kanban-board" data-kanban-pan-surface>
+                {visibleStages.map((stage) => (
+                  <DealColumn
+                    stage={stage.value}
+                    deals={dealsByStage[stage.value]}
+                    key={stage.value}
+                  />
+                ))}
+              </div>
             </div>
+            <KanbanNavigationRail
+              scrollElement={kanbanNavigation.element}
+              onScrollByColumn={kanbanNavigation.scrollByColumn}
+              onScrollByViewport={kanbanNavigation.scrollByViewport}
+              onScrollToEdge={kanbanNavigation.scrollToEdge}
+            />
           </div>
         )}
       </div>

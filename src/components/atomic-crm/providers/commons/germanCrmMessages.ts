@@ -355,6 +355,11 @@ export const germanCrmMessages = {
         no_fensterservice_deals: "Keine Fensterservice-Vorgänge vorhanden",
         no_hausmeisterdienst_deals:
           "Keine Hausmeisterservice-Vorgänge vorhanden",
+        scroll_controls_label: "Horizontale Vorgangsnavigation",
+        scroll_region_label: "Vorgänge nach Status horizontal durchsuchen",
+        scroll_left: "Vorgänge nach links scrollen",
+        scroll_right: "Vorgänge nach rechts scrollen",
+        scroll_thumb: "Sichtbaren Bereich der Vorgänge verschieben",
       },
     },
     notes: {

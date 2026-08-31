@@ -229,7 +229,7 @@ Schlanke **Ansichtsauswahl** in der Vorgangsübersicht — nicht dominant, touch
 |---------|--------|
 | Breite | `/vorgaenge` nutzt volle Viewport-Breite (`Layout` ohne `max-w-screen-xl`) |
 | Board | `.nora-kanban-board` — CSS Grid, `grid-auto-columns: minmax(280px, 320px)` |
-| Scroll | `.nora-kanban-scroll` — horizontales Scrollen bleibt; gestaltete Scrollleiste (Firefox + WebKit) |
+| Scroll | `.nora-kanban-scroll` — native horizontale Touch-/Trackpad-Bewegung und Momentum; die Browser-Scrollbar ist bei aktivem Navigation Rail visuell ausgeblendet, damit nicht zwei konkurrierende Leisten erscheinen |
 | Spalten | `.nora-kanban-column` — stabile Mindestbreite 280 px, max. 320 px; Karten volle Spaltenbreite |
 | Toolbar | `.nora-kanban-toolbar-sticky` — bleibt beim Scrollen oben sichtbar |
 | Spaltenkopf | `.nora-kanban-column-header` — klar abgesetzt; optional sticky unter Toolbar |
@@ -243,12 +243,36 @@ Schlanke **Ansichtsauswahl** in der Vorgangsübersicht — nicht dominant, touch
 | Spaltenkopf | Eigene Box mit Status (17 px), Anzahl, optional Auftragswert; `nora-kanban-column-gap` (16 px) vor Karten — kein Sticky-Overlap |
 | Business-ID | `BusinessNumber` — KD/VG als Badge 14–16 px (Kanban), größer im Detail; Nora-Akzent-Outline |
 | Dringlichkeit | `NoraUrgencyBadge` — Icon + Text; heute/überfällig deutlich; Farbe nicht allein |
-| Kanban-Scroll | `.nora-kanban-scroll` — 16 px Höhe, greifbarer Thumb; Mausrad horizontal via `useHorizontalWheelScroll` |
+| Kanban-Scroll | `.nora-kanban-scroll` bleibt die einzige native Scroll-Wahrheit; seine Browserleiste ist visuell ausgeblendet und das sticky Navigation Rail ist die einzige sichtbare horizontale Steuerung. Normales vertikales Mausrad bleibt Seitenscroll, native horizontale Touch-/Trackpad-/Shift-Gesten bleiben beim Board |
 | Vorgangsdetail | `.nora-deal-dialog` — `min(1100px, 96vw)`, `.nora-detail-scroll` — 14 px vertikale Scrollbar |
 | Abschnitte | `NoraSectionCard` — Übersicht, Ansprechpartner, Beschreibung, Aufgaben, Checkliste, Notizen |
 | Typografie | Grundtext 15–16 px, Kartentitel 17 px, Detailtitel 24–28 px, Metadaten min. 13–14 px |
 | Datum/Zeit | `noraDateTime.ts` — `de-DE`, z. B. `14. Juli 2026`, `Gestern um 17:13 Uhr` |
 | Icons | Kein dekoratives Einzelbuchstaben-Avatar in Vorgangskarten; Firmenname statt Buchstabe in Notizen |
+
+### Horizontale Arbeitsflächen / Kanban-Navigation (Wave 2026-08-30)
+
+Breite Arbeitsflächen müssen ohne Erklärung erkennen lassen, dass links oder rechts weiterer Inhalt liegt, dürfen den Inhalt aber nicht mit Hinweisen überdecken.
+
+| Element | Regel |
+|---------|-------|
+| Rail | Eine zusammenhängende Nora-Komponente am unteren sichtbaren Rand der Kanban-Arbeitsfläche; bleibt bei langen Spalten sticky, wird am Ende aber innerhalb der Arbeitsfläche begrenzt |
+| Viewport-Thumb | Breite = `clientWidth / scrollWidth`, auf schmalen Geräten mit 44 px Mindestgriff; Position = `scrollLeft / (scrollWidth - clientWidth)` über den verbleibenden Track-Weg; keine erfundene Prozentanzeige, kein zweiter Scrollzustand |
+| Thumb-Drag | Direkte proportionale Kopplung an das native `scrollLeft`, ohne Smooth-Lag; Pointer Capture plus Cleanup bei Up, Cancel, Lost Capture, externem Mouse-Up, Fensterverlust und Unmount |
+| Track | Klick auf freie Track-Fläche zentriert den sichtbaren Viewport ungefähr an der real angeklickten Position; programmatische Bewegung respektiert Reduced Motion |
+| Spaltenorientierung | Subtile Marker basieren auf den tatsächlichen Spaltenmitten; der Thumb zeigt den sichtbaren Ausschnitt über diesen Segmenten, ohne eine zweite Status-Kopfzeile zu erzeugen |
+| Pfeile | Bestandteil des Rails, 44×44 px Hit Target, klare `aria-label`/Tooltips, am jeweiligen Ende deaktiviert, ungefähr eine Spalte pro Aktivierung |
+| Randhinweis | Schmale geometriebasierte Edge-Fades ohne harten Schatten; zusammen mit dem natürlichen Anschnitt der nächsten Spalte nur sichtbar, wenn in der Richtung weiterer Inhalt existiert |
+| Tastatur | Scrollregion und Rail-Thumb unterstützen Pfeiltasten ungefähr spaltenweise, Page Up/Down abschnittsweise sowie Home/End; sichtbarer Fokus liegt am Rail statt als dominanter Rahmen um das ganze Board |
+| Maus-Pan | `grab`/`grabbing` ausschließlich auf freier Board-Fläche; niemals auf Karten, Links, Buttons, Inputs oder Spaltenüberschriften |
+| Karten-DnD | Hat immer Vorrang vor Board-Pan; keine zweite Drag-and-drop-Library |
+| Touch / Trackpad | Wischen auf dem Board bleibt nativ inklusive Momentum. Rail-Track, Pfeile und Thumb besitzen mindestens 44 px Höhe; der Thumb zusätzlich mindestens 44 px Breite und lässt sich per Touch-Pointer direkt ziehen. Keine Desktop-Board-Grab-Logik für Touch |
+| Vertikales Mausrad | Wird auf dem Vorgangs-Kanban nicht pauschal horizontal umgebogen, damit lange Spalten und die Seite natürlich vertikal lesbar bleiben |
+| Native Scrollbar | Nur die Browser-Darstellung wird ausgeblendet (`scrollbar-width: none` / WebKit-Scrollbar ohne Größe); native Scrollfläche, Gesten, Momentum und `scrollLeft` bleiben aktiv |
+| Motion | Track-/Pfeilbewegung darf smooth sein; direkter Thumb-Drag ist unmittelbar. Bei `prefers-reduced-motion: reduce` entfallen programmatische Smooth-Bewegung und Rail-Transitions |
+| Zustand | Aus `scrollLeft`, `scrollWidth`, `clientWidth` abgeleitet; bei Scroll, Resize und Inhaltsänderung neu berechnet |
+| Scroll-Snap | Nicht erzwungen — freie Navigation bleibt erhalten |
+| Release-Status | Maximal `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`; automatisierte und technische Browser-Tests sind kein visueller Acceptance-Beweis |
 
 ## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
 

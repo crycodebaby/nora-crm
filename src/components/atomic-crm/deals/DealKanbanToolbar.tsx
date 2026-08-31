@@ -59,23 +59,25 @@ export const DealKanbanToolbar = ({
           {translate("resources.deals.kanban.view_hausmeisterdienst")}
         </ToggleGroupItem>
       </ToggleGroup>
-      {showStageToggle ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="lg"
-          onClick={onToggleShowAllStages}
-          className={cn(
-            "nora-secondary-action nora-touch-target text-sm font-normal w-full sm:w-auto shrink-0",
-            showAllStages && "border-muted-foreground/30",
-          )}
-          aria-pressed={showAllStages}
-        >
-          {showAllStages
-            ? translate("resources.deals.kanban.hide_empty_stages")
-            : translate("resources.deals.kanban.show_all_stages")}
-        </Button>
-      ) : null}
+      <div className="flex items-center justify-end w-full sm:w-auto shrink-0">
+        {showStageToggle ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={onToggleShowAllStages}
+            className={cn(
+              "nora-secondary-action nora-touch-target text-sm font-normal flex-1 sm:flex-none",
+              showAllStages && "border-muted-foreground/30",
+            )}
+            aria-pressed={showAllStages}
+          >
+            {showAllStages
+              ? translate("resources.deals.kanban.hide_empty_stages")
+              : translate("resources.deals.kanban.show_all_stages")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 };

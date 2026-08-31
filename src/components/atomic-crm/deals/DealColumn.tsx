@@ -43,13 +43,18 @@ export const DealColumn = ({
         ) : null}
       </header>
 
-      <div className="nora-kanban-column-gap" aria-hidden />
+      <div
+        className="nora-kanban-column-gap"
+        data-kanban-pan-surface
+        aria-hidden
+      />
 
       <Droppable droppableId={stage}>
         {(droppableProvided, snapshot) => (
           <div
             ref={droppableProvided.innerRef}
             {...droppableProvided.droppableProps}
+            data-kanban-pan-surface
             className={`nora-kanban-column-cards flex flex-col gap-3 min-h-[4rem] ${
               snapshot.isDraggingOver ? "bg-muted/50 rounded-xl" : ""
             }`}

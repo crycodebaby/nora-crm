@@ -183,6 +183,50 @@
      well as out, so the surface is watched changing rather than caught having
      changed. */
   --nora-choreo-ease: cubic-bezier(0.33, 0.06, 0.26, 1);
+  /* Wide working surfaces: calm, explicit navigation without browser chrome
+     becoming the primary affordance. */
+  --nora-kanban-rail-height: 3.25rem;
+  --nora-kanban-rail-bottom-offset: 0.75rem;
+  --nora-kanban-rail-surface: color-mix(
+    in oklab,
+    var(--card) 94%,
+    var(--background)
+  );
+  --nora-kanban-rail-track: color-mix(
+    in oklab,
+    var(--muted) 78%,
+    var(--background)
+  );
+  --nora-kanban-rail-thumb: color-mix(
+    in oklab,
+    var(--muted-foreground) 58%,
+    var(--card)
+  );
+  --nora-kanban-rail-thumb-hover: color-mix(
+    in oklab,
+    var(--nora-brand) 22%,
+    var(--muted-foreground)
+  );
+  --nora-kanban-rail-marker: color-mix(
+    in oklab,
+    var(--muted-foreground) 28%,
+    transparent
+  );
+  --nora-kanban-scroll-track: color-mix(
+    in oklab,
+    var(--muted) 62%,
+    transparent
+  );
+  --nora-kanban-scroll-thumb: color-mix(
+    in oklab,
+    var(--muted-foreground) 44%,
+    transparent
+  );
+  --nora-kanban-scroll-thumb-hover: color-mix(
+    in oklab,
+    var(--nora-brand) 34%,
+    oklch(0.46 0 0)
+  );
 }
 
 .dark {
@@ -289,6 +333,46 @@
   --avatar-7: oklch(0.38 0.14 10);
   --avatar-8: oklch(0.4 0.11 80);
   --avatar-9: oklch(0.36 0.13 270);
+  --nora-kanban-rail-surface: color-mix(
+    in oklab,
+    var(--card) 91%,
+    var(--background)
+  );
+  --nora-kanban-rail-track: color-mix(
+    in oklab,
+    var(--muted) 76%,
+    var(--background)
+  );
+  --nora-kanban-rail-thumb: color-mix(
+    in oklab,
+    var(--muted-foreground) 66%,
+    var(--card)
+  );
+  --nora-kanban-rail-thumb-hover: color-mix(
+    in oklab,
+    var(--nora-brand) 28%,
+    var(--muted-foreground)
+  );
+  --nora-kanban-rail-marker: color-mix(
+    in oklab,
+    var(--muted-foreground) 34%,
+    transparent
+  );
+  --nora-kanban-scroll-track: color-mix(
+    in oklab,
+    var(--muted) 56%,
+    transparent
+  );
+  --nora-kanban-scroll-thumb: color-mix(
+    in oklab,
+    var(--muted-foreground) 48%,
+    transparent
+  );
+  --nora-kanban-scroll-thumb-hover: color-mix(
+    in oklab,
+    var(--nora-brand) 38%,
+    oklch(0.66 0 0)
+  );
 }
 
 a,
@@ -453,49 +537,88 @@ input[type="time"] {
     border-color: color-mix(in oklab, var(--nora-brand) 30%, var(--border));
   }
 
+  .nora-kanban-viewport {
+    position: relative;
+    min-width: 0;
+    isolation: isolate;
+  }
+
+  .nora-kanban-edge {
+    position: absolute;
+    z-index: 10;
+    top: 0;
+    bottom: calc(var(--nora-kanban-rail-height) + 1.5rem);
+    width: 2rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-kanban-edge-left {
+    left: 0;
+    background: linear-gradient(
+      to right,
+      color-mix(in oklab, var(--background) 96%, transparent),
+      transparent
+    );
+  }
+
+  .nora-kanban-edge-right {
+    right: 0;
+    background: linear-gradient(
+      to left,
+      color-mix(in oklab, var(--background) 96%, transparent),
+      transparent
+    );
+  }
+
+  .nora-kanban-viewport[data-can-scroll-left="true"] .nora-kanban-edge-left,
+  .nora-kanban-viewport[data-can-scroll-right="true"] .nora-kanban-edge-right {
+    opacity: 1;
+  }
+
   .nora-kanban-scroll {
     width: 100%;
     overflow-x: auto;
     overflow-y: visible;
-    padding-bottom: 1rem;
-    scrollbar-width: auto;
-    scrollbar-color: color-mix(
-        in oklab,
-        var(--muted-foreground) 55%,
-        transparent
-      )
-      color-mix(in oklab, var(--muted) 70%, transparent);
+    padding-bottom: calc(var(--nora-kanban-rail-height) + 1.5rem);
+    touch-action: pan-x pan-y pinch-zoom;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+    /* The Navigation Rail is the one visible horizontal control. Keep the
+       native scrolling surface and momentum, but do not show a second browser
+       scrollbar directly behind it. */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    outline: none;
+  }
+
+  .nora-kanban-scroll:focus-visible {
+    outline: none;
+  }
+
+  .nora-kanban-viewport:has(.nora-kanban-scroll:focus-visible)
+    .nora-kanban-navigation-rail {
+    border-color: color-mix(in oklab, var(--nora-brand) 30%, var(--border));
+    box-shadow:
+      0 0 0 3px var(--nora-brand-ring),
+      0 12px 30px color-mix(in oklab, var(--foreground) 11%, transparent);
   }
 
   .nora-kanban-scroll::-webkit-scrollbar {
-    height: 16px;
+    display: none;
+    width: 0;
+    height: 0;
   }
 
-  .nora-kanban-scroll::-webkit-scrollbar-track {
-    background: color-mix(in oklab, var(--muted) 55%, transparent);
-    border-radius: 9999px;
-    margin-inline: 0.25rem;
+  .nora-kanban-scroll [data-kanban-pan-surface] {
+    cursor: grab;
   }
 
-  .nora-kanban-scroll::-webkit-scrollbar-thumb {
-    min-width: 3rem;
-    background-color: color-mix(
-      in oklab,
-      var(--muted-foreground) 50%,
-      var(--border)
-    );
-    border-radius: 9999px;
-    border: 3px solid transparent;
-    background-clip: padding-box;
-  }
-
-  .nora-kanban-scroll::-webkit-scrollbar-thumb:hover,
-  .nora-kanban-scroll::-webkit-scrollbar-thumb:active {
-    background-color: color-mix(
-      in oklab,
-      var(--nora-brand) 55%,
-      var(--muted-foreground)
-    );
+  .nora-kanban-scroll[data-kanban-panning="true"],
+  .nora-kanban-scroll[data-kanban-panning="true"] * {
+    cursor: grabbing !important;
+    user-select: none !important;
   }
 
   .nora-kanban-board {
@@ -516,6 +639,7 @@ input[type="time"] {
 
   .nora-kanban-column-header {
     @apply rounded-xl border border-border bg-card px-4 py-3.5 shadow-sm;
+    cursor: default;
   }
 
   .nora-kanban-column-title {
@@ -557,6 +681,192 @@ input[type="time"] {
   .nora-kanban-toolbar-sticky {
     @apply sticky top-0 z-20 bg-background/95 backdrop-blur-sm pb-3 -mx-1 px-1;
     border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  }
+
+  .nora-kanban-rail-dock {
+    position: sticky;
+    bottom: var(--nora-kanban-rail-bottom-offset);
+    z-index: 18;
+    display: flex;
+    height: var(--nora-kanban-rail-height);
+    margin-top: calc(0rem - var(--nora-kanban-rail-height));
+    align-items: center;
+    justify-content: center;
+    padding-inline: clamp(0.75rem, 3vw, 2.5rem);
+    pointer-events: none;
+  }
+
+  .nora-kanban-navigation-rail {
+    display: grid;
+    grid-template-columns: var(--nora-touch-min) minmax(6rem, 1fr) var(
+        --nora-touch-min
+      );
+    align-items: center;
+    gap: 0.25rem;
+    width: min(58rem, 100%);
+    height: var(--nora-kanban-rail-height);
+    padding: 0.1875rem;
+    border: 1px solid color-mix(in oklab, var(--border) 88%, transparent);
+    border-radius: calc(var(--radius-xl) + 0.125rem);
+    background: var(--nora-kanban-rail-surface);
+    box-shadow:
+      0 10px 28px color-mix(in oklab, var(--foreground) 9%, transparent),
+      0 1px 2px color-mix(in oklab, var(--foreground) 8%, transparent);
+    pointer-events: auto;
+    opacity: 1;
+    transition:
+      opacity var(--nora-motion-fast) var(--nora-motion-ease),
+      border-color var(--nora-motion-fast) var(--nora-motion-ease),
+      box-shadow var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-kanban-navigation-rail[data-visible="false"] {
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .nora-kanban-navigation-rail:hover,
+  .nora-kanban-navigation-rail:focus-within {
+    border-color: color-mix(in oklab, var(--nora-brand) 18%, var(--border));
+    box-shadow:
+      0 12px 30px color-mix(in oklab, var(--foreground) 11%, transparent),
+      0 1px 2px color-mix(in oklab, var(--foreground) 9%, transparent);
+  }
+
+  .nora-kanban-rail-button {
+    width: var(--nora-touch-min);
+    height: var(--nora-touch-min);
+    border-radius: var(--radius-lg);
+    color: var(--muted-foreground);
+    background: transparent;
+  }
+
+  .nora-kanban-rail-button:not(:disabled):hover {
+    color: var(--foreground);
+    background: var(--nora-brand-soft);
+  }
+
+  .nora-kanban-rail-button:disabled {
+    opacity: 0.3;
+  }
+
+  .nora-kanban-rail-track {
+    position: relative;
+    height: var(--nora-touch-min);
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+    border-radius: 9999px;
+    background: var(--nora-kanban-rail-track);
+    box-shadow: inset 0 1px 2px
+      color-mix(in oklab, var(--foreground) 7%, transparent);
+    cursor: pointer;
+  }
+
+  .nora-kanban-rail-track:active {
+    background: color-mix(
+      in oklab,
+      var(--nora-kanban-rail-track) 86%,
+      var(--nora-brand-soft)
+    );
+  }
+
+  .nora-kanban-rail-markers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .nora-kanban-rail-marker {
+    position: absolute;
+    top: 50%;
+    width: 1px;
+    height: 0.75rem;
+    border-radius: 9999px;
+    background: var(--nora-kanban-rail-marker);
+    transform: translate(-50%, -50%);
+  }
+
+  .nora-kanban-rail-thumb {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--nora-touch-min);
+    min-width: 1px;
+    border-radius: 9999px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    will-change: transform, width;
+  }
+
+  .nora-kanban-rail-thumb-visual {
+    display: flex;
+    width: 100%;
+    height: 1.375rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+    border-radius: 9999px;
+    color: color-mix(in oklab, var(--foreground) 72%, transparent);
+    background: var(--nora-kanban-rail-thumb);
+    box-shadow:
+      0 3px 9px color-mix(in oklab, var(--foreground) 16%, transparent),
+      inset 0 1px 0 color-mix(in oklab, white 24%, transparent);
+    pointer-events: none;
+    transition:
+      height var(--nora-motion-fast) var(--nora-motion-ease),
+      color var(--nora-motion-fast) var(--nora-motion-ease),
+      background-color var(--nora-motion-fast) var(--nora-motion-ease),
+      box-shadow var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-kanban-rail-thumb-visual svg {
+    width: 0.875rem;
+    height: 0.875rem;
+    opacity: 0.68;
+  }
+
+  .nora-kanban-rail-thumb:hover .nora-kanban-rail-thumb-visual,
+  .nora-kanban-rail-thumb:focus-visible .nora-kanban-rail-thumb-visual {
+    height: 1.625rem;
+    color: var(--foreground);
+    background: var(--nora-kanban-rail-thumb-hover);
+  }
+
+  .nora-kanban-rail-thumb:focus-visible {
+    outline: 3px solid var(--nora-brand-ring);
+    outline-offset: 2px;
+  }
+
+  .nora-kanban-navigation-rail[data-dragging="true"] {
+    user-select: none;
+  }
+
+  .nora-kanban-navigation-rail[data-dragging="true"]
+    .nora-kanban-rail-thumb-visual {
+    height: 1.75rem;
+    color: var(--foreground);
+    background: var(--nora-kanban-rail-thumb-hover);
+    box-shadow:
+      0 5px 14px color-mix(in oklab, var(--foreground) 20%, transparent),
+      inset 0 1px 0 color-mix(in oklab, white 28%, transparent);
+    cursor: grabbing;
+  }
+
+  @media (max-width: 767px) {
+    .nora-kanban-rail-dock {
+      bottom: calc(4.75rem + env(safe-area-inset-bottom));
+      padding-inline: 0.5rem;
+    }
+
+    .nora-kanban-navigation-rail {
+      border-radius: var(--radius-xl);
+    }
   }
 
   .nora-business-id-badge {
@@ -1027,6 +1337,12 @@ input[type="time"] {
     animation: none !important;
   }
 
+  .nora-kanban-edge,
+  .nora-kanban-navigation-rail,
+  .nora-kanban-rail-thumb-visual {
+    transition-duration: 1ms !important;
+  }
+
   /* --- Application system event (PWA-1C.1) -----------------------------
      The orb carries no information that only motion conveys — the title and
      the body text say everything. So every living layer stands still, the
@@ -1187,15 +1503,6 @@ input[type="time"] {
       padding var(--nora-choreo-slow) var(--nora-choreo-ease),
       gap var(--nora-choreo-slow) var(--nora-choreo-ease);
     animation: nora-system-event-in 420ms var(--nora-motion-ease) both;
-  }
-
-  /* After the primary action the actions fold away and the surface itself
-     takes the focus (see `NoraUpdateEvent`), so that it does not fall to
-     `<body>`. `:focus-visible` only, and a soft ring rather than a hard rule
-     around 34rem: it has to be findable, not shouty. */
-  .nora-system-event:focus-visible {
-    outline: 3px solid var(--nora-brand-ring);
-    outline-offset: 2px;
   }
 
   /* Never invite a reload in the middle of Quick Capture or a Vorgangsakte:

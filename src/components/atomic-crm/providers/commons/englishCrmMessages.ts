@@ -348,6 +348,11 @@ export const englishCrmMessages = {
         view_hausmeisterdienst: "Caretaker service",
         no_fensterservice_deals: "No window service deals",
         no_hausmeisterdienst_deals: "No caretaker service deals",
+        scroll_controls_label: "Horizontal deal navigation",
+        scroll_region_label: "Browse deals horizontally by stage",
+        scroll_left: "Scroll deals left",
+        scroll_right: "Scroll deals right",
+        scroll_thumb: "Move the visible deal area",
       },
     },
     notes: {
