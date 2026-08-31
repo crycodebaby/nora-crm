@@ -399,6 +399,16 @@ Das Rail macht Größe, Ausschnitt und Position der horizontalen Arbeitsfläche 
 - Gestylter Localhost: technische und visuelle Prüfung von Anfang/Mitte/Ende, sticky Containergrenze, Pfeil, Track-Klick und direktem Thumb-Drag. Weitere dokumentierte Breiten-/Zoom-/Theme-Matrix gehört zur Session-Abnahme.
 - Status: **LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE**. Kein Production-Deployment; automatisierte Tests oder Agenten-Screenshots setzen den Status niemals auf `UX ACCEPTED`.
 
+### Nachtrag: Kontrollierter Production Release (2026-09-01) — `PRODUCTION VERIFIED`
+
+Ein unabhaengiges Release-Gate auf dem RC `0b021df9` hat einen BLOCKER gefunden, der nicht zur Kanban-Wave gehoerte: die `index.css` des RC stammte aus einem Arbeitsbaum-Snapshot auf Stand `0329c0ae` und hatte dadurch die erst danach ergaenzte Regel `.nora-system-event:focus-visible` aus `origin/main@90f3dfc4` verloren — ein WCAG-2.4.7-Regress an der PWA-Update-Flaeche, die `NoraUpdateEvent` programmatisch fokussiert. Geschlossen in `fe962c58` durch byte-gleiche Wiederherstellung genau dieses Blocks; im finalen Diff gegen die Basis erscheint die Regel deshalb gar nicht mehr als Aenderung. **Lehre fuer kuenftige Integrationen:** ein Keyword-Scan nach PWA-Begriffen reicht nicht — die vollstaendige Liste der geloeschten Zeilen gegen die Release-Basis muss gelesen werden.
+
+Release: Fast-Forward `90f3dfc4..fe962c58`, kein Force, kein Squash, kein Merge-Commit. Vercel Production `dpl_A9GhyFNPvUPfuprbtrERDPgHBvwU` READY auf exakt diesem SHA, Alias `nora.ergart.de`. Keine Migration, keine DB-Aenderung.
+
+**PWA-Update-Lifecycle erstmals gegen einen echten Folge-Build live verifiziert.** Ein vor dem Release geoeffneter Tab auf Build `90f3dfc4` (Bundle `index-DBLLfd-K.js`) blieb nach dem Deployment stabil; die Pruefung ergab `registration.waiting = true` bei **null** `controllerchange` — also kein Auto-Takeover vor der Benutzeraktion. Nach „Jetzt aktualisieren" fiel `controllerchange` **genau einmal**, gemessene **8.011 ms** nach dem Klick (die dokumentierte Achtsekunden-Choreografie), danach genau ein Reload auf das neue Bundle `index-BFqB6c-q.js`. Kein Recovery-Zustand im Happy Path, kein wartender Worker mehr, keine Chunk-404, kein `vite:preloadError`, Konsole ohne Meldungen. Damit ist der in PWA-1C.2/1C.3 beschriebene Contract erstmals an einem realen Production-Buildwechsel bestaetigt.
+
+Offen und ausdruecklich **nicht** Teil dieser Welle: das Product-Owner-Feedback zur Update-Experience (kuerzere Copy, ruhigere Bildsprache statt der orangen Warnoptik, freundlicherer Warte-/Recovery-Zustand, neue Nora-Ladeanimation). Das ist eine eigene spaetere PWA-UX-Polish-Welle und war nie eine Bedingung fuer diesen Release.
+
 ---
 
 ## 2026-08-29 – Notification Presentation Contract v1 (Phase 7A)
