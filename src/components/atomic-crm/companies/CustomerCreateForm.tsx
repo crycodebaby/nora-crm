@@ -40,6 +40,7 @@ import {
   CONTACT_CAPTURE_FIELD,
 } from "./CustomerContactCaptureInputs";
 import { buildCustomerCreatePayload } from "./buildCustomerCreatePayload";
+import { DEFAULT_CUSTOMER_STATE_ABBR } from "./customerCreateDefaults";
 
 export const CustomerCreateForm = () => {
   const { identity } = useGetIdentity();
@@ -90,13 +91,17 @@ export const CustomerCreateForm = () => {
             defaultValues={{
               sales_id: identity?.id,
               customer_kind: "business",
+              // Regionaler Standardfall (Customer Create Speed & Clarity Wave):
+              // Bundesland startet mit NRW, bleibt frei überschreibbar. Land
+              // wird nicht angezeigt und in buildCustomerCreatePayload gesetzt.
+              state_abbr: DEFAULT_CUSTOMER_STATE_ABBR,
               [CONTACT_CAPTURE_FIELD]: "new",
               contact_gender: contactGender[0].value,
             }}
           >
             <Card>
               <CardContent>
-                <CompanyInputs />
+                <CompanyInputs variant="create" />
                 <CustomerKindAwareContactSection />
                 <div
                   role="toolbar"

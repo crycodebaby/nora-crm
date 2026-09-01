@@ -45,6 +45,10 @@ export const englishCrmMessages = {
         contact_person: "Contact person",
         person: "Personal details",
       },
+      create_form: {
+        additional: "Additional details",
+        additional_help: "Rarely needed — can also be added later.",
+      },
       inputs: {
         customer_kind: {
           business: "Business / Self-employed",

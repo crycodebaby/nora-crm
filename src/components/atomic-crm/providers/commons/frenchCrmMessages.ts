@@ -47,6 +47,11 @@ export const frenchCrmMessages = {
         contact_person: "Contact principal",
         person: "Informations personnelles",
       },
+      create_form: {
+        additional: "Informations complémentaires",
+        additional_help:
+          "Rarement nécessaires — peuvent être ajoutées plus tard.",
+      },
       inputs: {
         customer_kind: {
           business: "Entreprise / Indépendant",

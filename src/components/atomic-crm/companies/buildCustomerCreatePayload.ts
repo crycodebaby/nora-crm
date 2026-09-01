@@ -6,6 +6,7 @@
  * Wave — "keine Businesslogik tief in visuellen Komponenten verstecken").
  */
 import { cleanLinksJsonb } from "../misc/linksModel";
+import { DEFAULT_CUSTOMER_COUNTRY } from "./customerCreateDefaults";
 import type { CreateCustomerWithContactParams } from "../operations/executeCreateCustomerWithContact";
 import {
   CONTACT_CAPTURE_FIELD,
@@ -16,6 +17,11 @@ const cleanEmails = (rows: any[] | null | undefined) =>
   (rows ?? []).filter((r) => r && r.email);
 const cleanPhones = (rows: any[] | null | undefined) =>
   (rows ?? []).filter((r) => r && r.number);
+
+const normalizeCountry = (value: unknown): string => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed || DEFAULT_CUSTOMER_COUNTRY;
+};
 
 export type BuildCustomerCreatePayloadResult =
   | { ok: true; params: CreateCustomerWithContactParams }
@@ -41,7 +47,10 @@ export const buildCustomerCreatePayload = (
     zipcode: values.zipcode,
     city: values.city,
     state_abbr: values.state_abbr,
-    country: values.country,
+    // Das Land-Feld ist im Create-Formular nicht sichtbar (Customer Create
+    // Speed & Clarity Wave): ein neuer Kunde erhält immer den kanonischen
+    // Deutschland-Wert, sofern nicht explizit ein anderer Wert mitkommt.
+    country: normalizeCountry(values.country),
     description: values.description,
     revenue: isIndividual ? null : values.revenue,
     tax_identifier: isIndividual ? null : values.tax_identifier,

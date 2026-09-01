@@ -66,6 +66,17 @@ Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show`: Klick auf Tab 
 
 ---
 
+### 3a. Kundenanlage — Findings aus der Customer Create Speed & Clarity Wave (2026-09-01)
+
+**Umgesetzt (RC, siehe Decision Log „2026-09-01 – Customer Create Speed & Clarity"):** Land auf `/kunden/create` ausgeblendet und als `"Deutschland"` gesetzt, Bundesland-Default `"NRW"`, „Weitere Angaben" eingeklappt, PLZ | Ort in einer Zeile. Folgende Punkte wurden dabei beobachtet, aber bewusst **nicht** in dieser Wave behoben:
+
+1. **Produktions-Datenhygiene `companies.country` (LOW, Daten, kein Code):** Bestand enthält `"Deutschland "` (4×, Leerzeichen am Ende), `"DE"` (1×) neben `"Deutschland"` (1×) und `NULL` (10×). Neue Kunden erhalten ab jetzt konsistent `"Deutschland"`; ein einmaliges, vom Product Owner freigegebenes Read-Then-Update der 5 abweichenden Bestandswerte wäre sinnvoll (kein Migration-Bedarf, kein Constraint-Wunsch — Freitext bleibt Freitext).
+2. **Demo-Seed `state_abbr = "NW"` vs. Produktion/PO `"NRW"` (LOW, Demo-Daten):** `noraDemoSeed.ts` nutzt das ISO-3166-2-Kürzel „NW", alle gepflegten Produktionswerte und der neue Default sagen „NRW". Für Demo-Konsistenz auf „NRW" angleichen (nur Demo-Daten, `05-demo-data-guidelines.md`).
+3. **Ansprechpartner-Unterabschnitt auf `/kunden/create` (MEDIUM, UX, Contact-Wave):** Bei „Neuer Ansprechpartner" trägt die E-Mail-Liste das Label „Persönliche Angaben" (`resources.contacts.field_categories.personal_info`), Telefon- und Link-Listen sind gar nicht beschriftet — drei unbeschriftete ⊕-Buttons untereinander. Gehört in eine Contact-Wave (`CustomerContactCaptureInputs.tsx`), analog zu den beschreibenden Add-Buttons der Kontakterstellung („Weitere Telefonnummer hinzufügen").
+4. **Privatperson: Namensfelder stehen ganz unten (MEDIUM, UX):** Für `customer_kind = individual` ist Vor-/Nachname das wichtigste Feld (Kundenname wird daraus abgeleitet), steht aber unter Kontakt/Adresse. Ein Slot in `CompanyInputs` (Person direkt unter der Kundenart) wäre der saubere Fix — strukturelle Änderung, daher hier nur empfohlen.
+5. **Leerer rechter Rand auf `/kunden/create` (LOW, Layout):** `lg:mr-72` reserviert Platz für ein Aside, das es im Create-Flow nicht gibt. Beim Entfernen würde das Formular sehr breit; besser eine bewusste `max-w`-Entscheidung im Rahmen einer Formular-Breiten-Regel im Design System.
+6. **E-Mail/Telefon erfordern erst einen ⊕-Klick (LOW, UX, geteiltes Muster):** Auf Create startet jede Liste leer; ein vorbelegter leerer Eintrag (wie in `ContactEdit`) spart einen Klick, betrifft aber das geteilte `ArrayInput`-Muster von Kunden und Kontakten — nicht isoliert für Kunden ändern.
+
 ## Geplante Domain-Waves
 
 ### 4. Aufgabenmodell vereinheitlichen (Kunde + Ansprechpartner)

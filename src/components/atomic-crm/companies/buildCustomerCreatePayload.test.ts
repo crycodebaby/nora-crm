@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildCustomerCreatePayload } from "./buildCustomerCreatePayload";
 import { CONTACT_CAPTURE_FIELD } from "./CustomerContactCaptureInputs";
+import {
+  DEFAULT_CUSTOMER_COUNTRY,
+  DEFAULT_CUSTOMER_STATE_ABBR,
+} from "./customerCreateDefaults";
 
 describe("buildCustomerCreatePayload — Unternehmen/Selbstständig", () => {
   it("business with no contact (mode 'none') → company only", () => {
@@ -130,5 +134,67 @@ describe("buildCustomerCreatePayload — Privatperson", () => {
   it("fails fast for business mode without a company name", () => {
     const result = buildCustomerCreatePayload({ customer_kind: "business" });
     expect(result).toEqual({ ok: false, error: "company_name_required" });
+  });
+});
+
+describe("buildCustomerCreatePayload — regionale Defaults (Customer Create Speed & Clarity Wave)", () => {
+  it("uses the canonical country value when the form carries no country (field is hidden on create)", () => {
+    const result = buildCustomerCreatePayload({
+      customer_kind: "business",
+      name: "Rheinbogen Hausverwaltung",
+      [CONTACT_CAPTURE_FIELD]: "none",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(DEFAULT_CUSTOMER_COUNTRY).toBe("Deutschland");
+    expect(result.params.company.country).toBe("Deutschland");
+  });
+
+  it("treats blank/whitespace country as absent (no 'Deutschland ' variants)", () => {
+    const result = buildCustomerCreatePayload({
+      customer_kind: "business",
+      name: "WEG Königsallee 12",
+      country: "   ",
+      [CONTACT_CAPTURE_FIELD]: "none",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.params.company.country).toBe("Deutschland");
+  });
+
+  it("keeps an explicitly provided country (trimmed) — no silent overwrite", () => {
+    const result = buildCustomerCreatePayload({
+      customer_kind: "business",
+      name: "Grenzgänger BV",
+      country: " Niederlande ",
+      [CONTACT_CAPTURE_FIELD]: "none",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.params.company.country).toBe("Niederlande");
+  });
+
+  it("passes state_abbr through untouched — the NRW default lives in the form, an override wins", () => {
+    expect(DEFAULT_CUSTOMER_STATE_ABBR).toBe("NRW");
+    const nrw = buildCustomerCreatePayload({
+      customer_kind: "business",
+      name: "A",
+      state_abbr: DEFAULT_CUSTOMER_STATE_ABBR,
+      [CONTACT_CAPTURE_FIELD]: "none",
+    });
+    const overridden = buildCustomerCreatePayload({
+      customer_kind: "individual",
+      contact_first_name: "Heike",
+      contact_last_name: "Lange",
+      state_abbr: "Niedersachsen",
+    });
+    expect(nrw.ok && nrw.params.company.state_abbr).toBe("NRW");
+    expect(overridden.ok && overridden.params.company.state_abbr).toBe(
+      "Niedersachsen",
+    );
+    // Privatperson also gets the country default.
+    expect(overridden.ok && overridden.params.company.country).toBe(
+      "Deutschland",
+    );
   });
 });

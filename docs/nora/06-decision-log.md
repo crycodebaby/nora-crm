@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt | [Springen](#2026-09-01--customer-create-speed--clarity-land-ausgeblendet-bundesland-nrw-weitere-angaben-eingeklappt) |
 | 2026-09-01 – PWA Completion Acknowledgement: „Aktualisierung abgeschlossen" nach dem Reload, genau einmal | [Springen](#2026-09-01--pwa-completion-acknowledgement-aktualisierung-abgeschlossen-nach-dem-reload-genau-einmal) |
 | 2026-09-01 – PWA Visual Polish 2: Ring statt Spektakel, kein Reload-Angebot bei wartendem Worker | [Springen](#2026-09-01--pwa-visual-polish-2-ring-statt-spektakel-kein-reload-angebot-bei-wartendem-worker) |
 | 2026-09-01 – PWA Update State Contract V2: Browser-Fakten statt Entdeckungssignal | [Springen](#2026-09-01--pwa-update-state-contract-v2-browser-fakten-statt-entdeckungssignal) |
@@ -92,6 +93,51 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt
+
+### Kontext
+
+Ergart arbeitet praktisch ausschließlich regional in Deutschland, vor allem in Nordrhein-Westfalen. Auf `/kunden/create` musste das Büro trotzdem bei jedem neuen Kunden „Land" und „Bundesland" von Hand eintippen; daneben standen Sales-CRM-Residuen (Größe, Umsatz) gleichwertig neben den täglich benötigten Feldern. Product-Owner-Auftrag: Kundenanlage schneller und klarer machen — ohne Datenmodell-/Backend-Änderung.
+
+**Ist-Analyse vor der Umsetzung (read-only, `nora-crm-prod` + Code):**
+
+- `companies.country` ist nullable Freitext, kein Default, kein ISO-Code; die RPC `create_customer_with_contact_core` schreibt `nullif(p_company->>'country', '')`. Produktionsbestand: 10× `NULL`, 4× `"Deutschland "` (mit Leerzeichen am Ende), 1× `"Deutschland"`, 1× `"DE"`. Demo-Seed (`noraDemoSeed.ts`): `"Deutschland"`. **Kanonischer Wert ist damit `"Deutschland"`** — kein neuer Wert erfunden.
+- `companies.state_abbr` ist nullable Freitext. Produktionsbestand: 9× `NULL`, 7× `"NRW"` — die PO-Vorgabe „NRW" deckt sich mit allen gepflegten Bestandswerten. (Demo-Seed verwendet `"NW"`, siehe Findings in `17-…`.)
+- Es gab bereits Form-`defaultValues` in `CustomerCreateForm.tsx` (`sales_id`, `customer_kind`, Ansprechpartner-Modus, Anrede) — der sauberste Ort für den Bundesland-Default. Der Country-Default gehört in den reinen, unit-getesteten Mapper `buildCustomerCreatePayload.ts`, weil das Feld im Formular nicht mehr existiert.
+
+### Entscheidung
+
+1. **Land ist auf „Kunde anlegen" kein sichtbares Feld mehr.** `buildCustomerCreatePayload` setzt `country` auf `DEFAULT_CUSTOMER_COUNTRY = "Deutschland"` (neues Modul `customerCreateDefaults.ts`), sofern nicht explizit ein anderer, nicht-leerer Wert mitkommt; Leerzeichen-Varianten werden als „nicht gesetzt" behandelt. Keine DB-Spalte, kein Domain-Feld, keine Bestandsdaten verändert.
+2. **Bundesland startet mit `"NRW"`** (`DEFAULT_CUSTOMER_STATE_ABBR`) über die Form-`defaultValues` — sofort sichtbar, frei überschreibbar, kein Select, keine Bundesländer-Domainlogik.
+3. **Create/Edit-Trennung explizit statt implizit:** `CompanyInputs` bekommt `variant="create" | "default"`. `CustomerCreateForm` übergibt `create`; `CompanyEdit` bleibt bei `default`. Im Edit bleibt „Land" sichtbar/editierbar, der gespeicherte Bundesland-Wert wird nie überschrieben, Kontext-Felder bleiben inline.
+4. **Progressive Disclosure nur im Create-Flow:** Links, Größe, Umsatz und Steuernummer liegen in einem standardmäßig eingeklappten Bereich „Weitere Angaben" (bestehende `Accordion`-Primitive, dasselbe Muster wie die Kontakterstellung vom 2026-08-28, inkl. automatischem Öffnen bei Validierungsfehler nach Submit). Kundentyp bleibt sichtbar (Nora-fachlich: Privatkunde/Hausverwaltung/Gewerbekunde …). Kein neues Formular-Framework, keine neue Komponentenarchitektur.
+5. **Adresse in deutscher Lesereihenfolge:** Straße → PLZ + Ort (eine Zeile) → Bundesland. Gilt für Create und Edit gleichermaßen (ein Address-Block, eine Wahrheit).
+6. Neue sichtbare Texte (`resources.companies.create_form.additional`, `additional_help`) in Deutsch, Englisch, Französisch.
+
+### Begründung
+
+Weniger kognitive Last, nicht weniger Daten: Der Standardfall (deutscher Kunde in NRW) erfordert null zusätzliche Eingaben, Ausnahmen bleiben mit einem Tastendruck möglich. Der Country-Default liegt im Application-Layer, damit die Persistenz weiterhin exakt den bisherigen Vertrag (`nullif`, Freitext) erhält und die Regel ohne Formular unit-testbar ist. Die `variant`-Prop macht den Unterschied Create/Edit im Code lesbar statt ihn an `useRecordContext() == null` zu hängen.
+
+### Vor/Nach (Desktop 1440 px, Light)
+
+- **Vorher:** Adresse-Block mit fünf untereinanderstehenden Feldern (Adresse, Ort, Postleitzahl, Bundesland, Land), alle leer; linke Spalte Kontakt (E-Mail, Telefon, Links) + Kontext (Kundentyp, Größe, Umsatz, Steuernummer) inline. Dokumenthöhe 1 552 px.
+- **Nachher:** Adresse (Adresse; PLZ | Ort; Bundesland = „NRW"), kein Land; linke Spalte Kontakt (E-Mail, Telefon) + Kontext (Kundentyp) + eingeklappt „Weitere Angaben — Selten benötigt — kann auch später ergänzt werden." Dokumenthöhe 1 402 px. Privatperson: Kontext entfällt, „Weitere Angaben" enthält nur Links.
+
+### Verifikation
+
+- `npm ci`, `npm run typecheck`, `npm run build`: grün.
+- Fokussierte Tests: `buildCustomerCreatePayload.test.ts` (12), `CompanyCreate.test.tsx` (8), neu `CompanyEdit.test.tsx` (2) — grün. Abgedeckt: kein Land-Feld; kanonischer Deutschland-Wert im RPC-Payload (mit/ohne Ansprechpartner, Privatperson); NRW-Default; NRW überschreibbar; Edit übernimmt Bestandswerte („Niedersachsen", leer) und zeigt Land; Disclosure eingeklappt/aufklappbar; bestehende Pflichtfeld-Validierung des neuen Ansprechpartners.
+- Full Vitest: 88 Dateien, 764 Tests grün, 1 skipped (vorbestehend). ESLint/Prettier auf allen geänderten Dateien grün, `git diff --check` sauber.
+- Browser (`npm run dev:demo`): Desktop 1440 px und 784 px, Hell und Dunkel — Land weg, Bundesland „NRW" sichtbar, PLZ/Ort-Zeile sauber, kein horizontaler Overflow, Buttons erreichbar. End-to-End im Demo-Provider: Kunde ohne Ansprechpartner angelegt → Kundenakte zeigt „Neuss / NRW / Deutschland". Edit eines Demo-Kunden zeigt weiterhin „Land = Deutschland", Bundesland unverändert „NW".
+
+### Nicht Teil dieser Änderung
+
+PWA, Kanban, Supabase-Schema/SQL/RLS, Notifications, Operation Status, globales Design System, Loader, Contact-Create-Redesign, Routing, Dependencies. Ansprechpartner-Logik (kein/neu/selbst/bestehend) fachlich unverändert — nur geprüft, dass Defaults und Layout sie nicht berühren. Bewusst **nicht** umgesetzt (nur empfohlen, siehe `17-…`): Ansprechpartner-Unterabschnitt mit irreführendem Label „Persönliche Angaben" und unbeschrifteten ⊕-Buttons; Privatperson-Namensfelder ganz unten statt oben; Datenhygiene der Produktions-`country`-Werte.
+
+**Status:** CUSTOMER CREATE SPEED & CLARITY RC VERIFIED — READY FOR PRODUCT OWNER REVIEW. Kein main-Push, kein Deployment.
 
 ---
 

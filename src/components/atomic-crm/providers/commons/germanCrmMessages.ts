@@ -47,6 +47,10 @@ export const germanCrmMessages = {
         contact_person: "Ansprechpartner",
         person: "Persönliche Angaben",
       },
+      create_form: {
+        additional: "Weitere Angaben",
+        additional_help: "Selten benötigt — kann auch später ergänzt werden.",
+      },
       inputs: {
         customer_kind: {
           business: "Firma",
