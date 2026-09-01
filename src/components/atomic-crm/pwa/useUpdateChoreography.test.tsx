@@ -1,4 +1,4 @@
-import { act, useState } from "react";
+import { StrictMode, act } from "react";
 import { render } from "vitest-browser-react";
 
 import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
@@ -11,124 +11,102 @@ import {
 } from "./useUpdateChoreography";
 
 /**
- * Der letzte Schritt eines Updates ist der Reload — und der gehoert Nora.
+ * Die Praesentations-Zustandsmaschine — gegen den ECHTEN Store.
  *
- * **Warum es diese Datei gibt.** Der Client aus `virtual:pwa-register` laedt
- * nur dann selbst neu, wenn Workbox die gefundene Aktualisierung als „intern"
- * fuehrt. Im Zwei-Build-Harness ist real gemessen worden: nach `SKIP_WAITING`
- * feuert `controllerchange`, der neue Worker uebernimmt, der alte Precache
- * verschwindet — und die Seite bleibt trotzdem stehen. „Uebernommen" ist also
- * nicht „fertig". Diese Tests halten fest, dass Nora den Reload in dem Fall
- * selbst ausloest, und zwar genau einmal.
+ * **Warum kein lokaler Fake-Harness mehr.** Ein Harness, in dem `activated`,
+ * `reloadRequired` und `applyUpdate` nichts miteinander zu tun haben, kann
+ * genau die Kopplungen nicht sehen, um die es hier geht (PWA-1C.3-Race,
+ * V2-Reload-Befund). Hier kommen alle Fakten aus `usePwaUpdate()`, also aus
+ * `pwaUpdateStore` selbst; die Browser-Fakten (Controller, wartender/aktiver
+ * Worker) sind eine Attrappe mit derselben Aussagekraft wie im Browser.
  *
- * Gegen den Hook statt gegen die Komponente, weil `window.location.reload` in
- * einem echten Browser nicht ersetzbar ist (unforgeable). Der Hook nimmt den
- * Reload deshalb als Parameter — dieselbe Naht, die die Komponente benutzt.
+ * Nur der Reload bleibt injizierbar, weil `window.location.reload` in einem
+ * echten Browser nicht ersetzbar ist — dieselbe Naht, die die Komponente
+ * benutzt. Deshalb wird der Reload HIER geprueft und nicht in
+ * `NoraUpdateEvent.test.tsx`.
  */
 
-type Controls = { setActivated: (value: boolean) => void };
-let controls: Controls | null = null;
+const makeWorker = () => new EventTarget() as unknown as ServiceWorker;
 
-const Harness = ({
-  applyUpdate,
-  reload,
-}: {
-  applyUpdate: () => void;
-  reload: () => void;
-}) => {
-  const [activated, setActivated] = useState(false);
-  controls = { setActivated };
-  const { phase, presentation, start, retry } = useUpdateChoreography({
-    applyUpdate,
-    // `applying` traegt hier nichts bei: solange eine Phase laeuft, ist die
-    // Praesentation ohnehin „choreography". Bewusst false, damit dieser Test
-    // nicht versehentlich am falschen Signal haengt.
-    applying: false,
-    activated,
-    reload,
-  });
-  return (
-    <div
-      data-testid="probe"
-      data-phase={phase}
-      data-presentation={presentation}
-    >
-      <button data-testid="go" onClick={start}>
-        go
-      </button>
-      <button data-testid="again" onClick={retry}>
-        again
-      </button>
-    </div>
-  );
+let oldWorker = makeWorker();
+let newWorker = makeWorker();
+const facts = {
+  waiting: null as ServiceWorker | null,
+  installing: null as ServiceWorker | null,
+  active: null as ServiceWorker | null,
+  controller: null as ServiceWorker | null,
 };
 
-/**
- * Derselbe Hook, aber an den ECHTEN Store gekoppelt (PWA-1C.3).
- *
- * **Warum es diesen zweiten Harness braucht.** Der obige `Harness` haelt
- * `activated` in lokalem React-State und uebergibt ein `vi.fn()` als
- * `applyUpdate`. Genau diese Vereinfachung hat den Race verdeckt, den der Last
- * Delta Review gefunden hat: in Production setzte `applyUpdate()` selbst
- * `activated` zurueck, und ein Harness, in dem die beiden Groessen nichts
- * miteinander zu tun haben, kann das per Konstruktion nicht sehen.
- *
- * Hier kommen `applying`, `activated` und `applyUpdate` deshalb aus
- * `usePwaUpdate()` — also aus `pwaUpdateStore` selbst, mit derselben
- * Kopplung wie in der Anwendung. `controllerchange` wird ueber
- * `navigator.serviceWorker` abgesetzt, den echten Weg. Nur der Reload bleibt
- * injizierbar, weil `window.location.reload` im Browser nicht ersetzbar ist —
- * und genau deswegen wird dieser Fall hier geprueft und nicht in
- * `NoraUpdateEvent.test.tsx`.
- *
- * Wuerde jemand `activated = false` in `applyUpdate()` wieder einfuehren,
- * faellt der Test rot: der Commit des zweiten Laufs saehe dann `activated`
- * false, `reload` bliebe ungerufen und der Watchdog brachte Recovery zurueck.
- */
-let storeControls: { start: () => void; retry: () => void } | null = null;
+const fakeRegistration = new EventTarget();
+Object.defineProperties(fakeRegistration, {
+  waiting: { get: () => facts.waiting },
+  installing: { get: () => facts.installing },
+  active: { get: () => facts.active },
+  update: { value: () => Promise.resolve() },
+});
 
-const StoreHarness = ({ reload }: { reload: () => void }) => {
-  const { applying, activated, applyUpdate } = usePwaUpdate();
-  const { phase, presentation, start, retry } = useUpdateChoreography({
-    applyUpdate,
+let applyCalls = 0;
+let needRefresh: (() => void) | undefined;
+let rejectApply = false;
+
+const registerSw: RegisterSwLike = (opts) => {
+  needRefresh = opts.onNeedRefresh;
+  opts.onRegisteredSW?.(
+    "/sw.js",
+    fakeRegistration as unknown as ServiceWorkerRegistration,
+  );
+  return () => {
+    applyCalls += 1;
+    return rejectApply
+      ? Promise.reject(new Error("activation refused"))
+      : Promise.resolve();
+  };
+};
+
+/** Der Browser aktiviert den wartenden Worker — mit oder ohne Benachrichtigung. */
+const activateNewWorker = ({ notify }: { notify: boolean }) => {
+  facts.waiting = null;
+  facts.active = newWorker;
+  if (notify) facts.controller = newWorker;
+  newWorker.dispatchEvent(new Event("statechange"));
+  if (notify)
+    navigator.serviceWorker.dispatchEvent(new Event("controllerchange"));
+};
+
+let controls: { start: () => void; retry: () => void } | null = null;
+
+const Harness = ({ reload }: { reload: () => void }) => {
+  const {
     applying,
     activated,
+    reloadRequired,
+    failed,
+    applyUpdate,
+    syncFacts,
+    assessActivation,
+  } = usePwaUpdate();
+  const { phase, presentation, stall, start, retry } = useUpdateChoreography({
+    applyUpdate,
+    syncFacts,
+    assessActivation,
+    applying,
+    activated,
+    reloadRequired,
+    failed,
     reload,
   });
-  storeControls = { start, retry };
+  controls = { start, retry };
   return (
     <div
       data-testid="probe"
       data-phase={phase}
       data-presentation={presentation}
+      data-stall={stall}
       data-applying={String(applying)}
       data-activated={String(activated)}
     />
   );
 };
-
-/** Zaehlt die Aktivierungsanfragen: ein Aufruf ist genau ein SKIP_WAITING. */
-let storeApplyCalls = 0;
-let storeNeedRefresh: (() => void) | undefined;
-let storeWaiting = true;
-
-const storeRegisterSw: RegisterSwLike = (opts) => {
-  storeNeedRefresh = opts.onNeedRefresh;
-  opts.onRegisteredSW?.("/sw.js", {
-    get waiting() {
-      return storeWaiting ? ({} as ServiceWorker) : null;
-    },
-    update: () => Promise.resolve(),
-  } as unknown as ServiceWorkerRegistration);
-  return () => {
-    storeApplyCalls += 1;
-    return Promise.resolve();
-  };
-};
-
-/** Die echte Uebernahme, auf demselben EventTarget wie in Production. */
-const dispatchControllerChange = () =>
-  navigator.serviceWorker.dispatchEvent(new Event("controllerchange"));
 
 const probe = () =>
   document.querySelector<HTMLElement>('[data-testid="probe"]');
@@ -149,370 +127,372 @@ const flush = async (body: () => void) => {
 };
 const advance = (ms: number) => flush(() => vi.advanceTimersByTime(ms));
 
-describe("useUpdateChoreography — Reload-Verantwortung", () => {
+describe("useUpdateChoreography", () => {
   beforeEach(() => {
-    controls = null;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    pwaUpdateStore.reset();
+    oldWorker = makeWorker();
+    newWorker = makeWorker();
+    facts.waiting = newWorker;
+    facts.installing = null;
+    facts.active = oldWorker;
+    facts.controller = oldWorker;
+    applyCalls = 0;
+    rejectApply = false;
+    controls = null;
+    pwaUpdateStore.start(registerSw, { getController: () => facts.controller });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    pwaUpdateStore.reset();
   });
 
-  it("laedt selbst neu, wenn nach der Uebernahme nichts passiert", async () => {
-    const applyUpdate = vi.fn();
+  const announce = () => flush(() => needRefresh!());
+  const start = () => flush(() => controls!.start());
+  /** Commit und Watchdog in zwei Schritten: der Watchdog-Timer entsteht erst im Effekt nach dem Commit. */
+  const commit = () => advance(CHOREOGRAPHY_COMMIT_MS);
+  const watchdog = () => advance(ACTIVATION_WATCHDOG_MS);
+
+  it("Happy Path: eine Anfrage, eine Uebernahme, genau ein Reload", async () => {
     const reload = vi.fn();
-    const screen = await render(
-      <Harness applyUpdate={applyUpdate} reload={reload} />,
-    );
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    expect(probe()?.dataset.presentation).toBe("available");
 
-    await flush(() =>
-      document.querySelector<HTMLElement>('[data-testid="go"]')!.click(),
-    );
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    expect(applyUpdate).toHaveBeenCalledTimes(1);
+    await start();
+    expect(probe()?.dataset.presentation).toBe("applying");
+    expect(probe()?.dataset.phase).toBe("settling");
+
+    await advance(CHOREOGRAPHY_COMMIT_MS - 1);
+    expect(applyCalls).toBe(0);
+    await advance(1);
+    expect(applyCalls).toBe(1);
     expect(reload).not.toHaveBeenCalled();
 
-    // Der Browser meldet die Uebernahme — der Client laedt aber nicht neu.
-    await flush(() => controls!.setActivated(true));
-    expect(reload).not.toHaveBeenCalled();
+    await flush(() => activateNewWorker({ notify: true }));
+    expect(probe()?.dataset.activated).toBe("true");
+    expect(probe()?.dataset.presentation).toBe("applying");
 
     await advance(RELOAD_FALLBACK_MS - 1);
     expect(reload).not.toHaveBeenCalled();
-
     await advance(1);
     expect(reload).toHaveBeenCalledTimes(1);
 
-    // Und danach nicht noch einmal.
-    await advance(RELOAD_FALLBACK_MS * 5);
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(probe()?.dataset.presentation).toBe("choreography");
-
-    await screen.unmount();
-  });
-
-  it("laedt nicht neu, solange die Uebernahme ausbleibt — sondern zeigt Recovery", async () => {
-    const reload = vi.fn();
-    const screen = await render(
-      <Harness applyUpdate={vi.fn()} reload={reload} />,
-    );
-
-    await flush(() =>
-      document.querySelector<HTMLElement>('[data-testid="go"]')!.click(),
-    );
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-
-    expect(reload).not.toHaveBeenCalled();
-    expect(probe()?.dataset.presentation).toBe("recovery");
-
-    await screen.unmount();
-  });
-
-  // --------------------------------------------------------------------------
-  // Der zweite Anlauf (PWA-1C.2). Der Store-Teil liegt in
-  // `pwaUpdateStore.test.ts`; hier zaehlt, dass die Sequenz den zweiten Aufruf
-  // ueberhaupt ausloest und dass daraus genau ein Reload wird.
-  // --------------------------------------------------------------------------
-
-  const click = (id: string) =>
-    flush(() =>
-      document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!.click(),
-    );
-
-  /**
-   * Commit und Watchdog bewusst in zwei Schritten: der Watchdog-Timer entsteht
-   * erst in dem Effekt, den der Commit ausloest. Ein einziger grosser Sprung
-   * wuerde ihn nie sehen und faelschlich „kein Recovery" melden.
-   */
-  const runFailedAttempt = async () => {
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-  };
-
-  it("loest beim zweiten Anlauf einen zweiten applyUpdate aus", async () => {
-    const applyUpdate = vi.fn();
-    const screen = await render(
-      <Harness applyUpdate={applyUpdate} reload={vi.fn()} />,
-    );
-
-    await click("go");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(probe()?.dataset.presentation).toBe("recovery");
-    expect(applyUpdate).toHaveBeenCalledTimes(1);
-
-    await click("again");
-
-    // Die Sequenz laeuft wieder von vorn — und commitet nicht frueher.
-    expect(probe()?.dataset.presentation).toBe("choreography");
-    await advance(CHOREOGRAPHY_COMMIT_MS - 1);
-    expect(applyUpdate).toHaveBeenCalledTimes(1);
-
-    await advance(1);
-    expect(applyUpdate).toHaveBeenCalledTimes(2);
-
-    await screen.unmount();
-  });
-
-  it("laedt nach einem erfolgreichen zweiten Anlauf genau einmal neu", async () => {
-    const applyUpdate = vi.fn();
-    const reload = vi.fn();
-    const screen = await render(
-      <Harness applyUpdate={applyUpdate} reload={reload} />,
-    );
-
-    await click("go");
-    await runFailedAttempt();
-    await click("again");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    expect(applyUpdate).toHaveBeenCalledTimes(2);
-
-    // Diesmal uebernimmt der Worker.
-    await flush(() => controls!.setActivated(true));
-    await advance(RELOAD_FALLBACK_MS);
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(probe()?.dataset.presentation).toBe("choreography");
-
-    // Kein zweiter Reload aus einem Rest des ersten Laufs.
-    await advance(RELOAD_FALLBACK_MS * 5);
-    expect(reload).toHaveBeenCalledTimes(1);
-
-    await screen.unmount();
-  });
-
-  it("zeigt nach einem zweiten Fehlschlag wieder Recovery und bleibt wiederholbar", async () => {
-    const applyUpdate = vi.fn();
-    const reload = vi.fn();
-    const screen = await render(
-      <Harness applyUpdate={applyUpdate} reload={reload} />,
-    );
-
-    await click("go");
-    await runFailedAttempt();
-    await click("again");
-    await runFailedAttempt();
-
-    expect(applyUpdate).toHaveBeenCalledTimes(2);
-    expect(probe()?.dataset.presentation).toBe("recovery");
-    expect(reload).not.toHaveBeenCalled();
-
-    // Ein dritter Anlauf bleibt moeglich — keine kuenstliche Versuchsgrenze.
-    await click("again");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    expect(applyUpdate).toHaveBeenCalledTimes(3);
-
-    await screen.unmount();
-  });
-
-  it("macht aus einem spaeten controllerchange im zweiten Lauf keinen zweiten Reload", async () => {
-    const applyUpdate = vi.fn();
-    const reload = vi.fn();
-    const screen = await render(
-      <Harness applyUpdate={applyUpdate} reload={reload} />,
-    );
-
-    // Getrennte Schritte, sonst entsteht der Watchdog-Timer nie und der Lauf
-    // startet gar nicht aus Recovery — die fruehere Fassung sprang mit einem
-    // einzigen `advance()` ueber beides und bewies deshalb nichts.
-    await click("go");
-    await runFailedAttempt();
-    expect(probe()?.dataset.presentation).toBe("recovery");
-    expect(applyUpdate).toHaveBeenCalledTimes(1);
-
-    await click("again");
-
-    // Mitten in der zweiten Choreografie trifft die Uebernahme des ERSTEN
-    // Versuchs doch noch ein.
-    await advance(2000);
-    await flush(() => controls!.setActivated(true));
-
-    // Vor dem Commit passiert nichts — der Reload haengt an `commitRequested`.
-    await advance(RELOAD_FALLBACK_MS * 2);
-    expect(reload).not.toHaveBeenCalled();
-
-    // Dann faellt der Commit. Der Store liefert `activated` weiterhin (die
-    // Groesse ist monoton, siehe `pwaUpdateStore`), also greift der
-    // Reload-Pfad statt des Watchdogs.
-    await advance(CHOREOGRAPHY_COMMIT_MS - RELOAD_FALLBACK_MS * 2 - 2000);
-    await advance(RELOAD_FALLBACK_MS);
-    expect(reload).toHaveBeenCalledTimes(1);
-    expect(probe()?.dataset.presentation).toBe("choreography");
-
-    // Kein zweiter Reload, und auch nach der vollen Frist kein Recovery.
+    // Weit ueber jede Frist hinaus: kein zweiter Reload, keine zweite Anfrage,
+    // kein „Gleich bereit".
     await advance(ACTIVATION_WATCHDOG_MS * 3);
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(probe()?.dataset.presentation).toBe("choreography");
+    expect(applyCalls).toBe(1);
+    expect(probe()?.dataset.presentation).toBe("applying");
+    expect(probe()?.dataset.stall).toBe("none");
 
     await screen.unmount();
   });
 
-  // --------------------------------------------------------------------------
-  // Gegen den echten Store (PWA-1C.3). Siehe den Kommentar an `StoreHarness`:
-  // dieselbe Kopplung von `applyUpdate`, `applying` und `activated` wie in der
-  // Anwendung — nur der Reload bleibt injizierbar.
-  // --------------------------------------------------------------------------
+  it("wird bei ausbleibender Uebernahme langsam — nicht fehlgeschlagen — und versucht es genau einmal still erneut", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    expect(applyCalls).toBe(1);
 
-  describe("am echten Store", () => {
-    beforeEach(() => {
-      pwaUpdateStore.reset();
-      storeApplyCalls = 0;
-      storeWaiting = true;
-      storeControls = null;
-      pwaUpdateStore.start(storeRegisterSw);
-    });
+    await advance(ACTIVATION_WATCHDOG_MS - 1);
+    expect(probe()?.dataset.presentation).toBe("applying");
+    await advance(1);
 
-    afterEach(() => {
-      pwaUpdateStore.reset();
-    });
+    expect(probe()?.dataset.presentation).toBe("slow");
+    expect(probe()?.dataset.stall).toBe("slow");
+    // Der stille zweite Versuch ist eine echte zweite Anfrage.
+    expect(applyCalls).toBe(2);
+    expect(reload).not.toHaveBeenCalled();
 
-    /** Bis in den Recovery-Zustand: Anfrage raus, Uebernahme bleibt aus. */
-    const toRecovery = async () => {
-      await flush(() => storeNeedRefresh!());
-      await flush(() => storeControls!.start());
-      await advance(CHOREOGRAPHY_COMMIT_MS);
-      expect(storeApplyCalls).toBe(1);
-      await advance(ACTIVATION_WATCHDOG_MS);
-      expect(probe()?.dataset.presentation).toBe("recovery");
-    };
+    // Zweite Frist: weiterhin langsam, jetzt mit Reload-Angebot — und kein
+    // dritter Automatismus.
+    await watchdog();
+    expect(probe()?.dataset.presentation).toBe("slow");
+    expect(probe()?.dataset.stall).toBe("prolonged");
+    expect(applyCalls).toBe(2);
 
-    it("haelt eine Uebernahme, die waehrend des zweiten Laufs eintrifft", async () => {
-      const reload = vi.fn();
-      const screen = await render(<StoreHarness reload={reload} />);
+    await advance(ACTIVATION_WATCHDOG_MS * 3);
+    expect(applyCalls).toBe(2);
+    expect(reload).not.toHaveBeenCalled();
+    expect(probe()?.dataset.presentation).toBe("slow");
 
-      await toRecovery();
-      // Der Watchdog macht den Versuch wiederholbar — sonst liefe der Retry in
-      // den `applying`-Guard (das war der BLOCKER aus PWA-1C.2).
-      await flush(() => pwaUpdateStore.endStalledActivation());
-      await flush(() => storeControls!.retry());
-
-      // Mitten im zweiten Lauf trifft die Uebernahme des ERSTEN Versuchs ein.
-      await advance(2000);
-      await flush(() => dispatchControllerChange());
-      expect(probe()?.dataset.activated).toBe("true");
-      expect(probe()?.dataset.presentation).toBe("choreography");
-
-      // Die Choreografie laeuft sauber zu Ende — kein abrupter Abbruch, kein
-      // vorgezogener Reload. Der Commit bleibt der Uebergabepunkt.
-      await advance(CHOREOGRAPHY_COMMIT_MS - 2000 - 1);
-      expect(reload).not.toHaveBeenCalled();
-      expect(probe()?.dataset.presentation).toBe("choreography");
-
-      await advance(1);
-      // Der Commit fordert nichts mehr an, und die Uebernahme steht noch.
-      expect(storeApplyCalls).toBe(1);
-      expect(probe()?.dataset.activated).toBe("true");
-
-      await advance(RELOAD_FALLBACK_MS);
-      expect(reload).toHaveBeenCalledTimes(1);
-
-      // Weit ueber die Watchdog-Frist hinaus: kein Recovery, kein zweiter
-      // Reload, keine zweite Anfrage.
-      await advance(ACTIVATION_WATCHDOG_MS * 3);
-      expect(reload).toHaveBeenCalledTimes(1);
-      expect(storeApplyCalls).toBe(1);
-      expect(probe()?.dataset.presentation).toBe("choreography");
-
-      await screen.unmount();
-    });
-
-    it("laesst den legitimen Retry weiterhin senden", async () => {
-      const reload = vi.fn();
-      const screen = await render(<StoreHarness reload={reload} />);
-
-      await toRecovery();
-      await flush(() => pwaUpdateStore.endStalledActivation());
-      await flush(() => storeControls!.retry());
-
-      // Keine Uebernahme diesmal: der `activated`-Guard darf den echten
-      // zweiten Versuch nicht blockieren.
-      await advance(CHOREOGRAPHY_COMMIT_MS);
-      expect(storeApplyCalls).toBe(2);
-      expect(reload).not.toHaveBeenCalled();
-
-      await screen.unmount();
-    });
-
-    it("laedt nach einem erfolgreichen zweiten Versuch genau einmal", async () => {
-      const reload = vi.fn();
-      const screen = await render(<StoreHarness reload={reload} />);
-
-      await toRecovery();
-      await flush(() => pwaUpdateStore.endStalledActivation());
-      await flush(() => storeControls!.retry());
-      await advance(CHOREOGRAPHY_COMMIT_MS);
-      expect(storeApplyCalls).toBe(2);
-
-      // Die Uebernahme kommt NACH Anfrage 2.
-      storeWaiting = false;
-      await flush(() => dispatchControllerChange());
-      await advance(RELOAD_FALLBACK_MS);
-      expect(reload).toHaveBeenCalledTimes(1);
-
-      await advance(ACTIVATION_WATCHDOG_MS * 3);
-      expect(reload).toHaveBeenCalledTimes(1);
-      expect(probe()?.dataset.presentation).toBe("choreography");
-
-      await screen.unmount();
-    });
-
-    it("bringt bei bestaetigter Uebernahme keinen Watchdog mehr zurueck", async () => {
-      const reload = vi.fn();
-      const screen = await render(<StoreHarness reload={reload} />);
-
-      await flush(() => storeNeedRefresh!());
-      await flush(() => storeControls!.start());
-      await advance(CHOREOGRAPHY_COMMIT_MS);
-      storeWaiting = false;
-      await flush(() => dispatchControllerChange());
-
-      // Ab hier darf keine Frist mehr Recovery erzeugen.
-      await advance(ACTIVATION_WATCHDOG_MS * 4);
-      expect(probe()?.dataset.presentation).toBe("choreography");
-      expect(reload).toHaveBeenCalledTimes(1);
-      expect(storeApplyCalls).toBe(1);
-
-      await screen.unmount();
-    });
-
-    it("sendet nach bestaetigter Uebernahme auch bei weiteren Commits nichts", async () => {
-      const reload = vi.fn();
-      const screen = await render(<StoreHarness reload={reload} />);
-
-      await flush(() => storeNeedRefresh!());
-      storeWaiting = false;
-      await flush(() => dispatchControllerChange());
-      expect(probe()?.dataset.activated).toBe("true");
-
-      // Dreifacher Start, danach noch ein Retry: jeder Lauf commitet, und
-      // trotzdem geht keine einzige Anfrage raus.
-      await flush(() => {
-        storeControls!.start();
-        storeControls!.start();
-        storeControls!.start();
-      });
-      await advance(CHOREOGRAPHY_COMMIT_MS);
-      await flush(() => storeControls!.retry());
-      await advance(CHOREOGRAPHY_COMMIT_MS);
-
-      expect(storeApplyCalls).toBe(0);
-      expect(probe()?.dataset.activated).toBe("true");
-
-      await screen.unmount();
-    });
+    await screen.unmount();
   });
 
-  it("raeumt den Reload-Timer beim Unmount ab", async () => {
+  it("nimmt „Gleich bereit“ zurueck, sobald die Uebernahme doch eintrifft", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    await watchdog();
+    expect(probe()?.dataset.presentation).toBe("slow");
+
+    await flush(() => activateNewWorker({ notify: true }));
+    expect(probe()?.dataset.presentation).toBe("applying");
+    expect(probe()?.dataset.stall).toBe("slow");
+
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+    // Die zweite Frist erzeugt danach nichts mehr.
+    await advance(ACTIVATION_WATCHDOG_MS * 2);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(applyCalls).toBe(2);
+
+    await screen.unmount();
+  });
+
+  it("erzeugt kein „Gleich bereit“, wenn die Uebernahme kurz vor der Frist eintrifft", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    await advance(ACTIVATION_WATCHDOG_MS - 100);
+    await flush(() => activateNewWorker({ notify: true }));
+
+    await advance(200);
+    expect(probe()?.dataset.presentation).toBe("applying");
+    expect(probe()?.dataset.stall).toBe("none");
+    expect(applyCalls).toBe(1);
+
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    await screen.unmount();
+  });
+
+  // --- Das unkontrollierte Dokument (V2) ---------------------------------------
+
+  it("laedt nach dem Commit selbst neu, wenn die Fakten reloadRequired zeigen (unkontrolliert, kein controllerchange)", async () => {
+    facts.controller = null;
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    expect(applyCalls).toBe(1);
+
+    // Der Worker aktiviert durch unsere Anfrage — dieses Dokument hoert nichts.
+    await flush(() => activateNewWorker({ notify: false }));
+    expect(probe()?.dataset.activated).toBe("false");
+    expect(probe()?.dataset.presentation).toBe("applying");
+
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+    // Kein „Gleich bereit", keine zweite Anfrage.
+    await advance(ACTIVATION_WATCHDOG_MS * 2);
+    expect(applyCalls).toBe(1);
+    expect(probe()?.dataset.stall).toBe("none");
+
+    await screen.unmount();
+  });
+
+  it("findet den Reload-Befund spaetestens beim Watchdog, wenn kein statechange kam", async () => {
+    facts.controller = null;
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+
+    // Fakten aendern sich still (ohne Ereignis): der Watchdog liest sie.
+    facts.waiting = null;
+    facts.active = newWorker;
+    await watchdog();
+    expect(probe()?.dataset.presentation).toBe("applying");
+    expect(probe()?.dataset.stall).toBe("none");
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(applyCalls).toBe(1);
+
+    await screen.unmount();
+  });
+
+  it("startet keine Choreografie, wenn die neue Version beim Klick bereits aktiv ist", async () => {
+    facts.controller = null;
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    // Der Worker hat sich 2 ms nach der Entdeckung selbst aktiviert.
+    await flush(() => activateNewWorker({ notify: false }));
+    expect(probe()?.dataset.presentation).toBe("reloadRequired");
+
+    await start();
+    expect(probe()?.dataset.phase).toBe("idle");
+    expect(probe()?.dataset.presentation).toBe("reloadRequired");
+    await advance(CHOREOGRAPHY_COMMIT_MS + ACTIVATION_WATCHDOG_MS);
+    expect(applyCalls).toBe(0);
+    // Ohne Commit kein automatischer Reload — der Benutzer klickt.
+    expect(reload).not.toHaveBeenCalled();
+
+    await screen.unmount();
+  });
+
+  it("liest beim Klick die Fakten, auch wenn sich seit der Anzeige nichts gemeldet hat", async () => {
+    facts.controller = null;
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    expect(probe()?.dataset.presentation).toBe("available");
+
+    // Stiller Faktenwechsel ohne Ereignis.
+    facts.waiting = null;
+    facts.active = newWorker;
+    await start();
+
+    expect(probe()?.dataset.presentation).toBe("reloadRequired");
+    expect(probe()?.dataset.phase).toBe("idle");
+    expect(applyCalls).toBe(0);
+
+    await screen.unmount();
+  });
+
+  // --- Fremde Aktivierung (anderer Tab) ----------------------------------------
+
+  it("korrigiert sich selbst, wenn ein anderer Tab aktiviert hat — keine Schein-Choreografie", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    expect(probe()?.dataset.presentation).toBe("available");
+
+    await flush(() => activateNewWorker({ notify: true }));
+    expect(probe()?.dataset.presentation).toBe("reloadRequired");
+
+    await start();
+    expect(probe()?.dataset.phase).toBe("idle");
+    await advance(CHOREOGRAPHY_COMMIT_MS);
+    expect(applyCalls).toBe(0);
+    expect(reload).not.toHaveBeenCalled();
+
+    await screen.unmount();
+  });
+
+  it("verwirft eine Uebernahme nicht, die waehrend der Choreografie eintrifft", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await advance(2000);
+
+    await flush(() => activateNewWorker({ notify: true }));
+    expect(probe()?.dataset.activated).toBe("true");
+    // Die Choreografie laeuft sauber zu Ende — kein abrupter Abbruch, kein
+    // Umspringen auf „Neu laden" mitten in der Sequenz.
+    expect(probe()?.dataset.presentation).toBe("applying");
+
+    await advance(CHOREOGRAPHY_COMMIT_MS - 2000 - 1);
+    expect(reload).not.toHaveBeenCalled();
+    await advance(1);
+    // Der Commit fordert nichts mehr an.
+    expect(applyCalls).toBe(0);
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    await advance(ACTIVATION_WATCHDOG_MS * 3);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(probe()?.dataset.stall).toBe("none");
+
+    await screen.unmount();
+  });
+
+  // --- Echter Fehler -----------------------------------------------------------
+
+  it("zeigt failed nur bei abgelehnter Anfrage — ohne Reload und ohne Warten", async () => {
+    rejectApply = true;
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    await flush(() => {});
+
+    expect(probe()?.dataset.presentation).toBe("failed");
+    await advance(ACTIVATION_WATCHDOG_MS * 3);
+    expect(probe()?.dataset.presentation).toBe("failed");
+    expect(probe()?.dataset.stall).toBe("none");
+    expect(reload).not.toHaveBeenCalled();
+    expect(applyCalls).toBe(1);
+
+    await screen.unmount();
+  });
+
+  // --- Manueller zweiter Anlauf ------------------------------------------------
+
+  it("sendet bei retry genau eine weitere Anfrage ohne neue Choreografie", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    await watchdog();
+    await watchdog();
+    expect(probe()?.dataset.stall).toBe("prolonged");
+    expect(applyCalls).toBe(2);
+
+    await flush(() => controls!.retry());
+    expect(applyCalls).toBe(3);
+    expect(probe()?.dataset.phase).toBe("committing");
+    expect(probe()?.dataset.stall).toBe("slow");
+
+    await flush(() => activateNewWorker({ notify: true }));
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    await screen.unmount();
+  });
+
+  it("sendet bei retry nichts, wenn kein Worker mehr wartet", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    await watchdog();
+    expect(applyCalls).toBe(2);
+
+    facts.waiting = null;
+    facts.active = newWorker;
+    await flush(() => controls!.retry());
+    expect(applyCalls).toBe(2);
+    // Der Retry hat die Fakten gelesen: Reload-Befund nach Commit → Reload.
+    await advance(RELOAD_FALLBACK_MS);
+    expect(reload).toHaveBeenCalledTimes(1);
+
+    await screen.unmount();
+  });
+
+  // --- Robustheit --------------------------------------------------------------
+
+  it("commitet auch unter StrictMode genau einmal", async () => {
     const reload = vi.fn();
     const screen = await render(
-      <Harness applyUpdate={vi.fn()} reload={reload} />,
+      <StrictMode>
+        <Harness reload={reload} />
+      </StrictMode>,
     );
+    await announce();
+    await start();
+    await commit();
+    expect(applyCalls).toBe(1);
+    await watchdog();
+    // Auch der stille zweite Versuch nur einmal.
+    expect(applyCalls).toBe(2);
 
-    await flush(() =>
-      document.querySelector<HTMLElement>('[data-testid="go"]')!.click(),
-    );
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await flush(() => controls!.setActivated(true));
+    await screen.unmount();
+  });
+
+  it("raeumt alle Timer beim Unmount ab", async () => {
+    const reload = vi.fn();
+    const screen = await render(<Harness reload={reload} />);
+    await announce();
+    await start();
+    await commit();
+    await flush(() => activateNewWorker({ notify: true }));
 
     await screen.unmount();
     await flush(() => vi.advanceTimersByTime(RELOAD_FALLBACK_MS * 4));

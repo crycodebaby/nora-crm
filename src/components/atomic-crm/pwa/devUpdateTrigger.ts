@@ -48,12 +48,16 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
  * sie sonst auf `undefined` aufruft.
  */
 const FAKE_WAITING_WORKER = {} as ServiceWorker;
+/** Der bereits aktive Worker der Attrappe — im Browser der Controller des Dokuments. */
+const FAKE_ACTIVE_WORKER = {} as ServiceWorker;
 
 const createFakeRegistration = (state: { waiting: boolean }) =>
   ({
     get waiting() {
       return state.waiting ? FAKE_WAITING_WORKER : null;
     },
+    installing: null,
+    active: FAKE_ACTIVE_WORKER,
     update: () => Promise.resolve(),
   }) as unknown as ServiceWorkerRegistration;
 
@@ -207,6 +211,11 @@ export const mountUpdateDevTrigger = () => {
     reject: false,
     hijacked: false,
     fast: false,
+    // Seit V2: ob dieses Dokument einen Controller hat. „aus" ist der
+    // reproduzierte Production-Fall (Erstbesuch, Hard Reload): der Worker
+    // aktiviert sich von selbst, und die Oberflaeche muss auf „Neu laden"
+    // statt auf eine Schein-Choreografie laufen.
+    controlled: true,
     // Standard: ein Worker wartet. Das ist der reale Fehlerfall, für den der
     // Watchdog gebaut wurde, und damit die Recovery-Variante „Erneut
     // versuchen" — bis PWA-1C.2 war genau sie hier nicht herstellbar.
@@ -248,7 +257,9 @@ export const mountUpdateDevTrigger = () => {
     // Werkzeug benutzt, bleibt der echte Registrierungsweg unangetastet.
     if (!state.hijacked) {
       pwaUpdateStore.reset();
-      pwaUpdateStore.start(createFakeRegisterSw(state));
+      pwaUpdateStore.start(createFakeRegisterSw(state), {
+        getController: () => (state.controlled ? FAKE_ACTIVE_WORKER : null),
+      });
       state.hijacked = true;
     }
     needRefresh?.();
@@ -261,18 +272,32 @@ export const mountUpdateDevTrigger = () => {
       : "⏻  Wartender Worker: aus";
   });
   waitingButton.title =
-    "Steuert registration.waiting. An → Recovery bietet Erneut versuchen " +
-    "(Variante A, der reale Fehlerfall). Aus → Recovery bietet Nora neu laden " +
-    "(Variante B), weil ein zweites SKIP_WAITING dann nachweislich nichts täte.";
+    "Steuert registration.waiting. An → das Update ist aktivierbar. Aus → " +
+    "nichts wartet mehr; zusammen mit „Dokument kontrolliert: aus“ ergibt " +
+    "das den Zustand „Neue Version bereit / Nora neu laden“.";
 
-  const takeoverButton = addButton("✔  Übernahme simulieren", () =>
-    simulateTakeover(state),
-  );
+  const controlledButton = addButton("⎈  Dokument kontrolliert: an", () => {
+    state.controlled = !state.controlled;
+    controlledButton.textContent = state.controlled
+      ? "⎈  Dokument kontrolliert: an"
+      : "⎈  Dokument kontrolliert: aus";
+    // Ein Fakt hat sich geaendert — genau wie im Browser wird neu gelesen.
+    if (state.hijacked) pwaUpdateStore.syncFacts();
+  });
+  controlledButton.title =
+    "Steuert navigator.serviceWorker.controller. Aus = Erstbesuch / Hard " +
+    "Reload: dieses Dokument bekommt nie ein controllerchange. Wartender " +
+    "Worker aus + kontrolliert aus → Neue Version bereit (Reload statt " +
+    "Choreografie).";
+
+  const takeoverButton = addButton("✔  Übernahme simulieren", () => {
+    simulateTakeover(state);
+    if (state.hijacked) pwaUpdateStore.syncFacts();
+  });
   takeoverButton.title =
     "Setzt ein echtes „controllerchange“ ab — der Erfolgsfall. Ohne diesen " +
-    "Klick bleibt die Übernahme aus, und genau das ist der reale " +
-    "Production-Fehlerfall: nach der Watchdog-Frist muss der " +
-    "Recovery-Zustand erscheinen.";
+    "Klick bleibt die Übernahme aus: nach der Watchdog-Frist muss „Gleich " +
+    "bereit“ (Worker wartet) erscheinen, nicht ein Fehler.";
 
   const rejectButton = addButton("⟲  Ablehnung: aus", () => {
     state.reject = !state.reject;
@@ -334,7 +359,8 @@ export const mountUpdateDevTrigger = () => {
         : "bereit";
     status.textContent =
       `Store: ${snapshot.state}` +
-      `${snapshot.activated ? " +übernommen" : ""} — Panel: ${shown}` +
+      `${snapshot.activated ? " +übernommen" : ""}` +
+      `${snapshot.reloadRequired ? " +reload" : ""} — Panel: ${shown}` +
       // Ohne diese Zahl lässt sich am Bildschirm nicht unterscheiden, ob
       // „Erneut versuchen" wirklich einen zweiten Aktivierungsversuch
       // ausgelöst oder nur die Choreografie noch einmal abgespielt hat.

@@ -11,9 +11,17 @@ import { usePwaUpdate } from "./usePwaUpdate";
 let needRefresh: (() => void) | undefined;
 let updateCalls = 0;
 
+const activeWorker = {} as ServiceWorker;
+const fakeRegistration = {
+  waiting: {} as ServiceWorker,
+  installing: null,
+  active: activeWorker,
+  update: () => Promise.resolve(),
+} as unknown as ServiceWorkerRegistration;
+
 const fakeRegisterSW: RegisterSwLike = (opts) => {
   needRefresh = opts.onNeedRefresh;
-  opts.onRegisteredSW?.("/sw.js", undefined);
+  opts.onRegisteredSW?.("/sw.js", fakeRegistration);
   return () => {
     updateCalls += 1;
     return Promise.resolve();
@@ -40,7 +48,9 @@ const Probe = () => {
 
 describe("usePwaUpdate", () => {
   it("spiegelt den Lifecycle und ueberlebt einen Remount", async () => {
-    pwaUpdateStore.start(fakeRegisterSW);
+    pwaUpdateStore.reset();
+    // Ein kontrolliertes Dokument, wie im production-bewiesenen Happy Path.
+    pwaUpdateStore.start(fakeRegisterSW, { getController: () => activeWorker });
 
     const first = await render(<Probe />);
     await expect.element(first.getByTestId("state")).toHaveTextContent("idle");
@@ -71,6 +81,6 @@ describe("usePwaUpdate", () => {
     expect(updateCalls).toBe(before + 1);
 
     await second.unmount();
-    pwaUpdateStore.stop();
+    pwaUpdateStore.reset();
   });
 });

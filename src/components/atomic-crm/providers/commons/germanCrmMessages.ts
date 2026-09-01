@@ -1051,32 +1051,31 @@ export const germanCrmMessages = {
         "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
     },
     pwa: {
+      // Presentation Contract V2: ein Titel, hoechstens eine ruhige Zeile,
+      // genau eine Primaeraktion. Keine Warnsprache ohne Fehlerbeweis.
       available_title: "Neue Nora-Version verfügbar",
-      available_intro: "Eine aktualisierte Version ist bereit.",
-      available_keeps_running:
-        "Ihre aktuelle Nora-Version läuft weiter, bis Sie aktualisieren.",
-      // Zweigeteilt seit PWA-1C.1: Handlungsanweisung zuerst, Begründung
-      // darunter. Als ein Satzblock las sich beides gleich wichtig — das Auge
-      // musste den ganzen Absatz lesen, um die eigentliche Aufforderung zu
-      // finden.
-      available_unsaved_hint:
-        "Bitte speichern Sie offene Eingaben, bevor Sie aktualisieren.",
-      available_unsaved_detail:
-        "Ungespeicherte Änderungen können dabei verloren gehen.",
-      applying_title: "Nora wird aktualisiert",
-      // Bewusst keine Fortschrittsaussage: die acht Sekunden sind eine
-      // Übergangsinszenierung, kein gemessener Vorgang.
-      applying_intro: "Die neue Version wird vorbereitet.",
+      // Der Speicherhinweis bleibt — als ruhige Nebenzeile, nicht als Warnbox.
+      available_hint: "Offene Eingaben vor dem Aktualisieren kurz speichern.",
       update_now: "Jetzt aktualisieren",
       update_later: "Später",
-      // Bewusst keine Fehlerbehauptung: technisch ist nur belegt, dass die
-      // erwartete Uebernahme ausgeblieben ist — nicht, dass sie endgueltig
-      // fehlgeschlagen waere.
-      recovery_title: "Aktualisierung dauert länger als erwartet",
-      recovery_intro:
-        "Nora konnte die neue Version noch nicht vollständig übernehmen. Sie können weiterarbeiten.",
-      retry_action: "Erneut versuchen",
+      // Bewusst keine Fortschrittsaussage: die acht Sekunden sind eine
+      // Übergangsinszenierung, kein gemessener Vorgang.
+      applying_title: "Nora wird aktualisiert",
+      // Langsam ist kein Fehler: der Worker wartet noch, Nora fragt still
+      // ein zweites Mal an.
+      slow_title: "Gleich bereit …",
+      slow_hint: "Nora bereitet die neue Version noch kurz vor.",
+      slow_prolonged_hint:
+        "Falls es nicht weitergeht, hilft ein kurzes Neuladen.",
+      // Die neue Version ist bereit oder bereits aktiv — dieses Fenster
+      // braucht nur noch einen Reload. Kein Fehler, keine Warnung.
+      reload_title: "Neue Version bereit",
       reload_action: "Nora neu laden",
+      // Nur bei positivem Fehlerbeweis (abgelehnte Aktivierungsanfrage).
+      // Nur zusagen, was Nora wirklich garantieren kann.
+      failed_title: "Aktualisierung gerade nicht möglich",
+      failed_hint: "Sie können normal weiterarbeiten.",
+      failed_action: "Weiterarbeiten",
     },
     notifications: {
       region_label: "Statusmeldungen",

@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-01 – PWA Update State Contract V2: Browser-Fakten statt Entdeckungssignal | [Springen](#2026-09-01--pwa-update-state-contract-v2-browser-fakten-statt-entdeckungssignal) |
 | 2026-08-30 – Eine bestätigte Übernahme ist endgültig: `activated` ist monoton (PWA-1C.3) | [Springen](#2026-08-30--eine-bestätigte-übernahme-ist-endgültig-activated-ist-monoton-pwa-1c3) |
 | 2026-08-30 – Ein Retry muss etwas senden: der beendete Aktivierungsversuch (PWA-1C.2 Closure) | [Springen](#2026-08-30--ein-retry-muss-etwas-senden-der-beendete-aktivierungsversuch-pwa-1c2-closure) |
 | 2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2) | [Springen](#2026-08-30--aktivierungsanfrage-ist-kein-erfolgssignal-watchdog-statt-promise-pwa-1c2) |
@@ -89,6 +90,39 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-09-01 – PWA Update State Contract V2: Browser-Fakten statt Entdeckungssignal
+
+### Kontext
+
+Die PWA-Wellen 1B–1C.3 sind mit dem Kanban-Release `fe962c58` live gegangen; der Happy Path (kontrollierter Tab, Worker WAITING, ein SKIP_WAITING, ein `controllerchange` 8 011 ms nach dem Klick, ein Reload) ist dort bestätigt. Trotzdem sah der Product Owner in Production den Recovery-Zustand „Aktualisierung dauert länger als erwartet — Nora konnte die neue Version noch nicht vollständig übernehmen. Sie können weiterarbeiten." mit der Aktion „Nora neu laden" — für Mitarbeiter ein Fehler, obwohl keiner vorlag.
+
+Eine Read-only-Diagnose (Zwei-Build-Repro mit echtem generiertem `sw.js`, Chromium; zehn Vitest-Szenarien gegen die echte Komponente) hat die Kombination als Recovery-Variante B identifiziert (`registration.waiting === null` beim Watchdog) und reproduziert:
+
+1. Seit PWA-1B ruft der Worker kein `clients.claim()` mehr. Ein Dokument ohne Controller (Erstbesuch, Hard Reload Ctrl+Shift+R, gelöschte Site-Daten, Inkognito) bleibt in der hash-gerouteten SPA mit Passwort-Login **den ganzen Arbeitstag** unkontrolliert.
+2. `register.js` (vite-plugin-pwa 1.2.0, Prompt-Modus) ruft `onNeedRefresh` für **externe** Funde — bei Noras stündlicher Prüfung immer — bereits beim `installed`-Ereignis, 200 ms bevor workbox-window über `waiting` entscheidet.
+3. Benutzt kein Client die Registrierung, aktiviert der Browser den Worker sofort (gemessen: 2 ms nach `installed`). `waiting` wird null, `messageSkipWaiting()` sendet nichts, `controllerchange` erreicht ein unkontrolliertes Dokument per Spezifikation nie. Nora deutete das nach 13 s als „nicht übernommen".
+
+Zweiter Befund (MEDIUM): hatte ein anderer Tab aktiviert (`activated = true`), blieb die Fläche auf „verfügbar" und ein Klick spielte acht Sekunden Choreografie ohne Wirkung ab. Der Watchdog selbst (5 s) war nicht zu aggressiv: Übernahme im kontrollierten Tab 14 ms nach dem Commit. Klassifikation TYPE D: technische Lücke im Client-Vertrag plus Präsentation.
+
+### Entscheidung
+
+- **Der Browser ist die Wahrheit; `onNeedRefresh` ist ein Entdeckungssignal.** `pwaUpdateStore.syncFacts()` liest `navigator.serviceWorker.controller`, `registration.waiting/installing/active` an jedem Entscheidungspunkt: Registrierung, `onNeedRefresh`, unmittelbar vor `applyUpdate()`, `controllerchange`, Watchdog, Rückkehr auf den Tab. Ereignisbasiert über `statechange` des beobachteten Workers und `updatefound` — kein Polling, kein BroadcastChannel, kein Cross-Tab-Protokoll.
+- **Expliziter Zustand `reloadRequired`** mit dokumentierter Invariante: `activated ∨ (entdeckt ∧ ¬waiting ∧ ¬installing ∧ (¬controlled ∨ active ≠ controller))`. Bewusst **nicht** `waiting === null` allein — ohne entdecktes Update sagt ein fehlender wartender Worker nichts, und während `installing` ersetzt gerade ein neuerer Worker den entdeckten.
+- **`applyUpdate()` liest vorher die Fakten** und sendet SKIP_WAITING nur, wenn ein Worker wartet; sonst antwortet es `activated`, `reloadRequired` oder `noop`. `activated` bleibt monoton (PWA-1C.3). Kein zweites SKIP_WAITING nach Erfolg.
+- **Der Watchdog (5 s, unverändert) ist kein Fehlerkriterium.** Beim Ablauf ordnet `assessActivation()` ein: `activated` → Reload-Pfad; Worker wartet → `slow` mit genau **einem** stillen zweiten Versuch pro Lauf, nach einer zweiten Frist Reload-Angebot ohne weiteren Automatismus; Reload-Befund → `reloadRequired` (nach einem Commit lädt Nora nach 1,5 s selbst); abgelehnte Anfrage → `failed`. Ein Timeout allein ist nie `failed`.
+- **Kein `clients.claim()`.** Das würde den PWA-1A-Chunk-Fehler zurückbringen. Ein unkontrolliertes Dokument braucht nur einen Reload — genau das sagt die Fläche jetzt.
+- **Presentation Contract V2:** `available · applying · slow · reloadRequired · failed`; ein Titel, höchstens eine ruhige Zeile, eine Primäraktion; kein Warnsymbol, keine Warnbox, kein Orange; nie „Sie können weiterarbeiten" neben einem Reload-Knopf. Zeigen die Fakten beim Klick bereits `reloadRequired`, startet keine Choreografie. Der production-bewiesene Happy Path bleibt unverändert (8-Sekunden-Choreografie, ein SKIP_WAITING, ein Reload).
+
+### Begründung
+
+Ein Zustand, der einen Fehlschlag behauptet, während die neue Version läuft, kostet Vertrauen — und die einzige richtige Handlung („Nora neu laden") stand neben einem Text, der sie überflüssig erscheinen ließ. Die Reparatur braucht keine neue Architektur: die Fakten, die fehlten, liegen bereits im Browser; Nora musste sie nur lesen, statt einem Callback eine Semantik zu unterstellen, die er nie hatte. Der 5-Sekunden-Wert bleibt, weil er gemessen richtig ist; falsch war die Schlussfolgerung, nicht die Frist.
+
+**Doku-Korrektur zu PWA-1C.2:** Der Client von `vite-plugin-pwa` lädt im kontrollierten Tab sehr wohl selbst neu (`controlling.isUpdate = true`, gemessen); nur ein unkontrolliertes Dokument bleibt stehen. Noras 1,5-s-Reload ist damit Sicherheitsnetz, nicht Regelweg — es entsteht kein Doppel-Reload.
+
+**Status:** `PWA UPDATE STATE CONTRACT V2 — LOCAL VERIFIED / RC`. Nicht Production Verified; kein Deployment. Der globale Nora-Loader ist eine eigene spätere Welle („Nora Loading Motion System", `17-known-issues-and-planned-waves.md`).
 
 ---
 

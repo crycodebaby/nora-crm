@@ -1056,22 +1056,19 @@ export const frenchCrmMessages = {
     },
     pwa: {
       available_title: "Nouvelle version de Nora disponible",
-      available_intro: "Une version actualisée est prête.",
-      available_keeps_running:
-        "Votre version actuelle de Nora continue de fonctionner jusqu'à la mise à jour.",
-      available_unsaved_hint:
-        "Veuillez enregistrer vos saisies en cours avant la mise à jour.",
-      available_unsaved_detail:
-        "Les modifications non enregistrées peuvent être perdues.",
-      applying_title: "Mise à jour de Nora",
-      applying_intro: "La nouvelle version est en cours de préparation.",
+      available_hint: "Enregistrez vos saisies en cours avant la mise à jour.",
       update_now: "Mettre à jour",
       update_later: "Plus tard",
-      recovery_title: "La mise à jour prend plus de temps que prévu",
-      recovery_intro:
-        "Nora n'a pas encore pu basculer vers la nouvelle version. Vous pouvez continuer à travailler.",
-      retry_action: "Réessayer",
+      applying_title: "Mise à jour de Nora",
+      slow_title: "Bientôt prêt …",
+      slow_hint: "Nora prépare encore la nouvelle version.",
+      slow_prolonged_hint:
+        "Si rien ne se passe, un rechargement rapide suffit.",
+      reload_title: "Nouvelle version prête",
       reload_action: "Recharger Nora",
+      failed_title: "Mise à jour impossible pour le moment",
+      failed_hint: "Vous pouvez continuer à travailler normalement.",
+      failed_action: "Continuer",
     },
     notifications: {
       region_label: "Messages d'état",

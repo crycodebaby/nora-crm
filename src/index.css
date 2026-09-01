@@ -144,29 +144,6 @@
      theme: the same alpha that reads as a soft halo on white glows on black. */
   --nora-system-aura-alpha: 0.34;
   --nora-system-aura-halo-alpha: 0.16;
-  /* Warning treatment. Its own value, not --nora-warning: the status token is
-     tuned for small text on a badge and turns muddy grey-brown at 32px. This
-     is warmer and higher in chroma so the mark reads as amber at a glance.
-     Deliberately NOT --destructive — the update is not a failure and must not
-     be dressed as one. */
-  --nora-system-warning: oklch(0.58 0.17 52);
-  --nora-system-warning-frame: color-mix(
-    in oklab,
-    var(--nora-system-warning) 42%,
-    var(--muted-foreground)
-  );
-  --nora-system-warning-surface: color-mix(
-    in oklab,
-    var(--nora-system-warning) 8%,
-    var(--card)
-  );
-  --nora-system-warning-border: color-mix(
-    in oklab,
-    var(--nora-system-warning) 26%,
-    transparent
-  );
-  /* No glow in light mode — on white it only muddies the contour. */
-  --nora-system-warning-glow: none;
   /* Motion. Restrained by design — no bounce, no gamification. */
   --nora-motion-fast: 150ms;
   --nora-motion-base: 220ms;
@@ -300,29 +277,6 @@
     0 44px 88px -36px oklch(0 0 0 / 0.75);
   --nora-system-aura-alpha: 0.48;
   --nora-system-aura-halo-alpha: 0.24;
-  /* Lighter and slightly less saturated than in light mode: on a dark ground
-     the same amber reads as brown, and pushing chroma instead of lightness
-     would tip it into neon. */
-  --nora-system-warning: oklch(0.82 0.14 62);
-  --nora-system-warning-frame: color-mix(
-    in oklab,
-    var(--nora-system-warning) 28%,
-    var(--muted-foreground)
-  );
-  --nora-system-warning-surface: color-mix(
-    in oklab,
-    var(--nora-system-warning) 9%,
-    var(--card)
-  );
-  --nora-system-warning-border: color-mix(
-    in oklab,
-    var(--nora-system-warning) 20%,
-    transparent
-  );
-  /* Controlled: one soft stop, no neon halo. */
-  --nora-system-warning-glow: drop-shadow(
-    0 0 6px color-mix(in oklab, var(--nora-system-warning) 24%, transparent)
-  );
   --avatar-0: oklch(0.35 0.12 240);
   --avatar-1: oklch(0.38 0.14 340);
   --avatar-2: oklch(0.35 0.11 180);
@@ -1346,8 +1300,7 @@ input[type="time"] {
   /* --- Application system event (PWA-1C.1) -----------------------------
      The orb carries no information that only motion conveys — the title and
      the body text say everything. So every living layer stands still, the
-     panel changes state through plain fades instead of morphing and growing,
-     and the warning symbol appears at once instead of assembling itself.
+     panel changes state through plain fades instead of morphing and growing.
 
      Two things deliberately survive:
 
@@ -1368,15 +1321,14 @@ input[type="time"] {
   .nora-orb-membrane,
   .nora-orb-body,
   .nora-orb-core,
-  .nora-orb-core-mass,
-  .nora-safety-mark [data-mark-part] {
+  .nora-orb-core-mass {
     animation: none !important;
   }
 
   .nora-system-event,
   .nora-system-event-fold,
   .nora-system-event-title,
-  .nora-system-event-lede,
+  .nora-system-event-hint,
   .nora-orb,
   .nora-orb-field,
   .nora-orb-aura,
@@ -1389,11 +1341,6 @@ input[type="time"] {
   .nora-system-event {
     --orb-scale: 1 !important;
     --orb-aura-spread: 1 !important;
-  }
-
-  .nora-safety-mark [data-mark-part] {
-    opacity: 1 !important;
-    transform: none !important;
   }
 
   .nora-system-event-dot {
@@ -1569,14 +1516,33 @@ input[type="time"] {
     --orb-aura-opacity: 1;
   }
 
-  /* Recovery reuses the resting composition: after a failed activation the
-     event must look like something the user can act on again, not like a
-     sequence frozen mid-flight. */
-  .nora-system-event[data-presentation="recovery"] {
+  /* "Gleich bereit": the calm update scene simply continues. Nothing grows,
+     nothing changes colour — the only difference is the slower breathing of
+     the dots. Waiting a little longer must not look like a new event. */
+  .nora-system-event[data-presentation="slow"] {
+    --event-pad: var(--event-pad-focus);
+    --event-gap: 1.375rem;
+    --orb-scale: 1.32;
+    --orb-aura-spread: 1.22;
+    --orb-aura-opacity: 1;
+  }
+
+  .nora-system-event[data-presentation="slow"] .nora-system-event-dot {
+    animation-duration: 3200ms;
+  }
+
+  /* "Neue Version bereit" and "gerade nicht moeglich" reuse the resting
+     composition: something the user can act on, not a sequence frozen
+     mid-flight. The orb rests; no danger colour, no warning surface. */
+  .nora-system-event[data-presentation="reloadRequired"],
+  .nora-system-event[data-presentation="failed"] {
     --event-pad: 2.5rem;
     --orb-scale: 1;
     --orb-aura-spread: 1;
     --orb-aura-opacity: 0.85;
+    --title-opacity: 1;
+    --title-blur: 0px;
+    --title-shift: 0px;
   }
 
   /* --- Stage ------------------------------------------------------------
@@ -1615,17 +1581,16 @@ input[type="time"] {
       transform 900ms var(--nora-choreo-ease);
   }
 
-  .nora-system-event-lede {
+  /* The one quiet secondary line (save hint, "almost ready", reload note).
+     Muted, no surface, no border, no symbol: it is information the eye may
+     pick up, never a warning it has to process. Fades with the title so the
+     composition never shows a stale line at full opacity. */
+  .nora-system-event-hint {
     @apply text-sm text-muted-foreground;
     max-width: 26rem;
     line-height: var(--nora-line-readable);
     opacity: var(--title-opacity);
     transition: opacity 700ms var(--nora-choreo-ease);
-  }
-
-  .nora-system-event-reassure {
-    @apply text-sm text-muted-foreground;
-    line-height: var(--nora-line-readable);
   }
 
   /* --- Fold -------------------------------------------------------------
@@ -1675,38 +1640,6 @@ input[type="time"] {
     transition: visibility 0s linear 520ms;
   }
 
-  /* --- Safety block -----------------------------------------------------
-     Symbol left, copy right, both inside one warm surface. The eye has to
-     land on WARNING and continue straight into READ THIS — so the mark is
-     large enough to register on its own and the text starts on the mark's
-     first baseline. */
-  .nora-system-event-safety {
-    @apply flex items-start gap-4 text-left;
-    padding: 1rem 1.125rem;
-    border-radius: 1rem;
-    background: var(--nora-system-warning-surface);
-    border: 1px solid var(--nora-system-warning-border);
-  }
-
-  .nora-system-event-safety-copy {
-    @apply flex min-w-0 flex-col gap-1;
-  }
-
-  .nora-system-event-safety-lead {
-    @apply text-sm font-medium;
-    line-height: var(--nora-line-readable);
-  }
-
-  /* Not plain --muted-foreground: measured against the warm safety surface it
-     came out at 4.33:1, just under AA for normal text. Nudged towards the
-     foreground until it clears 4.5:1 while staying clearly subordinate to the
-     instruction above it. */
-  .nora-system-event-safety-note {
-    @apply text-sm;
-    line-height: var(--nora-line-readable);
-    color: color-mix(in oklab, var(--muted-foreground) 78%, var(--foreground));
-  }
-
   .nora-system-event-actions {
     @apply flex flex-wrap items-center justify-center gap-3;
   }
@@ -1714,54 +1647,6 @@ input[type="time"] {
   .nora-system-event-action {
     min-width: 9rem;
     padding-inline: 1.25rem;
-  }
-
-  /* --- Warning mark ------------------------------------------------------
-     The product owner's geometry, coloured through Nora tokens. The outer
-     contour stays neutral-warm so it does not compete with the accent; the
-     bar and the dot carry the amber. Never --destructive: an available update
-     is not a failure. */
-  .nora-safety-mark {
-    @apply shrink-0;
-    width: 2rem;
-    height: 2rem;
-    /* Optical alignment with the first text line rather than the box top. */
-    margin-top: 0.0625rem;
-    filter: var(--nora-system-warning-glow);
-  }
-
-  .nora-safety-mark [data-mark-part] {
-    /* Each part scales about its own centre, otherwise the staged entrance
-       would slide the pieces across the mark instead of settling them. */
-    transform-box: fill-box;
-    transform-origin: center;
-    opacity: 0;
-    animation: nora-safety-mark-in 520ms var(--nora-motion-ease) both;
-  }
-
-  .nora-safety-mark [data-mark-part="frame"] {
-    fill: var(--nora-system-warning-frame);
-  }
-
-  /* The warm parts, in the order section 11 asks for: contour, bar, ring,
-     dot. Each delay is short enough that the whole mark is complete in under
-     three quarters of a second — attention, not suspense. */
-  .nora-safety-mark [data-mark-part="bar"],
-  .nora-safety-mark [data-mark-part="ring"],
-  .nora-safety-mark [data-mark-part="dot"] {
-    fill: var(--nora-system-warning);
-  }
-
-  .nora-safety-mark [data-mark-part="bar"] {
-    animation-delay: 130ms;
-  }
-
-  .nora-safety-mark [data-mark-part="ring"] {
-    animation-delay: 230ms;
-  }
-
-  .nora-safety-mark [data-mark-part="dot"] {
-    animation-delay: 320ms;
   }
 
   /* --- Animated ellipsis -------------------------------------------------
@@ -2149,20 +2034,6 @@ input[type="time"] {
       opacity: 1;
       transform: translateY(0) scale(1);
     }
-  }
-}
-
-/* Staged entrance of the warning geometry: contour, bar, ring, dot. A single
-   settle each — the mark is static afterwards. A permanently pulsing warning
-   produces nervousness, not attention. */
-@keyframes nora-safety-mark-in {
-  from {
-    opacity: 0;
-    transform: scale(0.82);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
   }
 }
 

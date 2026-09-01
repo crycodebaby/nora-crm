@@ -499,15 +499,9 @@ Die Aura ist rund 2,5-mal so breit wie der Orb und läuft weich in die Fläche a
 
 Technisch: reines CSS über `transform`, `opacity` und kontrolliert `border-radius`. Keine Animationsbibliothek, kein Canvas, kein JavaScript pro Frame.
 
-### Warnsymbol
+### Sicherheitszeile (seit Update State Contract V2)
 
-Die Geometrie stammt **unverändert** aus dem SVG des Product Owners (Original als Design-Asset unter `docs/nora/assets/pwa-update-warning-source.svg`, wird nicht überschrieben). Entfernt wurde nur Export-Ballast: das `fill="#000000"` am Wurzelelement, Adobe-Entities/Metadata/Namespaces, die feste 800×800-Größe und die vier leeren `<g>`-Hüllen. `viewBox` und jeder `d`-String sind byteweise identisch. **Nicht** durch ein Lucide-Icon ersetzt, nicht nachgezeichnet, nicht gerastert.
-
-Das Original zerfällt in genau die vier Teile, die die Choreografie braucht — `frame`, `bar`, `ring`, `dot` — die beim Erscheinen in dieser Reihenfolge um je 100 ms versetzt einblenden und **danach stillstehen**. Ein dauerhaft pulsierendes Warnsymbol erzeugt Nervosität statt Aufmerksamkeit.
-
-Farbe über eigene Tokens, nicht über `--nora-warning`: der Status-Token ist für kleinen Text auf einem Badge abgestimmt und wird bei 32 px zu einem matschigen Graubraun. `--nora-system-warning` ist wärmer und chromatischer (hell `oklch(0.58 0.17 52)`, dunkel `oklch(0.82 0.14 62)`). **Nie `--destructive`**: ein verfügbares Update ist kein Fehler und darf nicht als solcher auftreten. Die Fläche ist entsprechend warm-ruhig, kein Danger-State.
-
-Das Symbol ist `aria-hidden="true"` — der Text unmittelbar daneben sagt bereits vollständig, dass offene Eingaben gespeichert werden sollen. Eine Bezeichnung wäre eine zweite Screenreader-Ansage derselben Warnung.
+Das orange Warnsymbol und die orange Hinweisbox aus PWA-1C.1 sind entfernt (Product-Owner-Entscheidung, 2026-09-01: ein Update darf nicht wie eine Störung aussehen). Der Speicherhinweis bleibt — als **eine ruhige Nebenzeile** in `--muted-foreground`, ohne Fläche, Rahmen oder Symbol: „Offene Eingaben vor dem Aktualisieren kurz speichern." Dieselbe Zeile erscheint im Zustand „Neue Version bereit". Die `--nora-system-warning*`-Tokens und `NoraSafetyMark` existieren nicht mehr; das Original-SVG des Product Owners bleibt als Design-Asset unter `docs/nora/assets/pwa-update-warning-source.svg` erhalten.
 
 ### Update-Choreografie (8 Sekunden)
 
@@ -529,110 +523,25 @@ Regeln, die dabei nicht verhandelbar sind:
 - **Die Szene läuft weiter**, bis der Browser tatsächlich neu lädt. Nach Sekunde acht kein leeres Fenster.
 - **Drei Punkte statt bewegtem Text.** Deckkraft 0,25 → 1 → 0,25 mit versetzten Phasen über 2,4 s, `ease-in-out`. Sie tragen die fortlaufende Aktivitätssemantik, damit der Text vollkommen still stehen kann — kein Typewriter, keine springenden Buchstaben. Rein dekorativ (`aria-hidden`), der Titel sagt bereits alles.
 
-### Recovery (korrigiert nach dem Final Review, 2026-08-30)
+### Presentation Contract V2 (2026-09-01): fünf Zustände, eine Aktion
 
-**Anfrage ≠ Übernahme.** Nach der Achtsekundensequenz fällt genau ein `applyUpdate()`. Das bedeutet: SKIP_WAITING wurde **angefordert** — nicht, dass der neue Worker die Kontrolle bekommen hat. Die beiden Wahrheiten sind im Store getrennt:
+Der frühere Sammelzustand „Recovery" („Aktualisierung dauert länger als erwartet" mit „Erneut versuchen" oder „Nora neu laden") ist ersetzt. Technische Wahrheit liegt in `pwaUpdateStore` (Browser-Fakten: Controller, wartender/aktiver Worker, `activated`, `failed`), die Präsentation wird in `useUpdateChoreography` abgeleitet; die Komponente enthält keine Service-Worker-Logik.
 
-| Signal | Bedeutung |
-|---|---|
-| `applying` | Die Aktivierung wurde angefordert |
-| `activated` | Der Browser hat die Übernahme vollzogen (`controllerchange`) |
-
-Die erste Fassung leitete den Fehlschlag aus dem Promise von `updateServiceWorker()` ab. Das war falsch: der ausgelieferte Client (`vite-plugin-pwa` 1.2.0) wartet nur auf die Registrierung und feuert dann ein `postMessage` ohne `await`; `messageSkipWaiting()` verwirft sein eigenes Promise und tut ohne wartenden Worker sogar gar nichts. Das Promise resolved also **immer** und trägt keine Information. Damit war der dokumentierte Ausweg unerreichbar, und der reale Fall „Anfrage raus, Übernahme kommt nie" hätte Nora dauerhaft auf „wird aktualisiert" stehen lassen.
-
-**Der Watchdog.** Ab `applyUpdate()` — die acht Sekunden zählen ausdrücklich nicht mit — läuft eine Frist von **5 Sekunden**. Trifft `controllerchange` ein, wird sie abgeräumt (der Client lädt dann ohnehin neu). Bleibt sie aus, erscheint der Recovery-Zustand. Trifft die Übernahme *danach* doch noch ein, verschwindet er wieder — die Oberfläche behauptet nie etwas, das gerade nicht mehr stimmt.
-
-Die 5 Sekunden sind gemessen, nicht geraten. Gegen das echte generierte `sw.js` (38 Precache-Einträge, `cleanupOutdatedCaches`) in Chromium 148, jeweils `postMessage(SKIP_WAITING)` → `controllerchange`:
-
-| Bedingung | n | min | Median | max |
+| Zustand | Technische Bedingung | Titel | Zeile | Aktion(en) |
 |---|---|---|---|---|
-| ohne Drosselung | 6 | 2 ms | 2 ms | 3 ms |
-| CPU-Drosselung 4× | 5 | 2 ms | 3 ms | 34 ms |
-| CPU-Drosselung 20× | 4 | 9 ms | 11 ms | 26 ms |
+| `available` | Update entdeckt, Worker wartet, Dokument kontrolliert | Neue Nora-Version verfügbar | Offene Eingaben vor dem Aktualisieren kurz speichern. | Später · **Jetzt aktualisieren** |
+| `applying` | Choreografie läuft bzw. Anfrage gesendet; nach Übernahme/Reload-Befund bis zum Reload | Nora wird aktualisiert (ab `sustaining`) | — (drei Punkte) | keine |
+| `slow` | Watchdog (5 s nach Commit) findet den Worker weiterhin wartend; ein stiller zweiter Versuch läuft | Gleich bereit … | Nora bereitet die neue Version noch kurz vor. — nach der zweiten Frist: Falls es nicht weitergeht, hilft ein kurzes Neuladen. | keine; nach der zweiten Frist Nora neu laden (Ghost) |
+| `reloadRequired` | Neue Version aktiv, dieses Dokument braucht nur einen Reload (Invariante in `pwaUpdateStore.ts`) | Neue Version bereit | Offene Eingaben vor dem Aktualisieren kurz speichern. | Später · **Nora neu laden** |
+| `failed` | Positiver Fehlerbeweis: die Aktivierungsanfrage wurde abgelehnt | Aktualisierung gerade nicht möglich | Sie können normal weiterarbeiten. | Weiterarbeiten |
 
-Schlechtester beobachteter Wert 34 ms; 5 s sind davon rund das 150-Fache und decken zusätzlich die Zeitgeber-Drosselung eines Hintergrund-Tabs ab (Chrome rastert dort auf ca. eine Sekunde).
+Regeln:
 
-**Der Reload gehört Nora, nicht dem Plugin.** Beim Messen des Watchdogs fiel ein zweiter, größerer Punkt auf: der Client aus `virtual:pwa-register` lädt nur neu, wenn Workbox die gefundene Aktualisierung als *intern* führt. Bei Noras eigener Prüfung ist das nicht der Fall (sie läuft stündlich bzw. bei Tab-Rückkehr, also lange nach dem Seitenaufbau — Workbox stuft solche Funde als extern ein und lässt `isUpdate` weg). Im Zwei-Build-Harness real gemessen: nach `SKIP_WAITING` feuert `controllerchange` genau einmal, der neue Worker übernimmt, der alte Precache verschwindet — **und die Seite bleibt stehen**. Identisch am Code vor dieser Korrektur gemessen, also kein Regressionseffekt, sondern ein ungeprüfter Zustand.
+- **Ein Timeout ist nie ein Fehler.** Beim Ablauf des Watchdogs werden die Browser-Fakten neu gelesen; „langsam" heißt „der Worker wartet noch", nicht „gescheitert".
+- **Kein Schein-Update.** Zeigen die Fakten beim Klick bereits `reloadRequired` (unkontrolliertes Dokument, Aktivierung aus einem anderen Tab), startet keine Choreografie — die Fläche zeigt „Neue Version bereit". Trifft der Befund nach dem Commit ein, läuft die Szene ruhig weiter und Nora lädt nach 1,5 s selbst neu.
+- **Keine konkurrierenden Botschaften.** Nie „Sie können weiterarbeiten" neben einem Reload-Knopf. Genau eine Primäraktion pro Zustand.
+- **Kein Orange, kein Warnsymbol, keine Warnbox.** Alle fünf Zustände nutzen dieselbe Fläche, denselben Orb und dieselben Nora-Tokens; `failed` ist sachlich, nicht alarmierend.
+- **Slow-Motion:** die ruhige Update-Szene läuft einfach weiter, die drei Punkte atmen langsamer (3,2 s statt 2,4 s). Nichts wächst, nichts wechselt die Farbe.
+- **Reduced Motion** unverändert: Ebenen stehen still, Faltungen werden zu Fades, die Punkte behalten nur ihren Deckkraftzyklus.
 
-„Übernommen" ist deshalb nicht „fertig": fertig ist erst das neu geladene Dokument. Trifft `controllerchange` ein und lebt die Seite 1,5 s später immer noch, lädt Nora selbst neu. Lädt der Client doch selbst (er tut das synchron im `controlling`-Handler), kommt dieser Timer nie zum Zug — ein doppelter Reload ist damit ausgeschlossen.
-
-**Die Copy behauptet keinen Fehler.** Titel „Aktualisierung dauert länger als erwartet", darunter „Nora konnte die neue Version noch nicht vollständig übernehmen. Sie können weiterarbeiten." Belegt ist nur das Ausbleiben, nicht das endgültige Scheitern. Keine technischen Begriffe in der Oberfläche.
-
-**Die Aktion richtet sich nach dem echten Worker-Zustand.** Wartet noch ein Worker (`registration.waiting`), kann ein zweiter Anlauf etwas bewirken → „Erneut versuchen" startet eine vollständige neue Sequenz. Ist keiner mehr da, liefe `messageSkipWaiting()` nachweislich ins Leere → „Nora neu laden" ist dann die ehrlichere Aktion. Beim Klick wird der Worker-Zustand noch einmal gelesen: zwischen Watchdog und Klick können Sekunden liegen, und ein inzwischen verschwundener Worker führt dann zum Reload statt zu einem Versuch ins Leere.
-
-**„Erneut versuchen" ist ein echter zweiter Aktivierungsversuch** (korrigiert in PWA-1C.2, siehe Decision-Log). Beim Ablauf des Watchdogs endet der steckengebliebene Versuch kontrolliert — nur so lässt `applyUpdate()` überhaupt eine zweite Anfrage zu. Die Wirkung ist an einer technischen Größe messbar, nicht an der Animation: die Zahl der gesendeten SKIP_WAITING-Anfragen steigt.
-
-**Eine bestätigte Übernahme beendet den Vorgang, egal wann sie eintrifft** (PWA-1C.3). Trifft sie mitten in einer laufenden Retry-Choreografie ein, läuft die Szene ruhig zu Ende, der Commit fordert nichts mehr an, und Nora lädt selbst neu — kein zweiter Versuch ins Leere und kein Recovery-Zustand, der ein bereits erfolgreiches Update als „dauert länger" ausgibt.
-
-**Bewusst kein „Später" in Recovery.** SKIP_WAITING ist zu diesem Zeitpunkt gesendet; den Worker verlässlich wieder auf WAITING zu setzen, ist keine Fähigkeit, die Nora hat. Ein Knopf, der das verspräche, wäre eine Lüge über den eigenen Zustand. Der Ausweg ist deshalb die Aktion selbst — sie bekommt beim Eintritt in den Zustand den Fokus und ist damit sofort per Tastatur bedienbar.
-
-### Reduced Motion
-
-Bei `prefers-reduced-motion: reduce` (in echtem Chromium mit gesetztem Flag nachgemessen): alle Orb-Animationen `none`, der Orb behält Skalierung 1 (kein Wachsen), das Warnsymbol ist sofort vollständig sichtbar statt gestaffelt, Zustandswechsel laufen über einfache Fades. **Zwei Dinge überleben bewusst:**
-
-1. Die Achtsekundensequenz selbst — sie ist eine Produktentscheidung, keine Dekoration; sie zu kürzen gäbe Reduced-Motion-Nutzern einen anderen Update-Ablauf.
-2. Die drei Punkte, auf einer reinen Deckkraft-Keyframe (`nora-system-event-dot-fade`, ohne Scale). Sie sind das einzige verbleibende Lebenszeichen; ohne sie bliebe ein eingefrorener Bildschirm.
-
-### Accessibility
-
-**Sichtbare Fläche und Ansage sind getrennt** (korrigiert nach dem Final Review). Das Panel trug `role="status"`; damit kam `aria-atomic="true"`, und jede Mutation im Teilbaum ließ Screenreader die komplette Fläche erneut vorlesen — während der Achtsekundensequenz mehrfach, weil Sicherheitshinweis und Aktionen verschwinden, die Punkte auftauchen und der Titel wechselt.
-
-Jetzt: die Fläche ist `role="group"` mit `aria-labelledby` (genau **ein** `h2` im Baum — der Crossfade nutzt keinen zweiten Titel) und `aria-describedby`, **ohne** Live-Semantik. Die einzige Live-Region ist ein winziger `sr-only`-Announcer, der pro Zustandswechsel genau eine kurze Ansage trägt: „Neue Nora-Version verfügbar" → „Nora wird aktualisiert" → ggf. „Aktualisierung dauert länger als erwartet". Konzeptionell dieselbe Trennung wie in Phase 7B (`NoraNotificationAnnouncer`), aber ohne dessen Store — hier gibt es genau drei mögliche Ansagen. Die Identität der Ansage ist eine Sequenznummer als React-Key, kein Whitespace-Trick.
-
-**Fokus.** Kein Fokusdiebstahl, kein Focus-Trap, kein Scrim: solange das Ereignis nur dasteht, fasst es den Fokus nicht an. Löst der Benutzer die Primäraktion aus, faltet sich die Aktionszeile weg — ohne Zutun fiele der Fokus auf `<body>`. Deshalb wandert er in genau diesem Fall auf die Fläche selbst (`tabindex="-1"`, schmaler `:focus-visible`-Ring) und im Recovery-Zustand auf dessen einzige Aktion.
-
-Maßgeblich ist der **Fokus-Besitz**, nicht eine Momentaufnahme beim Klick (korrigiert in PWA-1C.2). Der Besitz beginnt mit der vom Benutzer ausgelösten Aktion und endet in dem Moment, in dem der Benutzer den Fokus selbst nach draußen trägt — ein `focusin`-Beobachter führt ihn mit, solange das Ereignis montiert ist. Vorher wurde nur einmal beim Klick gemessen; wer danach weiterarbeitete, bekam den Fokus dreizehn Sekunden später aus dem Eingabefeld gerissen, sobald der Watchdog zuschlug. Der Rückfall auf `<body>` beim Wegfalten der Aktionen zählt ausdrücklich **nicht** als Aufgabe des Besitzes — er ist keine Entscheidung des Benutzers. Kehrt der Benutzer freiwillig in die Fläche zurück, kehrt auch der Besitz zurück.
-
-Escape wirkt nur, wenn der Fokus im Panel liegt und noch etwas zu verwerfen ist — kein globaler Handler, der Dialogen Escape wegnimmt; während der Sequenz gibt es kein Zurück.
-
-**Bei offenem Dialog/Sheet wird gar nichts angezeigt** (`display: none` über dieselbe `body:has([data-slot="dialog-content"][data-state="open"])`-Regel wie in 7B — keine zweite Modal-Zustandsmaschine). In der echten App mit einem echten Radix-Dialog verifiziert: `display: none`, 0 fokussierbare Elemente, nach dem Schließen wieder `flex` mit 2 fokussierbaren Elementen und `body { pointer-events: auto }`.
-
-Touch-Ziele ≥ 44 px — **mit einer Falle**, die projektweit gilt: `.nora-primary-action` nutzt `@apply`, und Tailwind v4 verschiebt jede Regel, die das tut, in die `utilities`-Layer, wo sie nach `.min-h-*` einsortiert wird und gewinnt. Ihr `min-h-10` nagelt die Primäraktion auf 40 px fest, und **weder** eine `min-h-11`-Klasse am Element **noch** eine Regel in der `components`-Layer kann das überschreiben (Layer-Reihenfolge schlägt Spezifität). Gelöst über eine bewusst **ungelayerte** Regel — die einzige in `index.css`. Gemessen: vorher 164×40, jetzt 144×44 und 164×44 (Desktop) bzw. 422×47 (Mobile).
-
-### Kontrast (nachgemessen, gestylte App, Canvas-aufgelöste sRGB-Werte)
-
-| Element | Hell | Dunkel |
-|---|---|---|
-| Titel | 19,80 | 16,50 |
-| Einleitungszeile | 4,74 | 6,67 |
-| Warnhinweis (Handlungsanweisung) | 17,96 | 14,87 |
-| Warnhinweis (Begründung) | 6,35 | 7,48 |
-| Warnsymbol Kontur | 4,22 | 6,67 |
-| Warnsymbol Akzent | 4,13 | 8,47 |
-| Zusicherungszeile | 4,74 | 6,67 |
-| Sekundäraktion „Später" | 19,80 | 16,50 |
-| **Primäraktion „Jetzt aktualisieren"** | **3,56** | **3,56** |
-
-Alle Werte in der Panelfläche liegen ≥ 4,5 (AA), alle grafischen ≥ 3,0 (1.4.11). Die Begründungszeile im Warnhinweis nutzt **nicht** `--muted-foreground`: gegen die warme Fläche gemessen kam sie auf 4,33 und damit knapp unter AA; sie ist so weit Richtung `--foreground` gemischt, bis 4,5 erreicht ist, bleibt aber klar der Handlungsanweisung untergeordnet.
-
-**Eine Ausnahme, und sie ist projektweit.** Die Primäraktion trägt Weiß auf `--nora-brand` (`#ff3b1f`) und kommt damit auf **3,56** — unter AA für normalen Text (14 px / 600 zählt nicht als „large text"). Das ist **nicht** die Farbe dieser Welle, sondern die etablierte `.nora-primary-action`: dieselbe 3,56 wurde am bestehenden Header-Button „Neue Anfrage erfassen" nachgemessen. Ein lokaler Fix wäre technisch möglich (rund 15 % Schwarz in den Markenton mischen ergibt 4,76), wurde aber bewusst **nicht** gemacht: er hätte diesen einen Knopf anders eingefärbt als jede andere Primäraktion in Nora, direkt neben dem markenroten Orb, und hätte an einer vom Product Owner abgenommenen Komposition gedreht, ohne das eigentliche — globale — Problem zu lösen. Als eigener Design-System-Punkt geführt: `17-known-issues-and-planned-waves.md`.
-
-Hell und Dunkel sind **eigene Materialien**, keine Invertierung: die Panelfläche ist im Hellen reines Weiß (bei 0,995 las sie sich als leicht schmutziges Rechteck auf Noras weißem Hintergrund — Trennung kommt dort aus Schatten und Hairline), im Dunkeln liegt sie mit 0,222 leicht **über** `--popover`; die Aura trägt im Dunkeln mehr Alpha, weil derselbe Wert auf dunklem Grund verschwindet; das Warnsymbol bekommt nur im Dunkeln einen kontrollierten Ein-Stopp-Glow, der auf Weiß nur die Kontur verschmieren würde.
-
-### Mobile
-
-Dieselbe DNA, komprimiert: weiterhin eine zentrierte Spalte mit dem Orb als Mittelpunkt, nur kleiner und enger (Orb 5,25 rem, Padding 1,5 rem, Radius 1,375 rem). Bewusst **nicht** die Desktop-Komposition proportional verkleinert — Padding, Orb und Typografie gehen jeweils unterschiedlich weit herunter. Die Aktionen stapeln sich über die volle Breite mit der Primäraktion oben (`flex-col-reverse`); ein umbrechender Button-Zweizeiler liest sich bei dieser Breite schlechter als ein ehrlicher Stapel.
-
-### Tokens
-
-Alle themenabhängigen Werte liegen als `--nora-system-*` in `:root` und `.dark` (Surface, Surface-Lift, Hairline, Inner-Light, Shadow, Aura-Alpha, Halo-Alpha, Warning, Warning-Frame, Warning-Surface, Warning-Border, Warning-Glow). Keine verstreuten Hex-/OKLCH-Literale. Alle kompositionsabhängigen Werte (`--event-top`, `--event-pad`, `--event-pad-focus`, `--event-gap`, `--orb-size`, `--orb-scale`, `--orb-aura-spread`, `--orb-aura-opacity`, `--title-opacity`, `--title-blur`, `--title-shift`) liegen als lokale Variablen auf `.nora-system-event`; die Kinder lesen sie nur. Die gesamte Achtsekundenchoreografie sind dadurch vier Selektoren statt einer Zustandskaskade durch den Baum.
-
-### Texte
-
-Ausschließlich aus `crm.pwa.*` (de/en/fr). Keine technischen Begriffe in der Oberfläche — kein „Service Worker", „Cache", „Build", „Deployment", „Chunk", „Reload".
-
-### Wie man das Ereignis lokal ansieht
-
-Im echten Betrieb erscheint es frühestens nach einem Deployment. Für die Gestaltungsarbeit gibt es deshalb ein **Dev-Werkzeug**: `pwa/devUpdateTrigger.ts` blendet im Dev-Server unten links ein kleines Panel ein mit
-
-`Update anzeigen` · `Übernahme simulieren` · `Ablehnung` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Neu laden`
-
-- **Der Standardweg ist der reale Fehlerfall.** Ohne weiteren Klick verhält sich das Werkzeug wie Production: die Anfrage geht raus, das Promise resolved, `controllerchange` bleibt aus — nach der Watchdog-Frist muss der Recovery-Zustand erscheinen. Genau dieser Fall war im ersten RC ungetestet.
-- **Übernahme simulieren** setzt ein echtes `controllerchange` auf `navigator.serviceWorker` ab — derselbe Weg, den auch der Browser nimmt, und derselbe Listener, den der Store in Production benutzt. Kein Production-Code wird dafür verändert oder aufgeweicht.
-- **Ablehnung** lässt das Promise von `updateServiceWorker()` ablehnen. In Production passiert das praktisch nie; der Schalter hält nur den Absicherungszweig im Store am Leben.
-- **Orb-Tempo ×8** setzt die `playbackRate` aller zehn Orb-Animationen hoch. Die Perioden reichen bis 89 s; bei ×8 sieht man den vollständigen Morph-Zyklus in Sekunden.
-- **Reduced Motion** liest die **echte** `@media (prefers-reduced-motion: reduce)`-Regel aus dem geladenen Stylesheet und injiziert sie ohne die Bedingung — sie kann dadurch nie von der tatsächlichen CSS abweichen. Nachgemessen ergibt das dasselbe Bild wie die Browsereinstellung. Grenze: es simuliert die CSS-Regel, nicht die Einstellung; `matchMedia`-Abfragen im JavaScript sehen davon nichts.
-
-Das Werkzeug fasst ausschließlich `pwaUpdateStore` an (dieselbe Schnittstelle wie die echte Oberfläche), übernimmt die Registrierung **erst beim Klick** und ist reines DOM ohne Eintrag in `index.css`.
-
-**Production-Freiheit ist verifiziert, nicht angenommen.** Geladen wird es nur über einen dynamischen Import innerhalb von `if (import.meta.env.DEV)` — in `src/main.tsx` **und** in `demo/main.tsx` (der Demo-Modus hat einen eigenen Einstiegspunkt; ohne den zweiten Block fehlte das Panel unter `npm run dev:demo`). Nach `npm run build` enthält `dist/` null Treffer für `nora-dev-pwa-panel`, `devUpdateTrigger`, `mountUpdateDevTrigger` und die Button-Texte. Im `build:demo`-Artefakt taucht der Modulname noch in einer `.js.map` auf (dort ist `sourcemap: true`), im ausgelieferten JavaScript jedoch nicht; der echte Production-Build baut ohne Sourcemaps.
+Die Messwerte zur 5-Sekunden-Frist (2–34 ms Übernahme, 14 ms im V2-Repro) und die Begründung des Nora-eigenen Reloads stehen im Decision Log („2026-09-01 – PWA Update State Contract V2").

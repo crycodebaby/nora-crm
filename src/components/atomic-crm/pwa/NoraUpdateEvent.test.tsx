@@ -15,68 +15,44 @@ import {
 } from "./useUpdateChoreography";
 
 /**
- * Die Praesentation wird gegen den echten Store getestet, nicht gegen einen
- * gemockten Hook: so ist mitgeprueft, dass die UI wirklich nur ueber
- * `usePwaUpdate()` an den Lifecycle kommt.
+ * Die sichtbare Flaeche gegen den ECHTEN Store, mit Browser-Fakten als
+ * Attrappe derselben Aussagekraft wie im Browser (Controller, wartender und
+ * aktiver Worker als `EventTarget`s).
  *
- * **Was diese Datei NICHT behauptet.** Kein Test hier sagt aus, dass das
- * Ergebnis hochwertig aussieht — das ist eine Product-Owner-Entscheidung. Die
- * Tests decken Verhalten ab: welche Inhalte existieren, wann `applyUpdate()`
- * faellt und wann ausdruecklich nicht. Geometrie, Layer (`z-index: 70`),
- * Touch-Ziele, das Ausblenden bei offenem Dialog und Reduced Motion haengen an
- * `index.css`; im Browser-Test-Bundle sind die Tailwind-Utilities nicht
- * kompiliert, eine Zusicherung darauf waere aus dem falschen Grund gruen. Diese
- * Punkte werden in der echten gestylten App nachgemessen (siehe
- * `07-agent-change-checklist.md` und den PWA-1C.1-Abschlussbericht).
+ * Grenze: `window.location.reload` ist in einem echten Browser nicht
+ * ersetzbar. Deshalb spulen die Tests nach einer Uebernahme nie ueber die
+ * Reload-Frist hinaus — dass der Reload dann genau einmal faellt, prueft
+ * `useUpdateChoreography.test.tsx`, wo er injizierbar ist.
  */
+
+const makeWorker = () => new EventTarget() as unknown as ServiceWorker;
+
+let oldWorker = makeWorker();
+let newWorker = makeWorker();
+const facts = {
+  waiting: null as ServiceWorker | null,
+  installing: null as ServiceWorker | null,
+  active: null as ServiceWorker | null,
+  controller: null as ServiceWorker | null,
+};
+const fakeRegistration = new EventTarget();
+Object.defineProperties(fakeRegistration, {
+  waiting: { get: () => facts.waiting },
+  installing: { get: () => facts.installing },
+  active: { get: () => facts.active },
+  update: { value: () => Promise.resolve() },
+});
+
 let needRefresh: (() => void) | undefined;
 let applyCalls = 0;
-/**
- * Nur fuer den Absicherungszweig: das Promise lehnt ab. Der ausgelieferte
- * Production-Client tut das praktisch nie — deshalb ist das NICHT der
- * Standardfall dieser Datei.
- */
 let rejectApply = false;
 
-/**
- * Wartet nach der Anfrage noch ein Worker?
- *
- * Bis PWA-1C.2 reichte dieser Fake `undefined` als Registration durch. Damit
- * war `hasWaitingWorker()` immer `false` und die Recovery-Variante A („Erneut
- * versuchen") in der gesamten Suite unerreichbar — der BLOCKER konnte deshalb
- * gar nicht auffallen. Jetzt ist es eine echte Aussage, die pro Test gesetzt
- * wird: `true` ist der reale Fehlerfall (SKIP_WAITING raus, Worker wartet
- * weiter), `false` der Fall, in dem nur noch ein Reload hilft.
- */
-let waitingWorker = true;
-
-/**
- * Nur die zwei Eigenschaften, die der Store liest — kein nachgebauter Browser.
- * `update()` muss existieren, weil die Registration jetzt truthy ist und die
- * gedrosselte Pruefung des Stores sie sonst auf `undefined` aufriefe.
- */
-const fakeRegistration = {
-  get waiting() {
-    return waitingWorker ? ({} as ServiceWorker) : null;
-  },
-  update: () => Promise.resolve(),
-} as unknown as ServiceWorkerRegistration;
-
-/**
- * Bildet den echten Client nach, nicht eine Wunschvorstellung von ihm.
- *
- * `updateServiceWorker()` aus `vite-plugin-pwa` 1.2.0 schickt SKIP_WAITING und
- * **resolved** — ohne jede Aussage darueber, ob die Uebernahme gelingt. Genau
- * daran ist der erste RC gescheitert: er hat aus „resolved" auf Erfolg und aus
- * „rejected" auf Fehlschlag geschlossen. Der Fake resolved deshalb standard-
- * maessig und ueberlaesst die Wahrheit dem `controllerchange`-Ereignis.
- *
- * `applyCalls` ist dabei die technische Beobachtungsgroesse fuer den zweiten
- * Aktivierungsversuch: jeder Aufruf ist genau ein SKIP_WAITING.
- */
 const fakeRegisterSW: RegisterSwLike = (opts) => {
   needRefresh = opts.onNeedRefresh;
-  opts.onRegisteredSW?.("/sw.js", fakeRegistration);
+  opts.onRegisteredSW?.(
+    "/sw.js",
+    fakeRegistration as unknown as ServiceWorkerRegistration,
+  );
   return () => {
     applyCalls += 1;
     if (rejectApply) return Promise.reject(new Error("activation refused"));
@@ -84,15 +60,14 @@ const fakeRegisterSW: RegisterSwLike = (opts) => {
   };
 };
 
-/**
- * Die echte Uebernahme.
- *
- * `navigator.serviceWorker` ist ein normales `EventTarget`, und der Store
- * lauscht dort in Production auf genau dieses Ereignis. Der Test benutzt also
- * denselben Weg wie der Browser — keine gemockte Schnittstelle.
- */
-const simulateTakeover = () =>
-  navigator.serviceWorker.dispatchEvent(new Event("controllerchange"));
+const activateNewWorker = ({ notify }: { notify: boolean }) => {
+  facts.waiting = null;
+  facts.active = newWorker;
+  if (notify) facts.controller = newWorker;
+  newWorker.dispatchEvent(new Event("statechange"));
+  if (notify)
+    navigator.serviceWorker.dispatchEvent(new Event("controllerchange"));
+};
 
 // Die reinen Nora-Kataloge ohne die `ra.*`-Basis: fuer diesen Test reichen die
 // `crm.pwa.*`-Schluessel, `allowMissing` deckt den Rest ab.
@@ -127,28 +102,16 @@ const panel = () =>
   document.querySelector<HTMLElement>('[data-testid="nora-pwa-update-event"]');
 const testId = (id: string) =>
   document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+const title = () => panel()?.querySelector("h2")?.textContent ?? "";
+const hint = () => testId("nora-pwa-update-hint")?.textContent ?? "";
+const buttons = () => [...(panel()?.querySelectorAll("button") ?? [])];
 
-/**
- * Nur `setTimeout`/`clearTimeout` faelschen. Wuerde man alles faelschen,
- * geriete Reacts eigenes Scheduling mit in die Kontrolle des Tests und
- * `act()` koennte nicht mehr sauber flushen.
- */
 const useSequenceTimers = () =>
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
-/**
- * `act()` mit gesetztem Umgebungsflag.
- *
- * `vitest-browser-react` setzt `IS_REACT_ACT_ENVIRONMENT` um jeden eigenen
- * `act()`-Aufruf herum und danach wieder auf `false` zurueck — ein einmaliges
- * Setzen in `beforeAll` ueberlebt das erste `render()` also nicht. Deshalb
- * wird das Flag hier pro Aufruf gesetzt und wieder auf den vorherigen Wert
- * zurueckgestellt, sonst warnt React bei jedem Vorspulen.
- */
 const actEnvironment = globalThis as typeof globalThis & {
   IS_REACT_ACT_ENVIRONMENT?: boolean;
 };
-
 const flush = async (body: () => void) => {
   const previous = actEnvironment.IS_REACT_ACT_ENVIRONMENT;
   actEnvironment.IS_REACT_ACT_ENVIRONMENT = true;
@@ -160,33 +123,31 @@ const flush = async (body: () => void) => {
     actEnvironment.IS_REACT_ACT_ENVIRONMENT = previous;
   }
 };
-
-/** Zeit vorspulen und alle daraus folgenden React-Updates flushen. */
 const advance = (ms: number) => flush(() => vi.advanceTimersByTime(ms));
-
-/**
- * Der Store meldet ein wartendes Update. Bewusst durch `act()` gefuehrt: das
- * ist ein externer Store-Push, der React-State erzeugt — ohne `act()` liefe
- * die Assertion gegen einen noch nicht geflushten Baum.
- */
 const announceUpdate = () => flush(() => needRefresh!());
-
 const click = async (id: string) => {
   const node = testId(id);
   expect(node, `${id} sollte im DOM sein`).not.toBeNull();
   await flush(() => node!.click());
 };
+/** Commit und Watchdog bewusst getrennt: der Watchdog-Timer entsteht erst im Effekt nach dem Commit. */
+const commit = () => advance(CHOREOGRAPHY_COMMIT_MS);
+const watchdog = () => advance(ACTIVATION_WATCHDOG_MS);
 
 describe("NoraUpdateEvent", () => {
   beforeEach(() => {
-    // Der Store ist prozessweit und `applying` ist im echten Betrieb ein
-    // Endzustand (die Seite laedt neu). Ohne Reset wuerde ein Test, der
-    // aktualisiert hat, alle folgenden vergiften.
     pwaUpdateStore.reset();
+    oldWorker = makeWorker();
+    newWorker = makeWorker();
+    facts.waiting = newWorker;
+    facts.installing = null;
+    facts.active = oldWorker;
+    facts.controller = oldWorker;
     applyCalls = 0;
     rejectApply = false;
-    waitingWorker = true;
-    pwaUpdateStore.start(fakeRegisterSW);
+    pwaUpdateStore.start(fakeRegisterSW, {
+      getController: () => facts.controller,
+    });
   });
 
   afterEach(() => {
@@ -194,7 +155,9 @@ describe("NoraUpdateEvent", () => {
     pwaUpdateStore.reset();
   });
 
-  it("zeigt nichts, solange kein Update wartet", async () => {
+  // --- AVAILABLE ---------------------------------------------------------------
+
+  it("zeigt nichts, solange kein Update entdeckt ist", async () => {
     const screen = await renderEvent();
     await expect
       .element(screen.getByTestId("nora-pwa-update-event"))
@@ -202,43 +165,35 @@ describe("NoraUpdateEvent", () => {
     await screen.unmount();
   });
 
-  it("zeigt Titel, Sicherheitshinweis und beide Aktionen bei updateAvailable", async () => {
+  it("zeigt Titel, eine ruhige Speicherzeile und beide Aktionen — sonst nichts", async () => {
     const screen = await renderEvent();
     await announceUpdate();
 
     await expect
       .element(screen.getByTestId("nora-pwa-update-event"))
       .toBeInTheDocument();
-    // Der Titeltext steht jetzt zweimal im DOM: sichtbar im h2 und einmal im
-    // sr-only-Announcer. Deshalb gezielt auf die sichtbare Ueberschrift.
-    expect(panel()!.querySelector("h2")!.textContent).toBe(
-      "Neue Nora-Version verfügbar",
+    expect(title()).toBe("Neue Nora-Version verfügbar");
+    expect(hint()).toBe(
+      "Offene Eingaben vor dem Aktualisieren kurz speichern.",
     );
-    // Die Handlungsanweisung …
-    await expect
-      .element(screen.getByText(/Bitte speichern Sie offene Eingaben/))
-      .toBeVisible();
-    // … und die Begruendung darunter.
-    await expect
-      .element(screen.getByText(/Ungespeicherte Änderungen/))
-      .toBeVisible();
-    // Und die Zusicherung, dass die laufende Version weiterläuft.
-    await expect
-      .element(screen.getByText(/läuft weiter, bis Sie aktualisieren/))
-      .toBeVisible();
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-apply"))
-      .toBeVisible();
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-later"))
-      .toBeVisible();
+    expect(buttons().map((b) => b.textContent)).toEqual([
+      "Später",
+      "Jetzt aktualisieren",
+    ]);
 
-    // Systemereignis, nicht Statusmeldung: eigener Layer, keine 7B-Karte,
-    // und kein zweites Feedback-System daneben. Die sichtbare Flaeche ist
-    // bewusst KEINE Live-Region mehr (siehe Announcer-Tests weiter unten).
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-event"))
-      .toHaveAttribute("role", "group");
+    // Weg ist, was der Product Owner abgelehnt hat: der erklaerende Absatz,
+    // die Warnbox, das Warnsymbol.
+    expect(panel()?.textContent).not.toContain(
+      "aktualisierte Version ist bereit",
+    );
+    expect(panel()?.textContent).not.toContain("läuft weiter");
+    expect(panel()?.textContent).not.toContain("verloren gehen");
+    expect(panel()?.querySelector("svg")).toBeNull();
+    expect(document.querySelector(".nora-safety-mark")).toBeNull();
+    expect(document.querySelector(".nora-system-event-safety")).toBeNull();
+
+    // Systemereignis, nicht Statusmeldung: keine 7B-Karte, kein Toast.
+    expect(panel()!.getAttribute("role")).toBe("group");
     expect(
       document.querySelectorAll('[data-testid="nora-notification-card"]')
         .length,
@@ -248,29 +203,45 @@ describe("NoraUpdateEvent", () => {
     await screen.unmount();
   });
 
-  it("zeigt die Warnsymbol-Geometrie des Product Owners, dekorativ ausgezeichnet", async () => {
+  it("blendet bei 'Später' aus, ohne das Update zu verwerfen", async () => {
     const screen = await renderEvent();
     await announceUpdate();
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-safety"))
-      .toBeInTheDocument();
 
-    const mark = document.querySelector<SVGSVGElement>(".nora-safety-mark");
-    expect(mark).not.toBeNull();
-    // Die Original-viewBox, nicht neu gezeichnet.
-    expect(mark!.getAttribute("viewBox")).toBe("0 0 24 24");
-    // Alle vier Teile der Original-Geometrie, einzeln ansprechbar fuer die
-    // gestaffelte Einblendung.
-    expect(
-      [...mark!.querySelectorAll("[data-mark-part]")].map((node) =>
-        node.getAttribute("data-mark-part"),
-      ),
-    ).toEqual(["frame", "bar", "ring", "dot"]);
-    // Der Text daneben sagt bereits alles — keine zweite Screenreader-Ansage.
-    expect(mark!.getAttribute("aria-hidden")).toBe("true");
+    await click("nora-pwa-update-later");
+    await expect
+      .element(screen.getByTestId("nora-pwa-update-event"))
+      .not.toBeInTheDocument();
+    expect(applyCalls).toBe(0);
+
+    await announceUpdate();
+    await expect
+      .element(screen.getByTestId("nora-pwa-update-event"))
+      .toBeInTheDocument();
 
     await screen.unmount();
   });
+
+  it("schliesst per Escape nur im handlungsfaehigen Zustand", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    const esc = () =>
+      flush(() =>
+        panel()!.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        ),
+      );
+    await click("nora-pwa-update-apply");
+    await esc();
+    // Waehrend der Sequenz gibt es kein Zurueck.
+    expect(panel()).not.toBeNull();
+    expect(panel()?.dataset.presentation).toBe("applying");
+
+    await screen.unmount();
+  });
+
+  // --- APPLYING ----------------------------------------------------------------
 
   it("startet beim Klick die Choreografie, ohne sofort zu aktualisieren", async () => {
     useSequenceTimers();
@@ -279,9 +250,8 @@ describe("NoraUpdateEvent", () => {
 
     await click("nora-pwa-update-apply");
 
-    // Der Kern der Welle: der Klick loest die Sequenz aus, nicht den Reload.
     expect(applyCalls).toBe(0);
-    expect(panel()?.dataset.presentation).toBe("choreography");
+    expect(panel()?.dataset.presentation).toBe("applying");
     expect(panel()?.dataset.phase).toBe("settling");
     // Der Bestandsvertrag aus PWA-1C bleibt lesbar.
     expect(panel()?.dataset.state).toBe("applying");
@@ -295,23 +265,19 @@ describe("NoraUpdateEvent", () => {
     await announceUpdate();
     await click("nora-pwa-update-apply");
 
-    // Phase 1 und 2 tragen noch den alten Titel bei voller bzw. abfallender
-    // Deckkraft. Wuerde er hier schon umspringen, waere die ganze
-    // Auflösung-per-Blur wirkungslos.
-    const title = () => panel()!.querySelector("h2")!.textContent;
     expect(title()).toBe("Neue Nora-Version verfügbar");
     expect(testId("nora-pwa-update-dots")).toBeNull();
 
     await advance(CHOREOGRAPHY_TIMELINE.converging);
     expect(title()).toBe("Neue Nora-Version verfügbar");
 
-    // Erst mit Phase 3 — der Titel steht dann auf Deckkraft 0 und setzt sich
-    // mit dem neuen Text wieder.
     await advance(
       CHOREOGRAPHY_TIMELINE.sustaining - CHOREOGRAPHY_TIMELINE.converging,
     );
     expect(title()).toBe("Nora wird aktualisiert");
-    expect(testId("nora-pwa-update-dots")).not.toBeNull();
+    expect(testId("nora-pwa-update-dots")?.children.length).toBe(3);
+    // Kein erklaerender Text neben dem Titel.
+    expect(hint()).toBe("");
 
     await screen.unmount();
   });
@@ -324,27 +290,16 @@ describe("NoraUpdateEvent", () => {
 
     await advance(CHOREOGRAPHY_TIMELINE.converging);
     expect(panel()?.dataset.phase).toBe("converging");
-    expect(applyCalls).toBe(0);
-
     await advance(
       CHOREOGRAPHY_TIMELINE.sustaining - CHOREOGRAPHY_TIMELINE.converging,
     );
     expect(panel()?.dataset.phase).toBe("sustaining");
-    // Die ruhige Update-Szene: Titel, drei Punkte, keine Aktionen mehr.
-    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
-    expect(testId("nora-pwa-update-dots")?.children.length).toBe(3);
     expect(testId("nora-pwa-update-apply")).toBeNull();
     expect(testId("nora-pwa-update-later")).toBeNull();
-    expect(testId("nora-pwa-update-safety")).toBeNull();
-    expect(applyCalls).toBe(0);
-
     await advance(
       CHOREOGRAPHY_TIMELINE.committing - CHOREOGRAPHY_TIMELINE.sustaining,
     );
     expect(panel()?.dataset.phase).toBe("committing");
-    expect(applyCalls).toBe(0);
-
-    // Eine Millisekunde vor Schluss ist immer noch nichts passiert.
     await advance(
       CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.committing - 1,
     );
@@ -352,30 +307,22 @@ describe("NoraUpdateEvent", () => {
 
     await advance(1);
     expect(applyCalls).toBe(1);
-
-    // Die Szene laeuft weiter, bis der Browser tatsaechlich neu laedt —
-    // kein leeres Fenster nach Sekunde acht.
-    expect(panel()).not.toBeNull();
-    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
-    expect(testId("nora-pwa-update-dots")).not.toBeNull();
+    // Die Szene laeuft weiter, bis der Browser tatsaechlich neu laedt.
+    expect(title()).toBe("Nora wird aktualisiert");
 
     await screen.unmount();
   });
 
-  it("ruft applyUpdate genau einmal, auch bei Doppelklick", async () => {
+  it("ruft applyUpdate genau einmal, auch bei Doppelklick und unter StrictMode", async () => {
     useSequenceTimers();
-    const screen = await renderEvent();
+    const screen = await renderStrict();
     await announceUpdate();
 
-    // Beide Klicks fallen in Phase 1, in der die Aktionen noch montiert sind
-    // und sich sichtbar wegfalten — genau das Fenster, in dem ein zweiter
-    // Klick technisch moeglich waere.
     await click("nora-pwa-update-apply");
     await click("nora-pwa-update-apply");
+    await commit();
 
-    await advance(CHOREOGRAPHY_COMMIT_MS * 2);
     expect(applyCalls).toBe(1);
-
     await screen.unmount();
   });
 
@@ -388,371 +335,209 @@ describe("NoraUpdateEvent", () => {
     await advance(CHOREOGRAPHY_TIMELINE.sustaining);
     await screen.unmount();
 
-    // Alle Timer sind abgeraeumt: der wartende Worker bleibt unangetastet.
     await advance(CHOREOGRAPHY_COMMIT_MS * 2);
     expect(applyCalls).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("aktualisiert auch unter StrictMode genau einmal", async () => {
-    useSequenceTimers();
-    const screen = await renderStrict();
-    await announceUpdate();
-
-    await click("nora-pwa-update-apply");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-
-    // StrictMode montiert den Effekt doppelt und setzt die Timer dabei neu.
-    // Das Lauf-Token verhindert trotzdem einen zweiten Commit.
-    expect(applyCalls).toBe(1);
-
-    await screen.unmount();
-  });
-
-  it("waehlt die Recovery-Aktion auch unter StrictMode stabil", async () => {
-    useSequenceTimers();
-    const screen = await renderStrict();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-
-    // Der Effekt laeuft doppelt, und der erste Durchlauf hat `applying` bereits
-    // beendet. Beantwortet der zweite Aufruf die Frage anders, kippte die
-    // Aktion still auf „Nora neu laden" — obwohl ein Worker wartet.
-    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
-      "retry",
-    );
-
-    await screen.unmount();
-  });
-
-  // ------------------------------------------------------------------------
-  // Der reale Production-Fehlerfall. Genau hier war der erste RC blind: die
-  // Anfrage geht raus, das Promise resolved, und die Uebernahme bleibt aus.
-  // ------------------------------------------------------------------------
-
-  it("zeigt Recovery, wenn die Uebernahme nach der Anfrage ausbleibt", async () => {
+  it("bleibt nach rechtzeitiger Uebernahme in der Update-Szene", async () => {
     useSequenceTimers();
     const screen = await renderEvent();
     await announceUpdate();
     await click("nora-pwa-update-apply");
+    await commit();
 
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    expect(applyCalls).toBe(1);
-    // Anfrage gesendet, Promise resolved — und trotzdem ist nichts bewiesen.
-    expect(panel()?.dataset.presentation).toBe("choreography");
+    await flush(() => activateNewWorker({ notify: true }));
 
-    // Kurz vor Ablauf der Frist steht die Szene noch.
-    await advance(ACTIVATION_WATCHDOG_MS - 1);
-    expect(panel()?.dataset.presentation).toBe("choreography");
-
-    await advance(1);
-    expect(panel()?.dataset.presentation).toBe("recovery");
-    // Keine Fehlerbehauptung: belegt ist nur, dass es laenger dauert.
-    expect(panel()?.textContent).toContain(
-      "Aktualisierung dauert länger als erwartet",
-    );
-    expect(panel()?.textContent).toContain(
-      "konnte die neue Version noch nicht vollständig übernehmen",
-    );
-    expect(testId("nora-pwa-update-retry")).not.toBeNull();
-
-    await screen.unmount();
-  });
-
-  it("zeigt keinen Recovery-Zustand, wenn die Uebernahme rechtzeitig eintrifft", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await flush(() => simulateTakeover());
-
-    // Der Watchdog ist damit abgeraeumt: kein Recovery-Zustand, obwohl die
-    // Seite noch steht. Bewusst nur bis kurz vor die Reload-Frist — danach
-    // wuerde Nora hier wirklich neu laden und damit die Testseite abraeumen.
-    // Der laengere Horizont (Reload faellt, Watchdog schweigt trotzdem) liegt
-    // in `useUpdateChoreography.test.tsx`, wo der Reload injizierbar ist.
+    // Bewusst nur bis kurz vor die Reload-Frist.
     await advance(RELOAD_FALLBACK_MS - 1);
-    expect(panel()?.dataset.presentation).toBe("choreography");
-    expect(testId("nora-pwa-update-retry")).toBeNull();
+    expect(panel()?.dataset.presentation).toBe("applying");
+    expect(title()).toBe("Nora wird aktualisiert");
+    expect(buttons().length).toBe(0);
     expect(applyCalls).toBe(1);
 
     await screen.unmount();
   });
 
-  it("nimmt Recovery zurueck, wenn die Uebernahme verspaetet doch eintrifft", async () => {
+  // --- SLOW --------------------------------------------------------------------
+
+  it("zeigt „Gleich bereit …“ statt eines Fehlers, wenn die Uebernahme ausbleibt", async () => {
     useSequenceTimers();
     const screen = await renderEvent();
     await announceUpdate();
     await click("nora-pwa-update-apply");
+    await commit();
+    expect(applyCalls).toBe(1);
 
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    // Getrennter Schritt: der Watchdog-Timer entsteht erst in dem Effekt, den
-    // der Commit ausloest — ein einziger grosser Sprung wuerde ihn nie sehen.
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(panel()?.dataset.presentation).toBe("recovery");
+    await advance(ACTIVATION_WATCHDOG_MS - 1);
+    expect(panel()?.dataset.presentation).toBe("applying");
+    await advance(1);
 
-    await flush(() => simulateTakeover());
+    expect(panel()?.dataset.presentation).toBe("slow");
+    expect(title()).toBe("Gleich bereit …");
+    expect(hint()).toBe("Nora bereitet die neue Version noch kurz vor.");
+    expect(testId("nora-pwa-update-dots")).not.toBeNull();
+    // Keine Fehlersprache, keine Aktion — Nora versucht es still erneut.
+    expect(panel()?.textContent).not.toContain("länger als erwartet");
+    expect(panel()?.textContent).not.toContain("nicht");
+    expect(buttons().length).toBe(0);
+    expect(applyCalls).toBe(2);
 
-    // Keine widerspruechliche Oberflaeche: die Uebernahme ist eingetreten,
-    // also ist „dauert laenger" nicht mehr wahr — und ein zweiter
-    // `applyUpdate()` findet trotzdem nicht statt.
-    expect(panel()?.dataset.presentation).toBe("choreography");
-    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
+    await screen.unmount();
+  });
+
+  it("bietet nach der zweiten Frist ruhig den Reload an — ohne Fehlerbehauptung", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    await watchdog();
+    await watchdog();
+
+    expect(panel()?.dataset.presentation).toBe("slow");
+    expect(panel()?.dataset.stall).toBe("prolonged");
+    expect(title()).toBe("Gleich bereit …");
+    expect(hint()).toBe(
+      "Falls es nicht weitergeht, hilft ein kurzes Neuladen.",
+    );
+    expect(buttons().map((b) => b.textContent)).toEqual(["Nora neu laden"]);
+    expect(applyCalls).toBe(2);
+
+    await screen.unmount();
+  });
+
+  it("nimmt „Gleich bereit“ zurueck, wenn die Uebernahme verspaetet doch eintrifft", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    await watchdog();
+    expect(panel()?.dataset.presentation).toBe("slow");
+
+    await flush(() => activateNewWorker({ notify: true }));
+
+    expect(panel()?.dataset.presentation).toBe("applying");
+    expect(title()).toBe("Nora wird aktualisiert");
+    expect(buttons().length).toBe(0);
+
+    await screen.unmount();
+  });
+
+  // --- RELOAD_REQUIRED ---------------------------------------------------------
+
+  it("zeigt im unkontrollierten Dokument „Neue Version bereit“ statt einer Schein-Choreografie", async () => {
+    facts.controller = null;
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    expect(panel()?.dataset.presentation).toBe("available");
+
+    // 2 ms nach der Entdeckung aktiviert der Worker sich selbst — ohne
+    // controllerchange fuer dieses Dokument.
+    await flush(() => activateNewWorker({ notify: false }));
+
+    expect(panel()?.dataset.presentation).toBe("reloadRequired");
+    expect(title()).toBe("Neue Version bereit");
+    expect(hint()).toBe(
+      "Offene Eingaben vor dem Aktualisieren kurz speichern.",
+    );
+    expect(buttons().map((b) => b.textContent)).toEqual([
+      "Später",
+      "Nora neu laden",
+    ]);
+    expect(testId("nora-pwa-update-reload")?.textContent).toBe(
+      "Nora neu laden",
+    );
+    // Nichts davon liest sich als Fehler.
+    expect(panel()?.textContent).not.toContain("konnte");
+    expect(panel()?.textContent).not.toContain("nicht");
+    expect(applyCalls).toBe(0);
+
+    await screen.unmount();
+  });
+
+  it("korrigiert sich selbst, wenn ein anderer Tab aktiviert hat", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    await flush(() => activateNewWorker({ notify: true }));
+
+    expect(panel()?.dataset.presentation).toBe("reloadRequired");
+    expect(title()).toBe("Neue Version bereit");
+    expect(testId("nora-pwa-update-apply")).toBeNull();
+    expect(applyCalls).toBe(0);
+
+    await screen.unmount();
+  });
+
+  it("laesst den Reload-Hinweis verschieben", async () => {
+    facts.controller = null;
+    const screen = await renderEvent();
+    await announceUpdate();
+    await flush(() => activateNewWorker({ notify: false }));
+    expect(panel()?.dataset.presentation).toBe("reloadRequired");
+
+    await click("nora-pwa-update-later");
+    await expect
+      .element(screen.getByTestId("nora-pwa-update-event"))
+      .not.toBeInTheDocument();
+
+    await screen.unmount();
+  });
+
+  it("laeuft nach einem Klick vor dem Uebergang ohne Fehler in den Reload", async () => {
+    facts.controller = null;
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    expect(applyCalls).toBe(1);
+
+    await flush(() => activateNewWorker({ notify: false }));
+    // Reload-Befund nach Commit: die Szene bleibt ruhig, Nora laedt gleich.
+    expect(panel()?.dataset.presentation).toBe("applying");
+    await advance(RELOAD_FALLBACK_MS - 1);
+    expect(panel()?.dataset.presentation).toBe("applying");
     expect(applyCalls).toBe(1);
 
     await screen.unmount();
   });
 
-  it("faellt auch bei abgelehnter Anfrage in den Recovery-Zustand", async () => {
-    // Der Absicherungszweig: das Promise lehnt ab, der Store nimmt `applying`
-    // zurueck. Auch dann darf die Szene nicht ewig stehen bleiben.
+  // --- FAILED ------------------------------------------------------------------
+
+  it("zeigt bei abgelehnter Anfrage einen ruhigen, ehrlichen Fehlerzustand", async () => {
     rejectApply = true;
     useSequenceTimers();
     const screen = await renderEvent();
     await announceUpdate();
     await click("nora-pwa-update-apply");
+    await commit();
+    await flush(() => {});
 
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(applyCalls).toBe(1);
-    expect(panel()?.dataset.presentation).toBe("recovery");
-
-    await screen.unmount();
-  });
-
-  /** Bis zum Recovery-Zustand. Commit und Watchdog bewusst getrennt. */
-  const runFailedAttempt = async () => {
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-  };
-
-  it("bietet bei wartendem Worker „Erneut versuchen“ an (Variante A)", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await runFailedAttempt();
-
-    expect(panel()?.dataset.presentation).toBe("recovery");
-    // SKIP_WAITING ist raus, der Worker wartet weiterhin: ein zweiter Anlauf
-    // kann hier tatsaechlich etwas anstossen.
-    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
-      "retry",
-    );
-    expect(testId("nora-pwa-update-retry")?.textContent).toContain(
-      "Erneut versuchen",
-    );
-
-    await screen.unmount();
-  });
-
-  it("bietet ohne wartenden Worker „Nora neu laden“ an (Variante B)", async () => {
-    waitingWorker = false;
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await runFailedAttempt();
-
-    // Ohne wartenden Worker taete `messageSkipWaiting()` nachweislich nichts —
-    // dann ist der kontrollierte Reload die ehrlichere Aktion.
-    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
-      "reload",
-    );
-    expect(testId("nora-pwa-update-retry")?.textContent).toContain(
-      "Nora neu laden",
-    );
-
-    await screen.unmount();
-  });
-
-  // --------------------------------------------------------------------------
-  // Der BLOCKER-Regressionstest (PWA-1C.2).
-  //
-  // Vorher lief „Erneut versuchen" acht Sekunden Choreografie ab und schickte
-  // dann NICHTS: `applyUpdate()` sperrte auf `applying`, das auf diesem Pfad
-  // nie wieder auf `false` fiel. Der Test misst deshalb nicht die Animation,
-  // sondern die Anfragen an den Worker.
-  // --------------------------------------------------------------------------
-
-  it("schickt mit „Erneut versuchen“ einen echten zweiten Aktivierungsversuch", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await runFailedAttempt();
-
-    expect(applyCalls).toBe(1);
-    expect(testId("nora-pwa-update-retry")?.dataset.recoveryAction).toBe(
-      "retry",
-    );
-
-    await click("nora-pwa-update-retry");
-
-    // Die Sequenz beginnt wirklich von vorn: erste Phase, nicht ein Sprung
-    // mitten in die Update-Szene.
-    expect(panel()?.dataset.presentation).toBe("choreography");
-    expect(panel()?.dataset.phase).toBe("settling");
-
-    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
-    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
-
-    // Und sie commitet keine Sekunde frueher als beim ersten Mal.
-    await advance(
-      CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining - 1,
-    );
+    expect(panel()?.dataset.presentation).toBe("failed");
+    expect(title()).toBe("Aktualisierung gerade nicht möglich");
+    expect(hint()).toBe("Sie können normal weiterarbeiten.");
+    expect(buttons().map((b) => b.textContent)).toEqual(["Weiterarbeiten"]);
+    // Keine Aktivitaetspunkte: es laeuft nichts mehr.
+    expect(testId("nora-pwa-update-dots")).toBeNull();
+    // Kein Warten, keine Wiederholung von allein.
+    await watchdog();
+    expect(panel()?.dataset.presentation).toBe("failed");
     expect(applyCalls).toBe(1);
 
-    await advance(1);
-    // Das ist der Punkt: eine zweite echte Anfrage, nicht nur ein zweiter Lauf.
-    expect(applyCalls).toBe(2);
+    await click("nora-pwa-update-continue");
+    await expect
+      .element(screen.getByTestId("nora-pwa-update-event"))
+      .not.toBeInTheDocument();
 
     await screen.unmount();
   });
 
-  it("nimmt den Recovery-Zustand zurueck, wenn der zweite Anlauf gelingt", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await runFailedAttempt();
-    await click("nora-pwa-update-retry");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    expect(applyCalls).toBe(2);
-
-    await flush(() => simulateTakeover());
-
-    // Bewusst nur bis kurz vor die Reload-Frist: den Reload selbst prueft
-    // `useUpdateChoreography.test.tsx`, wo er injizierbar ist.
-    await advance(RELOAD_FALLBACK_MS - 1);
-    expect(panel()?.dataset.presentation).toBe("choreography");
-    expect(testId("nora-pwa-update-retry")).toBeNull();
-    expect(applyCalls).toBe(2);
-
-    await screen.unmount();
-  });
-
-  // --------------------------------------------------------------------------
-  // Der Race aus dem Last Delta Review (PWA-1C.3).
-  //
-  // Die Uebernahme trifft WAEHREND der Retry-Choreografie ein, vor deren
-  // Commit. Vorher loeschte der Commit sie wieder (`applyUpdate()` setzte
-  // `activated = false`), schickte ein zweites SKIP_WAITING ins Leere und liess
-  // Nora anschliessend faelschlich in den Recovery-Zustand laufen.
-  // --------------------------------------------------------------------------
-
-  it("fordert nichts mehr an, wenn dieses Dokument die Uebernahme schon gesehen hat", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-
-    // Etwa aus einem anderen Tab: der neue Worker kontrolliert dieses Dokument
-    // bereits, bevor der Benutzer hier ueberhaupt entschieden hat.
-    waitingWorker = false;
-    await flush(() => simulateTakeover());
-    expect(panel()?.dataset.presentation).toBe("available");
-
-    await click("nora-pwa-update-apply");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-
-    // Es gibt nichts zu aktivieren — also geht auch nichts raus. Frueher lief
-    // hier eine Anfrage ins Leere und danach dreizehn Sekunden bis Recovery.
-    expect(applyCalls).toBe(0);
-    await advance(RELOAD_FALLBACK_MS - 1);
-    expect(panel()?.dataset.presentation).toBe("choreography");
-    expect(testId("nora-pwa-update-retry")).toBeNull();
-
-    await screen.unmount();
-  });
-
-  it("verwirft eine Uebernahme nicht, die waehrend des zweiten Laufs eintrifft", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await runFailedAttempt();
-    expect(applyCalls).toBe(1);
-
-    await click("nora-pwa-update-retry");
-    await advance(2000);
-
-    // Die verspaetete Uebernahme von Versuch 1 — mitten im zweiten Lauf. Ein
-    // echtes `controllerchange`, wie im Browser; der Worker ist damit weg.
-    waitingWorker = false;
-    await flush(() => simulateTakeover());
-    expect(panel()?.dataset.presentation).toBe("choreography");
-
-    // Der Commit des zweiten Laufs darf jetzt nichts mehr anfordern.
-    await advance(CHOREOGRAPHY_COMMIT_MS - 2000);
-    expect(applyCalls).toBe(1);
-
-    // Und die Szene kippt nicht in Recovery. Bewusst nur bis kurz vor die
-    // Reload-Frist: danach wuerde Nora hier wirklich neu laden und die
-    // Testseite abraeumen. Dass der Reload dann genau einmal faellt und der
-    // Watchdog schweigt, prueft `useUpdateChoreography.test.tsx`, wo der
-    // Reload injizierbar ist.
-    await advance(RELOAD_FALLBACK_MS - 1);
-    expect(panel()?.dataset.presentation).toBe("choreography");
-    expect(panel()?.textContent).toContain("Nora wird aktualisiert");
-    expect(testId("nora-pwa-update-retry")).toBeNull();
-    expect(applyCalls).toBe(1);
-
-    await screen.unmount();
-  });
-
-  it("bleibt nach einem zweiten Fehlschlag wiederholbar", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await runFailedAttempt();
-
-    await click("nora-pwa-update-retry");
-    await runFailedAttempt();
-    expect(applyCalls).toBe(2);
-    expect(panel()?.dataset.presentation).toBe("recovery");
-
-    // Keine kuenstliche Versuchsgrenze: solange wirklich ein Worker wartet,
-    // bleibt der Ausweg offen.
-    await click("nora-pwa-update-retry");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    expect(applyCalls).toBe(3);
-
-    await screen.unmount();
-  });
-
-  // Der Gegenfall — wartender Worker verschwindet ZWISCHEN Watchdog und Klick,
-  // die Aktion laedt dann statt zu wiederholen — laesst sich hier bewusst nicht
-  // pruefen: er endet in `window.location.reload()`, und das ist in einem
-  // echten Browser nicht ersetzbar (siehe Kopf von
-  // `useUpdateChoreography.test.tsx`). Geprueft ist stattdessen die Wahrheit,
-  // auf der die Entscheidung beruht — `hasWaitingWorker()` in
-  // `pwaUpdateStore.test.ts` — plus der Laufzeitnachweis in der echten App.
-
-  it("bietet in Recovery bewusst kein „Spaeter“ an", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-    await click("nora-pwa-update-apply");
-    await advance(CHOREOGRAPHY_COMMIT_MS);
-    await advance(ACTIVATION_WATCHDOG_MS);
-
-    // SKIP_WAITING ist raus. Ein „Spaeter" wuerde behaupten, der Worker liesse
-    // sich wieder auf WAITING zuruecksetzen — das kann Nora nicht zusichern.
-    expect(testId("nora-pwa-update-later")).toBeNull();
-    // Stattdessen: genau eine, erreichbare Aktion.
-    const actions = panel()!.querySelectorAll("button");
-    expect(actions.length).toBe(1);
-    expect(actions[0].getAttribute("data-testid")).toBe(
-      "nora-pwa-update-retry",
-    );
-
-    await screen.unmount();
-  });
+  // --- Fokus -------------------------------------------------------------------
 
   it("laesst den Fokus nach der Primaeraktion nicht ins Nirgendwo fallen", async () => {
     useSequenceTimers();
@@ -761,30 +546,20 @@ describe("NoraUpdateEvent", () => {
 
     const apply = testId("nora-pwa-update-apply")!;
     apply.focus();
-    expect(document.activeElement).toBe(apply);
     await flush(() => apply.click());
 
-    // Die Aktionen falten sich weg; ohne Zutun landete der Fokus auf <body>.
     await advance(CHOREOGRAPHY_TIMELINE.sustaining);
     expect(testId("nora-pwa-update-apply")).toBeNull();
     expect(document.activeElement).toBe(panel());
 
-    // Im Recovery-Zustand liegt er auf der einzigen Aktion — per Tastatur
-    // sofort bedienbar, ohne vom Dokumentanfang aus suchen zu muessen.
+    // Sobald es wieder eine Aktion gibt, liegt der Fokus darauf.
     await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(document.activeElement).toBe(testId("nora-pwa-update-retry"));
+    await watchdog();
+    await watchdog();
+    expect(document.activeElement).toBe(testId("nora-pwa-update-reload"));
 
     await screen.unmount();
   });
-
-  // --------------------------------------------------------------------------
-  // Fokus-Besitz (PWA-1C.2).
-  //
-  // Vorher wurde der Besitz einmal beim Klick gemessen und nie wieder geprueft.
-  // Wer danach weiterarbeitete, bekam den Fokus dreizehn Sekunden spaeter aus
-  // dem Eingabefeld gerissen, sobald der Watchdog zuschlug.
-  // --------------------------------------------------------------------------
 
   it("gibt den Fokus nicht mehr her, wenn der Benutzer inzwischen woanders arbeitet", async () => {
     useSequenceTimers();
@@ -793,95 +568,20 @@ describe("NoraUpdateEvent", () => {
     const screen = await renderEvent();
     await announceUpdate();
 
-    // Start aus dem Panel heraus: der Besitz beginnt bei Nora.
     const apply = testId("nora-pwa-update-apply")!;
     apply.focus();
     await flush(() => apply.click());
-
-    // Der Benutzer geht zurueck an die Arbeit.
     await flush(() => field.focus());
     expect(document.activeElement).toBe(field);
 
-    await runFailedAttempt();
-
-    // Recovery ist da — der Fokus bleibt trotzdem, wo der Benutzer ihn hat.
-    expect(panel()?.dataset.presentation).toBe("recovery");
+    await commit();
+    await watchdog();
+    await watchdog();
+    expect(panel()?.dataset.stall).toBe("prolonged");
     expect(document.activeElement).toBe(field);
 
     await screen.unmount();
     field.remove();
-  });
-
-  it("gibt den Fokus auch dann nicht her, wenn der Benutzer bewusst weggetabbt ist", async () => {
-    useSequenceTimers();
-    const outside = document.createElement("button");
-    document.body.append(outside);
-    const screen = await renderEvent();
-    await announceUpdate();
-
-    const apply = testId("nora-pwa-update-apply")!;
-    apply.focus();
-    await flush(() => apply.click());
-
-    // Wie ein Tabulatorschritt aus dem Panel heraus.
-    await flush(() => outside.focus());
-    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
-    expect(document.activeElement).toBe(outside);
-
-    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(document.activeElement).toBe(outside);
-
-    await screen.unmount();
-    outside.remove();
-  });
-
-  it("uebernimmt den Fokus wieder, wenn der Benutzer freiwillig zurueckkehrt", async () => {
-    useSequenceTimers();
-    const outside = document.createElement("button");
-    document.body.append(outside);
-    const screen = await renderEvent();
-    await announceUpdate();
-
-    const apply = testId("nora-pwa-update-apply")!;
-    apply.focus();
-    await flush(() => apply.click());
-    await flush(() => outside.focus());
-
-    // Der Benutzer kehrt von sich aus in das Systemereignis zurueck: der
-    // Besitz folgt dem echten Fokus, nicht einer einmaligen Momentaufnahme.
-    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
-    await flush(() => panel()!.focus());
-
-    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(document.activeElement).toBe(testId("nora-pwa-update-retry"));
-
-    await screen.unmount();
-    outside.remove();
-  });
-
-  it("wertet den Rueckfall auf <body> nicht als Fokusaufgabe", async () => {
-    useSequenceTimers();
-    const screen = await renderEvent();
-    await announceUpdate();
-
-    const apply = testId("nora-pwa-update-apply")!;
-    apply.focus();
-    await flush(() => apply.click());
-
-    // Der Knopf verschwindet mit der Faltung; der Browser setzt den Fokus dabei
-    // von sich aus auf <body>. Das ist KEINE Entscheidung des Benutzers, und
-    // eine reine `contains(document.activeElement)`-Pruefung waere hier falsch
-    // abgebogen.
-    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
-    expect(document.activeElement).toBe(panel());
-
-    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
-    await advance(ACTIVATION_WATCHDOG_MS);
-    expect(document.activeElement).toBe(testId("nora-pwa-update-retry"));
-
-    await screen.unmount();
   });
 
   it("nimmt den Fokus nicht, wenn er ausserhalb des Panels liegt", async () => {
@@ -892,33 +592,24 @@ describe("NoraUpdateEvent", () => {
     await announceUpdate();
 
     outside.focus();
-    // Programmatisch ausgeloest, ohne dass der Fokus je im Panel lag.
     await flush(() => testId("nora-pwa-update-apply")!.click());
     await advance(CHOREOGRAPHY_TIMELINE.sustaining);
-
     expect(document.activeElement).toBe(outside);
 
     await screen.unmount();
     outside.remove();
   });
 
-  // ------------------------------------------------------------------------
-  // Live-Region: genau eine Ansage pro Zustandswechsel.
-  // ------------------------------------------------------------------------
+  // --- Announcer ---------------------------------------------------------------
 
   it("haelt die Live-Semantik im Announcer statt in der sichtbaren Flaeche", async () => {
-    useSequenceTimers();
     const screen = await renderEvent();
     await announceUpdate();
 
     const announcer = testId("nora-pwa-update-announcer")!;
     expect(announcer.getAttribute("aria-live")).toBe("polite");
     expect(announcer.getAttribute("role")).toBe("status");
-    // Die grosse, sich staendig veraendernde Flaeche traegt KEINE Live-Rolle
-    // und kein aria-live — sonst laese ein Screenreader sie bei jeder Mutation
-    // komplett erneut vor.
     expect(panel()!.getAttribute("role")).toBe("group");
-    expect(panel()!.getAttribute("aria-live")).toBeNull();
     expect(panel()!.querySelectorAll("[aria-live]").length).toBe(0);
     expect(announcer.textContent).toContain("Neue Nora-Version verfügbar");
 
@@ -940,54 +631,27 @@ describe("NoraUpdateEvent", () => {
     record();
     await click("nora-pwa-update-apply");
     record();
-    await advance(CHOREOGRAPHY_TIMELINE.converging);
+    await advance(CHOREOGRAPHY_TIMELINE.sustaining);
     record();
-    await advance(
-      CHOREOGRAPHY_TIMELINE.sustaining - CHOREOGRAPHY_TIMELINE.converging,
-    );
+    await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
     record();
-    await advance(
-      CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining + 1,
-    );
-    record();
-    await advance(ACTIVATION_WATCHDOG_MS);
+    await watchdog();
     record();
 
-    // Verfuegbar → wird aktualisiert → dauert laenger. Drei Ansagen, obwohl
-    // der sichtbare Teilbaum sich in derselben Zeit mehrfach umbaut.
     expect(seen).toEqual([
       "Neue Nora-Version verfügbar",
       "Nora wird aktualisiert",
-      "Aktualisierung dauert länger als erwartet",
+      "Gleich bereit …",
     ]);
 
     await screen.unmount();
   });
 
-  it("blendet bei 'Später' aus, ohne das Update zu verwerfen", async () => {
-    const screen = await renderEvent();
-    await announceUpdate();
-
-    await screen.getByTestId("nora-pwa-update-later").click();
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-event"))
-      .not.toBeInTheDocument();
-    // Der wartende Worker ist nicht angefasst worden.
-    expect(applyCalls).toBe(0);
-
-    // Ein neu gefundenes Update zeigt den Hinweis sofort wieder.
-    await announceUpdate();
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-event"))
-      .toBeInTheDocument();
-
-    await screen.unmount();
-  });
+  // --- A11y / i18n -------------------------------------------------------------
 
   it("beschriftet Panel und Beschreibung verknüpft (a11y)", async () => {
     const screen = await renderEvent();
     await announceUpdate();
-    // Erst auf das gerenderte Panel warten, dann direkt im DOM messen.
     await expect
       .element(screen.getByTestId("nora-pwa-update-event"))
       .toBeVisible();
@@ -996,23 +660,13 @@ describe("NoraUpdateEvent", () => {
     const labelledBy = node.getAttribute("aria-labelledby")!;
     const describedBy = node.getAttribute("aria-describedby")!;
     expect(document.getElementById(labelledBy)?.tagName).toBe("H2");
-    expect(document.getElementById(describedBy)).toBeTruthy();
-    // Genau ein Titel im Accessibility-Baum, kein zweiter fuer den Crossfade.
+    expect(document.getElementById(describedBy)?.textContent).toBe(
+      "Offene Eingaben vor dem Aktualisieren kurz speichern.",
+    );
     expect(node.querySelectorAll("h2").length).toBe(1);
+    expect(node.classList.contains("nora-system-event")).toBe(true);
     // Kein Fokusdiebstahl: das Panel ist nicht modal.
     expect(node.contains(document.activeElement)).toBe(false);
-
-    await screen.unmount();
-  });
-
-  it("traegt die Systemklasse des eigenen Layers", async () => {
-    const screen = await renderEvent();
-    await announceUpdate();
-    await expect
-      .element(screen.getByTestId("nora-pwa-update-event"))
-      .toBeVisible();
-
-    expect(panel()!.classList.contains("nora-system-event")).toBe(true);
 
     await screen.unmount();
   });
@@ -1022,15 +676,12 @@ describe("NoraUpdateEvent", () => {
     const screen = await renderEvent("en");
     await announceUpdate();
 
-    expect(panel()?.textContent).toContain("New Nora version available");
-    expect(panel()?.textContent).toContain(
-      "Please save any open entries before you update",
-    );
+    expect(title()).toBe("New Nora version available");
+    expect(hint()).toBe("Save any open entries before updating.");
 
-    // Auch die Choreografie-Copy haengt am Katalog.
     await click("nora-pwa-update-apply");
     await advance(CHOREOGRAPHY_TIMELINE.sustaining);
-    expect(panel()?.textContent).toContain("Updating Nora");
+    expect(title()).toBe("Updating Nora");
 
     await screen.unmount();
   });

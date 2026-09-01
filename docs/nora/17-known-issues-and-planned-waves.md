@@ -376,6 +376,20 @@ Der **Final Adversarial Review** des ersten PWA-RC (`0329c0aedb7b250436ab43b651a
 
 **Offen geblieben und bewusst nicht in dieser Welle gelöst:** der Kontrast der Primäraktion (siehe nächster Abschnitt) und die Reduced-Motion-Dauer.
 
+### PWA Update State Contract V2 (2026-09-01): Recovery-Bug behoben — `LOCAL VERIFIED / RC`
+
+**Befund (Read-only-Diagnose, Zwei-Build-Repro in Chromium, TYPE D).** Der Product Owner sah in Production den Recovery-Zustand mit „Nora neu laden", obwohl kein Fehler vorlag. Ursache: `onNeedRefresh` aus `vite-plugin-pwa` (Prompt-Modus) feuert für externe Funde bereits beim `installed`, und Nora behandelte den Callback als „ein Worker wartet". In einem **unkontrollierten Dokument** (kein `controller` — Erstbesuch, Hard Reload, gelöschte Site-Daten; ohne `clients.claim()` bleibt es das bis zur nächsten Navigation) aktiviert sich der Worker 2 ms später selbst, SKIP_WAITING geht ins Leere und `controllerchange` erreicht das Dokument nie → nach 13 s Recovery B. Zweiter Befund (MEDIUM): hatte ein anderer Tab aktiviert, zeigte die Fläche weiter „verfügbar" und spielte beim Klick acht Sekunden ohne Wirkung ab. Der 5-s-Watchdog selbst war **nicht** zu aggressiv (Übernahme im kontrollierten Tab: 14 ms).
+
+**Behoben:** Browser-Fakten als Wahrheit (`syncFacts()` an allen Entscheidungspunkten, ereignisbasiert über `statechange`/`updatefound`/`controllerchange`/`visibilitychange`), expliziter Zustand `reloadRequired`, `applyUpdate()` sendet nur mit wartendem Worker, Watchdog liest Fakten statt Fehler zu setzen (`slow` mit genau einem stillen zweiten Versuch), `failed` nur bei abgelehnter Anfrage, Presentation Contract V2 mit ruhiger Copy und ohne Warnoptik. Kein `clients.claim()`, kein Cross-Tab-Messaging, keine Dependency-Änderung, der production-bewiesene Happy Path (waiting → 8 s → ein SKIP_WAITING → ein controllerchange → ein Reload) ist unverändert. Details: `16-current-state.md` 6b, `02-design-system.md` (Presentation Contract V2), Decision Log „2026-09-01 – PWA Update State Contract V2".
+
+**Doku-Korrektur:** Die Aussage aus PWA-1C.2, der Client lade nach der Übernahme nie selbst neu, gilt nur für unkontrollierte Dokumente. Im kontrollierten Tab meldet Workbox `controlling.isUpdate = true` und `register.js` lädt synchron neu (gemessen); Noras 1,5-s-Reload ist das Sicherheitsnetz für alle anderen Fälle — es entsteht kein Doppel-Reload.
+
+**Offen / bewusst nicht in dieser Welle:** Reduced-Motion-Dauer der Choreografie; Kontrast/Touch-Höhe der Primäraktion (unten); der globale Loader (nächster Abschnitt). Production-Verifikation steht aus.
+
+## Nora Loading Motion System (geplante Welle, noch nicht begonnen)
+
+Aus der PWA-Diagnose 2026-09-01: Nora hat **zwei identische Spinner-Komponenten** (`src/components/ui/spinner.tsx`, `src/components/admin/spinner.tsx` — beide lucide `Loader2` + `animate-spin text-primary`), `admin/loading.tsx` darauf aufbauend, rund 13 direkte `animate-spin`-Vorkommen und ~45 `Loader2`/`Spinner`-Referenzen in ~25 Dateien (Quick Capture, Kontakt→Kunde, Import, Audit, Kalender-Admin, Notification-Card, sonner-Loading-Icon, Mobile-Dashboard), dazu `ui/skeleton.tsx`, `ui/progress.tsx` und den eigenständigen PWA-Orb. Der Product Owner wünscht einen hochwertigeren, ruhigeren Nora-Ladekreis. **Bewusst nicht in der PWA-V2-Welle umgesetzt** — die PWA-Fläche hat nur ihre eigene ruhige Wartebewegung (langsamer atmende Punkte) bekommen. Empfehlung für die eigene Welle: einen zentralen Nora Motion Primitive einführen, die beiden Spinner-Komponenten darauf umstellen (deckt den Großteil ab), dann die Inline-`animate-spin`-Stellen nachziehen; Reduced Motion, Hell/Dunkel und 44-px-Touchziele mit abnehmen.
+
 ## Kontrast der Nora-Primäraktion unterschreitet AA (LOW, projektweit, 2026-08-30)
 
 **Befund.** `.nora-primary-action` trägt Weiß auf `--nora-brand` (`#ff3b1f`). Canvas-aufgelöst gemessen: **3,56:1** — unter den 4,5:1, die WCAG 1.4.3 für normalen Text verlangt (14 px bei Schriftschnitt 600 zählt nicht als „large text"). Der Wert ist in Hell und Dunkel identisch, weil die Markenfarbe in beiden Modi dieselbe ist.

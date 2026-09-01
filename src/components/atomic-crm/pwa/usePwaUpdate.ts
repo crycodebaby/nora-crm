@@ -1,6 +1,12 @@
 import { useCallback, useSyncExternalStore } from "react";
 
-import { pwaUpdateStore, type PwaUpdateState } from "./pwaUpdateStore";
+import {
+  pwaUpdateStore,
+  type PwaActivationAssessment,
+  type PwaApplyOutcome,
+  type PwaUpdateSnapshot,
+  type PwaUpdateState,
+} from "./pwaUpdateStore";
 
 export interface PwaUpdate {
   state: PwaUpdateState;
@@ -9,24 +15,29 @@ export interface PwaUpdate {
   applying: boolean;
   /** Die Uebernahme ist tatsaechlich eingetreten (`controllerchange`). */
   activated: boolean;
-  applyUpdate: () => void;
+  /** Neue Version bereit/aktiv — dieses Dokument braucht nur einen Reload. */
+  reloadRequired: boolean;
+  /** Positiver Fehlerbeweis (abgelehnte Aktivierungsanfrage). */
+  failed: boolean;
+  /** Browser-Fakt der letzten Synchronisation. */
+  waiting: boolean;
+  /** Browser-Fakt der letzten Synchronisation. */
+  controlled: boolean;
+  /** Fakten neu lesen, Snapshot zurueckgeben. */
+  syncFacts: () => PwaUpdateSnapshot;
+  applyUpdate: () => PwaApplyOutcome;
   /** Kann ein erneuter Aktivierungsversuch ueberhaupt etwas anstossen? */
   hasWaitingWorker: () => boolean;
-  /**
-   * Beendet den steckengebliebenen Versuch und meldet, ob ein Retry technisch
-   * etwas bewirken kann. Aufzurufen genau beim Ablauf des Watchdogs.
-   */
-  endStalledActivation: () => boolean;
+  /** Beim Ablauf des Watchdogs: Fakten lesen und einordnen. */
+  assessActivation: () => PwaActivationAssessment;
   dismissForNow: () => void;
 }
 
 /**
- * Praesentations-Schnittstelle fuer den PWA-Update-Lifecycle (Welle PWA-1B).
+ * Praesentations-Schnittstelle fuer den PWA-Update-Lifecycle.
  *
- * Die UI bekommt genau diese vier Angaben und fasst weder
+ * Die UI bekommt genau diese Angaben und fasst weder
  * `navigator.serviceWorker` noch Workbox oder die Registration selbst an.
- * PWA-1C baut die eigentliche Update-Darstellung auf dieser Schnittstelle auf,
- * ohne die Lifecycle-Logik anzufassen.
  *
  * Der Hook liest nur. Registriert wird der Service Worker beim App-Start in
  * `src/main.tsx` — bewusst nicht hier: Nora rendert die Layouts erst nach dem
@@ -39,14 +50,15 @@ export const usePwaUpdate = (): PwaUpdate => {
     pwaUpdateStore.getSnapshot,
   );
 
+  const syncFacts = useCallback(() => pwaUpdateStore.syncFacts(), []);
   const applyUpdate = useCallback(() => pwaUpdateStore.applyUpdate(), []);
   const dismissForNow = useCallback(() => pwaUpdateStore.dismissForNow(), []);
   const hasWaitingWorker = useCallback(
     () => pwaUpdateStore.hasWaitingWorker(),
     [],
   );
-  const endStalledActivation = useCallback(
-    () => pwaUpdateStore.endStalledActivation(),
+  const assessActivation = useCallback(
+    () => pwaUpdateStore.assessActivation(),
     [],
   );
 
@@ -55,9 +67,14 @@ export const usePwaUpdate = (): PwaUpdate => {
     updateAvailable: snapshot.updateAvailable,
     applying: snapshot.applying,
     activated: snapshot.activated,
+    reloadRequired: snapshot.reloadRequired,
+    failed: snapshot.failed,
+    waiting: snapshot.waiting,
+    controlled: snapshot.controlled,
+    syncFacts,
     applyUpdate,
     hasWaitingWorker,
-    endStalledActivation,
+    assessActivation,
     dismissForNow,
   };
 };
