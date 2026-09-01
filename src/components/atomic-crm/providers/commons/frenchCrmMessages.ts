@@ -1062,9 +1062,9 @@ export const frenchCrmMessages = {
       applying_title: "Mise à jour de Nora",
       slow_title: "Bientôt prêt …",
       slow_hint: "Nora prépare encore la nouvelle version.",
-      slow_prolonged_hint:
-        "Si rien ne se passe, un rechargement rapide suffit.",
+      slow_action: "Continuer",
       reload_title: "Nouvelle version prête",
+      reload_hint: "Enregistrez vos saisies en cours avant de recharger.",
       reload_action: "Recharger Nora",
       failed_title: "Mise à jour impossible pour le moment",
       failed_hint: "Vous pouvez continuer à travailler normalement.",

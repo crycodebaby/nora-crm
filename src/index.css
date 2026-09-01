@@ -144,6 +144,15 @@
      theme: the same alpha that reads as a soft halo on white glows on black. */
   --nora-system-aura-alpha: 0.34;
   --nora-system-aura-halo-alpha: 0.16;
+  /* The orbital ring (Visual Polish 2): brand, but thin — it must read as a
+     hairline instrument, never as a second orb. The soft stop is the arc's
+     tail. */
+  --nora-system-ring: color-mix(in oklab, var(--nora-brand) 82%, transparent);
+  --nora-system-ring-soft: color-mix(
+    in oklab,
+    var(--nora-brand) 22%,
+    transparent
+  );
   /* Motion. Restrained by design — no bounce, no gamification. */
   --nora-motion-fast: 150ms;
   --nora-motion-base: 220ms;
@@ -277,6 +286,14 @@
     0 44px 88px -36px oklch(0 0 0 / 0.75);
   --nora-system-aura-alpha: 0.48;
   --nora-system-aura-halo-alpha: 0.24;
+  /* A touch lighter than the brand on dark ground, otherwise the hairline
+     sinks into the aura. */
+  --nora-system-ring: color-mix(in oklab, var(--nora-brand) 78%, white);
+  --nora-system-ring-soft: color-mix(
+    in oklab,
+    var(--nora-brand) 26%,
+    transparent
+  );
   --avatar-0: oklch(0.35 0.12 240);
   --avatar-1: oklch(0.38 0.14 340);
   --avatar-2: oklch(0.35 0.11 180);
@@ -1321,8 +1338,22 @@ input[type="time"] {
   .nora-orb-membrane,
   .nora-orb-body,
   .nora-orb-core,
-  .nora-orb-core-mass {
+  .nora-orb-core-mass,
+  .nora-orb-ring {
     animation: none !important;
+  }
+
+  /* The travelling arc is motion by definition, so it is replaced by the
+     closed resting ring wherever an arc would show: "still working" and
+     "ready" then differ by the dots and the copy, and the ring still marks
+     the orb as busy or done. Opacity fades stay — they are not motion. */
+  .nora-orb-ring-a,
+  .nora-orb-ring-b {
+    opacity: 0 !important;
+  }
+
+  .nora-orb-ring-full {
+    opacity: calc(max(var(--ring-arc), var(--ring-full)) * 0.6) !important;
   }
 
   .nora-system-event,
@@ -1375,25 +1406,52 @@ input[type="time"] {
    a third more width, more than double the padding, a layered surface instead
    of border+shadow, and an aura that reaches into the surrounding space
    instead of hugging the shape.
+
+   VISUAL POLISH 2 (2026-09-01). The V2 state contract fixed the truth of the
+   panel, but the product owner found it visually still the old panel. This
+   pass changes the composition once more, again without a new surface
+   type: 30rem instead of 34, flat material, a smaller orb with a thin
+   orbital ring that carries the state (arc = updating, closed = ready,
+   dimmed orb = failed), one secondary line at most, and a single
+   unmistakable primary action. The 8-second timeline and every store
+   decision are untouched.
    ------------------------------------------------------------------------- */
 @layer components {
   .nora-system-event {
     /* --- Composition variables ---------------------------------------
        Every phase-dependent value is a variable on this one element. The
        children only read them, so the whole 8-second choreography is four
-       selectors below instead of a state cascade through the tree. */
-    --event-pad: 2.5rem;
+       selectors below instead of a state cascade through the tree.
+
+       VISUAL POLISH 2 (2026-09-01). The product owner found the V2 panel
+       still too close to the previous version. What changed is the
+       composition, not the contract: a narrower, quieter surface (30rem,
+       flat material, larger radius), a smaller orb that carries the state
+       through a thin orbital ring instead of growing into a spectacle, one
+       secondary line at most, and an action row with a single unmistakable
+       primary. The reload offer in "Gleich bereit" is gone (UX-1). */
+    --event-pad: 2.75rem 2.5rem 2.25rem;
     /* The padding the composition opens up to once only the orb, the title
        and the dots are left. Its own variable so the short-viewport rules can
        scale it too — as a literal inside the phase selectors it outranked
        them on specificity and re-expanded a panel that had just been made to
        fit. */
-    --event-pad-focus: 3rem;
-    --event-gap: 1.5rem;
-    --orb-size: 8.5rem;
+    --event-pad-focus: 3rem 2.5rem 2.75rem;
+    --event-gap: 1.375rem;
+    --orb-size: 7rem;
     --orb-scale: 1;
     --orb-aura-spread: 1;
-    --orb-aura-opacity: 0.85;
+    --orb-aura-opacity: 0.8;
+    /* Failed only: the orb dims and desaturates instead of turning red. */
+    --orb-dim: 1;
+    --orb-saturate: 1;
+    /* The orbital ring: `--ring-arc` shows the moving arc (updating / still
+       preparing), `--ring-full` the closed resting ring (new version ready).
+       `--ring-period` is the arc's revolution time — brisk while updating,
+       visibly slower while Nora is still preparing. */
+    --ring-arc: 0;
+    --ring-full: 0;
+    --ring-period: 2800ms;
     --title-opacity: 1;
     --title-blur: 0px;
     --title-shift: 0px;
@@ -1401,10 +1459,10 @@ input[type="time"] {
     --event-top: clamp(4.5rem, 8vh, 7rem);
 
     @apply fixed flex flex-col items-center text-center;
-    /* Wider and airier than the rejected 30rem box, but still a surface and
-       not a takeover. 34rem is the point where the safety block reads as two
-       comfortable lines rather than four cramped ones. */
-    width: min(34rem, calc(100vw - 3rem));
+    /* 30rem: one calm column. The V2 panel was 34rem because a boxed safety
+       paragraph needed the line length; with a single secondary line the
+       extra width only made the surface read as a card again. */
+    width: min(30rem, calc(100vw - 3rem));
     left: 50%;
     /* Drops slightly on tall screens so the composition is not pinned to the
        very top edge of a 1440-tall display, while still clearing the 46px
@@ -1414,20 +1472,14 @@ input[type="time"] {
     z-index: 70;
     gap: var(--event-gap);
     padding: var(--event-pad);
-    border-radius: 1.75rem;
+    border-radius: 2rem;
     /* Hairline, not a 1px grey box: a brand-tinted edge that is only just
        visible is what makes the surface read as machined rather than drawn. */
     border: 1px solid var(--nora-system-hairline);
-    /* Two-stop vertical lift + the surface colour. The gradient is what stops
-       this reading as a flat div; it is deliberately shallow enough that no
-       banding is visible on an 8-bit display. */
-    background:
-      linear-gradient(
-        180deg,
-        var(--nora-system-surface-lift) 0%,
-        var(--nora-system-surface) 42%
-      ),
-      var(--nora-system-surface);
+    /* Flat material. The two-stop lift of V2 made the top of the surface
+       read as a header band; one plain surface with the inner top light and
+       the deep, soft shadow is calmer and separates just as well. */
+    background: var(--nora-system-surface);
     color: var(--popover-foreground);
     box-shadow:
       inset 0 1px 0 var(--nora-system-inner-light),
@@ -1438,9 +1490,9 @@ input[type="time"] {
        page behind the surface.
 
        `hidden`, deliberately not `hidden auto`. Measured in the styled app:
-       with `auto` the aura's 160px of downward overflow became scrollable
-       area and the panel grew a permanent scrollbar — which also ate 17px of
-       the content width and pulled the composition off centre. `hidden` does
+       with `auto` the aura's downward overflow became scrollable area and
+       the panel grew a permanent scrollbar — which also ate 17px of the
+       content width and pulled the composition off centre. `hidden` does
        not scroll, so it simply clips, which is what the aura wants anyway.
        Reachability is instead guaranteed by the height-based rules further
        down; the one viewport where scaling is not enough re-enables scrolling
@@ -1449,13 +1501,13 @@ input[type="time"] {
     transition:
       padding var(--nora-choreo-slow) var(--nora-choreo-ease),
       gap var(--nora-choreo-slow) var(--nora-choreo-ease);
-    animation: nora-system-event-in 420ms var(--nora-motion-ease) both;
+    animation: nora-system-event-in 520ms var(--nora-choreo-ease) both;
   }
 
   /* After the primary action the actions fold away and the surface itself
      takes the focus (see `NoraUpdateEvent`), so that it does not fall to
      `<body>`. `:focus-visible` only, and a soft ring rather than a hard rule
-     around 34rem: it has to be findable, not shouty. */
+     around the panel: it has to be findable, not shouty. */
   .nora-system-event:focus-visible {
     outline: 3px solid var(--nora-brand-ring);
     outline-offset: 2px;
@@ -1474,75 +1526,123 @@ input[type="time"] {
   }
 
   /* --- The 8-second choreography, as four variable sets ------------------
+     The timing is the frozen presentation contract (`CHOREOGRAPHY_TIMELINE`);
+     only what each phase LOOKS like lives here. Visual Polish 2 tones every
+     scale step down: the orb no longer swells into a spectacle, the ring
+     carries the "something is happening" instead.
+
      Phase 1 `settling` (0–1.2s): the orb gains a little presence while the
-     actions, the reassurance and the safety block fold away. Nothing snaps. */
+     actions and the hint fold away. Nothing snaps. */
   .nora-system-event[data-phase="settling"] {
-    --orb-scale: 1.06;
-    --orb-aura-spread: 1.06;
-    --orb-aura-opacity: 0.95;
+    --orb-scale: 1.04;
+    --orb-aura-spread: 1.04;
+    --orb-aura-opacity: 0.9;
   }
 
   /* Phase 2 `converging` (1.2–2.8s): the composition contracts onto its
-     centre. The orb grows properly, the aura spreads, the title dissolves so
+     centre. The orb grows a little, the aura spreads, the title dissolves so
      the swap to the update wording happens while nothing is visible. */
   .nora-system-event[data-phase="converging"] {
     --event-gap: 1.25rem;
-    --orb-scale: 1.3;
-    --orb-aura-spread: 1.2;
+    --orb-scale: 1.14;
+    --orb-aura-spread: 1.12;
     --orb-aura-opacity: 1;
     --title-opacity: 0;
     --title-blur: 5px;
     --title-shift: -0.375rem;
   }
 
-  /* Phase 3 `sustaining` (2.8–7.5s): the calm update scene. Orb, one line,
-     three dots. The title settles back in out of the blur. */
+  /* Phase 3 `sustaining` (2.8–7.5s): the calm update scene. Orb with its
+     orbital arc, one line, three dots. The title settles back in out of the
+     blur. */
   .nora-system-event[data-phase="sustaining"] {
     --event-pad: var(--event-pad-focus);
-    --event-gap: 1.375rem;
-    --orb-scale: 1.32;
-    --orb-aura-spread: 1.22;
+    --event-gap: 1.25rem;
+    --orb-scale: 1.16;
+    --orb-aura-spread: 1.14;
     --orb-aura-opacity: 1;
+    --ring-arc: 1;
   }
 
   /* Phase 4 `committing` (7.5–8.0s): the orb steadies, the aura draws inward
-     and brightens. Optical preparation for the hand-off — no new element, no
-     announcement, just a settling. */
+     and brightens, the arc keeps running. Optical preparation for the
+     hand-off — no new element, no announcement, just a settling. */
   .nora-system-event[data-phase="committing"] {
     --event-pad: var(--event-pad-focus);
-    --event-gap: 1.375rem;
-    --orb-scale: 1.22;
-    --orb-aura-spread: 0.94;
+    --event-gap: 1.25rem;
+    --orb-scale: 1.1;
+    --orb-aura-spread: 0.96;
     --orb-aura-opacity: 1;
+    --ring-arc: 1;
+  }
+
+  /* An activation requested outside this panel's own run (the store is
+     `applying` while the phase is still idle): the arc is the only honest
+     signal, no scene change. */
+  .nora-system-event[data-presentation="applying"][data-phase="idle"] {
+    --ring-arc: 1;
   }
 
   /* "Gleich bereit": the calm update scene simply continues. Nothing grows,
-     nothing changes colour — the only difference is the slower breathing of
-     the dots. Waiting a little longer must not look like a new event. */
+     nothing changes colour — the arc turns at half speed and the dots
+     breathe slower. Waiting a little longer must not look like a new event,
+     and it offers no repair action: a reload does not resolve a worker that
+     is genuinely still waiting. */
   .nora-system-event[data-presentation="slow"] {
     --event-pad: var(--event-pad-focus);
-    --event-gap: 1.375rem;
-    --orb-scale: 1.32;
-    --orb-aura-spread: 1.22;
+    --event-gap: 1.25rem;
+    --orb-scale: 1.16;
+    --orb-aura-spread: 1.14;
     --orb-aura-opacity: 1;
+    --ring-arc: 1;
+    --ring-period: 5600ms;
   }
 
   .nora-system-event[data-presentation="slow"] .nora-system-event-dot {
     animation-duration: 3200ms;
   }
 
-  /* "Neue Version bereit" and "gerade nicht moeglich" reuse the resting
-     composition: something the user can act on, not a sequence frozen
-     mid-flight. The orb rests; no danger colour, no warning surface. */
-  .nora-system-event[data-presentation="reloadRequired"],
-  .nora-system-event[data-presentation="failed"] {
-    --event-pad: 2.5rem;
+  /* "Neue Version bereit": the resting composition with a closed ring. The
+     arc has come to rest — the one visual that says "done" without a tick
+     mark or a colour change. Something the user can act on, not a sequence
+     frozen mid-flight. */
+  .nora-system-event[data-presentation="reloadRequired"] {
     --orb-scale: 1;
-    --orb-aura-spread: 1;
-    --orb-aura-opacity: 0.85;
+    --orb-aura-spread: 1.04;
+    --orb-aura-opacity: 0.9;
+    /* The phase selectors above may still say "arc" (the run's phase stays
+       at `committing` until the panel is dismissed); the state wins. */
+    --ring-arc: 0;
+    --ring-full: 1;
     --title-opacity: 1;
     --title-blur: 0px;
     --title-shift: 0px;
+  }
+
+  /* "Gerade nicht moeglich": subdued, quiet. The orb dims and loses
+     saturation, the aura pulls back, no ring, no dots, and the living layers
+     hold still — a truthful pause, never a danger state. Deliberately not the
+     same picture as "Neue Version bereit". */
+  .nora-system-event[data-presentation="failed"] {
+    --orb-scale: 0.94;
+    --orb-aura-spread: 0.9;
+    --orb-aura-opacity: 0.4;
+    --orb-dim: 0.72;
+    --orb-saturate: 0.5;
+    --ring-arc: 0;
+    --ring-full: 0;
+    --title-opacity: 1;
+    --title-blur: 0px;
+    --title-shift: 0px;
+  }
+
+  .nora-system-event[data-presentation="failed"] .nora-orb-aura,
+  .nora-system-event[data-presentation="failed"] .nora-orb-halo,
+  .nora-system-event[data-presentation="failed"] .nora-orb-membrane,
+  .nora-system-event[data-presentation="failed"] .nora-orb-body,
+  .nora-system-event[data-presentation="failed"] .nora-orb-core,
+  .nora-system-event[data-presentation="failed"] .nora-orb-core-mass {
+    animation-play-state: paused;
   }
 
   /* --- Stage ------------------------------------------------------------
@@ -1551,7 +1651,9 @@ input[type="time"] {
   .nora-system-event-stage {
     @apply relative flex shrink-0 items-center justify-center;
     width: 100%;
-    height: calc(var(--orb-size) * 1.15);
+    /* Taller than the orb so the aura and the ring have room before the
+       surface clips them. */
+    height: calc(var(--orb-size) * 1.3);
     transition: height var(--nora-choreo-slow) var(--nora-choreo-ease);
   }
 
@@ -1566,9 +1668,14 @@ input[type="time"] {
     --fold-gap: 0.5rem;
   }
 
+  /* One title, set a touch larger and tighter than V2 so it carries the
+     composition on its own — there is no paragraph under it any more. */
   .nora-system-event-title {
-    @apply text-xl font-semibold tracking-tight;
+    @apply font-semibold;
+    font-size: 1.375rem;
+    letter-spacing: -0.015em;
     line-height: var(--nora-line-body);
+    text-wrap: balance;
     opacity: var(--title-opacity);
     filter: blur(var(--title-blur));
     transform: translateY(var(--title-shift));
@@ -1581,14 +1688,16 @@ input[type="time"] {
       transform 900ms var(--nora-choreo-ease);
   }
 
-  /* The one quiet secondary line (save hint, "almost ready", reload note).
-     Muted, no surface, no border, no symbol: it is information the eye may
-     pick up, never a warning it has to process. Fades with the title so the
-     composition never shows a stale line at full opacity. */
+  /* The one quiet secondary line (save hint, "almost ready", "keep
+     working"). Muted, no surface, no border, no symbol: information the eye
+     may pick up, never a warning it has to process. Fades with the title so
+     the composition never shows a stale line at full opacity. */
   .nora-system-event-hint {
     @apply text-sm text-muted-foreground;
-    max-width: 26rem;
+    max-width: 22rem;
+    margin-top: 0.125rem;
     line-height: var(--nora-line-readable);
+    text-wrap: balance;
     opacity: var(--title-opacity);
     transition: opacity 700ms var(--nora-choreo-ease);
   }
@@ -1640,13 +1749,52 @@ input[type="time"] {
     transition: visibility 0s linear 520ms;
   }
 
+  /* --- Actions ----------------------------------------------------------
+     One row, one unmistakable primary. The quiet action is text-only until
+     hovered: it must be findable, but never compete with "Jetzt
+     aktualisieren" / "Nora neu laden". Slightly more air above the row than
+     between title and hint, so the eye reads copy first, then decides. */
   .nora-system-event-actions {
-    @apply flex flex-wrap items-center justify-center gap-3;
+    @apply flex flex-wrap items-center justify-center;
+    gap: 0.75rem;
+    padding-top: 0.25rem;
   }
 
   .nora-system-event-action {
-    min-width: 9rem;
-    padding-inline: 1.25rem;
+    min-width: 8.5rem;
+    padding-inline: 1.375rem;
+    border-radius: 0.875rem;
+  }
+
+  /* Same soft ring as the panel itself, on every action. The shared Button
+     ring is tuned for form controls on white; on this surface it sat too
+     close to the edge to read. */
+  .nora-system-event-action:focus-visible {
+    outline: 3px solid var(--nora-brand-ring);
+    outline-offset: 2px;
+  }
+
+  .nora-system-event-action-quiet {
+    color: var(--muted-foreground);
+  }
+
+  .nora-system-event-action-quiet:hover,
+  .nora-system-event-action-quiet:focus-visible {
+    color: var(--foreground);
+    background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  }
+
+  /* The primary lifts off the surface with a brand-tinted shadow instead of
+     a heavier colour — hierarchy from depth, not from alarm. */
+  .nora-system-event-action.nora-primary-action {
+    box-shadow:
+      0 1px 0 color-mix(in oklab, white 18%, transparent) inset,
+      0 10px 24px -12px color-mix(in oklab, var(--nora-brand) 65%, transparent);
+  }
+
+  .nora-system-event-action.nora-primary-action:active {
+    box-shadow: 0 4px 12px -8px
+      color-mix(in oklab, var(--nora-brand) 65%, transparent);
   }
 
   /* --- Animated ellipsis -------------------------------------------------
@@ -1694,9 +1842,90 @@ input[type="time"] {
     width: var(--orb-size);
     height: var(--orb-size);
     transform: scale(var(--orb-scale));
+    /* Failed only: dimmed and desaturated, never recoloured. */
+    opacity: var(--orb-dim);
+    filter: saturate(var(--orb-saturate));
     /* Slower than every UI transition in Nora on purpose: the orb growing is
        the single motion the eye is meant to follow through phase 2. */
-    transition: transform 1200ms var(--nora-choreo-ease);
+    transition:
+      transform 1200ms var(--nora-choreo-ease),
+      opacity 900ms var(--nora-choreo-ease),
+      filter 900ms var(--nora-choreo-ease);
+  }
+
+  /* --- The orbital ring (Visual Polish 2) --------------------------------
+     Nora's PWA-local loading motion. Not a spinner: a thin arc that travels
+     around the orb, on two layers with unequal periods running against each
+     other, so the visible arc keeps changing length instead of one dot going
+     round. Everything is `transform: rotate` and `opacity` — compositor
+     only, no repainted gradient per frame.
+
+     The ring is a masked conic gradient: the gradient carries the arc with a
+     soft tail, the radial mask cuts it to a hairline. It sits OUTSIDE the
+     aura field so the phase-driven spread never scales it: a ring that grows
+     with the aura reads as part of the glow, one that keeps its radius reads
+     as an instrument.
+
+     Three states, three layers:
+       arc a + arc b   updating (2.8 s revolution) / still preparing (5.6 s)
+       full            new version ready — the arc has come to rest, closed
+       (none)          failed — the orb dims instead */
+  .nora-orb-ring {
+    @apply pointer-events-none absolute rounded-full;
+    --ring-w: max(2px, calc(var(--orb-size) * 0.024));
+    inset: -16%;
+    opacity: 0;
+    transition: opacity 900ms var(--nora-choreo-ease);
+    -webkit-mask: radial-gradient(
+      farthest-side,
+      transparent calc(100% - var(--ring-w) - 0.5px),
+      #000 calc(100% - var(--ring-w))
+    );
+    mask: radial-gradient(
+      farthest-side,
+      transparent calc(100% - var(--ring-w) - 0.5px),
+      #000 calc(100% - var(--ring-w))
+    );
+  }
+
+  .nora-orb-ring-a {
+    opacity: var(--ring-arc);
+    background: conic-gradient(
+      from 0deg,
+      transparent 0turn,
+      transparent 0.56turn,
+      var(--nora-system-ring-soft) 0.7turn,
+      var(--nora-system-ring) 1turn
+    );
+    animation: nora-orb-ring-turn var(--ring-period) linear infinite;
+  }
+
+  /* The counter-layer: shorter arc, slower, the other way round. The two
+     never line up for long, which is what makes the arc look like it
+     breathes rather than spins. */
+  .nora-orb-ring-b {
+    opacity: calc(var(--ring-arc) * 0.55);
+    background: conic-gradient(
+      from 180deg,
+      transparent 0turn,
+      transparent 0.74turn,
+      var(--nora-system-ring-soft) 0.84turn,
+      var(--nora-system-ring) 1turn
+    );
+    animation: nora-orb-ring-turn calc(var(--ring-period) * 1.618) linear
+      infinite reverse;
+  }
+
+  .nora-orb-ring-full {
+    opacity: calc(var(--ring-full) * 0.6);
+    background: var(--nora-system-ring);
+  }
+
+  /* One settle when it appears: the ring closes onto the orb from slightly
+     outside, then holds. Keyed on the state (not on the element) so it plays
+     on entry rather than once at mount. */
+  .nora-system-event[data-presentation="reloadRequired"] .nora-orb-ring-full {
+    animation: nora-orb-ring-settle 1200ms var(--nora-choreo-ease) both;
   }
 
   /* The aura field carries the PHASE-driven spread, the two gradients inside
@@ -1925,7 +2154,7 @@ input[type="time"] {
       --event-pad: 2rem;
       --event-pad-focus: 2.25rem;
       --event-gap: 1.25rem;
-      --orb-size: 6.75rem;
+      --orb-size: 6rem;
     }
   }
 
@@ -1937,11 +2166,11 @@ input[type="time"] {
       --event-pad: 1.5rem;
       --event-pad-focus: 1.75rem;
       --event-gap: 1rem;
-      --orb-size: 5.25rem;
+      --orb-size: 5rem;
     }
 
     .nora-system-event-title {
-      @apply text-lg;
+      font-size: 1.1875rem;
     }
   }
 
@@ -1966,27 +2195,28 @@ input[type="time"] {
      down by a different amount so the small panel stays balanced. */
   @media (max-width: 767px) {
     .nora-system-event {
-      --event-pad: 1.5rem;
-      --event-pad-focus: 1.875rem;
+      --event-pad: 1.75rem 1.5rem 1.5rem;
+      --event-pad-focus: 2rem 1.5rem 1.75rem;
       --event-gap: 1.125rem;
-      --orb-size: 5.25rem;
+      --orb-size: 5rem;
 
       width: auto;
       left: 0.75rem;
       right: 0.75rem;
       top: calc(env(safe-area-inset-top) + 0.75rem);
       transform: none;
-      border-radius: 1.375rem;
+      border-radius: 1.5rem;
     }
 
     .nora-system-event-title {
-      @apply text-lg;
+      font-size: 1.1875rem;
     }
 
     /* Full-width, stacked, primary on top: at this size a wrapped button row
        reads worse than an honest stack. */
     .nora-system-event-actions {
       @apply w-full flex-col-reverse;
+      gap: 0.5rem;
     }
 
     .nora-system-event-action {
@@ -2058,6 +2288,28 @@ input[type="time"] {
   }
   40% {
     opacity: 1;
+  }
+}
+
+/* The orbital arc. One full revolution per period; the two layers get
+   different periods (golden ratio apart) from the variables on the panel. */
+@keyframes nora-orb-ring-turn {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The closed ring settles onto the orb once when "Neue Version bereit"
+   appears — arriving, not flashing. */
+@keyframes nora-orb-ring-settle {
+  from {
+    transform: scale(1.1);
+  }
+  to {
+    transform: scale(1);
   }
 }
 

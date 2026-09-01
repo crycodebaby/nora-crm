@@ -71,7 +71,12 @@ const TITLE_KEY: Record<ChoreographyPresentation, string> = {
  *
  * **Ruhig, nicht alarmierend.** Kein Warnsymbol, keine Warnbox, keine
  * Fehlersprache ohne Fehlerbeweis. Ein Titel, hoechstens eine ruhige Zeile,
- * genau eine Primaeraktion.
+ * genau eine Primaeraktion. Seit Visual Polish 2 traegt der Orb den
+ * Zustand: ein umlaufender Bogen waehrend der Aktualisierung, ein ruhig
+ * geschlossener Ring, wenn die neue Version bereit ist, ein gedaempfter Orb
+ * im Fehlerfall. Im Zustand „Gleich bereit" gibt es bewusst keinen
+ * Reload-Knopf und keinen Reparaturtipp — ein Reload loest einen wirklich
+ * wartenden Worker nachweislich nicht (siehe Decision Log, Visual Polish 2).
  *
  * **Nicht-modal, aber prominent.** Das Panel nimmt keinen Fokus, kapselt
  * keinen, setzt kein `aria-hidden` und hat keinen Scrim. Bei offenem
@@ -135,16 +140,19 @@ export const NoraUpdateEvent = () => {
       ? "crm.pwa.available_title"
       : TITLE_KEY[presentation];
 
+  // Visual Polish 2: eine Zeile pro Zustand, und im langsamen Zustand
+  // ausdruecklich KEIN Reparaturtipp — solange ein Worker wirklich wartet,
+  // waere „neu laden" ein Rat, der nachweislich nichts loest.
   const hintKey =
-    presentation === "available" || presentation === "reloadRequired"
+    presentation === "available"
       ? "crm.pwa.available_hint"
-      : presentation === "slow"
-        ? stall === "prolonged"
-          ? "crm.pwa.slow_prolonged_hint"
-          : "crm.pwa.slow_hint"
-        : presentation === "failed"
-          ? "crm.pwa.failed_hint"
-          : null;
+      : presentation === "reloadRequired"
+        ? "crm.pwa.reload_hint"
+        : presentation === "slow"
+          ? "crm.pwa.slow_hint"
+          : presentation === "failed"
+            ? "crm.pwa.failed_hint"
+            : null;
 
   // Alles, was nur im handlungsfaehigen Zustand gilt, bleibt durch Phase 1
   // montiert, damit es sich sichtbar wegfalten kann.
@@ -170,7 +178,11 @@ export const NoraUpdateEvent = () => {
   };
 
   const dismiss = () => {
-    if (presentation === "failed") reset();
+    // Fehler und verlaengertes Warten haben eine laufende Sequenz hinter
+    // sich: erst die Choreografie verwerfen, dann denselben sicheren
+    // Verschiebe-Pfad wie „Spaeter" nehmen. Der wartende Worker bleibt
+    // unangetastet; eine spaetere Uebernahme hebt die Verschiebung auf.
+    if (presentation === "failed" || presentation === "slow") reset();
     dismissForNow();
   };
 
@@ -257,7 +269,7 @@ export const NoraUpdateEvent = () => {
         onKeyDown={handleKeyDown}
       >
         <div className="nora-system-event-stage">
-          <NoraUpdateOrb phase={phase} />
+          <NoraUpdateOrb phase={phase} presentation={presentation} />
         </div>
 
         <div className="nora-system-event-copy">
@@ -306,7 +318,7 @@ export const NoraUpdateEvent = () => {
                     <Button
                       size="lg"
                       variant="ghost"
-                      className="nora-system-event-action"
+                      className="nora-system-event-action nora-system-event-action-quiet"
                       onClick={dismiss}
                       data-testid="nora-pwa-update-later"
                     >
@@ -329,7 +341,7 @@ export const NoraUpdateEvent = () => {
                     <Button
                       size="lg"
                       variant="ghost"
-                      className="nora-system-event-action"
+                      className="nora-system-event-action nora-system-event-action-quiet"
                       onClick={dismiss}
                       data-testid="nora-pwa-update-later"
                     >
@@ -346,24 +358,26 @@ export const NoraUpdateEvent = () => {
                     </Button>
                   </>
                 ) : presentation === "slow" ? (
-                  /* Erst nach der zweiten Frist: der Reload ist dann eine
-                    ehrliche Abkuerzung, aber kein Muss. */
+                  /* Erst nach der zweiten Frist, und bewusst kein Reload:
+                    solange ein Worker wartet, laedt ein Reload nachweislich
+                    denselben alten Build. Der einzige ehrliche Ausweg ist,
+                    den Hinweis ruhig zu verschieben und weiterzuarbeiten. */
                   <Button
                     ref={primaryRef}
                     size="lg"
                     variant="ghost"
-                    className="nora-system-event-action"
-                    onClick={reloadPage}
-                    data-testid="nora-pwa-update-reload"
+                    className="nora-system-event-action nora-system-event-action-quiet"
+                    onClick={dismiss}
+                    data-testid="nora-pwa-update-continue"
                   >
-                    {translate("crm.pwa.reload_action")}
+                    {translate("crm.pwa.slow_action")}
                   </Button>
                 ) : presentation === "failed" ? (
                   <Button
                     ref={primaryRef}
                     size="lg"
                     variant="ghost"
-                    className="nora-system-event-action"
+                    className="nora-system-event-action nora-system-event-action-quiet"
                     onClick={dismiss}
                     data-testid="nora-pwa-update-continue"
                   >

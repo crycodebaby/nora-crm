@@ -2,14 +2,24 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
 
 /**
  * Entwicklerwerkzeug zum Auslösen und Prüfen des Nora-Systemereignisses
- * (Welle PWA-1C.1). **Nur im Dev-Server. Niemals in Production.**
+ * (Welle PWA-1C.1, seit V2/Visual Polish 2 mit Browser-Fakten-Schaltern).
+ * **Nur im Dev-Server. Niemals in Production.**
  *
  * **Warum es das gibt.** Das Update-Ereignis erscheint im echten Betrieb nur
  * dann, wenn ein neuer Service Worker installiert ist und WAITING steht — also
  * frühestens nach einem Deployment. Ohne dieses Werkzeug ließe sich die
- * Gestaltung (Orb, Warnsymbol, Achtsekundenchoreografie, Hell/Dunkel, Reduced
+ * Gestaltung (Orb, Ring, Achtsekundenchoreografie, Hell/Dunkel, Reduced
  * Motion) nur nach einem echten Release beurteilen, und Nachbessern hieße:
  * wieder deployen.
+ *
+ * **Alle fünf sichtbaren Zustände sind herstellbar:**
+ *   available        „Update anzeigen" (Standard: Worker wartet, kontrolliert)
+ *   applying / slow  „Jetzt aktualisieren" ohne „Übernahme simulieren":
+ *                    nach 8 s Commit, nach 13 s „Gleich bereit", nach 18 s
+ *                    die verlängerte Wartelage mit „Weiterarbeiten"
+ *   reloadRequired   „Wartender Worker: aus" + „Dokument kontrolliert: aus",
+ *                    dann „Update anzeigen"
+ *   failed           „Ablehnung: an", dann „Jetzt aktualisieren" (nach 8 s)
  *
  * **Wie die Production-Freiheit garantiert ist.** Dieses Modul wird in
  * `src/main.tsx` ausschließlich über einen dynamischen Import innerhalb von
@@ -37,11 +47,11 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
  * Der wartende Worker als Attrappe.
  *
  * Bis PWA-1C.2 reichte das Werkzeug `undefined` als Registration durch. Damit
- * lieferte `hasWaitingWorker()` immer `false`, und die Recovery-Variante mit
- * „Erneut versuchen" war weder fuer QA noch fuer die Tests jemals erreichbar —
- * genau dort sass der BLOCKER, den niemand sehen konnte. Jetzt gibt es eine
- * Registration mit derselben Aussagekraft wie im Browser: ein `waiting`, das
- * verschwindet, sobald die Uebernahme stattfindet.
+ * las der Store nie einen wartenden Worker, und der Zustand „Worker wartet
+ * weiterhin" (heute „Gleich bereit") war weder fuer QA noch fuer die Tests
+ * jemals erreichbar — genau dort sass der BLOCKER, den niemand sehen konnte.
+ * Jetzt gibt es eine Registration mit derselben Aussagekraft wie im Browser:
+ * ein `waiting`, das verschwindet, sobald die Uebernahme stattfindet.
  *
  * Bewusst nur die zwei Eigenschaften, die der Store liest — kein nachgebauter
  * Browser. `update()` muss dabei sein, weil die stuendliche Pruefung des Stores
@@ -92,7 +102,7 @@ const createFakeRegisterSw = (state: {
           // dieses Werkzeugs: die Anfrage geht raus und das Promise verhält
           // sich genau wie in Production — es sagt nichts über den Erfolg.
           // Ohne simulierte Übernahme bleibt `controllerchange` aus, und nach
-          // der Watchdog-Frist muss der Recovery-Zustand erscheinen.
+          // der Watchdog-Frist muss „Gleich bereit" erscheinen — kein Fehler.
           new Promise<void>(() => {});
     };
   };
@@ -216,9 +226,9 @@ export const mountUpdateDevTrigger = () => {
     // aktiviert sich von selbst, und die Oberflaeche muss auf „Neu laden"
     // statt auf eine Schein-Choreografie laufen.
     controlled: true,
-    // Standard: ein Worker wartet. Das ist der reale Fehlerfall, für den der
-    // Watchdog gebaut wurde, und damit die Recovery-Variante „Erneut
-    // versuchen" — bis PWA-1C.2 war genau sie hier nicht herstellbar.
+    // Standard: ein Worker wartet. Das ist der Fall, für den der Watchdog
+    // gebaut wurde: bleibt die Übernahme aus, erscheint „Gleich bereit" —
+    // bis PWA-1C.2 war genau dieser Zustand hier nicht herstellbar.
     waiting: true,
     requests: 0,
   };
@@ -361,9 +371,9 @@ export const mountUpdateDevTrigger = () => {
       `Store: ${snapshot.state}` +
       `${snapshot.activated ? " +übernommen" : ""}` +
       `${snapshot.reloadRequired ? " +reload" : ""} — Panel: ${shown}` +
-      // Ohne diese Zahl lässt sich am Bildschirm nicht unterscheiden, ob
-      // „Erneut versuchen" wirklich einen zweiten Aktivierungsversuch
-      // ausgelöst oder nur die Choreografie noch einmal abgespielt hat.
+      // Ohne diese Zahl lässt sich am Bildschirm nicht unterscheiden, ob der
+      // stille zweite Versuch wirklich eine zweite Anfrage gesendet oder nur
+      // die Choreografie weitergespielt hat.
       ` — Anfragen: ${state.requests}`;
   };
 

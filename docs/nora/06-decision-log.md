@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-01 – PWA Visual Polish 2: Ring statt Spektakel, kein Reload-Angebot bei wartendem Worker | [Springen](#2026-09-01--pwa-visual-polish-2-ring-statt-spektakel-kein-reload-angebot-bei-wartendem-worker) |
 | 2026-09-01 – PWA Update State Contract V2: Browser-Fakten statt Entdeckungssignal | [Springen](#2026-09-01--pwa-update-state-contract-v2-browser-fakten-statt-entdeckungssignal) |
 | 2026-08-30 – Eine bestätigte Übernahme ist endgültig: `activated` ist monoton (PWA-1C.3) | [Springen](#2026-08-30--eine-bestätigte-übernahme-ist-endgültig-activated-ist-monoton-pwa-1c3) |
 | 2026-08-30 – Ein Retry muss etwas senden: der beendete Aktivierungsversuch (PWA-1C.2 Closure) | [Springen](#2026-08-30--ein-retry-muss-etwas-senden-der-beendete-aktivierungsversuch-pwa-1c2-closure) |
@@ -90,6 +91,30 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-09-01 – PWA Visual Polish 2: Ring statt Spektakel, kein Reload-Angebot bei wartendem Worker
+
+### Kontext
+
+Der State Contract V2 (`3a092771`) hat den unabhängigen finalen technischen Review bestanden (`PWA UPDATE STATE CONTRACT V2 TECHNICALLY APPROVED — FREEZE STATE CONTRACT`, 0 BLOCKER / 0 HIGH / 0 MEDIUM) und ist damit eingefroren. Zwei Punkte blieben offen: **UX-1** — im Zustand „Gleich bereit" bot die Fläche nach der zweiten Frist „Nora neu laden" plus den Hinweis „Falls es nicht weitergeht, hilft ein kurzes Neuladen." an, obwohl der Zwei-Build-Beweis (Build W mit stummem SKIP_WAITING-Handler) zeigte, dass ein Reload bei weiterhin wartendem Worker denselben Build unter demselben Controller lädt und den Benutzer sofort wieder zu „Neue Nora-Version verfügbar" bringt; und die Produktrückmeldung, dass das Panel trotz V2 optisch noch wie die Vorversion wirkt. Zusätzlich hatte der Review festgestellt (NOTE-2), dass `02-design-system.md` in V2 die Abschnitte Accessibility, Kontrast, Mobile, Tokens, Texte und „lokal ansehen" verloren hatte.
+
+### Entscheidung
+
+- **Reine Präsentationswelle.** `pwaUpdateStore.ts`, `pwaRegistration.ts`, `usePwaUpdate.ts`, `useUpdateChoreography.ts`, `vite.config.ts` (Service-Worker-Erzeugung) sind byteweise unverändert; Watchdog, Retry, `reloadRequired`-Invariante, SKIP_WAITING-Vertrag und die Achtsekunden-Timeline bleiben, wie sie sind.
+- **UX-1 behoben:** in `slow`/verlängertem Warten gibt es weder Reload-Knopf noch Reparaturtipp. Nach der zweiten Frist erscheint ein leises „Weiterarbeiten", das denselben sicheren Verschiebe-Pfad nimmt wie „Später" (Choreografie `reset()` + `dismissForNow()`): nichts wird gesendet, der wartende Worker bleibt erhalten, eine spätere Übernahme hebt die Verschiebung auf. Keine neue Zustandslogik. Der Reload-CTA existiert nur noch in `reloadRequired`.
+- **Der Orb trägt den Zustand.** Neue PWA-lokale Lade-Bewegung: ein dünner, maskierter Conic-Gradient-Bogen auf zwei gegenläufigen Ebenen (Perioden 1 : 1,618; 2,8 s beim Aktualisieren, 5,6 s bei „Gleich bereit"), geschlossener Ruhering bei „Neue Version bereit", gedämpfter entsättigter Orb im Fehlerfall. Kein rotierender Ladekreis, keine Abhängigkeit, nur `transform`/`opacity`. Reduced Motion ersetzt den Bogen durch den Ruhering. Noras globale Loader bleiben unangetastet (eigene Welle).
+- **Komposition:** 30 rem statt 34, flaches Material, Radius 2 rem, Orb 7 rem (Update-Szene 1,16 statt 1,32), Titel 1,375 rem, eine Nebenzeile, eine Aktionsreihe mit einer Primäraktion (markengetönter Schatten) und einer leisen Textaktion. Mobil gestapelt, Primär oben.
+- **Copy:** `reload_hint` „Offene Eingaben vor dem Neuladen kurz speichern."; `slow_prolonged_hint` entfernt; `slow_action` „Weiterarbeiten" (en „Keep working", fr „Continuer"). Strukturelle Parität de/en/fr.
+- **Docs-Integrität:** die in V2 verlorenen Abschnitte von `02-design-system.md` sind in aktualisierter Form wiederhergestellt (ohne Warnsymbol/Recovery), zusätzlich dokumentiert die Welle Ring, Tokens und Zustandsbilder additiv.
+- **Bewusst nicht in dieser Welle:** die technischen LOWs des Reviews (Assessment `nothing`, Nutzen des stillen zweiten SKIP_WAITING), die Plugin-Notes (sofortiger Reload eines Nicht-Klick-Tabs durch `vite-plugin-pwa`), der projektweite Primäraktions-Kontrast (3,56) und der globale Loader.
+
+### Begründung
+
+Ein technisch korrekter Zustand, der eine wirkungslose Handlung anbietet, ist für die Mitarbeiter eine Falle: sie laden neu, sehen wieder „verfügbar", laden wieder — und lernen, dass Nora „nicht will". Der einzige ehrliche Ausweg bei einem Worker, der wirklich noch wartet, ist, in Ruhe weiterzuarbeiten. Visuell braucht die Fläche keinen größeren Orb und keine zweite Zeile, um ernst genommen zu werden — sie braucht einen Zustand, den man auf einen Blick liest. Ein Bogen, der läuft; ein Ring, der geschlossen ist; ein Orb, der still wird. Das ist die ganze Sprache.
+
+**Status:** `PWA VISUAL POLISH 2 RC VERIFIED — READY FOR PRODUCT OWNER ACCEPTANCE`. Lokaler RC auf `polish/nora-pwa-update-visual-v2`; nicht gepusht, nicht deployed, keine Product-Owner-Abnahme.
 
 ---
 

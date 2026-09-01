@@ -1,4 +1,7 @@
-import type { ChoreographyPhase } from "./useUpdateChoreography";
+import type {
+  ChoreographyPhase,
+  ChoreographyPresentation,
+} from "./useUpdateChoreography";
 
 /**
  * Der Nora Update Orb — Mittelpunkt des Systemereignisses (Welle PWA-1C.1).
@@ -34,15 +37,40 @@ import type { ChoreographyPhase } from "./useUpdateChoreography";
  * durchgehend weiter. Dadurch gibt es beim Uebergang in die Update-Szene keinen
  * Zustandsbruch: dieselbe Form waechst, sie wird nicht ausgetauscht.
  *
- * Bei `prefers-reduced-motion: reduce` steht der Orb still (Regeln in
- * `index.css`). Er traegt keine Information, die nur ueber Bewegung entsteht.
+ * **Der Ring (Visual Polish 2).** Um den Orb liegt ein duenner Kreisbogen —
+ * Noras PWA-lokale Lade-Bewegung, bewusst kein rotierender Ladekreis. Zwei
+ * Bogenebenen laufen mit ungleichen Perioden gegenlaeufig um; ueberlagert
+ * ergibt das einen Bogen, der scheinbar laenger und kuerzer wird, statt
+ * eines Punkts, der im Kreis faehrt. Waehrend der Aktualisierung zuegig,
+ * in „Gleich bereit" spuerbar langsamer, bei „Neue Version bereit" ein
+ * ruhig geschlossener Ring — fertig, nichts dreht mehr. Im Fehlerfall gibt
+ * es keinen Ring; der Orb selbst wird gedaempft. Alles ueber `transform`
+ * und `opacity`, Steuerung ausschliesslich ueber `data-presentation`
+ * (CSS in `index.css`).
+ *
+ * Bei `prefers-reduced-motion: reduce` steht der Orb still und der Bogen
+ * wird zum ruhigen Ring (Regeln in `index.css`). Er traegt keine
+ * Information, die nur ueber Bewegung entsteht.
  */
 export const NoraUpdateOrb = ({
   phase = "idle",
+  presentation = "available",
 }: {
   phase?: ChoreographyPhase;
+  presentation?: ChoreographyPresentation;
 }) => (
-  <span className="nora-orb" data-phase={phase} aria-hidden="true">
+  <span
+    className="nora-orb"
+    data-phase={phase}
+    data-presentation={presentation}
+    aria-hidden="true"
+  >
+    {/* The ring sits outside the field so the aura's phase-driven spread
+        never scales it: a ring that grows with the aura reads as part of the
+        glow; one that keeps its radius reads as an instrument. */}
+    <span className="nora-orb-ring nora-orb-ring-a" />
+    <span className="nora-orb-ring nora-orb-ring-b" />
+    <span className="nora-orb-ring nora-orb-ring-full" />
     {/* Separate wrapper on purpose: it carries the phase-driven spread, the
         two gradients inside carry their own breathing. An animation always
         beats a transition on the same property, so combining the two on one

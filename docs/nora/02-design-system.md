@@ -531,8 +531,8 @@ Der frühere Sammelzustand „Recovery" („Aktualisierung dauert länger als er
 |---|---|---|---|---|
 | `available` | Update entdeckt, Worker wartet, Dokument kontrolliert | Neue Nora-Version verfügbar | Offene Eingaben vor dem Aktualisieren kurz speichern. | Später · **Jetzt aktualisieren** |
 | `applying` | Choreografie läuft bzw. Anfrage gesendet; nach Übernahme/Reload-Befund bis zum Reload | Nora wird aktualisiert (ab `sustaining`) | — (drei Punkte) | keine |
-| `slow` | Watchdog (5 s nach Commit) findet den Worker weiterhin wartend; ein stiller zweiter Versuch läuft | Gleich bereit … | Nora bereitet die neue Version noch kurz vor. — nach der zweiten Frist: Falls es nicht weitergeht, hilft ein kurzes Neuladen. | keine; nach der zweiten Frist Nora neu laden (Ghost) |
-| `reloadRequired` | Neue Version aktiv, dieses Dokument braucht nur einen Reload (Invariante in `pwaUpdateStore.ts`) | Neue Version bereit | Offene Eingaben vor dem Aktualisieren kurz speichern. | Später · **Nora neu laden** |
+| `slow` | Watchdog (5 s nach Commit) findet den Worker weiterhin wartend; ein stiller zweiter Versuch läuft | Gleich bereit … | Nora bereitet die neue Version noch kurz vor. | keine — nach der zweiten Frist: Weiterarbeiten (leise, verschiebt den Hinweis) |
+| `reloadRequired` | Neue Version aktiv, dieses Dokument braucht nur einen Reload (Invariante in `pwaUpdateStore.ts`) | Neue Version bereit | Offene Eingaben vor dem Neuladen kurz speichern. | Später · **Nora neu laden** |
 | `failed` | Positiver Fehlerbeweis: die Aktivierungsanfrage wurde abgelehnt | Aktualisierung gerade nicht möglich | Sie können normal weiterarbeiten. | Weiterarbeiten |
 
 Regeln:
@@ -545,3 +545,65 @@ Regeln:
 - **Reduced Motion** unverändert: Ebenen stehen still, Faltungen werden zu Fades, die Punkte behalten nur ihren Deckkraftzyklus.
 
 Die Messwerte zur 5-Sekunden-Frist (2–34 ms Übernahme, 14 ms im V2-Repro) und die Begründung des Nora-eigenen Reloads stehen im Decision Log („2026-09-01 – PWA Update State Contract V2").
+
+### Visual Polish 2 (2026-09-01): Komposition, Ring, ruhiger Slow-Zustand
+
+Der State Contract V2 ist technisch abgenommen und eingefroren; diese Welle ändert **nur die Präsentation** (`NoraUpdateEvent.tsx`, `NoraUpdateOrb.tsx`, PWA-CSS, `crm.pwa.*`). `pwaUpdateStore.ts`, `pwaRegistration.ts`, `usePwaUpdate.ts` und `useUpdateChoreography.ts` sind byteweise unverändert.
+
+**Was sich sichtbar geändert hat:**
+
+- **Fläche:** 30 rem statt 34, flaches Material statt Zweistopp-Lift, Radius 2 rem, Padding 2,75/2,5/2,25 rem. Die Fläche liest sich als ruhige Spalte, nicht mehr als Karte mit Kopfband.
+- **Orb:** 7 rem statt 8,5; in der Update-Szene Skalierung 1,16 statt 1,32. Der Orb schwillt nicht mehr zum Spektakel an — den Zustand trägt der Ring.
+- **Ring (Noras PWA-lokale Lade-Bewegung):** ein dünner Kreisbogen (`--nora-system-ring`, Stärke `max(2px, 2,4 % des Orbs)`) außerhalb des Aura-Felds, als maskierter Conic-Gradient. Zwei Bogenebenen laufen gegenläufig mit Perioden im Verhältnis 1 : 1,618 (`--ring-period` 2,8 s beim Aktualisieren, 5,6 s bei „Gleich bereit"); überlagert wirkt der Bogen länger und kürzer, statt dass ein Punkt im Kreis fährt. Bei „Neue Version bereit" ein **geschlossener** Ring, der einmal auf den Orb „setzt" (`nora-orb-ring-settle`); im Fehlerfall kein Ring, stattdessen ein gedämpfter, entsättigter Orb (`--orb-dim: 0.72`, `--orb-saturate: 0.5`) mit angehaltenen Ebenen. Nur `transform` und `opacity`, kein Repaint pro Frame. Kein rotierender Ladekreis; Noras globale Loader bleiben unberührt (eigene Welle „Nora Loading Motion System").
+- **Typografie:** Titel 1,375 rem / -0,015 em / `text-wrap: balance`, eine Nebenzeile in `--muted-foreground` mit 22 rem Zeilenlänge. Kein Absatz, keine Box.
+- **Aktionen:** eine Reihe, eine Primäraktion mit markengetöntem Schatten (`.nora-system-event-action.nora-primary-action`), die leise Aktion (`.nora-system-event-action-quiet`) ist reiner Text in `--muted-foreground` und wird erst bei Hover/Fokus zur Fläche. Fokusring auf jeder Aktion identisch zum Panelring (`--nora-brand-ring`, 3 px, Offset 2 px).
+- **Slow / verlängertes Warten (UX-1 aus dem Final Review):** kein „Nora neu laden" und kein Reparaturtipp mehr. Der Zwei-Build-Beweis (Build W mit stummem SKIP_WAITING-Handler) hat gezeigt: ein Reload lädt bei weiterhin wartendem Worker **denselben** Build unter **demselben** Controller und bringt den Benutzer sofort wieder zu „Neue Nora-Version verfügbar". Nach der zweiten Frist erscheint deshalb nur ein leises „Weiterarbeiten" — es nimmt denselben sicheren Pfad wie „Später" (`reset()` der Choreografie plus `dismissForNow()`), sendet nichts, lässt den wartenden Worker unangetastet; eine spätere Übernahme (anderer Tab) hebt die Verschiebung auf und zeigt „Neue Version bereit".
+- **Reload-Zeile:** „Offene Eingaben vor dem Neuladen kurz speichern." — dieselbe Handlung, das richtige Verb.
+
+**Zustandsbilder (was der Orb tut):**
+
+| Zustand | Orb | Ring | Punkte |
+|---|---|---|---|
+| `available` | ruhig lebend, Aura 0,8 | — | — |
+| `applying` | wächst leicht (1,16), Aura 1 | Bogen, 2,8 s | ja |
+| `slow` | wie `applying` | Bogen, 5,6 s | ja, 3,2 s |
+| `reloadRequired` | Ruhe, Aura 0,9 | geschlossen, 0,6 | — |
+| `failed` | 0,94, gedämpft, entsättigt, Ebenen angehalten | — | — |
+
+### Reduced Motion
+
+Bei `prefers-reduced-motion: reduce`: alle Orb-Ebenen und der Ring ohne Animation, der Orb behält Skalierung 1 (kein Wachsen), Zustandswechsel laufen über einfache Fades. Der laufende Bogen ist per Definition Bewegung — er wird überall dort, wo er erschiene, durch den **geschlossenen Ruhering** ersetzt (`opacity: max(--ring-arc, --ring-full) · 0,6`); „arbeitet noch" und „bereit" unterscheiden sich dann über Punkte und Copy, der Ring markiert den Orb weiterhin als beschäftigt bzw. fertig. **Zwei Dinge überleben bewusst:** die Achtsekundensequenz selbst (Produktentscheidung, kein Schmuck; sie zu kürzen gäbe Reduced-Motion-Nutzern einen anderen Update-Ablauf) und die drei Punkte auf einer reinen Deckkraft-Keyframe (`nora-system-event-dot-fade`) als einziges verbleibendes Lebenszeichen. Im Dev-Server nachgestellt (Schalter „Reduced Motion" injiziert die echte Media-Regel ohne Bedingung).
+
+### Accessibility
+
+**Sichtbare Fläche und Ansage sind getrennt.** Die Fläche ist `role="group"` mit `aria-labelledby` (genau **ein** `h2` im Baum — der Crossfade nutzt keinen zweiten Titel) und `aria-describedby`, **ohne** Live-Semantik. Die einzige Live-Region ist ein winziger `sr-only`-Announcer, der pro Zustandswechsel genau eine kurze Ansage trägt („Neue Nora-Version verfügbar" → „Nora wird aktualisiert" → ggf. „Gleich bereit …" / „Neue Version bereit" / „Aktualisierung gerade nicht möglich"). Die Identität der Ansage ist eine Sequenznummer als React-Key.
+
+**Fokus.** Kein Fokusdiebstahl, kein Focus-Trap, kein Scrim. Maßgeblich ist der **Fokus-Besitz**: er beginnt mit der vom Benutzer ausgelösten Aktion und endet, sobald der Benutzer den Fokus selbst nach draußen trägt (`focusin`-Beobachter). Nach der Primäraktion wandert der Fokus auf die Fläche (`tabindex="-1"`, `.nora-system-event:focus-visible` — Regel unverändert erhalten), in jedem handlungsfähigen Folgezustand auf dessen Primär- bzw. einzige Aktion („Weiterarbeiten", „Nora neu laden"). Der Rückfall auf `<body>` beim Wegfalten zählt nicht als Aufgabe des Besitzes. Escape wirkt nur bei Fokus im Panel und nur, wenn es etwas zu verwerfen gibt.
+
+**Bei offenem Dialog/Sheet wird gar nichts angezeigt** (`display: none` über dieselbe `body:has([data-slot="dialog-content"][data-state="open"])`-Regel wie in 7B — keine zweite Modal-Zustandsmaschine). Weggefaltete Aktionen sind `visibility: hidden` und `pointer-events: none`, also weder im Tab-Flow noch im Accessibility-Baum.
+
+**Touch-Ziele ≥ 44 px** — mit der projektweiten Falle: `.nora-primary-action` nutzt `@apply`, Tailwind v4 legt die Regel in die `utilities`-Layer, wo ihr `min-h-10` (40 px) jede Layer-Regel schlägt. Gelöst über die eine bewusst **ungelayerte** Regel in `index.css` (`.nora-system-event-action.nora-system-event-action { min-height: var(--nora-touch-min) }`). Layout-Höhe 44 px; während der 520-ms-Eintrittsanimation misst `getBoundingClientRect` kurz 43,3 px (Skalierung 0,985), danach 44. Mobil (412 px) 46 px.
+
+### Kontrast
+
+Titel und Zeilen unverändert auf Noras Standardtokens (Titel `--popover-foreground`, Nebenzeile `--muted-foreground` auf reinem Weiß bzw. `oklch(0.222 0 0)` — beide ≥ 4,5, siehe Messung PWA-1C.1). Die leise Aktion steht in `--muted-foreground` und wird bei Hover/Fokus `--foreground`. **Die Primäraktion bleibt die projektweite Ausnahme:** Weiß auf `--nora-brand` (`#ff3b1f`) = 3,56, unter AA für normalen Text. Bewusst weiterhin **nicht** lokal korrigiert — derselbe Wert wie „Neue Anfrage erfassen" im Header; ein anders eingefärbter Knopf direkt neben dem markenroten Orb löste das globale Problem nicht. Offen als Product-Owner-Entscheidung in `17-known-issues-and-planned-waves.md`. Der Ring ist grafisch (`--nora-system-ring`, 82 % Marke hell / 78 % Marke + Weiß dunkel) und trägt keine Information, die nicht auch Titel und Punkte tragen.
+
+### Mobile
+
+Dieselbe DNA, komprimiert: weiterhin eine zentrierte Spalte mit dem Orb als Mittelpunkt (Orb 5 rem, Padding 1,75/1,5/1,5 rem, Radius 1,5 rem, Titel 1,1875 rem). Die Aktionen stapeln sich über die volle Breite mit der Primäraktion oben (`flex-col-reverse`). Im Dev-Server bei 800 px (Panel 473 px, kein Overflow) und 412 px (Panel 366 px, Knöpfe 314 × 46 px, kein Overflow) nachgemessen. Kurze Viewports: `--orb-size` 6 rem (≤ 800 px Höhe) bzw. 5 rem (≤ 680 px), Titel dort 1,1875 rem.
+
+### Tokens
+
+Themenabhängig als `--nora-system-*` in `:root` und `.dark`: Surface, Surface-Lift, Hairline, Inner-Light, Shadow, Aura, Aura-Alpha, Halo-Alpha, **Ring, Ring-Soft** (neu). Die Warning-Tokens sind seit V2 entfernt. Kompositionsabhängig als lokale Variablen auf `.nora-system-event`: `--event-top`, `--event-pad`, `--event-pad-focus`, `--event-gap`, `--orb-size`, `--orb-scale`, `--orb-aura-spread`, `--orb-aura-opacity`, **`--orb-dim`, `--orb-saturate`, `--ring-arc`, `--ring-full`, `--ring-period`** (neu), `--title-opacity`, `--title-blur`, `--title-shift`. Die Kinder lesen sie nur; Phasen und Zustände sind je ein Selektor.
+
+### Texte
+
+Ausschließlich aus `crm.pwa.*` (de/en/fr, strukturell identisch: `available_title`, `available_hint`, `update_now`, `update_later`, `applying_title`, `slow_title`, `slow_hint`, `slow_action`, `reload_title`, `reload_hint`, `reload_action`, `failed_title`, `failed_hint`, `failed_action`). Keine technischen Begriffe in der Oberfläche — kein „Service Worker", „Cache", „Build", „Deployment", „Chunk", „Reload"; kein „konnte nicht", kein „dauert länger", kein Reparaturtipp.
+
+### Wie man das Ereignis lokal ansieht
+
+Im echten Betrieb erscheint es frühestens nach einem Deployment. Für die Gestaltungsarbeit gibt es das **Dev-Werkzeug** `pwa/devUpdateTrigger.ts` (unten links im Dev-Server, `npm run dev` und `npm run dev:demo`):
+
+`Update anzeigen` · `Wartender Worker: an/aus` · `Dokument kontrolliert: an/aus` · `Übernahme simulieren` · `Ablehnung: an/aus` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Neu laden`
+
+Alle fünf sichtbaren Zustände sind damit herstellbar: **available** (Standard) · **applying / slow / verlängert** („Jetzt aktualisieren" ohne „Übernahme simulieren": Commit nach 8 s, „Gleich bereit" nach 13 s, „Weiterarbeiten" nach 18 s) · **reloadRequired** („Wartender Worker: aus" + „Dokument kontrolliert: aus", dann „Update anzeigen") · **failed** („Ablehnung: an", dann „Jetzt aktualisieren"). Das Werkzeug fasst ausschließlich `pwaUpdateStore` an, übernimmt die Registrierung erst beim Klick und ist reines DOM ohne Eintrag in `index.css`. Production-Freiheit: nur über einen dynamischen Import innerhalb von `if (import.meta.env.DEV)` in `src/main.tsx` **und** `demo/main.tsx`; `dist/` enthält null Treffer für `nora-dev-pwa-panel`.

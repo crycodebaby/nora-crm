@@ -1062,14 +1062,18 @@ export const germanCrmMessages = {
       // Übergangsinszenierung, kein gemessener Vorgang.
       applying_title: "Nora wird aktualisiert",
       // Langsam ist kein Fehler: der Worker wartet noch, Nora fragt still
-      // ein zweites Mal an.
+      // ein zweites Mal an. Bewusst KEIN Reparaturtipp und KEIN Reload-Knopf
+      // (Visual Polish 2): solange ein Worker wirklich wartet, laedt ein
+      // Reload nachweislich denselben alten Build unter demselben Controller.
       slow_title: "Gleich bereit …",
       slow_hint: "Nora bereitet die neue Version noch kurz vor.",
-      slow_prolonged_hint:
-        "Falls es nicht weitergeht, hilft ein kurzes Neuladen.",
+      // Einziger Ausweg nach der zweiten Frist: den Hinweis ruhig verschieben
+      // (derselbe sichere Weg wie „Spaeter"), nicht eine wirkungslose Aktion.
+      slow_action: "Weiterarbeiten",
       // Die neue Version ist bereit oder bereits aktiv — dieses Fenster
       // braucht nur noch einen Reload. Kein Fehler, keine Warnung.
       reload_title: "Neue Version bereit",
+      reload_hint: "Offene Eingaben vor dem Neuladen kurz speichern.",
       reload_action: "Nora neu laden",
       // Nur bei positivem Fehlerbeweis (abgelehnte Aktivierungsanfrage).
       // Nur zusagen, was Nora wirklich garantieren kann.

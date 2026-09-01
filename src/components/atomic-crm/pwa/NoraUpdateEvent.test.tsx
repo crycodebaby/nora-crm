@@ -165,6 +165,26 @@ describe("NoraUpdateEvent", () => {
     await screen.unmount();
   });
 
+  it("zeigt in jedem Zustand denselben Orb mit Ring statt eines Warnsymbols (Visual Polish 2)", async () => {
+    facts.controller = null;
+    const screen = await renderEvent();
+    await announceUpdate();
+
+    const orb = panel()!.querySelector(".nora-orb")!;
+    expect(orb.getAttribute("aria-hidden")).toBe("true");
+    expect(orb.getAttribute("data-presentation")).toBe("available");
+    expect(orb.querySelectorAll(".nora-orb-ring").length).toBe(3);
+    // Kein Warnsymbol, keine Warnbox, kein SVG.
+    expect(panel()!.querySelector("svg")).toBeNull();
+    expect(panel()!.querySelector(".nora-safety-mark")).toBeNull();
+    expect(panel()!.querySelector(".nora-system-event-safety")).toBeNull();
+
+    await flush(() => activateNewWorker({ notify: false }));
+    expect(orb.getAttribute("data-presentation")).toBe("reloadRequired");
+
+    await screen.unmount();
+  });
+
   it("zeigt Titel, eine ruhige Speicherzeile und beide Aktionen — sonst nichts", async () => {
     const screen = await renderEvent();
     await announceUpdate();
@@ -377,16 +397,18 @@ describe("NoraUpdateEvent", () => {
     expect(title()).toBe("Gleich bereit …");
     expect(hint()).toBe("Nora bereitet die neue Version noch kurz vor.");
     expect(testId("nora-pwa-update-dots")).not.toBeNull();
-    // Keine Fehlersprache, keine Aktion — Nora versucht es still erneut.
+    // Keine Fehlersprache, keine Aktion, kein Reparaturtipp — Nora versucht
+    // es still erneut.
     expect(panel()?.textContent).not.toContain("länger als erwartet");
     expect(panel()?.textContent).not.toContain("nicht");
+    expect(panel()?.textContent).not.toContain("Neuladen");
     expect(buttons().length).toBe(0);
     expect(applyCalls).toBe(2);
 
     await screen.unmount();
   });
 
-  it("bietet nach der zweiten Frist ruhig den Reload an — ohne Fehlerbehauptung", async () => {
+  it("bleibt nach der zweiten Frist ruhig — kein Reload-Angebot, kein Reparaturtipp (UX-1)", async () => {
     useSequenceTimers();
     const screen = await renderEvent();
     await announceUpdate();
@@ -398,11 +420,42 @@ describe("NoraUpdateEvent", () => {
     expect(panel()?.dataset.presentation).toBe("slow");
     expect(panel()?.dataset.stall).toBe("prolonged");
     expect(title()).toBe("Gleich bereit …");
-    expect(hint()).toBe(
-      "Falls es nicht weitergeht, hilft ein kurzes Neuladen.",
-    );
-    expect(buttons().map((b) => b.textContent)).toEqual(["Nora neu laden"]);
+    expect(hint()).toBe("Nora bereitet die neue Version noch kurz vor.");
+    // Ein Reload loest einen wirklich wartenden Worker nachweislich nicht
+    // (Zwei-Build-Beweis im Final Review). Deshalb weder Knopf noch Tipp.
+    expect(testId("nora-pwa-update-reload")).toBeNull();
+    expect(panel()?.textContent).not.toContain("Neuladen");
+    expect(panel()?.textContent).not.toContain("neu laden");
+    expect(buttons().map((b) => b.textContent)).toEqual(["Weiterarbeiten"]);
     expect(applyCalls).toBe(2);
+
+    await screen.unmount();
+  });
+
+  it("laesst „Weiterarbeiten“ im verlaengerten Warten den Hinweis verschieben — ohne neue Anfrage", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    await watchdog();
+    await watchdog();
+    expect(panel()?.dataset.stall).toBe("prolonged");
+
+    await click("nora-pwa-update-continue");
+    await expect
+      .element(screen.getByTestId("nora-pwa-update-event"))
+      .not.toBeInTheDocument();
+    // Derselbe sichere Verschiebe-Pfad wie „Spaeter": nichts wurde gesendet,
+    // der wartende Worker bleibt erhalten.
+    expect(applyCalls).toBe(2);
+    expect(facts.waiting).not.toBeNull();
+
+    // Eine spaetere Uebernahme (z. B. aus einem anderen Tab) hebt die
+    // Verschiebung auf: der Reload-Befund wird sichtbar.
+    await flush(() => activateNewWorker({ notify: true }));
+    expect(panel()?.dataset.presentation).toBe("reloadRequired");
+    expect(title()).toBe("Neue Version bereit");
 
     await screen.unmount();
   });
@@ -440,9 +493,7 @@ describe("NoraUpdateEvent", () => {
 
     expect(panel()?.dataset.presentation).toBe("reloadRequired");
     expect(title()).toBe("Neue Version bereit");
-    expect(hint()).toBe(
-      "Offene Eingaben vor dem Aktualisieren kurz speichern.",
-    );
+    expect(hint()).toBe("Offene Eingaben vor dem Neuladen kurz speichern.");
     expect(buttons().map((b) => b.textContent)).toEqual([
       "Später",
       "Nora neu laden",
@@ -556,7 +607,7 @@ describe("NoraUpdateEvent", () => {
     await advance(CHOREOGRAPHY_COMMIT_MS - CHOREOGRAPHY_TIMELINE.sustaining);
     await watchdog();
     await watchdog();
-    expect(document.activeElement).toBe(testId("nora-pwa-update-reload"));
+    expect(document.activeElement).toBe(testId("nora-pwa-update-continue"));
 
     await screen.unmount();
   });
