@@ -1053,6 +1053,8 @@ export const englishCrmMessages = {
       failed_title: "Update not possible right now",
       failed_hint: "You can keep working as usual.",
       failed_action: "Keep working",
+      completed_title: "Update complete",
+      completed_hint: "Nora is ready.",
     },
     notifications: {
       region_label: "Status messages",

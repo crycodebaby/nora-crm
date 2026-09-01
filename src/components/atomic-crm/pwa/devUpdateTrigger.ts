@@ -1,3 +1,4 @@
+import { markUpdateCompleted } from "./pwaUpdateCompletion";
 import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
 
 /**
@@ -20,6 +21,10 @@ import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
  *   reloadRequired   „Wartender Worker: aus" + „Dokument kontrolliert: aus",
  *                    dann „Update anzeigen"
  *   failed           „Ablehnung: an", dann „Jetzt aktualisieren" (nach 8 s)
+ *   completed        auf dem echten Weg: „Jetzt aktualisieren", nach 8 s
+ *                    „Übernahme simulieren" → Nora lädt nach 1,5 s selbst
+ *                    neu und zeigt „Aktualisierung abgeschlossen"; oder
+ *                    direkt „Abschluss anzeigen" (setzt nur das Bit und lädt)
  *
  * **Wie die Production-Freiheit garantiert ist.** Dieses Modul wird in
  * `src/main.tsx` ausschließlich über einen dynamischen Import innerhalb von
@@ -352,6 +357,19 @@ export const mountUpdateDevTrigger = () => {
     document.head.append(style);
     reducedButton.textContent = "♿  Reduced Motion: an";
   });
+
+  const completedButton = addButton("✔  Abschluss anzeigen", () => {
+    // Derselbe Uebergabepunkt wie im echten Betrieb, nur ohne den Weg
+    // dorthin: das Bit steht, das Dokument endet, die naechste Version
+    // bestaetigt genau einmal. Ein zweites „Neu laden" zeigt nichts mehr.
+    markUpdateCompleted();
+    window.location.reload();
+  });
+  completedButton.title =
+    "Setzt das Abschluss-Bit (sessionStorage) und lädt neu — die frische " +
+    "Version zeigt einmal „Aktualisierung abgeschlossen“. Der echte Weg: " +
+    "„Jetzt aktualisieren“, nach 8 s „Übernahme simulieren“, Nora lädt " +
+    "nach 1,5 s selbst neu.";
 
   addButton("↻  Neu laden", () => window.location.reload());
 

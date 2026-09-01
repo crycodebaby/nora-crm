@@ -57,7 +57,14 @@
  * void postMessage). Das Promise traegt KEINE Information ueber Erfolg. Lehnt
  * es doch ab, ist das der einzige positive Fehlerbeweis — und nur dann gilt
  * `failed`. Ein Timeout allein ist nie ein Fehler.
+ *
+ * Einzige Nebenwirkung ausserhalb des Snapshots (2026-09-01): eine
+ * vollzogene Uebernahme hinterlaesst ein Bit im `sessionStorage`, damit die
+ * frisch geladene Version den Abschluss einmal bestaetigen kann
+ * (`pwaUpdateCompletion.ts`). Der State Contract selbst ist unveraendert.
  */
+
+import { markUpdateCompleted } from "./pwaUpdateCompletion";
 
 /** Registrierungsfunktion aus `virtual:pwa-register` (injiziert, s. `pwaRegistration.ts`). */
 export interface RegisterSwLike {
@@ -379,6 +386,14 @@ export const createPwaUpdateStore = (
   const handleControllerChange = () => {
     if (activated) return;
     activated = true;
+    // Die Uebernahme ist der Erfolg — und der Reload folgt ihr unmittelbar
+    // (im kontrollierten Tab laedt der Client aus `virtual:pwa-register`
+    // synchron in seinem eigenen `controllerchange`-Listener neu). Deshalb
+    // hier, vor jedem `emit()`: dieser Listener steht vor dem Workbox-
+    // Listener, das Bit ist also gesetzt, bevor der Reload beginnt. Kein
+    // Zustand dieses Stores — nur die Uebergabe an das naechste Dokument
+    // (siehe `pwaUpdateCompletion.ts`).
+    markUpdateCompleted();
     // Ein neuer Fakt hebt eine fruehere Ablehnung auf: sie galt einem
     // Hinweis, nicht einer vollzogenen Uebernahme.
     dismissedUntil = 0;

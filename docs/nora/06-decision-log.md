@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-01 – PWA Completion Acknowledgement: „Aktualisierung abgeschlossen" nach dem Reload, genau einmal | [Springen](#2026-09-01--pwa-completion-acknowledgement-aktualisierung-abgeschlossen-nach-dem-reload-genau-einmal) |
 | 2026-09-01 – PWA Visual Polish 2: Ring statt Spektakel, kein Reload-Angebot bei wartendem Worker | [Springen](#2026-09-01--pwa-visual-polish-2-ring-statt-spektakel-kein-reload-angebot-bei-wartendem-worker) |
 | 2026-09-01 – PWA Update State Contract V2: Browser-Fakten statt Entdeckungssignal | [Springen](#2026-09-01--pwa-update-state-contract-v2-browser-fakten-statt-entdeckungssignal) |
 | 2026-08-30 – Eine bestätigte Übernahme ist endgültig: `activated` ist monoton (PWA-1C.3) | [Springen](#2026-08-30--eine-bestätigte-übernahme-ist-endgültig-activated-ist-monoton-pwa-1c3) |
@@ -91,6 +92,33 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-09-01 – PWA Completion Acknowledgement: „Aktualisierung abgeschlossen" nach dem Reload, genau einmal
+
+### Kontext
+
+Der Update-Experience fehlte der positive Abschluss: Nach „Jetzt aktualisieren" lief die Choreografie, Nora lud neu — und die neue Version begann wortlos. Der Product Owner wollte einen klaren, freundlichen Success-Moment, **nicht vor dem Reload behauptet, sondern nach dem erfolgreichen Reload der neuen Version bestätigt** („Completion Acknowledgement"). Randbedingungen: State Contract V2 bleibt eingefroren, keine neue Lifecycle-Infrastruktur, keine Vermischung mit Operation-Notifications, kein Success bei gewöhnlichem Reload, keinem nach `failed`, keine Doppelanzeige.
+
+### Entscheidung
+
+- **Ein Bit im `sessionStorage`** (`nora.pwa.updateCompleted`, Modul `pwa/pwaUpdateCompletion.ts`) trägt den Erfolg über den Reload. Tab-gebunden: überlebt genau den Reload, läuft nie in andere Tabs, stirbt mit dem Tab. Gleiche Wahl wie `chunk-reload` in `src/main.tsx`. Kein `localStorage`, kein Query-Parameter, kein Cross-Tab-Messaging, kein neuer Store-Zustand.
+- **Geschrieben nur an Wahrheitspunkten:** (1) `controllerchange` im Store — der einzige belastbare Übernahmebeweis; synchron im Listener, der vor dem Workbox-Listener registriert ist, also *bevor* der Client aus `virtual:pwa-register` im kontrollierten Tab neu lädt. (2) Noras eigener Reload (`reloadPage` in `NoraUpdateEvent.tsx`): der Fallback nach dem Commit und der Klick auf „Nora neu laden" im Zustand `reloadRequired`, den die Browser-Fakten belegt haben. Nie bei `failed`, `slow`, „Später", F5.
+- **Genau einmal:** beim ersten Mount von `NoraUpdateEvent` gelesen, sofort aus dem Speicher gelöscht, im Modulspeicher gemerkt (StrictMode-Doppelaufruf, Layout-Wechsel, Remount nach Login antworten gleich); nach Anzeige quittiert. Ein zweiter Reload findet nichts.
+- **Präsentation:** dieselbe Fläche, derselbe Orb, `data-presentation="completed"` — der Orb wird über die Tokens grün (`--nora-success`), geschlossener Ring, ein dünner Haken, der sich nach dem Ring einzeichnet, Titel in Success-Grün. Titel „Aktualisierung abgeschlossen", Zeile „Nora ist bereit." (en „Update complete / Nora is ready.", fr „Mise à jour terminée / Nora est prête."). Keine Aktion, keine Punkte, kein Fokusdiebstahl; Announcer sagt einen Satz. Auto-Dismiss nach 6 s (`COMPLETION_DISMISS_MS`), 420 ms Ausblenden; Escape bei Fokus im Panel blendet früher aus. Reduced Motion: Haken steht fertig, kein Ausblende-Weg.
+- **Vorrang des Stores:** meldet der Store direkt nach dem Reload etwas (weiteres Update), tritt die Bestätigung ohne Ausblenden zurück und kommt nicht wieder.
+- **Store-Eingriff minimal:** `pwaUpdateStore.ts` erhält genau eine Nebenwirkung (`markUpdateCompleted()` in `handleControllerChange`); Snapshot, Zustände, Invarianten und `useUpdateChoreography.ts` sind unverändert.
+- **Dev-Harness:** neuer Knopf „Abschluss anzeigen" (setzt nur das Bit und lädt neu); der echte Weg „Jetzt aktualisieren → 8 s → Übernahme simulieren → 1,5 s Reload" führt ohne Sonderpfad zur Bestätigung. Weiterhin ausschließlich per `import.meta.env.DEV`.
+- **Bewusst nicht:** Versionsvergleich als zweite Wahrheit (die Browser-Fakten sind die Wahrheit, ein Build-Env-Abgleich brächte eine zweite Quelle mit Ausfallmöglichkeit), TTL auf dem Bit, Anzeige vor dem Reload, Anzeige über den Notification-/Operation-Store.
+
+### Begründung
+
+Ein Erfolg, der vor dem Reload behauptet wird, ist eine Vermutung; einer, der in der neu geladenen Version steht, ist ein Fakt — genau das, was der State Contract V2 überall sonst verlangt. Der `sessionStorage` ist die kleinste Stelle, die genau eine Dokument-Lebensdauer überbrückt. Und Grün am selben Orb, der eben noch rot lief, sagt „fertig" ohne ein einziges neues Element außer dem Haken.
+
+**Randfall, bewusst akzeptiert:** trifft die Übernahme in einem Tab ein, der weder selbst aktualisiert hat noch vom Client neu geladen wird (externes Update, anderer Tab hat ausgelöst), steht dort „Neue Version bereit"; verschiebt der Benutzer und lädt später von Hand neu, erscheint die Bestätigung — zutreffend, denn *dieser* Reload vollendet das Update in diesem Tab.
+
+**Status:** `PWA COMPLETION ACKNOWLEDGEMENT RC — LOCAL VERIFIED`. Lokaler RC auf `feat/nora-pwa-update-success-ack` (Basis `0e505456`, Visual Polish 2); nicht gepusht, nicht deployed, keine Product-Owner-Abnahme.
 
 ---
 

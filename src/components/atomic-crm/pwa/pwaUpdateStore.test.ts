@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
+import { UPDATE_COMPLETED_STORAGE_KEY } from "./pwaUpdateCompletion";
 import {
   createPwaUpdateStore,
   DISMISS_RESHOW_AFTER_MS,
@@ -152,10 +153,12 @@ describe("pwaUpdateStore", () => {
   beforeEach(() => {
     clock = 1_000_000;
     vi.useFakeTimers();
+    sessionStorage.removeItem(UPDATE_COMPLETED_STORAGE_KEY);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    sessionStorage.removeItem(UPDATE_COMPLETED_STORAGE_KEY);
   });
 
   it("meldet idle, solange kein Update entdeckt ist", () => {
@@ -412,6 +415,40 @@ describe("pwaUpdateStore", () => {
     expect(h.store.getSnapshot().reloadRequired).toBe(true);
     expect(h.store.assessActivation()).toBe("activated");
     expect(listener).toHaveBeenCalled();
+    h.store.stop();
+  });
+
+  it("hinterlaesst den Abschluss fuer das naechste Dokument — nur bei vollzogener Uebernahme", async () => {
+    const h = harness();
+    h.handle.needRefresh!();
+    // Weder das Entdecken noch die Anfrage sind ein Erfolg.
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+    h.store.applyUpdate();
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+    // Ein Verschieben auch nicht.
+    h.store.dismissForNow();
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+
+    // Die Uebernahme: synchron im selben Listener-Aufruf, also bevor ein
+    // Client-Reload im naechsten Listener das Dokument beendet.
+    let seenDuringDispatch: string | null = "unset";
+    h.swTarget.target.addEventListener("controllerchange", () => {
+      seenDuringDispatch = sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY);
+    });
+    h.activateNewWorker({ notify: true });
+    expect(seenDuringDispatch).toBe("1");
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBe("1");
+    h.store.stop();
+  });
+
+  it("hinterlaesst bei abgelehnter Anfrage keinen Abschluss", async () => {
+    const h = harness({
+      updateServiceWorker: () => Promise.reject(new Error("refused")),
+    });
+    h.handle.needRefresh!();
+    h.store.applyUpdate();
+    await vi.waitFor(() => expect(h.store.getSnapshot().failed).toBe(true));
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
     h.store.stop();
   });
 

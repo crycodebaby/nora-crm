@@ -5,7 +5,16 @@ import polyglotI18nProvider from "ra-i18n-polyglot";
 
 import { germanCrmMessages } from "../providers/commons/germanCrmMessages";
 import { englishCrmMessages } from "../providers/commons/englishCrmMessages";
-import { NoraUpdateEvent } from "./NoraUpdateEvent";
+import {
+  COMPLETION_DISMISS_MS,
+  COMPLETION_LEAVE_MS,
+  NoraUpdateEvent,
+} from "./NoraUpdateEvent";
+import {
+  UPDATE_COMPLETED_STORAGE_KEY,
+  markUpdateCompleted,
+  resetUpdateCompletion,
+} from "./pwaUpdateCompletion";
 import { pwaUpdateStore, type RegisterSwLike } from "./pwaUpdateStore";
 import {
   ACTIVATION_WATCHDOG_MS,
@@ -145,6 +154,10 @@ describe("NoraUpdateEvent", () => {
     facts.controller = oldWorker;
     applyCalls = 0;
     rejectApply = false;
+    // Kein Abschluss aus einem frueheren Test: jeder Test beginnt wie ein
+    // gewoehnlich geladenes Dokument.
+    sessionStorage.removeItem(UPDATE_COMPLETED_STORAGE_KEY);
+    resetUpdateCompletion();
     pwaUpdateStore.start(fakeRegisterSW, {
       getController: () => facts.controller,
     });
@@ -153,6 +166,8 @@ describe("NoraUpdateEvent", () => {
   afterEach(() => {
     vi.useRealTimers();
     pwaUpdateStore.reset();
+    sessionStorage.removeItem(UPDATE_COMPLETED_STORAGE_KEY);
+    resetUpdateCompletion();
   });
 
   // --- AVAILABLE ---------------------------------------------------------------
@@ -735,5 +750,170 @@ describe("NoraUpdateEvent", () => {
     expect(title()).toBe("Updating Nora");
 
     await screen.unmount();
+  });
+
+  // --- COMPLETION ACKNOWLEDGEMENT (2026-09-01) ----------------------------------
+  // Der Abschluss lebt nur in der frisch geladenen Version. `markUpdateCompleted()`
+  // plus `resetUpdateCompletion()` spielt den Reload: das vorige Dokument hat
+  // das Bit gesetzt, dieses liest es zum ersten Mal.
+
+  const completeAndReload = () => {
+    markUpdateCompleted();
+    resetUpdateCompletion();
+  };
+  const announcer = () =>
+    testId("nora-pwa-update-announcer")?.textContent ?? "";
+
+  it("bestaetigt nach einem erfolgreichen Update-Reload genau einmal — gruen, ohne Aktion", async () => {
+    useSequenceTimers();
+    completeAndReload();
+    const screen = await renderEvent();
+
+    const node = panel();
+    expect(node, "die Bestaetigung sollte sofort stehen").not.toBeNull();
+    expect(node!.dataset.presentation).toBe("completed");
+    expect(node!.dataset.state).toBe("completed");
+    expect(title()).toBe("Aktualisierung abgeschlossen");
+    expect(hint()).toBe("Nora ist bereit.");
+    // Keine Aktion, keine Punkte, kein Fokusdiebstahl.
+    expect(buttons().length).toBe(0);
+    expect(testId("nora-pwa-update-dots")).toBeNull();
+    expect(node!.contains(document.activeElement)).toBe(false);
+    // Der Orb traegt den Zustand: geschlossener Ring plus Haken — kein
+    // Warnsymbol, keine Warnbox.
+    const orb = node!.querySelector(".nora-orb")!;
+    expect(orb.getAttribute("data-presentation")).toBe("completed");
+    expect(testId("nora-pwa-update-check")).not.toBeNull();
+    expect(orb.querySelectorAll(".nora-orb-ring").length).toBe(3);
+    expect(node!.querySelector(".nora-system-event-safety")).toBeNull();
+    // Angesagt als ein Satz.
+    expect(announcer()).toBe("Aktualisierung abgeschlossen. Nora ist bereit.");
+    // Das Bit ist verbraucht: ein weiterer Reload faende nichts.
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+
+    // Von selbst gehen: erst das Ausblenden, dann weg.
+    await advance(COMPLETION_DISMISS_MS - 1);
+    expect(panel()!.dataset.leaving).toBeUndefined();
+    await advance(1);
+    expect(panel()!.dataset.leaving).toBe("true");
+    await advance(COMPLETION_LEAVE_MS);
+    expect(panel()).toBeNull();
+    expect(announcer()).toBe("");
+
+    // Ein Remount (Layout-Wechsel) zeigt sie nicht erneut.
+    await screen.unmount();
+    const again = await renderEvent();
+    expect(panel()).toBeNull();
+    await again.unmount();
+  });
+
+  it("zeigt nach einem gewoehnlichen Reload keine Bestaetigung", async () => {
+    // Kein Bit, kein Update: genau der F5-Fall.
+    const screen = await renderEvent();
+    expect(panel()).toBeNull();
+    // Auch die Store-Fakten bleiben unberuehrt.
+    expect(pwaUpdateStore.getSnapshot().state).toBe("idle");
+    await screen.unmount();
+  });
+
+  it("zeigt die Bestaetigung unter StrictMode genau einmal", async () => {
+    useSequenceTimers();
+    completeAndReload();
+    const screen = await renderStrict();
+    expect(
+      document.querySelectorAll('[data-testid="nora-pwa-update-event"]').length,
+    ).toBe(1);
+    expect(title()).toBe("Aktualisierung abgeschlossen");
+    await screen.unmount();
+  });
+
+  it("tritt zurueck, sobald der Store etwas zu sagen hat — und kommt nicht wieder", async () => {
+    useSequenceTimers();
+    completeAndReload();
+    const screen = await renderEvent();
+    expect(panel()!.dataset.presentation).toBe("completed");
+
+    // Ein weiteres Update direkt nach dem Reload: die Wahrheit des Stores
+    // gewinnt, ohne Ausblende-Sequenz.
+    await announceUpdate();
+    expect(panel()!.dataset.presentation).toBe("available");
+    expect(title()).toBe("Neue Nora-Version verfügbar");
+    expect(testId("nora-pwa-update-check")).toBeNull();
+
+    // Wird der Hinweis verschoben, kehrt die Bestaetigung nicht zurueck.
+    await click("nora-pwa-update-later");
+    expect(panel()).toBeNull();
+    await screen.unmount();
+  });
+
+  it("laesst sich mit Escape frueher ausblenden, wenn der Fokus im Panel liegt", async () => {
+    useSequenceTimers();
+    completeAndReload();
+    const screen = await renderEvent();
+
+    await flush(() => panel()!.focus());
+    await flush(() =>
+      panel()!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    expect(panel()!.dataset.leaving).toBe("true");
+    await advance(COMPLETION_LEAVE_MS);
+    expect(panel()).toBeNull();
+    await screen.unmount();
+  });
+
+  it("uebersetzt die Bestaetigung (i18n)", async () => {
+    completeAndReload();
+    const screen = await renderEvent("en");
+    expect(title()).toBe("Update complete");
+    expect(hint()).toBe("Nora is ready.");
+    expect(announcer()).toBe("Update complete. Nora is ready.");
+    await screen.unmount();
+  });
+
+  it("hinterlaesst den Abschluss ueber den echten Store, sobald die Uebernahme eintrifft", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+
+    await flush(() => activateNewWorker({ notify: true }));
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBe("1");
+    // Vor dem Reload zeigt die laufende Version weiterhin die Update-Szene,
+    // nie schon den Abschluss: der gehoert dem naechsten Dokument.
+    expect(panel()!.dataset.presentation).toBe("applying");
+    expect(testId("nora-pwa-update-check")).toBeNull();
+
+    // Nicht ueber die Reload-Frist hinaus spulen (echter Browser).
+    await screen.unmount();
+  });
+
+  it("hinterlaesst bei „Gleich bereit“ und bei Ablehnung keinen Abschluss", async () => {
+    useSequenceTimers();
+    const screen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    await watchdog();
+    expect(panel()!.dataset.presentation).toBe("slow");
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+    await screen.unmount();
+
+    pwaUpdateStore.reset();
+    rejectApply = true;
+    pwaUpdateStore.start(fakeRegisterSW, {
+      getController: () => facts.controller,
+    });
+    const failedScreen = await renderEvent();
+    await announceUpdate();
+    await click("nora-pwa-update-apply");
+    await commit();
+    await flush(() => {});
+    expect(panel()!.dataset.presentation).toBe("failed");
+    expect(sessionStorage.getItem(UPDATE_COMPLETED_STORAGE_KEY)).toBeNull();
+    await failedScreen.unmount();
   });
 });

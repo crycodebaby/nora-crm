@@ -1080,6 +1080,12 @@ export const germanCrmMessages = {
       failed_title: "Aktualisierung gerade nicht möglich",
       failed_hint: "Sie können normal weiterarbeiten.",
       failed_action: "Weiterarbeiten",
+      // Abschlussbestätigung (2026-09-01): erscheint genau einmal in der
+      // frisch geladenen Version nach einem erfolgreichen Update — nie vor
+      // dem Reload, nie nach einem gewöhnlichen Neuladen. Zwei ruhige
+      // Zeilen, keine Aktion, blendet sich von selbst aus.
+      completed_title: "Aktualisierung abgeschlossen",
+      completed_hint: "Nora ist bereit.",
     },
     notifications: {
       region_label: "Statusmeldungen",

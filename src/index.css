@@ -153,6 +153,19 @@
     var(--nora-brand) 22%,
     transparent
   );
+  /* Completion acknowledgement (2026-09-01): the one state in which the orb
+     is not brand red. `--nora-success` is the 7B status green; the deep stop
+     replaces `--nora-brand-hover` in the orb body's shaded side so the green
+     orb keeps its volume, the hairline takes the same faint tint the brand
+     hairline has, and the tick is white on the mid green (≥ 4.5:1 measured
+     against oklch(0.52 0.13 150)). */
+  --nora-success-deep: oklch(0.42 0.12 150);
+  --nora-system-hairline-success: color-mix(
+    in oklab,
+    var(--nora-success) 16%,
+    oklch(0.88 0 0)
+  );
+  --nora-system-check: oklch(1 0 0);
   /* Motion. Restrained by design — no bounce, no gamification. */
   --nora-motion-fast: 150ms;
   --nora-motion-base: 220ms;
@@ -294,6 +307,16 @@
     var(--nora-brand) 26%,
     transparent
   );
+  /* Dark success is a light green (oklch 0.76), so the tick must be dark to
+     stay legible on the orb body, and the deep stop sits below the body
+     tone rather than above it. */
+  --nora-success-deep: oklch(0.62 0.14 150);
+  --nora-system-hairline-success: color-mix(
+    in oklab,
+    var(--nora-success) 12%,
+    oklch(1 0 0 / 15%)
+  );
+  --nora-system-check: oklch(0.2 0.03 150);
   --avatar-0: oklch(0.35 0.12 240);
   --avatar-1: oklch(0.38 0.14 340);
   --avatar-2: oklch(0.35 0.11 180);
@@ -1356,6 +1379,15 @@ input[type="time"] {
     opacity: calc(max(var(--ring-arc), var(--ring-full)) * 0.6) !important;
   }
 
+  /* The completion tick does not draw itself in — it is simply there. Its
+     resting state (dashoffset 0) IS the finished drawing, so no keyframe is
+     needed to reach it. The panel still leaves after the same six seconds;
+     without the exit animation it is removed in place. */
+  .nora-orb-check path {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+
   .nora-system-event,
   .nora-system-event-fold,
   .nora-system-event-title,
@@ -1643,6 +1675,77 @@ input[type="time"] {
   .nora-system-event[data-presentation="failed"] .nora-orb-core,
   .nora-system-event[data-presentation="failed"] .nora-orb-core-mass {
     animation-play-state: paused;
+  }
+
+  /* --- "Aktualisierung abgeschlossen" (2026-09-01) ---------------------
+     The one positive closing moment, shown once in the freshly loaded
+     version after a successful update (see `pwaUpdateCompletion.ts`). The
+     same surface, the same orb — but green: the orb layers read
+     `--nora-brand`, the aura and the ring read their system tokens, and all
+     of them are re-pointed at `--nora-success` on this one element. Nothing
+     is recoloured by hand, so light and dark keep their own greens.
+
+     Calm by construction: resting composition, closed ring that settles
+     once, a thin tick that draws itself in after the ring has landed, and
+     the title in the success green. No action row, no dots. Never orange,
+     never a warning glyph — this is the opposite of `failed`. */
+  .nora-system-event[data-presentation="completed"] {
+    --nora-brand: var(--nora-success);
+    --nora-brand-hover: var(--nora-success-deep);
+    --nora-system-aura: var(--nora-success);
+    --nora-system-ring: var(--nora-success);
+    --nora-system-hairline: var(--nora-system-hairline-success);
+    --orb-scale: 1;
+    --orb-aura-spread: 1.06;
+    --orb-aura-opacity: 0.9;
+    --ring-arc: 0;
+    --ring-full: 1;
+    --title-opacity: 1;
+    --title-blur: 0px;
+    --title-shift: 0px;
+    border-color: var(--nora-system-hairline-success);
+  }
+
+  .nora-system-event[data-presentation="completed"] .nora-system-event-title {
+    color: var(--nora-success);
+  }
+
+  /* Firmer than the "ready" ring (0.6): this one is the statement. */
+  .nora-system-event[data-presentation="completed"] .nora-orb-ring-full {
+    opacity: calc(var(--ring-full) * 0.85);
+    animation: nora-orb-ring-settle 1200ms var(--nora-choreo-ease) both;
+  }
+
+  /* The tick. Only mounted in this state (see `NoraUpdateOrb`). Sized to
+     the orb, not to the panel, so the short-viewport rules scale it along.
+     A soft dark shadow keeps the white stroke legible where it crosses the
+     body's highlight. */
+  .nora-orb-check {
+    @apply pointer-events-none absolute;
+    inset: 24%;
+    width: 52%;
+    height: 52%;
+    overflow: visible;
+    filter: drop-shadow(0 1px 1.5px oklch(0.25 0.06 150 / 0.35));
+  }
+
+  .nora-orb-check path {
+    fill: none;
+    stroke: var(--nora-system-check);
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    /* Waits for the ring to land, then draws in one stroke. */
+    animation: nora-orb-check-draw 640ms var(--nora-choreo-ease) 480ms both;
+  }
+
+  /* Leaving: the reverse of the entrance, a touch quicker. Keyed on the
+     attribute the component sets for the last 420 ms before it unmounts. */
+  .nora-system-event[data-leaving="true"] {
+    animation: nora-system-event-out 420ms var(--nora-choreo-ease) both;
+    pointer-events: none;
   }
 
   /* --- Stage ------------------------------------------------------------
@@ -2310,6 +2413,43 @@ input[type="time"] {
   }
   to {
     transform: scale(1);
+  }
+}
+
+/* The completion tick draws itself in one stroke (path normalised to
+   length 1 via `pathLength`). */
+@keyframes nora-orb-check-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The completion panel leaves the way it came: up and away, slightly
+   smaller, fading. */
+@keyframes nora-system-event-out {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-0.5rem) scale(0.985);
+  }
+}
+
+@media (max-width: 767px) {
+  @keyframes nora-system-event-out {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-0.5rem) scale(0.985);
+    }
   }
 }
 

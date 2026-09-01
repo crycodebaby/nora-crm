@@ -569,6 +569,18 @@ Der State Contract V2 ist technisch abgenommen und eingefroren; diese Welle änd
 | `slow` | wie `applying` | Bogen, 5,6 s | ja, 3,2 s |
 | `reloadRequired` | Ruhe, Aura 0,9 | geschlossen, 0,6 | — |
 | `failed` | 0,94, gedämpft, entsättigt, Ebenen angehalten | — | — |
+| `completed` | Ruhe, **grün** (Tokens umgehängt), Aura 0,9 | geschlossen, 0,85, grün, setzt einmal | — (Haken zeichnet sich ein) |
+
+### Abschlussbestätigung „Aktualisierung abgeschlossen" (2026-09-01)
+
+Der sechste sichtbare Zustand — und der einzige, der **nicht aus dem Store** kommt. Er erscheint genau einmal in der **frisch geladenen Version** nach einem erfolgreichen Update (Übergabe per `sessionStorage`-Bit, `pwa/pwaUpdateCompletion.ts`; Regeln im Decision Log „2026-09-01 – PWA Completion Acknowledgement"). Nie vor dem Reload, nie nach einem gewöhnlichen Neuladen, nie nach `failed`.
+
+- **Copy:** Titel „Aktualisierung abgeschlossen", Zeile „Nora ist bereit." (`crm.pwa.completed_title` / `completed_hint`). Announcer sagt beides als einen Satz.
+- **Dieselbe Fläche, derselbe Orb, grün:** `.nora-system-event[data-presentation="completed"]` hängt `--nora-brand`, `--nora-brand-hover`, `--nora-system-aura`, `--nora-system-ring` und die Hairline auf `--nora-success` / `--nora-success-deep` / `--nora-system-hairline-success` um — die Orb-Ebenen lesen ihre Farben aus diesen Variablen, nichts wird von Hand nachgefärbt, Hell und Dunkel behalten ihr eigenes Grün (hell `oklch(0.52 0.13 150)`, dunkel `oklch(0.76 0.15 150)`). Titel in `--nora-success` (hell ≥ 4,5:1 auf Weiß, dunkel ≈ 7:1). Kein Orange, kein Warnsymbol, kein Rot.
+- **Der Haken:** ein SVG-Strich (`.nora-orb-check`, nur in diesem Zustand montiert, `pathLength="1"`), 52 % des Orbs, Farbe `--nora-system-check` (hell Weiß mit weichem dunklem Schatten, dunkel `oklch(0.2 0.03 150)`). Zeichnet sich 480 ms nach dem Erscheinen in 640 ms ein (`nora-orb-check-draw`), nachdem der geschlossene Ring gesetzt hat (`nora-orb-ring-settle`, 1,2 s). Der ruhige Ring ist fester als bei „Neue Version bereit" (0,85 statt 0,6): er ist die Aussage.
+- **Keine Aktion, keine Punkte, kein Fokus.** Nichts zu entscheiden. Auto-Dismiss nach 6 s (`COMPLETION_DISMISS_MS`), Ausblenden 420 ms über `data-leaving="true"` (`nora-system-event-out`, umgekehrter Eintritt). Escape bei Fokus im Panel blendet früher aus.
+- **Vorrang des Stores:** meldet der Store etwas (weiteres Update), tritt die Bestätigung ohne Ausblenden zurück und kommt nicht wieder.
+- **Reduced Motion:** Haken steht fertig (`stroke-dashoffset: 0`), Ring ohne Setz-Bewegung, kein Ausblende-Weg — die Fläche wird nach denselben 6,4 s an Ort und Stelle entfernt.
 
 ### Reduced Motion
 
@@ -598,12 +610,12 @@ Themenabhängig als `--nora-system-*` in `:root` und `.dark`: Surface, Surface-L
 
 ### Texte
 
-Ausschließlich aus `crm.pwa.*` (de/en/fr, strukturell identisch: `available_title`, `available_hint`, `update_now`, `update_later`, `applying_title`, `slow_title`, `slow_hint`, `slow_action`, `reload_title`, `reload_hint`, `reload_action`, `failed_title`, `failed_hint`, `failed_action`). Keine technischen Begriffe in der Oberfläche — kein „Service Worker", „Cache", „Build", „Deployment", „Chunk", „Reload"; kein „konnte nicht", kein „dauert länger", kein Reparaturtipp.
+Ausschließlich aus `crm.pwa.*` (de/en/fr, strukturell identisch: `available_title`, `available_hint`, `update_now`, `update_later`, `applying_title`, `slow_title`, `slow_hint`, `slow_action`, `reload_title`, `reload_hint`, `reload_action`, `failed_title`, `failed_hint`, `failed_action`, `completed_title`, `completed_hint`). Keine technischen Begriffe in der Oberfläche — kein „Service Worker", „Cache", „Build", „Deployment", „Chunk", „Reload"; kein „konnte nicht", kein „dauert länger", kein Reparaturtipp.
 
 ### Wie man das Ereignis lokal ansieht
 
 Im echten Betrieb erscheint es frühestens nach einem Deployment. Für die Gestaltungsarbeit gibt es das **Dev-Werkzeug** `pwa/devUpdateTrigger.ts` (unten links im Dev-Server, `npm run dev` und `npm run dev:demo`):
 
-`Update anzeigen` · `Wartender Worker: an/aus` · `Dokument kontrolliert: an/aus` · `Übernahme simulieren` · `Ablehnung: an/aus` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Neu laden`
+`Update anzeigen` · `Wartender Worker: an/aus` · `Dokument kontrolliert: an/aus` · `Übernahme simulieren` · `Ablehnung: an/aus` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Abschluss anzeigen` · `Neu laden`
 
-Alle fünf sichtbaren Zustände sind damit herstellbar: **available** (Standard) · **applying / slow / verlängert** („Jetzt aktualisieren" ohne „Übernahme simulieren": Commit nach 8 s, „Gleich bereit" nach 13 s, „Weiterarbeiten" nach 18 s) · **reloadRequired** („Wartender Worker: aus" + „Dokument kontrolliert: aus", dann „Update anzeigen") · **failed** („Ablehnung: an", dann „Jetzt aktualisieren"). Das Werkzeug fasst ausschließlich `pwaUpdateStore` an, übernimmt die Registrierung erst beim Klick und ist reines DOM ohne Eintrag in `index.css`. Production-Freiheit: nur über einen dynamischen Import innerhalb von `if (import.meta.env.DEV)` in `src/main.tsx` **und** `demo/main.tsx`; `dist/` enthält null Treffer für `nora-dev-pwa-panel`.
+Alle sechs sichtbaren Zustände sind damit herstellbar: **available** (Standard) · **applying / slow / verlängert** („Jetzt aktualisieren" ohne „Übernahme simulieren": Commit nach 8 s, „Gleich bereit" nach 13 s, „Weiterarbeiten" nach 18 s) · **reloadRequired** („Wartender Worker: aus" + „Dokument kontrolliert: aus", dann „Update anzeigen") · **failed** („Ablehnung: an", dann „Jetzt aktualisieren") · **completed** auf dem echten Weg („Jetzt aktualisieren", nach 8 s „Übernahme simulieren" — Nora lädt nach 1,5 s selbst neu und die frische Seite bestätigt) oder direkt über „Abschluss anzeigen" (setzt nur das Bit und lädt neu; ein zweites „Neu laden" zeigt nichts mehr — der Beweis, dass ein gewöhnlicher Reload keine Bestätigung erzeugt). Das Werkzeug fasst ausschließlich `pwaUpdateStore` an, übernimmt die Registrierung erst beim Klick und ist reines DOM ohne Eintrag in `index.css`. Production-Freiheit: nur über einen dynamischen Import innerhalb von `if (import.meta.env.DEV)` in `src/main.tsx` **und** `demo/main.tsx`; `dist/` enthält null Treffer für `nora-dev-pwa-panel`.

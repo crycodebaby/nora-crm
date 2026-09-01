@@ -1069,6 +1069,8 @@ export const frenchCrmMessages = {
       failed_title: "Mise à jour impossible pour le moment",
       failed_hint: "Vous pouvez continuer à travailler normalement.",
       failed_action: "Continuer",
+      completed_title: "Mise à jour terminée",
+      completed_hint: "Nora est prête.",
     },
     notifications: {
       region_label: "Messages d'état",

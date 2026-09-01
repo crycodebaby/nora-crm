@@ -51,13 +51,23 @@ import type {
  * Bei `prefers-reduced-motion: reduce` steht der Orb still und der Bogen
  * wird zum ruhigen Ring (Regeln in `index.css`). Er traegt keine
  * Information, die nur ueber Bewegung entsteht.
+ *
+ * **Abschluss (2026-09-01).** Nach einem erfolgreichen Update, in der frisch
+ * geladenen Version, wird der Orb einmal gruen: Aura, Ebenen und der
+ * geschlossene Ring nehmen `--nora-success` an, und ein duenner Haken
+ * zeichnet sich in den Orb — das einzige zusaetzliche Element, nur in diesem
+ * Zustand montiert. Reduced Motion: der Haken steht fertig da.
  */
+
+/** Was der Orb zeigen kann: die fuenf Praesentationen plus der Abschluss. */
+export type OrbPresentation = ChoreographyPresentation | "completed";
+
 export const NoraUpdateOrb = ({
   phase = "idle",
   presentation = "available",
 }: {
   phase?: ChoreographyPhase;
-  presentation?: ChoreographyPresentation;
+  presentation?: OrbPresentation;
 }) => (
   <span
     className="nora-orb"
@@ -86,5 +96,17 @@ export const NoraUpdateOrb = ({
     <span className="nora-orb-core">
       <span className="nora-orb-core-mass" />
     </span>
+    {presentation === "completed" ? (
+      /* `pathLength="1"` normalises the stroke so the draw-in keyframe can
+         run from dashoffset 1 to 0 regardless of the path's real length. */
+      <svg
+        className="nora-orb-check"
+        viewBox="0 0 24 24"
+        focusable="false"
+        data-testid="nora-pwa-update-check"
+      >
+        <path d="M6.75 12.6l3.4 3.4 7.1-7.4" pathLength={1} />
+      </svg>
+    ) : null}
   </span>
 );
