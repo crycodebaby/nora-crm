@@ -220,6 +220,15 @@ grant all on table public.saved_text_snippets to anon;
 grant all on table public.saved_text_snippets to authenticated;
 grant all on table public.saved_text_snippets to service_role;
 
+-- Security Hardening Wave 0: audit_events is append-only, immutable history.
+-- Revoke first, then grant. Without the revoke, the public-schema default table
+-- privileges below leak TRUNCATE/REFERENCES/TRIGGER onto anon/authenticated at
+-- CREATE TABLE time. TRUNCATE is fatal here: it bypasses RLS *and* the
+-- prevent_audit_mutation row triggers, so neither guard can stop it.
+-- See migration 20260904174013_nora_audit_events_truncate_hardening.
+revoke all on table public.audit_events from public;
+revoke all on table public.audit_events from anon;
+revoke all on table public.audit_events from authenticated;
 grant select on table public.audit_events to authenticated;
 grant insert on table public.audit_events to nora_audit_writer;
 grant all on table public.audit_events to service_role;
