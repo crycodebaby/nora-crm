@@ -178,3 +178,7 @@ verify_jwt = false
 verify_jwt = false
 [functions.calendar-sync-manual]
 verify_jwt = false
+[functions.brevo-email-events]
+# The mail provider authenticates with a dedicated bearer token (BREVO_WEBHOOK_TOKEN),
+# not with a Nora user JWT — there is no user behind a delivery event.
+verify_jwt = false

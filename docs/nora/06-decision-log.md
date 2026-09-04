@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-04 – Employee Access V1C-A: Zustellbeobachtung ist Best-Effort-Korrelation, kein Öffnungs-Tracking | [Springen](#2026-09-04--employee-access-v1c-a-zustellbeobachtung-ist-best-effort-korrelation-kein-öffnungs-tracking) |
 | 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract | [Springen](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) |
 | 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert | [Springen](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) |
 | 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt | [Springen](#2026-09-01--customer-create-speed--clarity-land-ausgeblendet-bundesland-nrw-weitere-angaben-eingeklappt) |
@@ -98,6 +99,81 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 ---
 
+## 2026-09-04 – Employee Access V1C-A: Zustellbeobachtung ist Best-Effort-Korrelation, kein Öffnungs-Tracking
+
+**Kontext.** Nach V1A weiß Nora über eine Zugangs-E-Mail nur, dass der
+Sendevorgang angenommen wurde. Ob die Einladung beim Empfänger ankam, ist
+unbekannt — eine falsch geschriebene Adresse oder ein Hard Bounce sieht für
+einen Administrator exakt aus wie ein Erfolg.
+
+**Entscheidung 1 — Absender und Transport.** Kanonischer Absender ist
+`Nora <zugang@nora.ergart.de>` über Brevo als Supabase-Auth-SMTP-Transport. Die
+Auth-Semantik von Einladung und Passwort-Link bleibt unangetastet; es wird
+**kein** eigenes Authentifizierungs-Mailsystem gebaut.
+
+**Entscheidung 2 — Korrelation ist `BEST_EFFORT`, und das steht in den Daten.**
+GoTrue versendet über SMTP, erlaubt keine eigenen SMTP-Header
+(`X-Mailin-custom`) und gibt dem Aufrufer keine Provider-Message-ID zurück. Es
+existiert damit **kein von Nora kontrollierter Korrelationswert in der
+Nachricht**. Ein Provider-Ereignis wird über die Empfängeradresse einer
+`sales`-Zeile zugeordnet: das identifiziert die Person, aber nicht den einzelnen
+Sendeversuch. Jede gespeicherte Zeile trägt `correlation_confidence`, statt eine
+Heuristik später als Beweis zu lesen. Die UI darf „Zustellung" sagen und nicht
+„diese Einladung wurde zugestellt".
+
+Deterministisch wäre es nur über den Supabase **Send Email Hook** (Supabase
+erzeugt den Link, Nora versendet selbst über die Brevo-API mit eigener
+Korrelations-ID). Das ersetzt den Auth-Mailversand und ist eine **eigene
+Architekturentscheidung** — in dieser Welle bewusst nicht umgesetzt.
+
+**Entscheidung 3 — kein Öffnungs- und Klick-Tracking.** `opened`,
+`uniqueOpened`, `click` und Proxy-Opens werden nicht abonniert und **können**
+nicht gespeichert werden: der Endpunkt verwirft sie, und ein CHECK auf
+`event_type` lässt sie gar nicht erst in die Tabelle. V1C-A ist
+Betriebsbeobachtung, keine Mitarbeiterüberwachung. Eine spätere Aufnahme muss
+eine bewusste Änderung an genau diesen beiden Stellen sein.
+
+**Entscheidung 4 — providerneutraler Vertrag.** Nora liest ausschließlich
+`EMAIL_ACCEPTED` / `EMAIL_DELIVERED` / `EMAIL_DEFERRED` / `EMAIL_SOFT_BOUNCED` /
+`EMAIL_HARD_BOUNCED` / `EMAIL_BLOCKED` / `EMAIL_INVALID` / `EMAIL_SPAM_REPORTED`
+und daraus abgeleitet die Produktausgänge `accepted` / `delayed` / `delivered` /
+`undeliverable` / `spam_reported`. `hardBounce`, `softBounce`, „Brevo" und
+`message-id` erreichen die UI nie.
+
+**Entscheidung 5 — Produktwahrheit bleibt getrennt.** „Nora hat angefordert" ≠
+„Provider hat angenommen" ≠ „zugestellt". „Zugestellt" heißt: das empfangende
+Mailsystem hat angenommen. Es beweist nicht Lesen, Klicken oder abgeschlossenes
+Onboarding. Der Zugangsstatus kommt weiterhin ausschließlich aus V1A.
+
+**Entscheidung 6 — Reihenfolge und Duplikate.** Ereignisse dürfen doppelt und in
+beliebiger Reihenfolge eintreffen. Duplikate kollidieren auf einem `dedupe_key`
+(`on conflict do nothing`); der Produktausgang wird aus dem **Provider-Zeitstempel**
+abgeleitet, nicht aus der Ankunftsreihenfolge, mit Schweregrad-Rang nur als
+Gleichstandsregel. Ein Soft Bounce mit erfolgreichem Retry liest sich damit
+korrekt als „zugestellt".
+
+**Entscheidung 7 — Webhook-Authentifizierung.** Dedizierter Bearer-Token
+`BREVO_WEBHOOK_TOKEN` (Supabase Edge Function Secret), konstantzeitiger
+Vergleich, kein unauthentifizierter Endpunkt. Kein Nora-Benutzer-JWT — hinter
+einem Zustellereignis steht kein Benutzer. Der Brevo-API-Key wird **nicht** als
+Webhook-Authentifizierung wiederverwendet; er wird für den reinen Empfang gar
+nicht benötigt.
+
+**Speicherung.** `public.email_delivery_events`, append-only (kein `UPDATE`-,
+kein `DELETE`-Grant für irgendeine Rolle), RLS mit Admin-Leserecht, weiche
+`employee_sale_id` ohne Fremdschlüssel (Muster wie `operation_errors`). Keine
+Inhalte, keine Betreffzeilen, keine Links, keine Token. Schreibpfad
+ausschließlich über `public.ingest_email_delivery_event()` (SECURITY DEFINER,
+`service_role`); Lesemodell für V1C-B über
+`public.employee_email_delivery_status()` (admin-only).
+
+**Migration.** `20260904120000_nora_email_delivery_observability.sql` — additiv,
+**kein** Remote-Apply in diesem Commit.
+
+**Grenze zu V1B.** V1C-A liefert kein `/benutzer`-UI. Neu ist nur der
+Vokabular-Spiegel `sales/emailDeliveryContract.ts` (keine Komponente, kein
+Barrel-Export), damit V1C-B gegen Nora-Begriffe statt gegen Provider-Strings
+baut.
 ## 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract
 
 **Kontext.** V1A hat das Onboarding als reine Zustandsmaschine gebaut und ist

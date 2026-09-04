@@ -126,6 +126,29 @@ Onboarding-Backend (nur `VITE_IS_DEMO=true`, nicht im Production-Bundle).
 Verifikation und Messwerte: Decision Log „2026-09-04 – Employee Onboarding &
 Access V1B"; Gestaltungsregeln: `02-design-system.md` „Mitarbeiter-Onboarding
 & Zugang (Welle V1B)".
+23. **Employee Access V1C-A – E-Mail-Zustellbeobachtung** (2026-09-04):
+Backend-/Infrastruktur-Fundament, damit Nora über eine Zugangs-E-Mail mehr weiß
+als „Sendevorgang angenommen". Neue Edge Function `brevo-email-events`
+(Bearer-Token-Authentifizierung über `BREVO_WEBHOOK_TOKEN`, konstantzeitiger
+Vergleich, `verify_jwt = false`), providerneutraler Ereignisvertrag
+(`EMAIL_ACCEPTED` … `EMAIL_SPAM_REPORTED`), append-only Tabelle
+`public.email_delivery_events` mit Admin-Leserecht, Ingest-RPC
+`public.ingest_email_delivery_event()` und Lesemodell
+`public.employee_email_delivery_status()` für V1C-B. **Kein Öffnungs- und
+Klick-Tracking** — Tracking-Ereignisse werden verworfen und sind per CHECK
+ausgeschlossen. **Korrelation ist `BEST_EFFORT`** (Zuordnung über die
+Empfängeradresse; Supabase Auth versendet über SMTP und erlaubt keinen
+Nora-eigenen Korrelationswert in der Nachricht) — „zugestellt" beweist weder
+Lesen noch abgeschlossenes Onboarding. Migration
+`20260904120000_nora_email_delivery_observability.sql` ist additiv und
+**nicht** angewendet. **Status: `BACKEND RC` — nicht deployt, kein
+Brevo-Webhook angelegt, Production-SMTP unverändert.** Verifiziert: `typecheck`,
+`build`, ESLint sowie die Function-Suite (13 Dateien, 244 Tests) grün. **Nicht
+verifiziert:** die Migration wurde gegen **keine** Postgres-Instanz ausgeführt
+(kein Docker in der Session, siehe `17-known-issues-and-planned-waves.md`), und
+der Produktions-SMTP-Transport konnte nur indirekt beurteilt werden. Details:
+`18-email-delivery-observability.md`, Decision Log „2026-09-04 – Employee Access
+V1C-A".
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 

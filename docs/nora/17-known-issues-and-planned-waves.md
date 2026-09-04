@@ -559,3 +559,63 @@ Vercel-Deploy ausgeliefert. Ohne ein `supabase functions deploy users` gegen
 `nora-crm-prod` zeigt die Admin-Oberfläche „Der Zugangsstatus konnte nicht
 geladen werden." und die beiden Aktionen schlagen fehl. Das ist Teil des
 Release-Ablaufs dieser Welle, nicht ein Fehler im Code.
+
+---
+
+## Employee Access V1C-A – E-Mail-Zustellbeobachtung (offene Punkte)
+
+### V1C-A.1 Migration wurde gegen keine Postgres-Instanz ausgeführt
+
+**Status: OPEN (2026-09-04)**
+
+`20260904120000_nora_email_delivery_observability.sql` ist geschrieben und
+review-fest, aber in der erstellenden Session lief **kein** Apply: Docker war
+nicht verfügbar (`npx supabase db reset --local` daher unmöglich), und ein
+Apply gegen `nora-crm-prod` war ausdrücklich ausgeschlossen. Der im Repo
+vorhandene `pgsql-ast-parser` deckt diesen DDL-/plpgsql-Dialekt nicht ab und
+taugt nicht als Ersatzprüfung.
+
+**Vor dem Release zwingend:** Migration gegen eine echte Postgres-Instanz
+anwenden (lokaler Supabase-Stack oder ein Supabase-Branch), danach
+`ingest_email_delivery_event()` und `employee_email_delivery_status()` real
+aufrufen — inklusive Duplikat-Ingest, unbekanntem Empfänger und einem
+Nicht-Admin-Aufruf des Lesemodells (muss `42501` liefern).
+
+### V1C-A.2 Produktions-SMTP-Transport nur indirekt beurteilt
+
+**Status: OPEN (2026-09-04)**
+
+Die SMTP-Konfiguration von Supabase Auth ist über die verfügbaren
+Management-/MCP-Werkzeuge **nicht lesbar**. Aus den Auth-Logs von
+`nora-crm-prod` (2026-09-04) sind sieben erfolgreiche `/invite`- bzw.
+`/recover`-Anfragen ohne eine einzige `429`-Antwort belegt, davon drei
+innerhalb von zwei Minuten — das liegt weit über dem Limit des
+Supabase-Standardversands und spricht stark für einen aktiven Custom-SMTP.
+**Das ist eine Schlussfolgerung, kein Nachweis.** Welcher Anbieter, welcher
+Absender und welcher Anzeigename tatsächlich konfiguriert sind, ist aus den
+Logs nicht erkennbar.
+
+**Manuell zu prüfen:** Supabase Dashboard → Project Settings → Authentication →
+SMTP Settings (Anbieter, Host, Absender `zugang@nora.ergart.de`, Anzeigename
+`Nora`) sowie Authentication → Email Templates (Betreffzeilen, siehe
+`18-email-delivery-observability.md` Abschnitt 5 und 7).
+
+### V1C-A.3 Edge Function nicht deployt, Brevo-Webhook nicht angelegt
+
+**Status: OPEN (2026-09-04)**
+
+`brevo-email-events` existiert nur im Repository. Weder ist die Function
+deployt, noch ist `BREVO_WEBHOOK_TOKEN` gesetzt, noch existiert ein
+Brevo-Webhook. Bis dahin erreicht Nora kein einziges Zustellereignis. Ablauf
+und Reihenfolge: `18-email-delivery-observability.md` Abschnitt 7.
+
+### V1C-A.4 Deterministische Korrelation bleibt offene Architekturfrage
+
+**Status: PLANNED FOLLOW-UP**
+
+Solange Supabase Auth über SMTP versendet, ist die Zuordnung eines
+Provider-Ereignisses zu einem konkreten Sendeversuch `BEST_EFFORT` (Zuordnung
+über die Empfängeradresse). Deterministisch wäre sie über den Supabase **Send
+Email Hook** mit anschließendem Nora-eigenem Versand über die Brevo-API und
+eigener Korrelations-ID. Das ersetzt den Auth-Mailversand und ist eine eigene
+Architekturentscheidung mit eigenem Risiko — bewusst nicht Teil von V1C-A.
