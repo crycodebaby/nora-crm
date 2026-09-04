@@ -22,8 +22,13 @@ export type OnboardingStep =
   | "blocked"
   | "complete";
 
+/** Why COMPLETE was refused. Never a guess — see the accessBlocked event. */
+export type BlockedReason = "disabled" | "unverified";
+
 export type OnboardingState = {
   step: OnboardingStep;
+  /** Set only in the "blocked" step. */
+  blockedReason?: BlockedReason;
   /** True while a submit is in flight. Buttons disable on this, nothing else. */
   submitting: boolean;
   /** Last calm German error for the current step, or null. */
@@ -35,8 +40,12 @@ export type OnboardingEvent =
   | { type: "sessionResolved" }
   /** Bootstrap finished and there is no usable link/session. */
   | { type: "sessionMissing" }
-  /** The employee exists but their Nora access is disabled. */
-  | { type: "accessBlocked" }
+  /**
+   * Access could not be granted. `reason` keeps the message truthful:
+   * "disabled" is a verified fact about the account, "unverified" means the
+   * check itself failed and we refuse to claim either way.
+   */
+  | { type: "accessBlocked"; reason?: BlockedReason }
   /**
    * Bootstrap found that this browser already completed the password step of
    * an interrupted run. Enters PROFILE directly so the employee is never told
@@ -91,7 +100,12 @@ export function onboardingReducer(
 
     case "accessBlocked":
       // A disabled employee can never reach completion, from any step.
-      return { step: "blocked", submitting: false, error: null };
+      return {
+        step: "blocked",
+        submitting: false,
+        error: null,
+        blockedReason: event.reason ?? "disabled",
+      };
 
     case "passwordAlreadySet":
       // Only from bootstrap — never rewinds or advances an in-progress run.

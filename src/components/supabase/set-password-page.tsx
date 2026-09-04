@@ -33,6 +33,7 @@ import {
 import {
   clearPasswordSetMark,
   hasPasswordBeenSet,
+  linkFingerprint,
   markPasswordSet,
 } from "@/components/atomic-crm/login/passwordSetupMarker";
 import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
@@ -289,7 +290,7 @@ export const SetPasswordPage = () => {
 
         // An interrupted run (reload / closed tab) must not restart at WELCOME
         // and imply the password is still unset — it is not.
-        if (hasPasswordBeenSet(user.id)) {
+        if (hasPasswordBeenSet(user.id, linkFingerprint(access_token))) {
           dispatch({ type: "passwordAlreadySet" });
           return;
         }
@@ -365,16 +366,23 @@ export const SetPasswordPage = () => {
 
         // The password is now genuinely changed. Record that before any
         // further step can fail, so an interruption cannot misreport it.
-        markPasswordSet(user.id);
+        markPasswordSet(user.id, linkFingerprint(access_token));
 
-        const { data: sale } = await client
+        const { data: sale, error: saleError } = await client
           .from("sales")
           .select("id, disabled")
           .eq("user_id", user.id)
           .maybeSingle();
 
+        // The password is set either way. Completion still requires a proven,
+        // non-disabled employee mapping — but a failed CHECK is not evidence
+        // that access is disabled, so the two cases stay distinguishable.
+        if (saleError) {
+          dispatch({ type: "accessBlocked", reason: "unverified" });
+          return;
+        }
         if (!sale || sale.disabled) {
-          dispatch({ type: "accessBlocked" });
+          dispatch({ type: "accessBlocked", reason: "disabled" });
           return;
         }
 
@@ -417,7 +425,7 @@ export const SetPasswordPage = () => {
         if (saleError || !sale) throw saleError ?? new Error("missing sale");
 
         if (sale.disabled) {
-          dispatch({ type: "accessBlocked" });
+          dispatch({ type: "accessBlocked", reason: "disabled" });
           return;
         }
 
@@ -478,11 +486,14 @@ export const SetPasswordPage = () => {
       <EmployeeAccessShell mode="einladung">
         <div className="space-y-4" role="status">
           <h2 className="text-2xl font-semibold tracking-tight">
-            Zugang nicht verfügbar
+            {flow.blockedReason === "unverified"
+              ? "Zugang konnte nicht geprüft werden"
+              : "Zugang nicht verfügbar"}
           </h2>
           <p className="text-sm text-muted-foreground">
-            Für diese Adresse ist derzeit kein Nora-Zugang aktiv. Bitte wenden
-            Sie sich an Ihre Administration.
+            {flow.blockedReason === "unverified"
+              ? "Ihr Passwort wurde gespeichert. Ihr Zugang liess sich gerade nicht prüfen. Bitte melden Sie sich in Kürze mit Ihrem neuen Passwort an oder wenden Sie sich an Ihre Administration."
+              : "Für diese Adresse ist derzeit kein Nora-Zugang aktiv. Bitte wenden Sie sich an Ihre Administration."}
           </p>
           <Button asChild variant="ghost" className="w-full nora-touch-target">
             <Link to="/login?mode=anmelden">Zur Anmeldung</Link>

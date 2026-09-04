@@ -736,8 +736,15 @@ async function resendEmployeeInvitation(
     employeeEmail: sale.email,
   });
 
+  // The invitation is already out. Re-reading Auth here is a convenience, not
+  // a source of truth: loadAuthFacts() answers null on a transient read error,
+  // which would derive "unknown" and report a bogus state for an operation
+  // that actually succeeded. Fall back to the state we verified before the
+  // send — a resend does not change it.
   const nextFacts = await loadAuthFacts(sale.user_id);
-  return accessJson({ data: buildEmployeeAccessRecord(sale, nextFacts) });
+  return accessJson({
+    data: nextFacts ? buildEmployeeAccessRecord(sale, nextFacts) : current,
+  });
 }
 
 /**

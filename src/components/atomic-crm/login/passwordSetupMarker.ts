@@ -24,7 +24,32 @@ export const PASSWORD_MARKER_TTL_MS = 30 * 60 * 1000;
 type PasswordMarker = {
   userId: string;
   at: number;
+  /** Fingerprint of the link this run belongs to. See linkFingerprint(). */
+  link: number;
 };
+
+/**
+ * Lossy, one-way fingerprint of the access token that opened this run.
+ *
+ * It exists to separate a RELOAD of the current run (same token, marker
+ * applies) from a genuinely NEW setup/recovery link for the same employee
+ * (different token, marker must be ignored so the password step is shown).
+ * Without it, an employee who received a fresh link inside the TTL would be
+ * skipped past the password form and could not set a new password.
+ *
+ * djb2 over the token: not reversible to the token and never sent anywhere —
+ * it only ever has to distinguish one token from another.
+ */
+export function linkFingerprint(
+  accessToken: string | null | undefined,
+): number {
+  const value = accessToken ?? "";
+  let hash = 5381;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) + hash + value.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
 
 function readStorage(): Storage | null {
   try {
@@ -38,13 +63,14 @@ function readStorage(): Storage | null {
 
 export function markPasswordSet(
   userId: string,
+  link: number,
   now: number = Date.now(),
 ): void {
   if (!userId) return;
   const storage = readStorage();
   if (!storage) return;
   try {
-    const marker: PasswordMarker = { userId, at: now };
+    const marker: PasswordMarker = { userId, at: now, link };
     storage.setItem(STORAGE_KEY, JSON.stringify(marker));
   } catch {
     // Storage full or unavailable — the flow still works, just without resume.
@@ -67,6 +93,7 @@ export function clearPasswordSetMark(): void {
  */
 export function hasPasswordBeenSet(
   userId: string | null | undefined,
+  link: number,
   now: number = Date.now(),
 ): boolean {
   if (!userId) return false;
@@ -83,10 +110,16 @@ export function hasPasswordBeenSet(
 
   try {
     const marker = JSON.parse(raw) as Partial<PasswordMarker>;
-    if (typeof marker?.userId !== "string" || typeof marker?.at !== "number") {
+    if (
+      typeof marker?.userId !== "string" ||
+      typeof marker?.at !== "number" ||
+      typeof marker?.link !== "number"
+    ) {
       return false;
     }
     if (marker.userId !== userId) return false;
+    // A different link is a new setup intent, even inside the TTL.
+    if (marker.link !== link) return false;
     return now - marker.at < PASSWORD_MARKER_TTL_MS;
   } catch {
     return false;
