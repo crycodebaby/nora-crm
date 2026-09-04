@@ -105,6 +105,20 @@ export async function handleBrevoWebhook(
       // Tracking events and unknown future event names are accepted and
       // dropped. Nothing about them is persisted.
       summary.ignored += 1;
+      if (result.why === "unsupported") {
+        // A provider value we do not model stays diagnostic-only: visible in
+        // the logs so a vocabulary change is noticed, never silently mapped
+        // onto an outcome we cannot justify. Tracking events are not logged —
+        // they are expected and refusing them is the normal case.
+        console.error(
+          JSON.stringify({
+            operation: "brevo_email_events",
+            stage: "classify",
+            error: "unsupported_provider_event",
+            provider_event: result.providerEvent,
+          }),
+        );
+      }
       continue;
     }
 

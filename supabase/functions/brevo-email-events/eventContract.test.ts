@@ -21,20 +21,44 @@ const BASE_EVENT = {
 };
 
 describe("classifyProviderEvent", () => {
-  const supported: Array<[string, NoraEmailEventType]> = [
+  /**
+   * The values Brevo actually puts in the payload's `event` field. These are
+   * snake_case and differ from the camelCase names used when *subscribing* to
+   * the webhook — matching on the subscription spelling alone would drop every
+   * bounce silently, so the payload spelling is what the contract is proven
+   * against.
+   */
+  const payloadSpellings: Array<[string, NoraEmailEventType]> = [
     ["request", "EMAIL_ACCEPTED"],
-    ["sent", "EMAIL_ACCEPTED"],
     ["delivered", "EMAIL_DELIVERED"],
     ["deferred", "EMAIL_DEFERRED"],
-    ["softBounce", "EMAIL_SOFT_BOUNCED"],
-    ["hardBounce", "EMAIL_HARD_BOUNCED"],
+    ["soft_bounce", "EMAIL_SOFT_BOUNCED"],
+    ["hard_bounce", "EMAIL_HARD_BOUNCED"],
     ["blocked", "EMAIL_BLOCKED"],
-    ["invalid", "EMAIL_INVALID"],
+    ["invalid_email", "EMAIL_INVALID"],
     ["spam", "EMAIL_SPAM_REPORTED"],
   ];
 
-  it.each(supported)(
-    "maps %s to the Nora contract",
+  /** The subscription enum, accepted as well so neither vocabulary can break us. */
+  const subscriptionSpellings: Array<[string, NoraEmailEventType]> = [
+    ["sent", "EMAIL_ACCEPTED"],
+    ["softBounce", "EMAIL_SOFT_BOUNCED"],
+    ["hardBounce", "EMAIL_HARD_BOUNCED"],
+    ["invalid", "EMAIL_INVALID"],
+  ];
+
+  it.each(payloadSpellings)(
+    "maps the real payload value %s to the Nora contract",
+    (providerEvent, expected) => {
+      expect(classifyProviderEvent(providerEvent)).toEqual({
+        kind: "supported",
+        eventType: expected,
+      });
+    },
+  );
+
+  it.each(subscriptionSpellings)(
+    "also accepts the subscription spelling %s",
     (providerEvent, expected) => {
       expect(classifyProviderEvent(providerEvent)).toEqual({
         kind: "supported",
@@ -50,7 +74,7 @@ describe("classifyProviderEvent", () => {
     });
   });
 
-  it.each(["opened", "uniqueOpened", "click", "proxy_open"])(
+  it.each(["opened", "unique_opened", "uniqueOpened", "click", "proxy_open"])(
     "classifies the tracking event %s as ignored",
     (trackingEvent) => {
       expect(classifyProviderEvent(trackingEvent)).toEqual({
@@ -85,21 +109,35 @@ describe("normaliseProviderEvent", () => {
       providerMessageId: "<202609041200.123@smtp-relay.example>",
       providerEventId: "987654",
       mailKind: "employee_invite",
-      reason: null,
+      providerReason: null,
     });
   });
 
-  it("keeps a bounce reason but truncates it", () => {
+  it("keeps a bounded provider reason", () => {
     const result = normaliseProviderEvent({
       ...BASE_EVENT,
-      event: "hardBounce",
-      reason: "x".repeat(900),
+      event: "hard_bounce",
+      reason: "550 5.1.1 <employee@example.test>: Recipient address rejected",
     });
 
     expect(result.status).toBe("ok");
     if (result.status !== "ok") return;
     expect(result.event.eventType).toBe("EMAIL_HARD_BOUNCED");
-    expect(result.event.reason).toHaveLength(500);
+    expect(result.event.providerReason).toBe(
+      "550 5.1.1 <employee@example.test>: Recipient address rejected",
+    );
+  });
+
+  it("truncates an oversized provider reason", () => {
+    const result = normaliseProviderEvent({
+      ...BASE_EVENT,
+      event: "soft_bounce",
+      reason: "x".repeat(900),
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.event.providerReason).toHaveLength(500);
   });
 
   it("never carries an email body, link or token into the contract", () => {
@@ -126,7 +164,7 @@ describe("normaliseProviderEvent", () => {
       "providerEvent",
       "providerEventId",
       "providerMessageId",
-      "reason",
+      "providerReason",
       "recipient",
     ]);
   });

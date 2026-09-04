@@ -143,7 +143,10 @@ Lesen noch abgeschlossenes Onboarding. Migration
 `20260904120000_nora_email_delivery_observability.sql` ist additiv und
 **nicht** angewendet. **Status: `BACKEND RC` — nicht deployt, kein
 Brevo-Webhook angelegt, Production-SMTP unverändert.** Verifiziert: `typecheck`,
-`build`, ESLint sowie die Function-Suite (13 Dateien, 244 Tests) grün. **Nicht
+`build`, ESLint sowie die Function-Suite (13 Dateien, 251 Tests) grün — darunter
+repräsentative Brevo-Nutzlasten mit den echten `snake_case`-Ereigniswerten
+(`soft_bounce`, `hard_bounce`, `invalid_email`), die sich von den camelCase-
+Namen des Webhook-Abos unterscheiden. **Nicht
 verifiziert:** die Migration wurde gegen **keine** Postgres-Instanz ausgeführt
 (kein Docker in der Session, siehe `17-known-issues-and-planned-waves.md`), und
 der Produktions-SMTP-Transport konnte nur indirekt beurteilt werden. Details:

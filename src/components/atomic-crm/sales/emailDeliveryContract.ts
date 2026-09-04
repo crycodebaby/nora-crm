@@ -60,7 +60,14 @@ export type EmployeeMailDeliveryStatus = {
  */
 export const EMPLOYEE_MAIL_CORRELATION_CONFIDENCE = "best_effort" as const;
 
-/** German UI wording for each outcome, as agreed for the V1C-B surface. */
+/**
+ * German UI wording for each outcome, as agreed for the V1C-B surface.
+ *
+ * `undeliverable` deliberately collapses hard bounce, blocked and invalid into
+ * one product outcome — the administrator's next step is the same for all
+ * three. A surface that wants to differentiate reads the event type from the
+ * admin read model; it must still never render the provider's own word.
+ */
 export const EMPLOYEE_MAIL_OUTCOME_LABELS: Record<
   EmployeeMailDeliveryOutcome,
   string
@@ -71,6 +78,34 @@ export const EMPLOYEE_MAIL_OUTCOME_LABELS: Record<
   undeliverable: "E-Mail konnte nicht zugestellt werden",
   spam_reported: "Als Spam markiert",
 };
+
+/**
+ * What an administrator should DO about an outcome.
+ *
+ * Nora never acts on these by itself: it does not correct addresses, does not
+ * create accounts, and does not resend mail on a schedule. Retrying delivery is
+ * the provider's job and its behaviour stays authoritative; a resend from Nora
+ * only ever happens because an administrator asked for one.
+ */
+export const EMPLOYEE_MAIL_OUTCOME_ACTIONS: Record<
+  EmployeeMailDeliveryOutcome,
+  string | null
+> = {
+  accepted: null,
+  delayed: "Zustellung verzögert",
+  delivered: null,
+  undeliverable: "E-Mail-Adresse prüfen",
+  spam_reported: "Keine automatische erneute Zustellung",
+};
+
+/**
+ * The provider's own failure text, bounded at 500 characters at ingest.
+ *
+ * It exists so an administrator can tell "Postfach voll" from "Adresse
+ * existiert nicht". It is diagnostic, not product copy: show it as secondary
+ * detail, never in place of the German outcome label.
+ */
+export type EmployeeMailProviderReason = string | null;
 
 /**
  * The single guardrail this file is here to enforce: a delivered mail says

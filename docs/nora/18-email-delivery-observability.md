@@ -53,16 +53,34 @@ sie an (damit der Provider nicht endlos wiederholt) und verwirft sie.
 Der Rest von Nora sieht ausschließlich diese Werte — nie `hardBounce`,
 `softBounce`, „Brevo“ oder eine `message-id`:
 
-| Nora-Ereignis | Provider-Ereignis |
-|---|---|
-| `EMAIL_ACCEPTED` | `request`, `sent` |
-| `EMAIL_DELIVERED` | `delivered` |
-| `EMAIL_DEFERRED` | `deferred` |
-| `EMAIL_SOFT_BOUNCED` | `softBounce` |
-| `EMAIL_HARD_BOUNCED` | `hardBounce` |
-| `EMAIL_BLOCKED` | `blocked` |
-| `EMAIL_INVALID` | `invalid` |
-| `EMAIL_SPAM_REPORTED` | `spam` |
+### 4.1 Zwei Provider-Vokabulare — nicht verwechseln
+
+Brevo verwendet **unterschiedliche Schreibweisen** beim Abonnieren des Webhooks
+und in der tatsächlich gesendeten Nutzlast. Wer nur auf die Abo-Schreibweise
+prüft, verliert **jeden Bounce stillschweigend**.
+
+| Nora-Ereignis | Nutzlast (`event`-Feld) | Webhook-Abo (API-Enum) |
+|---|---|---|
+| `EMAIL_ACCEPTED` | `request` | `request`, `sent` |
+| `EMAIL_DELIVERED` | `delivered` | `delivered` |
+| `EMAIL_DEFERRED` | `deferred` | `deferred` |
+| `EMAIL_SOFT_BOUNCED` | `soft_bounce` | `softBounce` |
+| `EMAIL_HARD_BOUNCED` | `hard_bounce` | `hardBounce` |
+| `EMAIL_BLOCKED` | `blocked` | `blocked` |
+| `EMAIL_INVALID` | `invalid_email` | `invalid` |
+| `EMAIL_SPAM_REPORTED` | `spam` | `spam` |
+
+Die Edge Function akzeptiert **beide** Schreibweisen; die Tests beweisen die
+Zuordnung an repräsentativen Nutzlasten mit den echten `snake_case`-Werten.
+Dasselbe gilt beim Tracking: die Nutzlast sagt `unique_opened`, das Abo-Enum
+`uniqueOpened` — beide werden verworfen.
+
+Unbekannte Provider-Werte bleiben **rein diagnostisch**: sie werden nicht
+gespeichert und nicht auf einen Ausgang abgebildet, sondern mit
+`unsupported_provider_event` und dem rohen Namen protokolliert, damit eine
+Vokabularänderung auffällt statt still zu wirken.
+
+### 4.2 Ausgänge und Folgehandlung
 
 Produktausgang (das, was eine UI zeigt) — `accepted`, `delayed`, `delivered`,
 `undeliverable`, `spam_reported`. Deutsche Beschriftungen liegen in
@@ -72,6 +90,99 @@ Die Ableitung ist **semantisch, nicht ankunftsreihenfolgeabhängig**: das
 späteste Ereignis nach Provider-Zeitstempel gewinnt, bei gleichem Zeitstempel
 entscheidet ein Schweregrad-Rang. Ein Soft Bounce mit anschließendem
 erfolgreichem Retry liest sich damit korrekt als „zugestellt“.
+
+### 4.3 Diagnosetext (`provider_reason`)
+
+Für Ereignisse, zu denen der Provider einen Grund liefert (`deferred`,
+`soft_bounce`, `hard_bounce`), wird dieser als `provider_reason` gespeichert:
+auf 500 Zeichen begrenzt, sonst unverändert. Er unterscheidet „Postfach voll"
+von „Adresse existiert nicht" und ist damit für einen Administrator handlungs-
+relevant. **Vollständige Provider-Nutzlasten werden nicht gespeichert.**
+
+Mögliche spätere UI-Handlung (Beschriftungen in
+`sales/emailDeliveryContract.ts`):
+
+| Ausgang | Handlung |
+|---|---|
+| `delayed` (deferred / soft bounce) | „Zustellung verzögert" |
+| `undeliverable` (hard bounce) | „E-Mail-Adresse prüfen" |
+| `undeliverable` (invalid) | „E-Mail-Adresse ungültig" |
+| `undeliverable` (blocked) | „Zustellung blockiert" |
+| `spam_reported` | „Keine automatische erneute Zustellung" |
+
+`provider_reason` ist Sekundärinformation, nie Ersatz für die deutsche
+Ausgangs-Beschriftung.
+
+**Nora handelt nicht von selbst.** Keine automatische Adresskorrektur, keine
+Kontoanlage, kein automatischer Wiederholungsversand. Das Retry-Verhalten des
+Providers bleibt maßgeblich; ein erneuter Versand aus Nora passiert nur, weil
+ein Administrator ihn auslöst (V1A-Aktionen).
+
+### 4.4 Zeitvertrag
+
+Zwei getrennte Zeitstempel:
+
+| Spalte | Bedeutung |
+|---|---|
+| `event_at` | vom Provider gemeldeter Ereigniszeitpunkt |
+| `received_at` | Zeitpunkt, zu dem Nora den Webhook entgegengenommen und gespeichert hat |
+
+`event_at` wird bevorzugt aus den UTC-Feldern `ts_event` / `ts` / `ts_epoch`
+gelesen (Sekunden vs. Millisekunden werden an der Größenordnung erkannt, nicht
+am Feldnamen). Das lokalisierte `date`-Feld (CET/CEST) ist nur letzter Ausweg.
+Fehlt jeder brauchbare Zeitstempel, gilt die Nutzlast als malformed und wird
+nicht gespeichert.
+
+Eine spätere UI darf „Zugestellt am 04.09.2026 um 14:42" zeigen — aber niemals
+eine Aussage über Lesen oder Öffnen.
+
+### 4.5 Audit-Grenze
+
+`audit_events` und `email_delivery_events` bleiben getrennt:
+
+| Tabelle | Inhalt |
+|---|---|
+| `audit_events` | fachliche/sicherheitsrelevante Nora-Handlung: „Administrator hat Einladung angefordert" (`user.invited`, `user.invitation_resent`, `user.password_setup_requested`) |
+| `email_delivery_events` | Transportereignisse des Providers: `request`, `delivered`, `hard_bounce` … |
+
+Die Edge Function `brevo-email-events` schreibt **kein einziges**
+`audit_events`-Ereignis. Der Audit-Trail wird nicht mit Transportereignissen
+geflutet.
+
+### 4.6 Snapshot- und Löschvertrag
+
+Eine Ereigniszeile trägt nur den minimalen semantischen Kontext:
+`employee_sale_id` (weiche Referenz), `recipient_email_snapshot`, `mail_kind`,
+`provider_message_id`, `event_type`, `event_at`, `received_at`,
+`correlation_confidence`, begrenzter `provider_reason`. **Kein Inhalt, keine
+Auth-URL, kein Token.**
+
+**Kann eine alte `employee_sale_id` auf einen *anderen* Mitarbeiter zeigen?**
+In der Praxis nein: `public.sales.id` ist eine Identity-Spalte, deren Sequenz
+sich nur vorwärts bewegt und durch ein `DELETE` nicht zurückgesetzt wird, und
+kein Nora-Codepfad vergibt eine explizite Id. Strukturell garantiert ist es
+nicht, weil die Spalte `GENERATED BY DEFAULT` ist — eine von Hand gesetzte Id
+wäre möglich. `recipient_email_snapshot` ist die unabhängige Gegenprobe, mit der
+eine solche Fehlzuordnung erkennbar statt unsichtbar wäre. Eine Umstellung auf
+`GENERATED ALWAYS` wäre eine eigene Härtungsentscheidung an einer bestehenden
+Tabelle und ist **nicht** Teil von V1C-A.
+
+Zwei künftige Fälle sind bewusst auseinandergehalten:
+
+**A. Harte Löschung eines Test-/Fake-Benutzers.** Ein späteres *User Lifecycle
+Admin V1* muss alle Zustellereignisse eines Benutzers restlos entfernen können,
+damit eine angeforderte vollständige Test-Benutzer-Löschung keine personen-
+bezogenen Fragmente hinterlässt. Die Append-only-Regel steht dem **nicht** im
+Weg: sie entsteht aus fehlenden `UPDATE`/`DELETE`-Grants für Anwendungsrollen,
+während der Tabelleneigentümer (`postgres`) das Recht behält. Eine privilegierte
+`SECURITY DEFINER`-Purge-Funktion ist damit später möglich. **In V1C-A wird sie
+nicht implementiert.**
+
+**B. Offboarding eines echten Mitarbeiters.** Hier ist nicht vorausgesetzt, dass
+historische Betriebs-/Sicherheitsereignisse gelöscht gehören. Vorbereitet ist
+lediglich, dass Referenz und personenbezogener Snapshot getrennt von der
+nicht-personenbezogenen technischen Historie entfernt werden könnten.
+**Aufbewahrungsfristen werden in dieser Welle nicht entschieden.**
 
 ## 5. Korrelationsfähigkeit: `BEST_EFFORT`
 
@@ -181,8 +292,9 @@ liefert die Mailart dauerhaft `unknown` (siehe Abschnitt 5).
 
 - URL: `https://<projekt-ref>.supabase.co/functions/v1/brevo-email-events`
 - Typ: transactional, Kanal: email
-- Ereignisse: `request`, `delivered`, `deferred`, `softBounce`, `hardBounce`,
-  `blocked`, `invalid`, `spam`
+- Ereignisse (Abo-Enum, camelCase — die Nutzlast kommt in `snake_case`, siehe
+  Abschnitt 4.1): `request`, `delivered`, `deferred`, `softBounce`,
+  `hardBounce`, `blocked`, `invalid`, `spam`
 - **Nicht** abonnieren: `opened`, `uniqueOpened`, `click`, `unsubscribed`
 - Authentifizierung: `auth: { "type": "bearer", "token": <BREVO_WEBHOOK_TOKEN> }`
 

@@ -34,7 +34,7 @@ async function ingest(
       p_provider_message_id: event.providerMessageId,
       p_provider_event_id: event.providerEventId,
       p_mail_kind: event.mailKind,
-      p_reason: event.reason,
+      p_provider_reason: event.providerReason,
     },
   );
 

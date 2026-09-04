@@ -44,11 +44,19 @@ export type NoraMailKind =
 /**
  * Supported provider event names → Nora contract.
  *
- * Brevo emits both "request" and "sent" for the hand-off to the recipient's
- * mail system; both mean the same thing to Nora: the provider accepted the
- * message. That is explicitly NOT "delivered".
+ * IMPORTANT: Brevo uses TWO different vocabularies and they are not
+ * interchangeable. The webhook *subscription* enum is camelCase
+ * (`softBounce`, `hardBounce`, `invalid`, `uniqueOpened`), while the actual
+ * *payload* `event` field is snake_case (`soft_bounce`, `hard_bounce`,
+ * `invalid_email`, `unique_opened`). Subscribing with one and matching on the
+ * other silently drops every bounce. Both spellings are therefore accepted
+ * here, and the payload spellings are the ones exercised by the tests.
+ *
+ * "request" and "sent" both mean the hand-off to the recipient's mail system:
+ * the provider accepted the message. That is explicitly NOT "delivered".
  */
 const PROVIDER_EVENT_MAP: Record<string, NoraEmailEventType> = {
+  // Payload spelling first, subscription spelling second where they differ.
   request: "EMAIL_ACCEPTED",
   sent: "EMAIL_ACCEPTED",
   delivered: "EMAIL_DELIVERED",
@@ -70,8 +78,10 @@ const PROVIDER_EVENT_MAP: Record<string, NoraEmailEventType> = {
  */
 const TRACKING_EVENT_NAMES = new Set([
   "opened",
-  "uniqueopened",
+  // Payload spelling is "unique_opened"; the subscription enum says
+  // "uniqueOpened". Both are refused.
   "unique_opened",
+  "uniqueopened",
   "click",
   "clicked",
   "proxy_open",
@@ -190,7 +200,7 @@ export type NormalisedEmailEvent = {
   providerMessageId: string | null;
   providerEventId: string | null;
   mailKind: NoraMailKind;
-  reason: string | null;
+  providerReason: string | null;
 };
 
 export type NormaliseResult =
@@ -316,7 +326,7 @@ export function normaliseProviderEvent(raw: unknown): NormaliseResult {
 
   const providerMessageId = readString(payload["message-id"]);
   const providerEventId = readString(payload["id"]);
-  const reason = readString(payload["reason"]);
+  const providerReason = readString(payload["reason"]);
 
   return {
     status: "ok",
@@ -328,8 +338,9 @@ export function normaliseProviderEvent(raw: unknown): NormaliseResult {
       providerMessageId,
       providerEventId,
       mailKind: classifyMailKind(payload["subject"]),
-      // Provider-supplied diagnostic text: truncated, never a body, never a link.
-      reason: reason ? reason.slice(0, 500) : null,
+      // Provider-supplied failure text: bounded, so an administrator can act
+      // ("Adresse prüfen") without Nora storing a payload dump.
+      providerReason: providerReason ? providerReason.slice(0, 500) : null,
       dedupeKey: buildDedupeKey({
         providerMessageId,
         providerEventId,

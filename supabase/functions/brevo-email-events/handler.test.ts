@@ -156,32 +156,167 @@ describe("handleBrevoWebhook — event contract", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  const supported: Array<[string, string]> = [
-    ["request", "EMAIL_ACCEPTED"],
-    ["sent", "EMAIL_ACCEPTED"],
-    ["delivered", "EMAIL_DELIVERED"],
-    ["deferred", "EMAIL_DEFERRED"],
-    ["softBounce", "EMAIL_SOFT_BOUNCED"],
-    ["hardBounce", "EMAIL_HARD_BOUNCED"],
-    ["blocked", "EMAIL_BLOCKED"],
-    ["invalid", "EMAIL_INVALID"],
-    ["spam", "EMAIL_SPAM_REPORTED"],
+  /**
+   * Representative payloads in the shape Brevo actually posts, including the
+   * snake_case `event` values (which differ from the camelCase names used when
+   * subscribing to the webhook) and the fields that only appear on failures.
+   */
+  const realPayloads: Array<[string, Record<string, unknown>, string]> = [
+    [
+      "request",
+      {
+        event: "request",
+        email: "employee@example.test",
+        id: 1000,
+        date: "2026-09-04 14:00:00",
+        ts: 1788523200,
+        "message-id": "<202609041200.1@smtp-relay.brevo.com>",
+        ts_event: 1788523200,
+        subject: "Einladung zu Nora",
+        "X-Mailin-custom": "",
+        sending_ip: "1.2.3.4",
+        ts_epoch: 1788523200000,
+        tags: [],
+      },
+      "EMAIL_ACCEPTED",
+    ],
+    [
+      "delivered",
+      {
+        event: "delivered",
+        email: "employee@example.test",
+        id: 1001,
+        ts_event: 1788523230,
+        "message-id": "<202609041200.1@smtp-relay.brevo.com>",
+        subject: "Einladung zu Nora",
+      },
+      "EMAIL_DELIVERED",
+    ],
+    [
+      "deferred",
+      {
+        event: "deferred",
+        email: "employee@example.test",
+        id: 1002,
+        ts_event: 1788523260,
+        "message-id": "<202609041200.1@smtp-relay.brevo.com>",
+        reason: "4.2.1 mailbox temporarily unavailable",
+      },
+      "EMAIL_DEFERRED",
+    ],
+    [
+      "soft_bounce",
+      {
+        event: "soft_bounce",
+        email: "employee@example.test",
+        id: 1003,
+        ts_event: 1788523290,
+        "message-id": "<202609041200.1@smtp-relay.brevo.com>",
+        reason: "452 4.2.2 Mailbox full",
+      },
+      "EMAIL_SOFT_BOUNCED",
+    ],
+    [
+      "hard_bounce",
+      {
+        event: "hard_bounce",
+        email: "employee@example.test",
+        id: 1004,
+        ts_event: 1788523320,
+        "message-id": "<202609041200.2@smtp-relay.brevo.com>",
+        reason: "550 5.1.1 Recipient address rejected: User unknown",
+      },
+      "EMAIL_HARD_BOUNCED",
+    ],
+    [
+      "blocked",
+      {
+        event: "blocked",
+        email: "employee@example.test",
+        id: 1005,
+        ts_event: 1788523350,
+        "message-id": "<202609041200.3@smtp-relay.brevo.com>",
+      },
+      "EMAIL_BLOCKED",
+    ],
+    [
+      "invalid_email",
+      {
+        event: "invalid_email",
+        email: "employee@example.test",
+        id: 1006,
+        ts_event: 1788523380,
+        "message-id": "<202609041200.4@smtp-relay.brevo.com>",
+      },
+      "EMAIL_INVALID",
+    ],
+    [
+      "spam",
+      {
+        event: "spam",
+        email: "employee@example.test",
+        id: 1007,
+        ts_event: 1788523410,
+        "message-id": "<202609041200.5@smtp-relay.brevo.com>",
+      },
+      "EMAIL_SPAM_REPORTED",
+    ],
   ];
 
-  it.each(supported)(
-    "stores %s as %s",
-    async (providerEvent, expectedEventType) => {
-      const response = await handleBrevoWebhook(
-        request({ ...deliveredPayload, event: providerEvent }),
-        { expectedToken: TOKEN, ingest: ingestSpy.ingest },
-      );
+  it.each(realPayloads)(
+    "stores the real %s payload as %s",
+    async (_name, payload, expectedEventType) => {
+      const response = await handleBrevoWebhook(request(payload), {
+        expectedToken: TOKEN,
+        ingest: ingestSpy.ingest,
+      });
 
       expect(response.status).toBe(200);
       expect(ingestSpy.calls.at(-1)?.eventType).toBe(expectedEventType);
     },
   );
 
-  it.each(["opened", "uniqueOpened", "click"])(
+  it("carries the provider failure reason through for actionable events", async () => {
+    await handleBrevoWebhook(
+      request({
+        event: "hard_bounce",
+        email: "employee@example.test",
+        id: 2001,
+        ts_event: 1788523320,
+        "message-id": "<202609041200.9@smtp-relay.brevo.com>",
+        reason: "550 5.1.1 Recipient address rejected: User unknown",
+      }),
+      { expectedToken: TOKEN, ingest: ingestSpy.ingest },
+    );
+
+    expect(ingestSpy.calls[0].providerReason).toBe(
+      "550 5.1.1 Recipient address rejected: User unknown",
+    );
+  });
+
+  it("also accepts the camelCase subscription spellings", async () => {
+    const subscriptionSpellings: Array<[string, string]> = [
+      ["sent", "EMAIL_ACCEPTED"],
+      ["softBounce", "EMAIL_SOFT_BOUNCED"],
+      ["hardBounce", "EMAIL_HARD_BOUNCED"],
+      ["invalid", "EMAIL_INVALID"],
+    ];
+
+    for (const [providerEvent, expectedEventType] of subscriptionSpellings) {
+      const response = await handleBrevoWebhook(
+        request({
+          ...deliveredPayload,
+          event: providerEvent,
+          id: providerEvent,
+        }),
+        { expectedToken: TOKEN, ingest: ingestSpy.ingest },
+      );
+      expect(response.status).toBe(200);
+      expect(ingestSpy.calls.at(-1)?.eventType).toBe(expectedEventType);
+    }
+  });
+
+  it.each(["opened", "unique_opened", "uniqueOpened", "click"])(
     "accepts but never stores the tracking event %s",
     async (trackingEvent) => {
       const response = await handleBrevoWebhook(
