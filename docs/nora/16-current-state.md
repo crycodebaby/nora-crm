@@ -188,6 +188,29 @@ Prettier für die geänderten Dateien, App-Suite (98 Dateien, 886 Tests) und
 Function-Suite (13 Dateien, 259 Tests) grün. Details:
 `18-email-delivery-observability.md` Abschnitt 6a/6b.
 
+25. **User Lifecycle W1 – ein privilegierter Executor** (2026-09-05): jede
+Änderung an `sales.role` / `sales.disabled` (Rolle, Deaktivieren,
+Reaktivieren, Einladung als deaktiviert) läuft ausschließlich über
+`Admin-UI → users Edge Function → public.set_sales_access_by_executor
+(service_role, verifizierter Actor) → nora_private.apply_sales_role_change`.
+Die Legacy-RPC `set_sales_role_by_admin` ist für `authenticated`/`anon` nicht
+mehr ausführbar (nur noch service_role, Release-Fenster, Entfernung W2).
+Serverseitig neu: Selbstschutz (ein Admin kann sich nicht selbst deaktivieren
+oder demotieren, `403 self_access_change_forbidden`), Datenbank-Invariante
+„mindestens ein aktiver Administrator" (`guard_last_active_admin_trigger`,
+`NORA_LAST_ACTIVE_ADMIN_REQUIRED`), Bann-Synchronisation in **jedem** Zweig mit
+Verifikation beider Fakten (`employee_access_sync_incomplete` statt falschem
+Erfolg), Konsistenzfakt `accessConsistency` + `noraDisabled` in `GET /users`
+und eine Reparatur „Zugangsstatus synchronisieren" im `EmployeeAccessPanel`.
+Migration `20260904220000_nora_lifecycle_single_executor.sql`, neue SQL-Suite
+`lifecycle_single_executor_verification.sql`, `users/lifecycle.ts` (+17 Tests).
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`** (Branch
+`security/nora-lifecycle-w1-single-executor`, nicht auf `main`, nicht deployt,
+nicht Production Verified). Der eine in Production inkonsistente Datensatz
+(`sales.disabled = true`, kein Auth-Bann) wird **erst im Release** über den
+neuen Pfad repariert — siehe `17-known-issues-and-planned-waves.md` und
+Decision Log „2026-09-05 – User Lifecycle W1".
+
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
 Vollständige Entscheidung: Decision Log "2026-08-25 – Customer & Contact Workflow Wave".

@@ -337,7 +337,7 @@ Details in `11-google-calendar-rbac.md`:
 
 - **`sales.role`** ist die führende Rollenquelle (`admin` | `office` | `viewer`)
 - **Interne Helper** in Schema `nora_private` — nicht in PostgREST-Schemas (`config.toml`: nur `public`)
-- **Öffentliche RPCs** in `public`: `set_sales_role_by_admin`, `start_checklist_run_from_template`
+- **Öffentliche RPCs** in `public`: `start_checklist_run_from_template` (authenticated); `set_sales_access_by_executor` und die deprecated `set_sales_role_by_admin` sind seit User Lifecycle W1 (2026-09-05) **nur service_role** — der Browser erreicht Rollen-/Zugangsänderungen ausschließlich über die `users` Edge Function
 - **`nora_private.safe_auth_uid()`** nur intern — `auth.uid()` wirft bei malformed JWT-sub; RLS-Helper nutzen safe reader
 - **Capability-Rolle `nora_role_manager`** (NOLOGIN, NOBYPASSRLS) — einziger Owner von `apply_sales_role_change`; kein GUC-Token-Modell (v0.4b.2)
 - **Testrolle `nora_rls_test`** nur lokal via `rbac_rls_setup.sql` — **nie** in Produktionsmigrationen
@@ -377,7 +377,7 @@ Ebenso wurde geprüft: ein gesetzter `search_path = public` (statt `''`) bei `SE
 | `public.sales_directory` | alle aktiven Rollen | `id`, `first_name`, `last_name`, `avatar` — Teamlisten, Betreuer-Auswahl |
 | `public.sales` | Admin: alle Zeilen; sonst nur eigene Zeile | vollständiges Profil inkl. `role`, `email`, `disabled` nur für Admin-Verwaltung / eigenes Profil |
 
-Direkte Data-API-Updates auf `role`, `disabled`, `administrator`, `user_id`, `email` bleiben blockiert (Trigger). Rollenänderung nur über `set_sales_role_by_admin` → `nora_private.apply_sales_role_change` (Owner `nora_role_manager`).
+Direkte Data-API-Updates auf `role`, `disabled`, `administrator`, `user_id`, `email` bleiben blockiert (Trigger). Rollen-/Zugangsänderung nur über die `users` Edge Function → `set_sales_access_by_executor` (service_role, verifizierter Actor, Selbstschutz) → `nora_private.apply_sales_role_change` (Owner `nora_role_manager`). Zusätzliche Invariante seit W1: `guard_last_active_admin_trigger` lässt nie null Zeilen mit `role = 'admin' AND disabled = false` zurück (`NORA_LAST_ACTIVE_ADMIN_REQUIRED`).
 
 Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` — exakt ein Admin unter Parallelität.
 

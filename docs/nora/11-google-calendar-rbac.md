@@ -214,12 +214,12 @@ auth.users.id
 | Backfill | `administrator = true` → `role = 'admin'`; sonst `role = 'viewer'`; `office` nur manuell |
 | Internes Schema | `nora_private` — Helper nicht in PostgREST (`config.toml` schemas) |
 | Funktionen (intern) | `safe_auth_uid()`, `is_active_user()`, `current_role()`, `has_role()`, `can_write()`, `is_admin()` |
-| Öffentliche RPCs | `set_sales_role_by_admin`, `start_checklist_run_from_template` |
+| Öffentliche RPCs | `start_checklist_run_from_template`; seit W1 (2026-09-05): `set_sales_access_by_executor` nur service_role, `set_sales_role_by_admin` deprecated + nur service_role |
 | `search_path` | `''` auf SECURITY DEFINER; vollständig schemaqualifiziert |
 | GUC | ~~GUC-Token~~ → **`nora_role_manager`** Capability (v0.4b.2) |
 | View | `sales_directory` — reduzierte Teamliste (v0.4b.2) |
 | RLS Kern-CRM | Tiered policies über `nora_private.*` |
-| Edge Function `users` | `set_sales_role_by_admin` RPC |
+| Edge Function `users` | einziger Lifecycle-Executor: `set_sales_access_by_executor(p_actor_user_id, …)` + Auth-Bann + Verifikation (W1) |
 | Frontend `canAccess` | Matrix aus Abschnitt C |
 | Testrolle | **nur lokal** — `rbac_rls_setup.sql` / `teardown.sql`, nie in Migration |
 | Actor-ID | Kurzfristig `auth.uid()` in Policies/RPCs |
@@ -234,7 +234,10 @@ auth.users.id
 | `nora_private.has_role` | postgres | authenticated, service_role | nein | Matrix-Check für RLS |
 | `nora_private.can_write` | postgres | authenticated, service_role | nein | office/admin für RLS |
 | `nora_private.is_admin` | postgres | authenticated, service_role | nein | admin für RLS |
-| `public.set_sales_role_by_admin` | postgres | authenticated, service_role | ja | Delegiert an `apply_sales_role_change` |
+| `public.set_sales_role_by_admin` | postgres | **service_role** (W1: authenticated entzogen, deprecated) | ja | Delegiert an `apply_sales_role_change` |
+| `public.set_sales_access_by_executor` | postgres | **service_role** | ja | W1-Executor: verifizierter Actor, Selbstschutz, delegiert an `apply_sales_role_change` |
+| `nora_private.guard_last_active_admin` | postgres | (Trigger) | nein | W1: nie null aktive Admins |
+| `nora_private.active_admin_count` | postgres | postgres only | nein | W1: die eine Definition von „aktiver Admin" |
 | `nora_private.apply_sales_role_change` | **nora_role_manager** | postgres only | nein | Privileg-UPDATE als Capability-Owner |
 | `nora_private.resolve_first_signup_role` | postgres | (intern) | nein | Advisory lock für ersten Admin |
 | `public.handle_new_user` | postgres | (Trigger) | nein | sales bei Auth-Signup |

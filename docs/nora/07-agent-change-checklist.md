@@ -85,6 +85,9 @@ Bei RBAC-/RLS-Härtung (v0.4b / v0.4b.1 / v0.4b.2) zusätzlich:
 - [ ] Migrationen `20260714120000` + `20260714140000` + `20260714150000` angewendet
 - [ ] **Keine Testrolle** nach `db reset` ohne Setup (`rbac_rls_production_check.sql`)
 - [ ] Lokaler Testfluss: `production_check` → `first_admin_parallel` → `setup` → `matrix` → `final_hardening` → `checklists_audit` → `crm_audit` → `google_calendar` → `teardown` → `production_check`
+- [ ] **User Lifecycle W1:** `supabase/tests/lifecycle_single_executor_verification.sql` zusätzlich nach `production_check` (leere DB) **und** nach `safe_auth_role_verification` (mit Fixtures) ausführen — sie rollt sich selbst zurück
+- [ ] **Kein** neuer Schreibpfad für `sales.role` / `sales.disabled` außerhalb `users` Edge Function → `set_sales_access_by_executor`; `set_sales_role_by_admin` nie wieder an `authenticated` granten
+- [ ] Jede Änderung an `disabled` bewegt auch den Auth-Bann (Executor), nie nur eine Seite; kein grüner Erfolg ohne verifiziertes `accessConsistency = consistent`
 - [ ] Bekannter Windows-Tooling-Bug (bestätigt in zwei unabhängigen Sessions, 2026-08-29 Phase 6C und 6D.1): `rbac_rls_first_admin_parallel_runner.ps1` wirft `Write-Error "sales must be empty..."` trotz `count=0`, weil die Vorbedingungs-Regex die mehrzeilige `psql`-Spaltenausgabe falsch parst — kein SQL-/Produktfehler. Workaround: die im Skript enthaltene SQL (zwei parallele `docker exec ... psql`-Sessions gegen `auth.users`, danach Verifikation „exakt 1 admin + 1 viewer", Cleanup) manuell/per eigenem `Start-Job`-Aufruf ohne die Vorbedingungsprüfung nachbilden — nicht das `.ps1` patchen, ohne dass es explizit als eigene, bewusste Änderung entschieden wird.
 - [ ] Matrix als `postgres` mit `SET LOCAL ROLE nora_rls_test` — **kein** festes Testpasswort in Git
 - [ ] `nora_private` nicht in `config.toml` schemas

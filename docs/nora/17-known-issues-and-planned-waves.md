@@ -286,6 +286,46 @@ Jede dieser Änderungen berührt Grants breit und braucht denselben Ablauf wie W
 
 ---
 
+## User Lifecycle W1 — Zugangs-Drift in Production, Reparatur ausstehend
+
+**Status: `RC VERIFIED — REPAIR PENDING RELEASE` (2026-09-05)**
+
+Read-only gegen `nora-crm-prod` (2026-09-04, Reconnaissance) und lokal
+reproduziert: genau **ein** Mitarbeiter hat `sales.disabled = true`, aber
+`auth.users.banned_until IS NULL`. Ursache (lokal bewiesen): die RPC
+`public.set_sales_role_by_admin` war für `authenticated` ausführbar und setzt
+nur den Nora-Wert; nur die `users` Edge Function synchronisierte den Auth-Bann,
+und auch dort nicht beim Einladen mit `disabled = true`. Kein Datenzugriff war
+möglich (RLS verweigert deaktivierte `sales`-Zeilen), aber die Identität konnte
+weiterhin Token erneuern.
+
+W1 schließt den Direktpfad (EXECUTE entzogen), führt den Executor mit
+verifiziertem Actor ein, synchronisiert den Bann in jedem Zweig und meldet die
+Drift als `accessConsistency = inconsistent` (Details: Decision Log
+„2026-09-05 – User Lifecycle W1").
+
+**Reparatur — nur im kontrollierten Release, nur über den unterstützten Pfad:**
+
+1. Erkennung: `GET /users?sales_id=<id>` (Admin-JWT) liefert
+   `accessState = disabled`, `noraDisabled = true`,
+   `accessConsistency = inconsistent`.
+2. Reparatur: im Admin-UI (`/sales/<id>`) „Zugangsstatus synchronisieren" —
+   technisch `PATCH /users {sales_id, disabled: true}`. Der Executor wendet den
+   unveränderten Nora-Wert an (kein neues `user.disabled`-Audit-Ereignis),
+   setzt den Auth-Bann und verifiziert beide Fakten.
+3. Nachlesen: `GET /users?sales_id=<id>` → `accessConsistency = consistent`;
+   read-only SQL: `auth.users.banned_until` in der Zukunft, `sales.disabled`
+   unverändert `true`, Anzahl `user.disabled`-Ereignisse für diese `sale_id`
+   unverändert.
+4. Kein rohes Production-SQL, keine Dashboard-Bearbeitung des Datensatzes.
+
+**Bewusst offen nach W1:** service_role-Audit-Ereignisse bleiben `System`
+(W3); keine Session-Revokation beim Deaktivieren (Bann stoppt Refresh, ein
+laufendes Access-Token läuft regulär aus; RLS verweigert sofort) — W5; die
+Legacy-RPC wird in W2 entfernt; FakeRest kennt die neuen Guards nicht
+(Demo-Modus hat keine Autorisierung auf Datenebene, bestehende Lücke); die
+SQL-Suiten laufen weiterhin nicht in CI (W9).
+
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
 **Status: `ASSESSED — LOW — PLANNED FOLLOW-UP`**

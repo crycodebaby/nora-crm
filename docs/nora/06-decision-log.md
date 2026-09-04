@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-05 – User Lifecycle W1: ein privilegierter Executor, Selbst-/Letzter-Admin-Schutz, Zugangskonsistenz | [Springen](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) |
 | 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen | [Springen](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) |
 | 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht | [Springen](#2026-09-04--employee-access-v1c-b-zustellstatus-wird-gezeigt-die-mailart-nicht) |
 | 2026-09-04 – Employee Access V1C-A: Zustellbeobachtung ist Best-Effort-Korrelation, kein Öffnungs-Tracking | [Springen](#2026-09-04--employee-access-v1c-a-zustellbeobachtung-ist-best-effort-korrelation-kein-öffnungs-tracking) |
@@ -100,6 +101,68 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-09-05 – User Lifecycle W1: ein privilegierter Executor, Selbst-/Letzter-Admin-Schutz, Zugangskonsistenz
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`, nicht Production Verified.** Migration `20260904220000_nora_lifecycle_single_executor.sql` (SHA-256 `5e6e78d154d67f6d3c48565ba1e3c009acfbcffabac464e48dc3b2ba2218b987`), `users` Edge Function, Client-Contract. Branch `security/nora-lifecycle-w1-single-executor` auf Basis `origin/main = ef2e13e0`.
+
+### Kontext (lokal bewiesen, nicht nur aus der Reconnaissance übernommen)
+
+Vor W1 gab es **zwei** Wege, `sales.role` / `sales.disabled` zu ändern: die `users` Edge Function (service_role, mit Auth-Bann-Synchronisation) und die RPC `public.set_sales_role_by_admin`, die für `authenticated` ausführbar war. Read-only gegen die lokale Datenbank auf `origin/main` (rollback-Probe) belegt:
+
+- Ein Admin-JWT ruft die RPC direkt auf → `sales.disabled = true`, `auth.users.banned_until = NULL`. Genau dieser Zustand existiert in `nora-crm-prod` einmal (siehe `17-known-issues-and-planned-waves.md`).
+- Ein Admin deaktiviert **sich selbst** über die RPC → erlaubt; als einziger aktiver Admin → **0 aktive Administratoren**. Ebenso Selbst-Demotion.
+- Weder Edge Function noch Datenbank kannten einen Letzter-Admin-Schutz; die Sperre gegen Selbständerung lag ausschließlich im React-Formular (`readOnly`).
+- Audit-Ereignisse aus dem service_role-Pfad werden als `System` attribuiert (bereits bekannt, W3).
+
+### Entscheidungen
+
+1. **Genau ein normaler privilegierter Pfad.** `Admin-UI → users Edge Function → public.set_sales_access_by_executor → nora_private.apply_sales_role_change (nora_role_manager) → PostgreSQL`, plus Supabase Auth Admin für den Bann. Die Legacy-RPC `set_sales_role_by_admin` verliert EXECUTE für `authenticated` und `anon`, ihr Body verlangt zusätzlich `service_role` (Defense in Depth gegen ein späteres Re-Grant). Sie bleibt für das Release-Fenster (deployte Edge Function v4) bestehen und wird in W2 entfernt.
+
+2. **Verifizierter Actor-Kontext statt geratener Identität.** Die Executor-RPC erhält `p_actor_user_id`. Vertrauensgrenze: die Edge Function verifiziert das Caller-JWT (JWKS + `auth.getUser`) und übergibt **nur** diese User-ID; ein Browser kann die RPC nicht ausführen (kein EXECUTE, zusätzlich `service_role`-Claim-Prüfung im Body); ein gefälschter Actor kann kein Privileg erzeugen, weil die RPC ihn nur akzeptiert, wenn er eine existierende, aktive Admin-Zeile bezeichnet. Der Parameter kann Rechte nur verengen, nie erweitern.
+
+3. **Selbstschutz serverseitig, zweifach.** Edge Function: jede PATCH-Anfrage, die auf den Aufrufer zielt und `role` oder `disabled` enthält, wird mit `403 self_access_change_forbidden` abgewiesen, bevor irgendetwas geschrieben wird. Datenbank: die Executor-RPC verweigert jede **tatsächliche** Änderung an der eigenen Zeile (`DETAIL = NORA_SELF_ACCESS_CHANGE_FORBIDDEN`); das erneute Anwenden unveränderter Werte bleibt erlaubt (idempotenter Re-Sync).
+
+4. **Letzter aktiver Administrator ist eine Datenbank-Invariante.** „Aktiver Administrator" = `role = 'admin' AND disabled = false`, genau einmal kodiert in `nora_private.active_admin_count()`. Der Trigger `guard_last_active_admin_trigger` (BEFORE UPDATE OF role, disabled) verweigert jede Änderung, die null aktive Admins hinterließe (`DETAIL = NORA_LAST_ACTIVE_ADMIN_REQUIRED`), auf **jedem** Schreibpfad: Executor, Legacy-RPC, Capability-Funktion, direkter Owner-UPDATE. Konkurrierende Entfernungen werden über `pg_advisory_xact_lock(89142421, 2)` serialisiert; die Zählfunktion ist VOLATILE, damit ein mehrzeiliges UPDATE nicht zwei Admins in einem Statement entfernt. Der Auth-Bann ist **nicht** Teil der Definition — die Datenbank kann GoTrue-Zustand in einer Transaktion nicht zuverlässig lesen; eine Invariante auf unlesbarem Fremdsystem-Zustand wäre falsch. Genau ein Admin genügt (Product-Owner-Regel), keine Zwei-Admin-Pflicht. DELETE ist bewusst nicht Teil des Guards (kein unterstützter Löschpfad heute; gehört zu W2).
+
+5. **Zugangskonsistenz als eigener kleiner Fakt, kein fünfter Zustand.** `accessState` behält `invited | active | disabled | unknown`. Zusätzlich liefert `GET /users` `accessConsistency: consistent | inconsistent | unknown` (beide Richtungen: „Nora deaktiviert, Auth nicht gebannt" und „Nora aktiv, Auth gebannt") sowie `noraDisabled` (Noras eigener Wert). Rohe Auth-Felder (`banned_until`) verlassen den Server weiterhin nicht. Das `EmployeeAccessPanel` benennt eine Inkonsistenz und bietet **eine** Reparatur: „Zugangsstatus synchronisieren" wendet Noras Wert über dieselbe PATCH an, die das Formular nutzt (das Formular kann einen unveränderten Wert nicht erneut senden — genau deshalb existiert der Knopf).
+
+6. **Reihenfolge und Teilfehler.** Für jede Zugangsänderung: (1) Datenbank — hier werden Actor, Selbstschutz und Letzter-Admin geprüft, bevor Auth berührt wird; (2) Auth-Bann nur, wenn `disabled` Teil der Anfrage war; (3) beide Fakten erneut lesen und nur ein verifiziertes `consistent` als Erfolg melden. Scheitert (2) oder widerspricht (3): `500 employee_access_sync_incomplete` mit `accessConsistency`, kein grüner Erfolg. Der bereits geschriebene Nora-Wert entzieht Datenzugriff sofort (RLS) — der Teilzustand fällt in Richtung „Zugang verweigert", nie in Richtung „Identität bleibt versehentlich aktiv". Ein Retry derselben Anfrage konvergiert: (1) ist ein No-op ohne doppeltes Audit-Ereignis (Trigger feuert nur bei Änderung), (2) zieht nach. Keine verteilte Transaktion, bewusst.
+
+7. **Einladung als deaktiviert** läuft durch denselben Executor: Rolle und `disabled` in einer Anfrage, danach Bann und Verifikation — eine eingeladene, deaktivierte Identität ist auch in Auth gebannt.
+
+8. **Reine Rollenänderungen** rufen Auth Admin weiterhin nicht auf.
+
+### Fehlercontract
+
+| Fall | Datenbank (`DETAIL`) | Edge (`error`) | HTTP | Nutzertext (de) |
+|---|---|---|---|---|
+| Selbständerung | `NORA_SELF_ACCESS_CHANGE_FORBIDDEN` | `self_access_change_forbidden` | 403 | „Den eigenen Nora-Zugang und die eigene Rolle können Sie hier nicht ändern." |
+| letzter aktiver Admin | `NORA_LAST_ACTIVE_ADMIN_REQUIRED` | `last_active_admin_required` | 409 | „Mindestens ein aktiver Administrator muss erhalten bleiben." |
+| Auth nicht synchron | — | `employee_access_sync_incomplete` | 500 | „Der Zugangsstatus konnte nicht vollständig angewendet werden. Bitte … synchronisieren." |
+| fremder/ungültiger Actor | `NORA_PERMISSION_DENIED` | `role_update_forbidden` | 403 | bestehender Text |
+
+Die Datenbank-Codes folgen der Error-Contract-Konvention (`DETAIL` kanonisch, MESSAGE frei), sind aber bewusst **nicht** in `domain/noraErrorCodes.ts` aufgenommen: sie werden ausschließlich von der Edge Function gelesen und in den bestehenden snake_case-Contract der Employee-Access-Commands übersetzt; der Browser sieht nie das `DETAIL`.
+
+### Was W1 nicht tut
+
+Keine E-Mail-Änderung, kein Offboarding, kein Hard Delete, keine Session-Revokation (ein Bann verhindert neue Token und Refresh; ein laufendes Access-Token lebt bis zu seinem Ablauf, RLS verweigert Daten sofort), keine Audit-Actor-Korrektur (service_role-Ereignisse bleiben `System`; der Actor-Parameter ist so gebaut, dass W3 ihn nutzen kann), keine FakeRest-Parität für die Guards (Demo hat weiterhin keine Autorisierung auf Datenebene, dokumentierte Lücke), keine Reparatur des Production-Datensatzes (Release-Phase).
+
+### Verifikation (lokal, Postgres 15.8 / Docker)
+
+- Migration zweimal nacheinander auf die `origin/main`-Datenbank angewendet (forward, idempotent), danach voller `npx supabase db reset --local` (Replay von null).
+- Neue SQL-Suite `supabase/tests/lifecycle_single_executor_verification.sql` (9 Abschnitte, selbst rollback-end) grün — sowohl auf leerer Datenbank als auch mit `rbac_rls_setup`-Fixtures.
+- Kanonische Sequenz vollständig grün: `production_check` → W1 → `setup` → `matrix` → `final_hardening` → `safe_auth_role` → W1 → `checklists_audit` → `crm_audit` → `customer_contact_workflow` → `error_contract` → `error_observatory` → `operation_correlation` → `operation_status_disposition` → `task_customer_context` → `google_calendar` → `audit_immutability` → `core_indexes` → `teardown` → `production_check`. Drei bestehende Suiten wurden an den geschlossenen Direktpfad angepasst (`rbac_rls_matrix`, `rbac_rls_final_hardening`, `safe_auth_role_verification`), `rbac_rls_production_check` prüft die neue Grant-Grenze.
+- Function-Suite 14 Dateien / 282 Tests (neu: `users/lifecycle.test.ts`, 17 Tests: Reihenfolge, Guards, Teilfehler, Retry-Konvergenz), App-Suite 98 Dateien / 896 Tests (1 bekannter Skip), `typecheck`, `build`, ESLint 0 Fehler, Prettier.
+- **Echter HTTP-Lauf** gegen die lokal servierte `users` Edge Function (Kong, GoTrue, PostgREST, Edge Runtime): Deaktivieren setzt `sales.disabled` **und** `banned_until`; Selbständerung 403; Reaktivieren entfernt den Bann; direkte PostgREST-Aufrufe beider RPCs mit Admin-JWT → 403 `permission denied for function`; Viewer → 403; simulierte Production-Drift → `accessConsistency = inconsistent`, ein PATCH repariert sie (Bann gesetzt, kein doppeltes Audit-Ereignis); Einladung als deaktiviert → gebannt; zwei Admins können einander deaktivieren, ein gebannter Admin kann sich nicht anmelden (`user_banned`), der verbleibende Admin kann sich nicht selbst deaktivieren.
+
+### Release-Reihenfolge (für den Release-Agenten, nicht ausgeführt)
+
+1. Migration gegen `nora-crm-prod` — die deployte Edge Function v4 funktioniert weiter (service_role, Legacy-RPC bleibt), der Letzter-Admin-Guard ist ab jetzt aktiv, Browser verlieren den Direktpfad.
+2. `users` Edge Function deployen (v5) — ab jetzt Executor-RPC, Selbstschutz, Konsistenzfeld.
+3. Frontend (Push auf `main` → Vercel) — Panel zeigt Inkonsistenz und Reparatur. Altes Frontend + neue Edge Function ist verträglich (zusätzliche Felder werden ignoriert, neue Fehlercodes landen im generischen Fehlertext).
+4. Reparatur des einen inkonsistenten Mitarbeiters ausschließlich über den unterstützten Pfad: `GET /users?sales_id=…` muss `inconsistent` melden, danach im Admin-UI „Zugangsstatus synchronisieren" (= `PATCH {sales_id, disabled: true}`), danach `GET` erneut → `consistent`; read-only SQL bestätigt `banned_until` gesetzt und kein neues `user.disabled`-Audit-Ereignis.
+5. Nachprüfen: `list_migrations` mit Datei-Zeitstempel `20260904220000`, `rbac_rls_production_check`-Bedingungen read-only, Live-Smoke Benutzerliste/-bearbeitung.
 
 ## 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen
 
