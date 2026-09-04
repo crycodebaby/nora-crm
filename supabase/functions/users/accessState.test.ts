@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allowedAdminActions,
   buildEmployeeAccessRecord,
+  deriveAccessConsistency,
   deriveEmployeeAccessState,
   hasActiveBan,
   hasConfirmedEmail,
@@ -157,16 +158,20 @@ describe("buildEmployeeAccessRecord", () => {
       email: "viktoriia.p@ergart.de",
       accessState: "active",
       disabled: false,
+      noraDisabled: false,
+      accessConsistency: "consistent",
       invitedAt: "2026-09-01T08:00:00.000Z",
       activatedAt: "2026-09-02T09:00:00.000Z",
     });
     expect(Object.keys(record).sort()).toEqual([
+      "accessConsistency",
       "accessState",
       "activatedAt",
       "disabled",
       "email",
       "employeeId",
       "invitedAt",
+      "noraDisabled",
     ]);
   });
 
@@ -181,6 +186,74 @@ describe("buildEmployeeAccessRecord", () => {
     );
     expect(record.disabled).toBe(true);
     expect(record.accessState).toBe("disabled");
+  });
+});
+
+describe("deriveAccessConsistency (W1)", () => {
+  const confirmed = { email_confirmed_at: "2026-09-02T09:00:00.000Z" };
+
+  it("is consistent when neither side disables", () => {
+    expect(
+      deriveAccessConsistency(
+        sale(),
+        { ...confirmed, banned_until: null },
+        NOW,
+      ),
+    ).toBe("consistent");
+  });
+
+  it("is consistent when both sides disable", () => {
+    expect(
+      deriveAccessConsistency(
+        sale({ disabled: true }),
+        { ...confirmed, banned_until: "2036-01-01T00:00:00.000Z" },
+        NOW,
+      ),
+    ).toBe("consistent");
+  });
+
+  it("flags Nora-disabled without an Auth ban (the drift found in Production)", () => {
+    const record = buildEmployeeAccessRecord(
+      sale({ disabled: true }),
+      { ...confirmed, banned_until: null },
+      NOW,
+    );
+    expect(record.accessConsistency).toBe("inconsistent");
+    // The product state still says disabled: Nora's flag wins for access.
+    expect(record.accessState).toBe("disabled");
+    expect(record.noraDisabled).toBe(true);
+    expect(record.disabled).toBe(true);
+  });
+
+  it("flags Nora-enabled with an active Auth ban", () => {
+    const record = buildEmployeeAccessRecord(
+      sale({ disabled: false }),
+      { ...confirmed, banned_until: "2036-01-01T00:00:00.000Z" },
+      NOW,
+    );
+    expect(record.accessConsistency).toBe("inconsistent");
+    expect(record.accessState).toBe("disabled");
+    expect(record.noraDisabled).toBe(false);
+    expect(record.disabled).toBe(true);
+  });
+
+  it("treats an expired ban as no ban", () => {
+    expect(
+      deriveAccessConsistency(
+        sale(),
+        { ...confirmed, banned_until: "2020-01-01T00:00:00.000Z" },
+        NOW,
+      ),
+    ).toBe("consistent");
+  });
+
+  it("claims nothing when the Auth side cannot be read", () => {
+    expect(deriveAccessConsistency(sale({ disabled: true }), null, NOW)).toBe(
+      "unknown",
+    );
+    expect(buildEmployeeAccessRecord(sale(), null, NOW).accessConsistency).toBe(
+      "unknown",
+    );
   });
 });
 

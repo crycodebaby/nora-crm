@@ -116,6 +116,33 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
         });
         return;
       }
+      if (message === "self_access_change_forbidden") {
+        notify("resources.sales.edit.self_forbidden", {
+          type: "error",
+          messageArgs: {
+            _: "Den eigenen Nora-Zugang und die eigene Rolle können Sie hier nicht ändern.",
+          },
+        });
+        return;
+      }
+      if (message === "last_active_admin_required") {
+        notify("resources.sales.edit.last_admin_required", {
+          type: "error",
+          messageArgs: {
+            _: "Mindestens ein aktiver Administrator muss erhalten bleiben.",
+          },
+        });
+        return;
+      }
+      if (message === "employee_access_sync_incomplete") {
+        notify("resources.sales.edit.access_sync_incomplete", {
+          type: "error",
+          messageArgs: {
+            _: "Der Zugangsstatus konnte nicht vollständig angewendet werden. Bitte im Bereich „Nora-Zugang“ synchronisieren.",
+          },
+        });
+        return;
+      }
       if (message === "invalid_role" || message === "invalid_payload") {
         notify("resources.sales.edit.role_failed", {
           type: "error",

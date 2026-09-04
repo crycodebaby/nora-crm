@@ -248,6 +248,15 @@ const getDataProviderWithCustomMethods = () => {
           details?.error ??
           details?.code ??
           (error as { context?: { status?: number } })?.context?.status;
+        // W1 lifecycle codes carry their own meaning — never collapse them
+        // into the generic 403 below.
+        if (
+          code === "self_access_change_forbidden" ||
+          code === "last_active_admin_required" ||
+          code === "employee_access_sync_incomplete"
+        ) {
+          throw new Error(code);
+        }
         if (
           code === "role_update_forbidden" ||
           code === 403 ||

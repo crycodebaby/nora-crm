@@ -438,6 +438,12 @@ export const frenchCrmMessages = {
         role_forbidden:
           "Vous n'êtes pas autorisé à modifier les rôles utilisateur.",
         role_failed: "Le rôle utilisateur n'a pas pu être modifié.",
+        self_forbidden:
+          "Vous ne pouvez pas modifier ici votre propre accès Nora ni votre rôle.",
+        last_admin_required:
+          "Au moins un administrateur actif doit être conservé.",
+        access_sync_incomplete:
+          "L'état d'accès n'a pas pu être appliqué entièrement. Veuillez le synchroniser dans la section « Nora-Zugang ».",
         record_not_found: "Enregistrement introuvable",
         success: "Utilisateur mis à jour avec succès",
         title: "Modifier %{name}",

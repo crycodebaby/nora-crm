@@ -5,6 +5,7 @@ import {
   getEmployeeAccessStatus,
   requestEmployeePasswordSetup,
   resendEmployeeInvitation,
+  resyncEmployeeAccess,
 } from "./employeeAccess";
 import type { CrmDataProvider } from "../../providers/types";
 import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
@@ -16,6 +17,8 @@ const record = (
   email: "viktoriia.p@ergart.de",
   accessState: "invited",
   disabled: false,
+  noraDisabled: false,
+  accessConsistency: "consistent",
   invitedAt: "2026-09-01T08:00:00.000Z",
   activatedAt: null,
   ...over,
@@ -24,6 +27,7 @@ const record = (
 const provider = (over: Partial<CrmDataProvider> = {}) =>
   ({
     getEmployeeAccessStatus: vi.fn(async () => [record()]),
+    salesUpdate: vi.fn(async () => ({ id: 7, disabled: true })),
     resendEmployeeInvitation: vi.fn(async () => record()),
     requestEmployeePasswordSetup: vi.fn(async () =>
       record({
@@ -134,12 +138,30 @@ describe("requestEmployeePasswordSetup", () => {
       currentState: "active",
     });
     expect(Object.keys(result).sort()).toEqual([
+      "accessConsistency",
       "accessState",
       "activatedAt",
       "disabled",
       "email",
       "employeeId",
       "invitedAt",
+      "noraDisabled",
     ]);
+  });
+});
+
+describe("resyncEmployeeAccess (W1)", () => {
+  it("re-applies Nora's own flag through the same PATCH the edit form uses", async () => {
+    const dp = provider();
+    await resyncEmployeeAccess(dp, { salesId: 7, disabled: true });
+    expect(dp.salesUpdate).toHaveBeenCalledWith(7, { disabled: true });
+  });
+
+  it("sends only the access flag — never role, name or email", async () => {
+    const dp = provider();
+    await resyncEmployeeAccess(dp, { salesId: 7, disabled: false });
+    const [, patch] = (dp.salesUpdate as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [unknown, Record<string, unknown>];
+    expect(Object.keys(patch)).toEqual(["disabled"]);
   });
 });

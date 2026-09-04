@@ -12,20 +12,22 @@ const record = (
   email: "test.access@ergart.de",
   accessState: "invited",
   disabled: false,
+  noraDisabled: false,
+  accessConsistency: "consistent",
   invitedAt: "2026-09-01T08:00:00.000Z",
   activatedAt: null,
   ...over,
 });
 
-const renderPanel = (
-  state: EmployeeAccessRecord["accessState"],
+const renderPanelRecord = (
+  recordOverrides: Partial<EmployeeAccessRecord>,
   overrides: Record<string, unknown> = {},
 ) =>
   render(
     <StoryWrapper
       dataProvider={
         {
-          getEmployeeAccessStatus: async () => [record({ accessState: state })],
+          getEmployeeAccessStatus: async () => [record(recordOverrides)],
           ...overrides,
         } as never
       }
@@ -33,6 +35,93 @@ const renderPanel = (
       <EmployeeAccessPanel salesId={7} />
     </StoryWrapper>,
   );
+
+const renderPanel = (
+  state: EmployeeAccessRecord["accessState"],
+  overrides: Record<string, unknown> = {},
+) => renderPanelRecord({ accessState: state }, overrides);
+
+describe("EmployeeAccessPanel access consistency (W1)", () => {
+  it("does not mention synchronization while both access facts agree", async () => {
+    const screen = await renderPanel("disabled");
+    await expect
+      .element(screen.getByTestId("employee-access-state"))
+      .toHaveTextContent("Zugang deaktiviert");
+    await expect
+      .poll(
+        () =>
+          screen.container.textContent?.includes(
+            "Zugangsstatus synchronisieren",
+          ) ?? false,
+      )
+      .toBe(false);
+  });
+
+  it("names the mismatch and offers exactly one repair when Nora disabled but Auth did not", async () => {
+    const salesUpdate = vi.fn(async () => ({ id: 7, disabled: true }));
+    const screen = await renderPanelRecord(
+      {
+        accessState: "disabled",
+        disabled: true,
+        noraDisabled: true,
+        accessConsistency: "inconsistent",
+      },
+      { salesUpdate },
+    );
+
+    await expect
+      .element(screen.getByTestId("employee-access-consistency"))
+      .toHaveTextContent("nicht vollständig synchron");
+    await expect
+      .element(screen.getByTestId("employee-access-consistency"))
+      .toHaveTextContent("„Zugang deaktiviert“ erneut vollständig an");
+
+    await screen
+      .getByRole("button", { name: "Zugangsstatus synchronisieren" })
+      .click();
+
+    // The repair re-applies Nora's own value — the disabled flag, nothing else.
+    await expect.poll(() => salesUpdate.mock.calls.length).toBe(1);
+    expect(salesUpdate).toHaveBeenCalledWith(7, { disabled: true });
+  });
+
+  it("offers the repair in the other direction too (Nora enabled, Auth banned)", async () => {
+    const salesUpdate = vi.fn(async () => ({ id: 7, disabled: false }));
+    const screen = await renderPanelRecord(
+      {
+        accessState: "disabled",
+        disabled: true,
+        noraDisabled: false,
+        accessConsistency: "inconsistent",
+      },
+      { salesUpdate },
+    );
+    await expect
+      .element(screen.getByTestId("employee-access-consistency"))
+      .toHaveTextContent("„Zugang aktiv“ erneut vollständig an");
+    await screen
+      .getByRole("button", { name: "Zugangsstatus synchronisieren" })
+      .click();
+    await expect.poll(() => salesUpdate.mock.calls.length).toBe(1);
+    expect(salesUpdate).toHaveBeenCalledWith(7, { disabled: false });
+  });
+
+  it("keeps quiet when the Auth side is merely unknown", async () => {
+    const screen = await renderPanelRecord({
+      accessState: "unknown",
+      accessConsistency: "unknown",
+    });
+    await expect.element(screen.getByText("Zugang unklar")).toBeVisible();
+    await expect
+      .poll(
+        () =>
+          screen.container.textContent?.includes(
+            "Zugangsstatus synchronisieren",
+          ) ?? false,
+      )
+      .toBe(false);
+  });
+});
 
 describe("EmployeeAccessPanel action gating", () => {
   it("offers only a fresh invitation while the employee has not activated", async () => {

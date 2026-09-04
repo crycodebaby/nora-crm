@@ -8,10 +8,7 @@ import {
   buildPatchPlan,
   isAdminSale,
   isNoraRole,
-  mapPostgresError,
-  needsAuthAdminUpdate,
   type NoraRole,
-  type PatchPlan,
 } from "./patchHelpers.ts";
 import {
   buildEmployeeAccessRecord,
@@ -20,6 +17,12 @@ import {
   type EmployeeAccessRecord,
   type EmployeeAuthFacts,
 } from "./accessState.ts";
+import {
+  executeAccessChange,
+  LifecycleFailure,
+  type LifecycleDeps,
+  type LifecycleSaleRow,
+} from "./lifecycle.ts";
 
 function resolveInviteRedirectTo(): string {
   const siteUrl =
@@ -60,40 +63,93 @@ async function writeUserInviteAudit(args: {
   }
 }
 
-async function setSaleRoleAndDisabled(
-  saleId: number,
-  role: NoraRole,
-  disabled: boolean | null,
-) {
-  const { error } = await supabaseAdmin.rpc("set_sales_role_by_admin", {
-    p_sale_id: saleId,
-    p_role: role,
-    p_disabled: disabled,
-  });
+/* ------------------------------------------------------------------------ */
+/* W1 — the single privileged executor for role / disabled                   */
+/* ------------------------------------------------------------------------ */
 
-  if (error) {
-    console.error(
-      JSON.stringify({
-        operation: "set_sales_role_by_admin",
-        stage: "rpc",
-        sqlstate: error.code ?? null,
-        error: error.message ?? "unknown",
-      }),
+const LIFECYCLE_SELECT = "id, user_id, role, disabled";
+
+/** Projects an Auth Admin user down to the four facts the contract reads. */
+function toAuthFacts(user: unknown): EmployeeAuthFacts | null {
+  if (!user || typeof user !== "object") return null;
+  const u = user as Record<string, unknown>;
+  return {
+    banned_until: (u.banned_until as string | null | undefined) ?? null,
+    email_confirmed_at:
+      (u.email_confirmed_at as string | null | undefined) ?? null,
+    confirmed_at: (u.confirmed_at as string | null | undefined) ?? null,
+    invited_at: (u.invited_at as string | null | undefined) ?? null,
+  };
+}
+
+async function loadAuthFacts(
+  userId: string | null | undefined,
+): Promise<EmployeeAuthFacts | null> {
+  if (!userId) return null;
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (error || !data?.user) return null;
+  return toAuthFacts(data.user);
+}
+
+/**
+ * Real adapters behind the executor ports. The browser never reaches any of
+ * these: set_sales_access_by_executor is service_role-only in the database,
+ * and Auth Admin is only ever called with the service key from here.
+ */
+const lifecycleDeps: LifecycleDeps = {
+  applyAccessChange: async ({ actorUserId, salesId, role, disabled }) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "set_sales_access_by_executor",
+      {
+        p_actor_user_id: actorUserId,
+        p_sale_id: salesId,
+        p_role: role,
+        p_disabled: disabled,
+      },
     );
-    throw error;
-  }
+    if (error) throw error;
+    return data as LifecycleSaleRow;
+  },
+  setAuthBan: async (userId, banned) => {
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { ban_duration: banned ? "87600h" : "none" },
+    );
+    if (error || !data?.user) {
+      throw error ?? new Error("auth_update_failed");
+    }
+  },
+  readSale: async (salesId) => {
+    const { data, error } = await supabaseAdmin
+      .from("sales")
+      .select(LIFECYCLE_SELECT)
+      .eq("id", salesId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as LifecycleSaleRow;
+  },
+  readAuthFacts: loadAuthFacts,
+  log: (entry) => console.error(JSON.stringify(entry)),
+};
 
-  const { data: sales, error: salesError } = await supabaseAdmin
+function lifecycleErrorResponse(failure: LifecycleFailure): Response {
+  const { status, message, error, accessConsistency } = failure.failure;
+  return createErrorResponse(status, message, {
+    error,
+    ...(accessConsistency ? { accessConsistency } : {}),
+  });
+}
+
+async function reloadSale(salesId: number) {
+  const { data, error } = await supabaseAdmin
     .from("sales")
     .select("*")
-    .eq("id", saleId)
+    .eq("id", salesId)
     .single();
-
-  if (!sales || salesError) {
-    throw salesError ?? new Error("Failed to load updated sale");
+  if (!data || error) {
+    throw error ?? new Error("reload_failed");
   }
-
-  return sales;
+  return data;
 }
 
 async function updateSaleAvatar(user_id: string, avatar: unknown) {
@@ -132,23 +188,16 @@ async function resolveUserIdByEmail(email: string) {
   return data[0].id as string;
 }
 
-async function reloadSale(salesId: number) {
-  const { data, error } = await supabaseAdmin
-    .from("sales")
-    .select("*")
-    .eq("id", salesId)
-    .single();
-  if (!data || error) {
-    throw error ?? new Error("reload_failed");
-  }
-  return data;
-}
-
 /**
  * Admin-only invite: inviteUserByEmail creates the auth user (no client password),
- * handle_new_user creates the sales row, then role is set via secure RPC.
+ * handle_new_user creates the sales row, then role (and, if requested, the
+ * disabled state including its Auth ban) is applied through the executor.
  */
-async function inviteUser(req: Request, currentUserSale: any) {
+async function inviteUser(
+  req: Request,
+  currentUserSale: any,
+  actorUserId: string,
+) {
   const { email, first_name, last_name, disabled, administrator, role } =
     await req.json();
 
@@ -232,84 +281,64 @@ async function inviteUser(req: Request, currentUserSale: any) {
     });
   }
 
-  try {
-    let saleRow = await loadSaleByUserId(userId);
-    if (!saleRow) {
-      await new Promise((r) => setTimeout(r, 250));
-      saleRow = await loadSaleByUserId(userId);
-    }
-    if (!saleRow) {
-      return createErrorResponse(500, "Sales profile missing after invite", {
-        error: "internal_error",
-      });
-    }
-
-    const sale = await setSaleRoleAndDisabled(
-      saleRow.id,
-      resolvedRole,
-      typeof disabled === "boolean" ? disabled : null,
-    );
-
-    await writeUserInviteAudit({
-      actorSaleId: currentUserSale.id,
-      inviteeEmail: email,
-      inviteeSaleId: sale.id,
-      role: resolvedRole,
+  let saleRow = await loadSaleByUserId(userId);
+  if (!saleRow) {
+    await new Promise((r) => setTimeout(r, 250));
+    saleRow = await loadSaleByUserId(userId);
+  }
+  if (!saleRow) {
+    return createErrorResponse(500, "Sales profile missing after invite", {
+      error: "internal_error",
     });
+  }
 
-    return new Response(JSON.stringify({ data: sale }), {
-      headers: { "Content-Type": "application/json", ...corsHeaders },
+  // Role and — when the admin invites someone as disabled — the disabled state
+  // go through the same executor as every later change, so an invited-as-
+  // disabled identity ends up banned in Auth as well, never only flagged.
+  let result;
+  try {
+    result = await executeAccessChange(lifecycleDeps, {
+      actorUserId,
+      target: saleRow as LifecycleSaleRow,
+      role: resolvedRole,
+      ...(typeof disabled === "boolean" ? { disabled } : {}),
     });
   } catch (e) {
-    const mapped = mapPostgresError(e as { code?: string; message?: string });
-    return createErrorResponse(mapped.status, mapped.message, {
-      error: mapped.error,
+    if (e instanceof LifecycleFailure) return lifecycleErrorResponse(e);
+    console.error("user.invite.access_change_failed");
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
+    });
+  }
+
+  await writeUserInviteAudit({
+    actorSaleId: currentUserSale.id,
+    inviteeEmail: email,
+    inviteeSaleId: result.sale.id,
+    role: resolvedRole,
+  });
+
+  try {
+    const sale = await reloadSale(result.sale.id);
+    return new Response(
+      JSON.stringify({
+        data: sale,
+        accessConsistency: result.accessConsistency,
+      }),
+      { headers: { "Content-Type": "application/json", ...corsHeaders } },
+    );
+  } catch {
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
     });
   }
 }
 
-/**
- * Keeps the Supabase Auth ban in sync with sales.disabled.
- *
- * Both facts are authoritative for the derived access state, so applying only
- * one half is a real defect: an employee "activated" by clearing
- * sales.disabled would stay banned in Auth and still be unable to sign in.
- * Called for every disabled change, in both PATCH branches.
- */
-async function syncAuthBanState(
-  userId: string,
-  disabled: boolean,
-): Promise<boolean> {
-  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-    userId,
-    { ban_duration: disabled ? "87600h" : "none" },
-  );
-
-  if (!data?.user || error) {
-    console.error(
-      JSON.stringify({
-        operation: "sync_auth_ban",
-        stage: "auth_admin",
-        error: "auth_update_failed",
-      }),
-    );
-    return false;
-  }
-  return true;
-}
-
-async function applyRolePatch(
-  plan: PatchPlan,
-  sale: { id: number; role: NoraRole; disabled?: boolean },
+async function patchUser(
+  req: Request,
+  currentUserSale: any,
+  actorUserId: string,
 ) {
-  const nextRole = plan.wantsRole ? plan.role! : (sale.role as NoraRole);
-  const nextDisabled = plan.wantsDisabled
-    ? plan.disabled
-    : null; /* leave unchanged in RPC */
-  return setSaleRoleAndDisabled(sale.id, nextRole, nextDisabled);
-}
-
-async function patchUser(req: Request, currentUserSale: any) {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -321,8 +350,7 @@ async function patchUser(req: Request, currentUserSale: any) {
 
   const planned = buildPatchPlan(body);
   if ("error" in planned) {
-    const status = planned.error === "invalid_role" ? 400 : 400;
-    return createErrorResponse(status, "Invalid request", {
+    return createErrorResponse(400, "Invalid request", {
       error: planned.error,
     });
   }
@@ -340,6 +368,7 @@ async function patchUser(req: Request, currentUserSale: any) {
 
   const isSelf = currentUserSale.id === sale.id;
   const callerIsAdmin = isAdminSale(currentUserSale);
+  const wantsAccessChange = plan.wantsRole || plan.wantsDisabled;
 
   if (!callerIsAdmin && !isSelf) {
     return createErrorResponse(403, "Not Authorized", {
@@ -347,128 +376,79 @@ async function patchUser(req: Request, currentUserSale: any) {
     });
   }
 
-  if ((plan.wantsRole || plan.wantsDisabled) && !callerIsAdmin) {
+  if (wantsAccessChange && !callerIsAdmin) {
     return createErrorResponse(403, "Not Authorized", {
       error: "role_update_forbidden",
     });
   }
 
-  // Role / disabled only. A pure role change still performs no Auth Admin
-  // call; a disabled change must, so both authoritative facts stay in sync.
-  if (
-    (plan.wantsRole || plan.wantsDisabled) &&
-    !plan.wantsName &&
-    !plan.wantsEmail &&
-    !plan.wantsAvatar
-  ) {
-    if (plan.wantsDisabled && typeof plan.disabled === "boolean") {
-      const synced = await syncAuthBanState(sale.user_id, plan.disabled);
-      if (!synced) {
+  // Self guard (authoritative here, repeated in the database): an admin never
+  // changes their own role or access through the lifecycle API. Checked before
+  // any profile write so a refused request touches nothing.
+  if (wantsAccessChange && isSelf) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "self_access_change_forbidden",
+    });
+  }
+
+  // Profile fields (self or admin). Never the ban: the Auth ban is owned by
+  // the access change below, so it can only move together with sales.disabled.
+  if (plan.wantsName || plan.wantsEmail) {
+    const nextFirstName =
+      plan.firstName !== null ? plan.firstName : sale.first_name;
+    const nextLastName =
+      plan.lastName !== null ? plan.lastName : sale.last_name;
+
+    const authUpdate: {
+      email?: string;
+      user_metadata?: { first_name: string; last_name: string };
+    } = {};
+
+    if (plan.wantsName) {
+      authUpdate.user_metadata = {
+        first_name: nextFirstName,
+        last_name: nextLastName,
+      };
+    }
+
+    if (plan.wantsEmail && plan.email && plan.email !== sale.email) {
+      authUpdate.email = plan.email;
+    }
+
+    if (Object.keys(authUpdate).length > 0) {
+      const { data, error: userError } =
+        await supabaseAdmin.auth.admin.updateUserById(sale.user_id, authUpdate);
+
+      if (!data?.user || userError) {
+        console.error(
+          JSON.stringify({
+            operation: "updateUserById",
+            stage: "auth_admin",
+            error: "auth_update_failed",
+          }),
+        );
         return createErrorResponse(500, "Internal Server Error", {
           error: "internal_error",
         });
       }
     }
 
-    try {
-      const updated = await applyRolePatch(plan, sale);
-      return new Response(JSON.stringify({ data: updated }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
-    } catch (e) {
-      const mapped = mapPostgresError(e as { code?: string; message?: string });
-      return createErrorResponse(mapped.status, mapped.message, {
-        error: mapped.error,
-      });
-    }
-  }
-
-  // Profile fields (self or admin)
-  if (needsAuthAdminUpdate(plan) || plan.wantsAvatar) {
-    const nextFirstName =
-      plan.firstName !== null ? plan.firstName : sale.first_name;
-    const nextLastName =
-      plan.lastName !== null ? plan.lastName : sale.last_name;
-
-    if (plan.wantsName || plan.wantsEmail || plan.wantsDisabled) {
-      const authUpdate: {
-        email?: string;
-        ban_duration?: string;
-        user_metadata?: { first_name: string; last_name: string };
-      } = {};
-
-      if (plan.wantsName) {
-        authUpdate.user_metadata = {
+    if (plan.wantsName) {
+      const { error: saleUpdateError } = await supabaseAdmin
+        .from("sales")
+        .update({
           first_name: nextFirstName,
           last_name: nextLastName,
-        };
-      }
+        })
+        .eq("id", plan.salesId);
 
-      if (plan.wantsEmail && plan.email && plan.email !== sale.email) {
-        authUpdate.email = plan.email;
-      }
-
-      // Same rule as the role/disabled-only branch above: a disabled change
-      // always moves the Auth ban too, never only sales.disabled.
-      if (plan.wantsDisabled && typeof plan.disabled === "boolean") {
-        authUpdate.ban_duration = plan.disabled ? "87600h" : "none";
-      }
-
-      if (Object.keys(authUpdate).length > 0) {
-        const { data, error: userError } =
-          await supabaseAdmin.auth.admin.updateUserById(
-            sale.user_id,
-            authUpdate,
-          );
-
-        if (!data?.user || userError) {
-          console.error(
-            JSON.stringify({
-              operation: "updateUserById",
-              stage: "auth_admin",
-              error: "auth_update_failed",
-            }),
-          );
-          return createErrorResponse(500, "Internal Server Error", {
-            error: "internal_error",
-          });
-        }
-      }
-
-      if (plan.wantsName) {
-        const { error: saleUpdateError } = await supabaseAdmin
-          .from("sales")
-          .update({
-            first_name: nextFirstName,
-            last_name: nextLastName,
-          })
-          .eq("id", plan.salesId);
-
-        if (saleUpdateError) {
-          console.error(
-            JSON.stringify({
-              operation: "sales_name_update",
-              stage: "sales",
-              sqlstate: saleUpdateError.code ?? null,
-              error: "sale_update_failed",
-            }),
-          );
-          return createErrorResponse(500, "Internal Server Error", {
-            error: "internal_error",
-          });
-        }
-      }
-    }
-
-    if (plan.wantsAvatar) {
-      try {
-        await updateSaleAvatar(sale.user_id, plan.avatar);
-      } catch {
+      if (saleUpdateError) {
         console.error(
           JSON.stringify({
-            operation: "avatar_update",
+            operation: "sales_name_update",
             stage: "sales",
-            error: "avatar_update_failed",
+            sqlstate: saleUpdateError.code ?? null,
+            error: "sale_update_failed",
           }),
         );
         return createErrorResponse(500, "Internal Server Error", {
@@ -478,16 +458,53 @@ async function patchUser(req: Request, currentUserSale: any) {
     }
   }
 
-  if (plan.wantsRole || plan.wantsDisabled) {
+  if (plan.wantsAvatar) {
     try {
-      const updated = await applyRolePatch(plan, sale);
-      return new Response(JSON.stringify({ data: updated }), {
-        headers: { "Content-Type": "application/json", ...corsHeaders },
+      await updateSaleAvatar(sale.user_id, plan.avatar);
+    } catch {
+      console.error(
+        JSON.stringify({
+          operation: "avatar_update",
+          stage: "sales",
+          error: "avatar_update_failed",
+        }),
+      );
+      return createErrorResponse(500, "Internal Server Error", {
+        error: "internal_error",
       });
+    }
+  }
+
+  // Role / disabled — the one path. Database guards first, then Auth, then
+  // verification; see lifecycle.ts for the partial-failure contract.
+  if (wantsAccessChange) {
+    try {
+      const result = await executeAccessChange(lifecycleDeps, {
+        actorUserId,
+        target: {
+          id: sale.id,
+          user_id: sale.user_id,
+          role: sale.role,
+          disabled: sale.disabled === true,
+        },
+        ...(plan.wantsRole ? { role: plan.role as NoraRole } : {}),
+        ...(plan.wantsDisabled && typeof plan.disabled === "boolean"
+          ? { disabled: plan.disabled }
+          : {}),
+      });
+      const updated = await reloadSale(result.sale.id);
+      return new Response(
+        JSON.stringify({
+          data: updated,
+          accessConsistency: result.accessConsistency,
+        }),
+        { headers: { "Content-Type": "application/json", ...corsHeaders } },
+      );
     } catch (e) {
-      const mapped = mapPostgresError(e as { code?: string; message?: string });
-      return createErrorResponse(mapped.status, mapped.message, {
-        error: mapped.error,
+      if (e instanceof LifecycleFailure) return lifecycleErrorResponse(e);
+      console.error("user.patch.access_change_failed");
+      return createErrorResponse(500, "Internal Server Error", {
+        error: "internal_error",
       });
     }
   }
@@ -513,28 +530,6 @@ async function patchUser(req: Request, currentUserSale: any) {
  */
 
 const ACCESS_SELECT = "id, email, first_name, last_name, user_id, disabled";
-
-/** Projects an Auth Admin user down to the four facts the contract reads. */
-function toAuthFacts(user: unknown): EmployeeAuthFacts | null {
-  if (!user || typeof user !== "object") return null;
-  const u = user as Record<string, unknown>;
-  return {
-    banned_until: (u.banned_until as string | null | undefined) ?? null,
-    email_confirmed_at:
-      (u.email_confirmed_at as string | null | undefined) ?? null,
-    confirmed_at: (u.confirmed_at as string | null | undefined) ?? null,
-    invited_at: (u.invited_at as string | null | undefined) ?? null,
-  };
-}
-
-async function loadAuthFacts(
-  userId: string | null | undefined,
-): Promise<EmployeeAuthFacts | null> {
-  if (!userId) return null;
-  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
-  if (error || !data?.user) return null;
-  return toAuthFacts(data.user);
-}
 
 /** Walks every Auth page so a large directory never silently degrades to "unknown". */
 async function loadAllAuthFacts(): Promise<Map<string, EmployeeAuthFacts>> {
@@ -813,7 +808,11 @@ async function requestEmployeePasswordSetup(
  * POST dispatch: a body carrying "action" is an access command; a body without
  * one stays the legacy "create a new employee and invite them" payload.
  */
-async function postUsers(req: Request, currentUserSale: any) {
+async function postUsers(
+  req: Request,
+  currentUserSale: any,
+  actorUserId: string,
+) {
   let body: Record<string, unknown>;
   try {
     body = await req.clone().json();
@@ -837,30 +836,34 @@ async function postUsers(req: Request, currentUserSale: any) {
       : requestEmployeePasswordSetup(currentUserSale, command.salesId);
   }
 
-  return inviteUser(req, currentUserSale);
+  return inviteUser(req, currentUserSale, actorUserId);
 }
 
 Deno.serve(async (req: Request) =>
   OptionsMiddleware(req, async (req) =>
     AuthMiddleware(req, async (req) =>
       UserMiddleware(req, async (req, user) => {
+        // user comes from GoTrue's own verification of the caller's JWT
+        // (UserMiddleware → auth.getUser). Its id is the ONLY actor identity
+        // the executor ever receives — never anything from the request body.
         const currentUserSale = await getUserSale(user);
-        if (!currentUserSale || currentUserSale.disabled) {
+        if (!user || !currentUserSale || currentUserSale.disabled) {
           return createErrorResponse(401, "Unauthorized", {
             error: "unauthorized",
           });
         }
+        const actorUserId = user.id;
 
         if (req.method === "GET") {
           return getEmployeeAccessStatus(req, currentUserSale);
         }
 
         if (req.method === "POST") {
-          return postUsers(req, currentUserSale);
+          return postUsers(req, currentUserSale, actorUserId);
         }
 
         if (req.method === "PATCH") {
-          return patchUser(req, currentUserSale);
+          return patchUser(req, currentUserSale, actorUserId);
         }
 
         return createErrorResponse(405, "Method Not Allowed", {

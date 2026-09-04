@@ -41,12 +41,29 @@ export type EmployeeSaleFacts = {
   disabled?: boolean | null;
 };
 
+/**
+ * W1: whether the two authoritative access facts agree.
+ *
+ *   consistent    sales.disabled and the Auth ban say the same thing
+ *   inconsistent  one side says "disabled", the other does not — Nora must
+ *                 not treat this as a healthy state (either direction)
+ *   unknown       the Auth side could not be read; nothing is claimed
+ *
+ * Deliberately not a fifth access state: accessState keeps its four values,
+ * and "disabled" still wins whenever either side says so.
+ */
+export type AccessConsistency = "consistent" | "inconsistent" | "unknown";
+
 /** The complete public response shape — no provider metadata, no tokens. */
 export type EmployeeAccessRecord = {
   employeeId: number;
   email: string;
   accessState: EmployeeAccessState;
+  /** Product-facing "no access": sales.disabled OR an active Auth ban. */
   disabled: boolean;
+  /** Nora's own access flag (sales.disabled) on its own — the value a re-sync re-applies. */
+  noraDisabled: boolean;
+  accessConsistency: AccessConsistency;
   /** auth.users.invited_at — present only for employees created via invitation. */
   invitedAt: string | null;
   /** Email confirmation timestamp — the moment the invitation was actually used. */
@@ -97,6 +114,23 @@ export function deriveEmployeeAccessState(
   return hasConfirmedEmail(auth) ? "active" : "invited";
 }
 
+/**
+ * Both mismatch directions are reported: "Nora disabled, Auth not banned"
+ * (the identity can still refresh tokens although RLS denies data) and
+ * "Nora enabled, Auth banned" (Nora would claim "Zugang aktiv" for someone
+ * who cannot sign in). Without Auth facts nothing is claimed.
+ */
+export function deriveAccessConsistency(
+  sale: { disabled?: boolean | null },
+  auth: EmployeeAuthFacts | null | undefined,
+  now: Date = new Date(),
+): AccessConsistency {
+  if (!auth) return "unknown";
+  const noraDisabled = sale.disabled === true;
+  const authBanned = hasActiveBan(auth.banned_until, now);
+  return noraDisabled === authBanned ? "consistent" : "inconsistent";
+}
+
 export function buildEmployeeAccessRecord(
   sale: EmployeeSaleFacts,
   auth: EmployeeAuthFacts | null | undefined,
@@ -108,6 +142,8 @@ export function buildEmployeeAccessRecord(
     accessState: deriveEmployeeAccessState(sale, auth, now),
     disabled:
       sale.disabled === true || hasActiveBan(auth?.banned_until ?? null, now),
+    noraDisabled: sale.disabled === true,
+    accessConsistency: deriveAccessConsistency(sale, auth, now),
     invitedAt: auth?.invited_at ?? null,
     activatedAt: auth?.email_confirmed_at ?? auth?.confirmed_at ?? null,
   };

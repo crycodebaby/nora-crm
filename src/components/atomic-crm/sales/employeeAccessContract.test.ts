@@ -2,13 +2,81 @@ import { describe, expect, it } from "vitest";
 
 import {
   allowedAdminActions,
+  describeAccessResync,
+  EMPLOYEE_ACCESS_CONSISTENCY_NOTICE,
+  EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL,
   EMPLOYEE_ACCESS_STATES,
   EMPLOYEE_ACCESS_STATE_DESCRIPTION,
   EMPLOYEE_ACCESS_STATE_LABEL,
+  isAccessResyncApplicable,
   isAdminActionAllowed,
   isEmployeeAccessState,
   mapEmployeeAccessError,
+  type EmployeeAccessRecord,
 } from "./employeeAccessContract";
+
+const w1Record = (
+  over: Partial<EmployeeAccessRecord> = {},
+): EmployeeAccessRecord => ({
+  employeeId: 7,
+  email: "test.access@ergart.de",
+  accessState: "disabled",
+  disabled: true,
+  noraDisabled: true,
+  accessConsistency: "inconsistent",
+  invitedAt: null,
+  activatedAt: null,
+  ...over,
+});
+
+describe("employee access consistency (W1 client mirror)", () => {
+  it("offers the repair exactly when the server reports a mismatch", () => {
+    expect(
+      isAccessResyncApplicable({ accessConsistency: "inconsistent" }),
+    ).toBe(true);
+    expect(isAccessResyncApplicable({ accessConsistency: "consistent" })).toBe(
+      false,
+    );
+    expect(isAccessResyncApplicable({ accessConsistency: "unknown" })).toBe(
+      false,
+    );
+  });
+
+  it("describes the repair in product words for both directions", () => {
+    expect(describeAccessResync(w1Record({ noraDisabled: true }))).toContain(
+      "Zugang deaktiviert",
+    );
+    expect(describeAccessResync(w1Record({ noraDisabled: false }))).toContain(
+      "Zugang aktiv",
+    );
+  });
+
+  it("keeps provider internals out of the consistency copy", () => {
+    const wording = [
+      EMPLOYEE_ACCESS_CONSISTENCY_NOTICE,
+      EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL,
+      describeAccessResync(w1Record()),
+      mapEmployeeAccessError(new Error("self_access_change_forbidden")),
+      mapEmployeeAccessError(new Error("last_active_admin_required")),
+      mapEmployeeAccessError(new Error("employee_access_sync_incomplete")),
+    ].join(" ");
+    expect(wording).not.toMatch(
+      /banned_until|GoTrue|auth\.users|RPC|service_role|SQLSTATE|token/i,
+    );
+  });
+
+  it("maps the W1 lifecycle codes to calm, specific German copy", () => {
+    expect(
+      mapEmployeeAccessError(new Error("self_access_change_forbidden")),
+    ).toMatch(/eigenen Nora-Zugang/);
+    expect(
+      mapEmployeeAccessError(new Error("last_active_admin_required")),
+    ).toMatch(/Mindestens ein aktiver Administrator/);
+    expect(
+      mapEmployeeAccessError(new Error("employee_access_sync_incomplete")),
+    ).toMatch(/nicht vollständig angewendet/);
+  });
+});
 
 describe("employee access contract (client mirror)", () => {
   it("covers every state with product wording", () => {

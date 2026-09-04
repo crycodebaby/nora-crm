@@ -6,10 +6,15 @@ import type { CrmDataProvider } from "../providers/types";
 import {
   requestEmployeePasswordSetup,
   resendEmployeeInvitation,
+  resyncEmployeeAccess,
 } from "../application/commands/employeeAccess";
 import {
+  describeAccessResync,
   EMPLOYEE_ACCESS_ACTION_LABEL,
+  EMPLOYEE_ACCESS_CONSISTENCY_NOTICE,
+  EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL,
   EMPLOYEE_ACCESS_STATE_DESCRIPTION,
+  isAccessResyncApplicable,
   isAdminActionAllowed,
   mapEmployeeAccessError,
   type EmployeeAccessRecord,
@@ -49,6 +54,8 @@ function accessDateLine(record: EmployeeAccessRecord): string | null {
   }
 }
 
+type PanelAction = "resend_invitation" | "request_password_setup" | "resync";
+
 /**
  * Nora-Zugang panel for one employee (V1A contract, V1B presentation).
  *
@@ -57,6 +64,11 @@ function accessDateLine(record: EmployeeAccessRecord): string | null {
  * Enabling/disabling access stays the existing "Zugang deaktiviert" field in
  * the edit form — deliberately not duplicated here, so there is only one write
  * path for that fact; the panel points the administrator to it instead.
+ *
+ * W1: if the server reports that Nora's flag and the Auth side disagree, the
+ * panel says so and offers exactly one repair — re-applying Nora's own value
+ * through the same PATCH the form uses. The form cannot resend an unchanged
+ * value, which is why this one control exists.
  */
 export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
   const dataProvider = useDataProvider<CrmDataProvider>();
@@ -67,10 +79,14 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
   const record: EmployeeAccessRecord | undefined = data?.[0];
 
   const { mutate, isPending: isSubmitting } = useMutation({
-    mutationFn: async (
-      action: "resend_invitation" | "request_password_setup",
-    ) => {
+    mutationFn: async (action: PanelAction) => {
       if (!record) throw new Error("not_found");
+      if (action === "resync") {
+        return resyncEmployeeAccess(dataProvider, {
+          salesId,
+          disabled: record.noraDisabled,
+        });
+      }
       const input = { salesId, currentState: record.accessState };
       return action === "resend_invitation"
         ? resendEmployeeInvitation(dataProvider, input)
@@ -85,7 +101,9 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
           ? record?.email
             ? `Einladung erneut gesendet an ${record.email}.`
             : "Die Einladung wurde erneut gesendet."
-          : "E-Mail zum Einrichten des Passworts gesendet.";
+          : action === "resync"
+            ? "Zugangsstatus synchronisiert."
+            : "E-Mail zum Einrichten des Passworts gesendet.";
       notify(message, { type: "success", messageArgs: { _: message } });
     },
     onError: (error) => {
@@ -126,6 +144,7 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
     state,
     "request_password_setup",
   );
+  const needsResync = isAccessResyncApplicable(record);
 
   return (
     <section className="space-y-4" data-testid="employee-access-panel">
@@ -161,6 +180,31 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
             administrator acts on is the access state above, not transport. */}
         <EmployeeMailDeliveryStatus salesId={salesId} />
       </div>
+
+      {needsResync ? (
+        <div
+          className="space-y-2 rounded-md border border-border p-3"
+          role="status"
+          data-testid="employee-access-consistency"
+        >
+          <p className="text-sm font-medium text-foreground">
+            {EMPLOYEE_ACCESS_CONSISTENCY_NOTICE}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {describeAccessResync(record)}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="nora-touch-target"
+            disabled={isSubmitting}
+            aria-busy={isSubmitting || undefined}
+            onClick={() => mutate("resync")}
+          >
+            {EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL}
+          </Button>
+        </div>
+      ) : null}
 
       {canResend || canRequestPassword ? (
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

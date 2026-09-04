@@ -435,6 +435,12 @@ export const germanCrmMessages = {
         error: "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
         role_forbidden: "Sie sind nicht berechtigt, Benutzerrollen zu ändern.",
         role_failed: "Die Benutzerrolle konnte nicht geändert werden.",
+        self_forbidden:
+          "Den eigenen Nora-Zugang und die eigene Rolle können Sie hier nicht ändern.",
+        last_admin_required:
+          "Mindestens ein aktiver Administrator muss erhalten bleiben.",
+        access_sync_incomplete:
+          "Der Zugangsstatus konnte nicht vollständig angewendet werden. Bitte im Bereich „Nora-Zugang“ synchronisieren.",
         record_not_found: "Datensatz nicht gefunden",
         success: "Benutzer erfolgreich aktualisiert",
         title: "%{name} bearbeiten",

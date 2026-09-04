@@ -6,6 +6,10 @@
  * decide which admin action to offer. It deliberately contains no Auth logic:
  * the browser never sees auth.users, and the Edge Function re-checks every
  * action against the same rule — the UI is never the security boundary.
+ *
+ * W1 (User Lifecycle) adds the consistency fact: whether Nora's own flag and
+ * the Auth side agree. It is not a fifth state — the four states stay as they
+ * are — but a second, small typed fact the panel must never hide.
  */
 
 /** Product-facing Nora-Zugang states. Mirrors EmployeeAccessState on the server. */
@@ -18,6 +22,9 @@ export const EMPLOYEE_ACCESS_STATES = [
 
 export type EmployeeAccessState = (typeof EMPLOYEE_ACCESS_STATES)[number];
 
+/** Mirrors AccessConsistency on the server. */
+export type AccessConsistency = "consistent" | "inconsistent" | "unknown";
+
 export type EmployeeAccessAction =
   | "resend_invitation"
   | "request_password_setup"
@@ -29,7 +36,11 @@ export type EmployeeAccessRecord = {
   employeeId: number;
   email: string;
   accessState: EmployeeAccessState;
+  /** Product-facing "no access": Nora flag OR an active Auth ban. */
   disabled: boolean;
+  /** Nora's own flag on its own — the value a re-sync re-applies. */
+  noraDisabled: boolean;
+  accessConsistency: AccessConsistency;
   invitedAt: string | null;
   activatedAt: string | null;
 };
@@ -86,6 +97,30 @@ export const EMPLOYEE_ACCESS_ACTION_LABEL: Record<
 };
 
 /**
+ * W1 consistency copy. Calm, names the fact, names the repair. Never mentions
+ * the provider, tokens, bans or internal tables.
+ */
+export const EMPLOYEE_ACCESS_CONSISTENCY_NOTICE =
+  "Der Zugangsstatus ist nicht vollständig synchron. Bitte den Zugangsstatus erneut anwenden.";
+
+export const EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL =
+  "Zugangsstatus synchronisieren";
+
+/** What a re-sync will re-apply, in product words. */
+export function describeAccessResync(record: EmployeeAccessRecord): string {
+  return record.noraDisabled
+    ? "Nora wendet „Zugang deaktiviert“ erneut vollständig an."
+    : "Nora wendet „Zugang aktiv“ erneut vollständig an.";
+}
+
+/** The repair is offered exactly when the server says the two facts disagree. */
+export function isAccessResyncApplicable(
+  record: Pick<EmployeeAccessRecord, "accessConsistency">,
+): boolean {
+  return record.accessConsistency === "inconsistent";
+}
+
+/**
  * Which action is appropriate for a state. Mirrors allowedAdminActions() on the
  * server, which remains authoritative — this only keeps the UI from offering an
  * action the server would reject anyway.
@@ -120,7 +155,14 @@ export function mapEmployeeAccessError(error: unknown): string {
   switch (message) {
     case "access_action_forbidden":
     case "access_status_forbidden":
+    case "role_update_forbidden":
       return "Sie sind nicht berechtigt, den Nora-Zugang zu verwalten.";
+    case "self_access_change_forbidden":
+      return "Den eigenen Nora-Zugang und die eigene Rolle können Sie hier nicht ändern.";
+    case "last_active_admin_required":
+      return "Mindestens ein aktiver Administrator muss erhalten bleiben.";
+    case "employee_access_sync_incomplete":
+      return "Der Zugangsstatus konnte nicht vollständig angewendet werden. Bitte „Zugangsstatus synchronisieren“ erneut ausführen.";
     case "action_not_applicable":
       return "Diese Aktion passt nicht mehr zum aktuellen Zugangsstatus. Bitte laden Sie die Seite neu.";
     case "not_found":

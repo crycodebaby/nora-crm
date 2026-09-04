@@ -88,6 +88,19 @@ export const requestEmployeePasswordSetup = async (
   }
 };
 
+/**
+ * "Zugangsstatus synchronisieren" (W1) — re-applies Nora's own access flag
+ * through the same PATCH the edit form uses. The users Edge Function runs the
+ * full executor (database → Auth ban → verification), so an inconsistent pair
+ * converges. Sending the unchanged value is the point: the form cannot.
+ */
+export const resyncEmployeeAccess = async (
+  dataProvider: CrmDataProvider,
+  input: { salesId: Identifier; disabled: boolean },
+) => {
+  return dataProvider.salesUpdate(input.salesId, { disabled: input.disabled });
+};
+
 function normalizeAccessError(error: unknown): unknown {
   const message = error instanceof Error ? error.message : "";
   if (message === "action_not_applicable") {

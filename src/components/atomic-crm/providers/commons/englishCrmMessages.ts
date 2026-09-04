@@ -427,6 +427,10 @@ export const englishCrmMessages = {
         error: "An error occurred. Please try again.",
         role_forbidden: "You are not allowed to change user roles.",
         role_failed: "The user role could not be changed.",
+        self_forbidden: "You cannot change your own Nora access or role here.",
+        last_admin_required: "At least one active administrator must remain.",
+        access_sync_incomplete:
+          "The access state could not be applied completely. Please synchronize it in the “Nora-Zugang” section.",
         record_not_found: "Record not found",
         success: "User updated successfully",
         title: "Edit %{name}",

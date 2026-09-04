@@ -1443,6 +1443,9 @@ function toDemoAccessRecord(sale: Sale): EmployeeAccessRecord {
     email: sale.email,
     accessState: sale.disabled ? "disabled" : "active",
     disabled: Boolean(sale.disabled),
+    // Demo has one source of truth, so the two facts can never disagree.
+    noraDisabled: Boolean(sale.disabled),
+    accessConsistency: "consistent",
     invitedAt: null,
     activatedAt: null,
   };
