@@ -1,15 +1,117 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ValidateForm } from "ra-core";
-import { Form, required, useNotify, useTranslate } from "ra-core";
+import {
+  FieldTitle,
+  Form,
+  required,
+  useInput,
+  useNotify,
+  useTranslate,
+} from "ra-core";
 import type { FieldValues, SubmitHandler } from "react-hook-form";
+import { Eye, EyeOff } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { BooleanInput } from "@/components/admin/boolean-input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { TextInput } from "@/components/admin/text-input";
+import {
+  FormControl,
+  FormError,
+  FormField,
+  FormLabel,
+} from "@/components/admin/form";
+import { InputHelperText } from "@/components/admin/input-helper-text";
 import { EmployeeAccessShell } from "@/components/atomic-crm/login/EmployeeAccessShell";
 import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
 import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
+
+const PASSWORD_GUIDANCE =
+  "Mindestens 12 Zeichen. Verwenden Sie kein leicht erratbares Passwort.";
+
+interface PasswordInputProps {
+  label: string;
+  source: string;
+  autoComplete?: string;
+  validate?: Parameters<typeof useInput>[0]["validate"];
+  helperText?: string;
+}
+
+/**
+ * Password field with a show/hide toggle. Each instance keeps its own
+ * visibility state, so the password and confirm-password fields never
+ * share a reveal state.
+ */
+const PasswordInput = ({
+  label,
+  source,
+  autoComplete,
+  validate,
+  helperText,
+}: PasswordInputProps) => {
+  const [visible, setVisible] = useState(false);
+  const { id, field, isRequired } = useInput({ source, validate });
+
+  return (
+    <FormField id={id} name={field.name}>
+      <FormLabel>
+        <FieldTitle label={label} source={source} isRequired={isRequired} />
+      </FormLabel>
+      <div className="relative">
+        <FormControl>
+          <Input
+            {...field}
+            type={visible ? "text" : "password"}
+            autoComplete={autoComplete}
+            className="pr-10"
+          />
+        </FormControl>
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-label={visible ? "Passwort ausblenden" : "Passwort anzeigen"}
+          aria-pressed={visible}
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+        >
+          {visible ? (
+            <EyeOff className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Eye className="h-4 w-4" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+      <InputHelperText helperText={helperText} />
+      <FormError />
+    </FormField>
+  );
+};
+
+/**
+ * Maps known Supabase auth failures during password setup to calm,
+ * actionable German copy. Never surfaces raw provider payloads or tokens.
+ */
+export function mapPasswordSetupError(error: unknown): string {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+  const status =
+    error && typeof error === "object" && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : undefined;
+
+  if (/weak|easy to guess|pwned/i.test(message)) {
+    return "Dieses Passwort ist zu leicht zu erraten. Bitte wählen Sie ein längeres und persönlicheres Passwort.";
+  }
+  if (/too short|should be at least/i.test(message)) {
+    return "Das Passwort ist zu kurz. Verwenden Sie mindestens 12 Zeichen.";
+  }
+  if (status === 401 || status === 403 || /session|jwt|token/i.test(message)) {
+    return "Dieser Link ist nicht mehr gültig. Bitte fordern Sie einen neuen Link an.";
+  }
+  return "Das Passwort konnte nicht gesetzt werden. Bitte versuchen Sie es erneut oder fordern Sie eine neue Einladung an.";
+}
 
 interface PasswordFormData {
   password: string;
@@ -196,16 +298,12 @@ export const SetPasswordPage = () => {
         last_name: normalizePersonName(meta.last_name),
       });
       setStep(3);
-    } catch {
-      notify(
-        "Das Passwort konnte nicht gesetzt werden. Bitte versuchen Sie es erneut oder fordern Sie eine neue Einladung an.",
-        {
-          type: "error",
-          messageArgs: {
-            _: "Das Passwort konnte nicht gesetzt werden. Bitte versuchen Sie es erneut oder fordern Sie eine neue Einladung an.",
-          },
-        },
-      );
+    } catch (error) {
+      const message = mapPasswordSetupError(error);
+      notify(message, {
+        type: "error",
+        messageArgs: { _: message },
+      });
     } finally {
       setLoading(false);
     }
@@ -347,17 +445,16 @@ export const SetPasswordPage = () => {
           validate={validatePassword as ValidateForm}
           defaultValues={{ privacyAccepted: false }}
         >
-          <TextInput
+          <PasswordInput
             label="Passwort"
             autoComplete="new-password"
             source="password"
-            type="password"
             validate={required()}
+            helperText={PASSWORD_GUIDANCE}
           />
-          <TextInput
+          <PasswordInput
             label="Passwort bestätigen"
             source="confirmPassword"
-            type="password"
             autoComplete="new-password"
             validate={required()}
           />
