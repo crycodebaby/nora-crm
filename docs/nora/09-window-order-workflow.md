@@ -1,7 +1,11 @@
 # 09 – Fensterauftrag-Prozess (Chef-Rohkonzept → Nora-Spezifikation)
 
+Status: HISTORISCHE SPEZIFIKATION (Welle 7a, 2026-06-28) · Zweck: REFERENZ für den Fensterprozess · Zuletzt geprüft: 2026-09-04
+
+**Was davon gilt:** die Status-Zuordnung (Abschnitt 2–3), Checkliste statt Kanban-Spalten (Abschnitt 4), die Anti-Overengineering-Regeln (Abschnitt 9). **Was überholt ist:** alle Aussagen zu einem eigenen Terminmodell `appointments` und zu „Nora bleibt führend / bidirektionaler Sync" — entschieden ist das Gegenteil: Google Kalender ist System of Record, Nora hält nur `google_calendar_events` als Cache (`11`, `03` Falle 22). Die Phasenlabels v0.3e/f/g in Abschnitt 10 bezeichnen andere Wellen als im Decision Log. Aufgaben tragen seit der Unified Tasks Wave auch `tasks.company_id` (`01`).
+
 **Welle 7a** — Analyse und Spezifikation  
-**Status:** Nur Dokumentation — **keine** Migration, **keine** UI, **keine** Integrationen in dieser Welle.
+**Status damals:** Nur Dokumentation — **keine** Migration, **keine** UI, **keine** Integrationen in dieser Welle.
 
 Dieses Dokument bewertet das Chef-Rohkonzept für Fenstertausch/Fensterauftrag und übersetzt es in ein Nora-konformes fachliches und technisches Modell. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md` und den Decision Log.
 
@@ -346,7 +350,7 @@ Kunde erhält Link und sieht Fortschritt „wie Paketverfolgung“.
 | Integration | Bewertung | Rolle in Nora |
 |-------------|-----------|---------------|
 | **Google Maps** | ✅ sinnvoll, **später** (v0.3f) | Baustellenadresse, Route, Karte in Objekt/Vorgang — nicht als Adressspeicher |
-| **Google Kalender** | ✅ sinnvoll, **später** (v0.3g) | Echte Termine (Aufmaß, Montage); Nora bleibt führend, Sync bidirektional optional |
+| **Google Kalender** | ✅ read-only Grundlage im Repo (v0.4c), in Produktion nicht deployed | Echte Termine (Aufmaß, Montage). **Überholt:** „Nora bleibt führend, Sync bidirektional" — Google ist System of Record, Nora nur Cache + Verknüpfung (`11`) |
 | **Google Drive** | ❌ nicht als Kernspeicher | Anhänge in Nora Storage / Supabase Buckets |
 | **Gmail** | ⚠️ optional später | Inbound-E-Mail existiert; Outbound über Nora |
 | **Google Keep / Tasks / Contacts** | ❌ nicht Nora-Kern | Aufgaben und Kontakte leben in Nora |
@@ -383,7 +387,7 @@ Kunde erhält Link und sieht Fortschritt „wie Paketverfolgung“.
 | **v0.3d4** | UI Checkliste im Vorgangsdetail | ✅ |
 | **v0.3d5** | Hotboard „Produktionsfreigaben offen“ | ✅ |
 | **v0.3d6** | Audit-Ansicht Kunde/Vorgang (lesend) | v0.3d3 |
-| **v0.3e** | Terminmodell (`appointments`) | Migration |
+| ~~**v0.3e**~~ | ~~Terminmodell (`appointments`)~~ — **verworfen**, stattdessen `google_calendar_events` als Cache (`11`) | — |
 | **v0.3f** | Google Maps (Baustelle/Route) | Objekt- oder Adressmodell |
 | **v0.3g** | Google Kalender (Sync Termine) | v0.3e |
 | **v0.4** | E-Mail-Vorlagen + manueller Versand aus Vorgang | SMTP/Edge |

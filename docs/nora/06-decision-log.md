@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-04 – Dokumentations-Kontext: Wahrheit vor Historie; geerbter MCP-Server ist kein Nora-Feature | [Springen](#2026-09-04--dokumentations-kontext-wahrheit-vor-historie-geerbter-mcp-server-ist-kein-nora-feature) |
 | 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt | [Springen](#2026-09-01--customer-create-speed--clarity-land-ausgeblendet-bundesland-nrw-weitere-angaben-eingeklappt) |
 | 2026-09-01 – PWA Completion Acknowledgement: „Aktualisierung abgeschlossen" nach dem Reload, genau einmal | [Springen](#2026-09-01--pwa-completion-acknowledgement-aktualisierung-abgeschlossen-nach-dem-reload-genau-einmal) |
 | 2026-09-01 – PWA Visual Polish 2: Ring statt Spektakel, kein Reload-Angebot bei wartendem Worker | [Springen](#2026-09-01--pwa-visual-polish-2-ring-statt-spektakel-kein-reload-angebot-bei-wartendem-worker) |
@@ -96,6 +97,31 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 ---
 
+## 2026-09-04 – Dokumentations-Kontext: Wahrheit vor Historie; geerbter MCP-Server ist kein Nora-Feature
+
+### Kontext
+
+Ein unabhängiger Doku-Safety-Check (PASS 1, 2026-09-04) hat gegen Git, Vercel und Supabase verifiziert: Die „aktuellen" Dokumente (`16`, `17`, Statuszeilen in `06`) führten Customer Create Speed & Clarity, PWA Update State Contract V2, Visual Polish 2, Completion Acknowledgement und PWA-1B…1C.3 als „RC / nicht gepusht / nicht deployed", obwohl alle auf `origin/main` (`d41338ed`) und in Production (`nora.ergart.de`) live waren. Der Pflicht-Lesepfad für Agenten umfasste rund 150k Token, überwiegend Release-Protokolle. Zusätzlich enthält das Repository den von Atomic CRM geerbten MCP-Server (`supabase/functions/mcp`, Roh-SQL im Namen des Benutzers), dessen URL `ProfilePage.tsx` allen Nutzern anzeigt, ohne dass ein Nora-Dokument ihn erwähnte.
+
+### Entscheidung
+
+1. **Dokumentationsphilosophie:** Wahrheit vor Historie, Entscheidungen vor Chronologie, Regeln vor Erzählung, Verweise vor Duplikation. Aktive Dokumente behalten Historie nur, wenn sie eine aktuelle Regel, eine Kompatibilitäts-, Sicherheits- oder Betriebsbedingung, eine bewusst verworfene Lösung oder eine aktuelle Produktentscheidung erklärt. Git ist die Forensik. Release-Protokolle, Reviewer-Transkripte, Testzähler und Messreihen gehören nicht mehr in `16` und nicht in neue Decision-Einträge.
+2. **Kontext-Spine:** `AGENTS.md` → `00` → `16` → `15` (Architektur) → aufgabenspezifische Dokumente nach `AGENTS.md` Abschnitt D. Die frühere Regel „alle Nora-Dokumente lesen" entfällt. `15-architecture.md` ist neu und beschreibt Ist-Zustand, Zielrichtung und bewusst fehlende Architektur.
+3. **Release-Vokabular** ist in `07` fixiert (`LOCAL VERIFIED` → `RC VERIFIED` → `DEPLOYED` → `PRODUCTION VERIFIED` → `RELEASE COMPLETE`; `PO UX ACCEPTED` orthogonal und nur durch den Product Owner). Ältere Schreibweisen in bestehenden Einträgen bleiben als historisch stehen.
+4. **Geerbter MCP-Server:** Upstream-Code, nicht Noras KI-Architektur, keine freigegebene Integration. Er ist in Production nicht deployed und wird weder deployed noch erweitert, nur weil er existiert. Externe Clients erhalten nie direkten SQL-Zugang; sie rufen künftig Nora-Anwendungsoperationen (`15` §9/§10). ChatGPT/Nora-Integration: **PARKED / MAYBE**, keine Implementierungswelle freigegeben. Ob der Profil-Abschnitt ausgeblendet wird, entscheidet der Product Owner (`17` D3).
+5. **Upstream-Material ist nicht autoritativ:** `README.md`, `doc/`, `.github/CONTRIBUTING.md`, `CHANGELOG.md`, `.claude/skills/*`. Der Rat des Upstream-Skills `backend-dev` („Edge Function bevorzugt, RPC weniger") gilt für Nora nicht; Nora-Schreibpfade sind SECURITY-DEFINER-RPCs in einer Transaktion mit `DETAIL = NORA_*`.
+6. **Status-Korrekturen** in diesem Zug: Customer Create Speed & Clarity, PWA V2, Visual Polish 2, Completion Acknowledgement und PWA-1B…1C.3 sind `DEPLOYED`; Kanban Navigation Rail ist `DEPLOYED` + `PO UX ACCEPTED`. Eine PO-Sichtabnahme der live ausgelieferten PWA-Fläche (V2/Polish 2/Abschluss) ist nicht dokumentiert (`17` D5).
+
+### Begründung
+
+Ein Agent, der Live-Arbeit als „nicht deployed" liest, führt Releases doppelt aus oder debuggt gegen den falschen Build. Ein undokumentierter, in der UI beworbener Roh-SQL-Endpunkt neben einer Regel, die genau das verbietet (`03` Falle 36), ist die gefährlichste Lücke im Kontext. Beides ist mit Dokumentation allein behebbar; die Historie bleibt in Git vollständig erhalten.
+
+### Nicht Teil dieser Entscheidung
+
+Codeänderungen (Profil-Abschnitt, Skill-Datei, Edge-Function-Deployment), Restrukturierung oder Kürzung bestehender Einträge in `06`, ein Archivordner, die Umgestaltung von `01`/`03`.
+
+---
+
 ## 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt
 
 ### Kontext
@@ -137,7 +163,7 @@ Weniger kognitive Last, nicht weniger Daten: Der Standardfall (deutscher Kunde i
 
 PWA, Kanban, Supabase-Schema/SQL/RLS, Notifications, Operation Status, globales Design System, Loader, Contact-Create-Redesign, Routing, Dependencies. Ansprechpartner-Logik (kein/neu/selbst/bestehend) fachlich unverändert — nur geprüft, dass Defaults und Layout sie nicht berühren. Bewusst **nicht** umgesetzt (nur empfohlen, siehe `17-…`): Ansprechpartner-Unterabschnitt mit irreführendem Label „Persönliche Angaben" und unbeschrifteten ⊕-Buttons; Privatperson-Namensfelder ganz unten statt oben; Datenhygiene der Produktions-`country`-Werte.
 
-**Status:** CUSTOMER CREATE SPEED & CLARITY RC VERIFIED — READY FOR PRODUCT OWNER REVIEW. Kein main-Push, kein Deployment.
+**Status:** `DEPLOYED` — Commit `d41338ed` auf `origin/main`, Vercel Production READY auf exakt diesem SHA, `nora.ergart.de` (verifiziert 2026-09-04). Eine PO-Sichtabnahme ist nicht dokumentiert. Offene Befunde dieser Welle: `17` P11, P12, D4.
 
 ---
 
@@ -164,7 +190,7 @@ Ein Erfolg, der vor dem Reload behauptet wird, ist eine Vermutung; einer, der in
 
 **Randfall, bewusst akzeptiert:** trifft die Übernahme in einem Tab ein, der weder selbst aktualisiert hat noch vom Client neu geladen wird (externes Update, anderer Tab hat ausgelöst), steht dort „Neue Version bereit"; verschiebt der Benutzer und lädt später von Hand neu, erscheint die Bestätigung — zutreffend, denn *dieser* Reload vollendet das Update in diesem Tab.
 
-**Status:** `PWA COMPLETION ACKNOWLEDGEMENT RC — LOCAL VERIFIED`. Lokaler RC auf `feat/nora-pwa-update-success-ack` (Basis `0e505456`, Visual Polish 2); nicht gepusht, nicht deployed, keine Product-Owner-Abnahme.
+**Status:** `DEPLOYED` — Commit `672ebc76` auf `origin/main`, Vercel Production READY auf diesem SHA (2026-09-01). PO-Sichtabnahme nicht dokumentiert (`17` D5).
 
 ---
 
@@ -188,7 +214,7 @@ Der State Contract V2 (`3a092771`) hat den unabhängigen finalen technischen Rev
 
 Ein technisch korrekter Zustand, der eine wirkungslose Handlung anbietet, ist für die Mitarbeiter eine Falle: sie laden neu, sehen wieder „verfügbar", laden wieder — und lernen, dass Nora „nicht will". Der einzige ehrliche Ausweg bei einem Worker, der wirklich noch wartet, ist, in Ruhe weiterzuarbeiten. Visuell braucht die Fläche keinen größeren Orb und keine zweite Zeile, um ernst genommen zu werden — sie braucht einen Zustand, den man auf einen Blick liest. Ein Bogen, der läuft; ein Ring, der geschlossen ist; ein Orb, der still wird. Das ist die ganze Sprache.
 
-**Status:** `PWA VISUAL POLISH 2 RC VERIFIED — READY FOR PRODUCT OWNER ACCEPTANCE`. Lokaler RC auf `polish/nora-pwa-update-visual-v2`; nicht gepusht, nicht deployed, keine Product-Owner-Abnahme.
+**Status:** `DEPLOYED` — Commit `0e505456` auf `origin/main`, live seit Deployment `672ebc76` (2026-09-01). PO-Sichtabnahme nicht dokumentiert (`17` D5).
 
 ---
 
@@ -221,7 +247,7 @@ Ein Zustand, der einen Fehlschlag behauptet, während die neue Version läuft, k
 
 **Doku-Korrektur zu PWA-1C.2:** Der Client von `vite-plugin-pwa` lädt im kontrollierten Tab sehr wohl selbst neu (`controlling.isUpdate = true`, gemessen); nur ein unkontrolliertes Dokument bleibt stehen. Noras 1,5-s-Reload ist damit Sicherheitsnetz, nicht Regelweg — es entsteht kein Doppel-Reload.
 
-**Status:** `PWA UPDATE STATE CONTRACT V2 — LOCAL VERIFIED / RC`. Nicht Production Verified; kein Deployment. Der globale Nora-Loader ist eine eigene spätere Welle („Nora Loading Motion System", `17-known-issues-and-planned-waves.md`).
+**Status:** `DEPLOYED` — Commit `3a092771` auf `origin/main`, live seit Deployment `672ebc76` (2026-09-01); unabhängiger technischer Review 0 BLOCKER / 0 HIGH / 0 MEDIUM, State Contract eingefroren. Die Präsentation ist durch „Visual Polish 2" (Eintrag darüber) ersetzt. Der globale Nora-Loader ist eine eigene spätere Welle („Nora Loading Motion System", `17`).
 
 ---
 
@@ -430,7 +456,9 @@ Argument dagegen: Reduced Motion ist eine Aussage über Bewegung, nicht über Ze
 
 ### Bekannter Rest
 
-Designqualität ist kein automatisch prüfbares Kriterium. Tests decken Zustände, Timing, Semantik und Accessibility-Verdrahtung ab und behaupten ausdrücklich **nicht**, dass das Ergebnis hochwertig aussieht. Geometrie, Kontrast (Canvas-aufgelöste sRGB-Werte), Touch-Ziele, Viewport-Matrix, Reduced Motion, Dialog-Deferral und die vollständige Bildfolge der Achtsekundensequenz wurden in der gestylten App gemessen. Ob es sich **hochwertig anfühlt**, entscheidet der Product Owner — Status daher `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.
+Designqualität ist kein automatisch prüfbares Kriterium. Tests decken Zustände, Timing, Semantik und Accessibility-Verdrahtung ab und behaupten ausdrücklich **nicht**, dass das Ergebnis hochwertig aussieht. Geometrie, Kontrast (Canvas-aufgelöste sRGB-Werte), Touch-Ziele, Viewport-Matrix, Reduced Motion, Dialog-Deferral und die vollständige Bildfolge der Achtsekundensequenz wurden in der gestylten App gemessen. Ob es sich **hochwertig anfühlt**, entscheidet der Product Owner — Status damals `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.
+
+*Historisch (Stand 2026-09-04): Diese Fassung wurde vom Product Owner abgenommen, ging mit `fe962c58` live und ist seit „PWA Update State Contract V2" und „Visual Polish 2" (2026-09-01) durch die aktuelle Präsentation ersetzt. Maßangaben in diesem Eintrag gelten nicht mehr; die Gestaltungsprinzipien schon.*
 
 ---
 
@@ -464,7 +492,9 @@ Konkret:
 
 ### Bekannter Rest
 
-Designqualität ist kein automatisch prüfbares Kriterium. Tests decken Zustände, Semantik, Accessibility-Verdrahtung und Aktionen ab; Geometrie, Layer, Kontrast und Motiv wurden in der gestylten App nachgemessen. Ob es sich **hochwertig anfühlt**, entscheidet der Product Owner — Status daher `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.
+Designqualität ist kein automatisch prüfbares Kriterium. Tests decken Zustände, Semantik, Accessibility-Verdrahtung und Aktionen ab; Geometrie, Layer, Kontrast und Motiv wurden in der gestylten App nachgemessen. Ob es sich **hochwertig anfühlt**, entscheidet der Product Owner — Status damals `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`.
+
+*Historisch (Stand 2026-09-04): Die visuelle Fassung dieses Eintrags wurde vom Product Owner verworfen und durch PWA-1C.1, später V2/Visual Polish 2 ersetzt. Der hier entschiedene Lifecycle (Systemereignis, eigener Layer, kein Anzeigen bei offenem Dialog, „Später" 120 Minuten) gilt weiter und ist live seit `fe962c58`.*
 
 ---
 

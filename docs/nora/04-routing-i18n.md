@@ -22,11 +22,13 @@ Alte Pfade sollen nicht hart brechen:
 
 Interne alte Links dürfen über Redirects weiter funktionieren, sollten aber schrittweise auf Nora-Pfade umgestellt werden.
 
+**Stand 2026-09-04:** Im Altcode existieren noch rund 14 hartkodierte englische Pfade (`Link to="/contacts/…"`, `/companies/…`, `/deals/…`, `useMatch("/contacts/:id/*")` — u. a. `ActivityLog*Created.tsx`, `CompanyShow.tsx`, `ContactShow.tsx`, `ContactMergeButton.tsx`, `DealsPipeline.tsx`, `HotContacts.tsx`, `MobileNavigation.tsx`, `NoteShowPage.tsx`, `NotesIteratorMobile.tsx`). Sie funktionieren ausschließlich, weil `LegacyPathRedirect` sie umschreibt. **Der Redirect ist tragend und darf nicht entfernt oder verengt werden**, solange diese Stellen nicht auf `noraCreatePath()` umgestellt sind.
+
 ### ⚠️ Bekanntes Fehlermuster: interne Navigation gegen englische Ur-Code-Pfade
 
 **Bug-Beispiel (behoben, siehe Decision Log „Live-UX-Fixes-Wave“):** `CompanyShow.tsx` (unverändert aus dem englischen Atomic-CRM-Ur-Code übernommen) navigierte beim Tab-Wechsel intern per `navigate()` auf den alten englischen Pfad `/companies/...` und erkannte den aktiven Tab per `useMatch("/companies/:id/show/:tab")`. Der `LegacyPathRedirect` (siehe oben) hat diese `/companies/...`-URL aber sofort auf `/kunden/...` zurückgeschrieben — danach passte `useMatch` nicht mehr, der Tab sprang zurück auf „Aktivität“.
 
-**Ursache:** Ur-Code aus dem englischen Atomic CRM nutzt naturgemäß die englischen internen Pfade. Solange ein Nora-Agent so einen Code-Teil unangetastet übernimmt oder neuen Code nach diesem Vorbild schreibt, kann derselbe Fehler an anderer Stelle wieder auftreten (`ContactShow`, `DealShow`, neue Show-/List-Komponenten, o. ä. — im Rahmen dieser Wave geprüft und aktuell nicht betroffen).
+**Ursache:** Ur-Code aus dem englischen Atomic CRM nutzt naturgemäß die englischen internen Pfade. Solange ein Nora-Agent so einen Code-Teil unangetastet übernimmt oder neuen Code nach diesem Vorbild schreibt, kann derselbe Fehler an anderer Stelle wieder auftreten (`ContactShow`, `DealShow`, neue Show-/List-Komponenten, o. ä.). Geprüft und nicht betroffen ist nur der `useMatch`-Tab-Mechanismus; einfache englische `Link`-Ziele bestehen weiter (siehe Stand oben).
 
 **Regel für zukünftige Änderungen:**
 
@@ -38,10 +40,11 @@ Interne alte Links dürfen über Redirects weiter funktionieren, sollten aber sc
 
 | Route | Zweck | Auth |
 |---|---|---|
-| `/` | Startseite für Gäste; Dashboard für eingeloggte Nutzer | Gäste: Startseite |
-| `/login` | Startseite für Gäste; mit `?mode=anmelden` das Anmeldeformular | Öffentlich |
-| `/login?mode=anmelden` | Anmeldung (bestehende `LoginPage` innerhalb von `StartPage`) | Öffentlich |
-| `/sign-up` | Erstbenutzer-Registrierung (bestehende `SignupPage`) | Öffentlich, nur wenn noch nicht initialisiert |
+| `/` | Mitarbeiterzugang für Gäste (`StartPage` in `EmployeeAccessShell`); Dashboard für eingeloggte Nutzer | Gäste: Zugangsseite |
+| `/login` | Anmeldung; `?mode=anmelden` (Standard), `?mode=einladung` (Einladung aktivieren), `?mode=passwort` (Passwort vergessen) | Öffentlich |
+| `/sign-up` | Hinweisseite „Zugang nur per Einladung" (`SignupPage`) — **keine Registrierung**; `dataProvider.signUp` wirft im Supabase-Modus | Öffentlich |
+
+Seit 2026-07-23 (Decision Log „Mitarbeiterzugang") gibt es **keine öffentliche Selbstregistrierung**. Der erste Admin wird in Supabase angelegt (`handle_new_user` + `resolve_first_signup_role`), weitere Benutzer lädt ein Admin über die Edge Function `users` ein.
 
 Geschützte App-Routen (`/kontakte`, `/kunden`, `/vorgaenge`, …) leiten nicht eingeloggte Nutzer auf die Startseite um; von dort führt „Einloggen“ nach `/login` (optional mit `?redirect=`).
 
@@ -75,6 +78,8 @@ Implementierung: `AUDIT_PAGE_PATH = "/audit"` in `auditPagePath.ts`; registriert
 | Sign-up | Zur Startseite | `/` |
 
 Implementierung: gemeinsame Komponente `AuthPageNav` in `src/components/atomic-crm/login/`.
+
+**Seit 2026-07-23:** Der Link „Registrieren" führt auf die Hinweisseite „Zugang nur per Einladung"; es findet keine Registrierung statt. Die Keys bleiben bestehen, das Zielverhalten ist die Einladungs-/Aktivierungsseite.
 
 ## i18n-Regeln
 

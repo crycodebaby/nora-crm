@@ -1,5 +1,7 @@
 # Nora CRM – Rollen-UX-Abnahmeprotokoll (v0.3k.2)
 
+Status: HISTORISCHER SNAPSHOT (2026-07-14) — nicht fortgeführt. Dieses Protokoll wurde für keine UI-Welle seit August 2026 wiederholt und ist **keine laufende Abnahmeinstanz**; ein Verweis auf „Abnahme nach `12`" belegt keinen Status. Ob es archiviert oder als lebendes Protokoll je Welle fortgeführt wird, ist offen (`17` P15). Die technische Referenz am Ende (Demo-Session, `demoSession.ts`) gilt weiterhin.
+
 Stand: 2026-07-14  
 Demo: `npm run dev:demo` (http://localhost:5180/)  
 Referenz-Logins: `admin@nora.demo`, `office@nora.demo`, `viewer@nora.demo` (Passwort: `demo`)

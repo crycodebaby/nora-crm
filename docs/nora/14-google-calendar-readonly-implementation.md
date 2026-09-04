@@ -1,6 +1,9 @@
 # 14 – Google Kalender Read-only (v0.4c)
 
-**Status v0.4c.2:** OAuth + verschlüsselte Tokenablage + manueller Read-only-Sync implementiert  
+Status: **IMPLEMENTED IN REPOSITORY — NOT DEPLOYED IN PRODUCTION** (Stand 2026-09-04: in `nora-crm-prod` ist nur die Edge Function `users` deployed; `calendar-connect-start`, `calendar-connect-callback`, `calendar-sync-manual` fehlen, die Admin-Seite `/google-kalender` kann dort nicht arbeiten). Migrationen sind in Produktion angewendet. Kein OAuth-E2E durchgeführt. Deployment nur mit Secrets, Testkalender und PO-Freigabe (`17` P14, D6).
+
+**Status v0.4c.2 (Repository):** OAuth + verschlüsselte Tokenablage + manueller Read-only-Sync implementiert.
+
 **Migrationen:** `20260716120000_google_calendar_readonly.sql`, `20260717120000_google_calendar_oauth_sync.sql`  
 **Tests:** `supabase/tests/google_calendar_verification.sql`, `supabase/functions/_shared/googleCalendar/*.test.ts`
 

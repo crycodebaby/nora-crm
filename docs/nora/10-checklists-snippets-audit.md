@@ -6,7 +6,7 @@
 **Welle v0.3d4** — Checklisten-UI im Vorgangsdetail umgesetzt  
 **Welle v0.3d5** — Hotboard-Kachel „Produktionsfreigaben offen“ umgesetzt  
 **Welle v0.3l** — CRM-Audit-Verlauf (Kern-CRM-Trigger + UI) umgesetzt  
-**Status:** Tabellen, RLS, Audit, Run-Start, Vorgangs-UI, **Hotboard-Kachel** und **CRM-Änderungshistorie** implementiert
+**Status:** Tabellen, RLS, Audit, Run-Start, Vorgangs-UI, **Hotboard-Kachel** und **CRM-Änderungshistorie** implementiert und live. Die Abschnitte 1–13 unterhalb der Implementierungsstände sind die **historische Spezifikation**; wo sie von der Implementierung abweicht (`bigint`-FKs statt `uuid`, Run-Status `open | completed | cancelled`), gilt der Implementierungsstand.
 
 Dieses Dokument definiert das fachliche und technische Fundament für modulare Checklisten, wiederverwendbare Textbausteine und zentrale Audit-Logs. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `09-window-order-workflow.md` und den Decision Log.
 

@@ -272,7 +272,7 @@ Breite Arbeitsflächen müssen ohne Erklärung erkennen lassen, dass links oder 
 | Motion | Track-/Pfeilbewegung darf smooth sein; direkter Thumb-Drag ist unmittelbar. Bei `prefers-reduced-motion: reduce` entfallen programmatische Smooth-Bewegung und Rail-Transitions |
 | Zustand | Aus `scrollLeft`, `scrollWidth`, `clientWidth` abgeleitet; bei Scroll, Resize und Inhaltsänderung neu berechnet |
 | Scroll-Snap | Nicht erzwungen — freie Navigation bleibt erhalten |
-| Release-Status | Maximal `LOCAL VERIFIED — AWAITING PRODUCT OWNER UX ACCEPTANCE`; automatisierte und technische Browser-Tests sind kein visueller Acceptance-Beweis |
+| Status | `DEPLOYED` seit `fe962c58` (2026-09-01) und **`PO UX ACCEPTED`** (Product Owner, 2026-09-01). Automatisierte und technische Browser-Tests sind nie ein visueller Acceptance-Beweis |
 
 ## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
 
@@ -321,7 +321,7 @@ Flexibles Arbeitsfenster für Telefon, WhatsApp, E-Mail und Notizen — nicht li
 |---------|--------|
 | Navigation | `QuickCaptureStepTabs` — jederzeit zwischen Kunde / Ansprechpartner / Vorgang wechseln |
 | Validierung | Erst beim Speichern; Fehler inline am betroffenen Tab |
-| Entwurf | `localStorage` Key `nora-quick-capture-draft` — beim Schließen speichern, beim Öffnen wiederherstellen |
+| Entwurf | `localStorage` Key `nora-quick-capture-draft:{identity.id}` (pro Benutzer, Schema-Version 3, 7-Tage-Staleness, Autosave) — beim Schließen speichern, beim Öffnen wiederherstellen; der alte globale Key wird beim Upgrade entfernt, nie migriert (`03`) |
 | Entwurf verwerfen | Ghost-Button löscht lokalen Entwurf |
 | Layout Desktop | `lg:max-w-4xl`, 2 Spalten: Eingabe links, „Mögliche Kunden“ rechts |
 | Layout Mobile | Einspaltig, volle Breite bei Aktionsbuttons |
@@ -341,19 +341,19 @@ Ein Bereich `PossibleCustomersPanel` — keine doppelte Trefferliste.
 | Sekundär | „Als neuen Kunden erfassen“ unter der Liste |
 | Kein Auto-Merge | Nutzer wählt bewusst |
 
-## Öffentliche Startseite (Welle 6a)
+## Öffentliche Fläche / Mitarbeiterzugang
 
-Nicht eingeloggte Nutzer sehen unter `/` eine minimalistische Startseite (`NoraLandingPage` via `StartPage` als `loginPage`).
+**Status: CURRENT seit 2026-07-23** (Decision Log „Mitarbeiterzugang: öffentliches Redesign und Einladung"). Die frühere Welle-6a-Startseite mit Nora-Monogramm, Headline „Nora CRM" und Button „Registrieren" ist **ersetzt**.
 
 | Element | Darstellung |
 |---------|-------------|
-| Betreiber oben links | Ergart Gruppe + Markengrafik aus `public/ergart/AE_logo_transparent.png` |
-| Produkt zentral | Nora-Monogramm (`nora-monogram-*.png`) + Headline „Nora CRM“ |
-| Subline | „Kunden- und Vorgangsverwaltung für die Ergart Gruppe“ |
-| Primäraktion | „Einloggen“ → `/login` (Nora-Rot, touchfreundlich) |
-| Sekundäraktion | „Registrieren“ → `/sign-up` (ruhiger Outline-Button) |
+| Rahmen | `EmployeeAccessShell` — Markenhierarchie Ergart → Zugangszweck → Smairys (technisch, dezent) |
+| Titel | „Mitarbeiterzugang der Ergart Gruppe"; Nora-Branding erst nach der Anmeldung |
+| Modi (`StartPage`, Query `?mode=`) | `anmelden` (Standard) · `einladung` (Einladung aktivieren: Passwort → Profil → Abschluss) · `passwort` (Passwort vergessen) |
+| `/sign-up` | Hinweisseite „Zugang nur per Einladung" mit Links zur Aktivierung und Anmeldung — **keine** Registrierung |
+| Primäraktion | Formular-Submit in Nora-Rot, touchfreundlich (`.nora-primary-action`) |
 
-Eingeloggte Nutzer werden wie bisher auf das Dashboard geleitet.
+Eingeloggte Nutzer werden auf das Dashboard geleitet. Neue Benutzer legt ausschließlich ein Admin per Einladung an (Edge Function `users`).
 
 ## URLs und Sprache
 
@@ -451,9 +451,11 @@ Seit Phase 7B.4 real montiert — vorerst **nur** für Quick Capture. Alle ander
 - **Aktionen:** in 7B ausschließlich „Schließen“. Schließen beendet nur die Anzeige — es bricht keine Operation ab. Kein Retry, keine IT-Eskalation (7C bzw. Phase 8).
 - **Texte:** ausschließlich aus `crm.notifications.*`. Keine Literale im UI, keine sichtbaren `NORA_*`-Codes, keine IDs, keine Kontaktdaten außer einem Namen.
 
-## Anwendungs-Systemereignisse / Update-Experience (Wellen PWA-1C, PWA-1C.1)
+## Anwendungs-Systemereignisse / Update-Experience
 
-Neue Kategorie neben den Statusmeldungen aus Phase 7B. Ein **Systemereignis** berichtet über die Anwendung selbst (aktuell genau ein Fall: „neue Nora-Version verfügbar"), eine **Statusmeldung** über eine Aktion, die der Benutzer gerade ausgelöst hat. Beide teilen Typografie, Radius und die Motion-Tokens — sie werden aber **nie** semantisch zusammengelegt: ein Update bekommt keine `operationId`, keinen Idempotency-Key und keinen Eintrag im Notification-/Operation-Store.
+> **Lesehinweis:** Verbindlich für den heutigen Stand sind die Abschnitte **„Presentation Contract V2"**, **„Visual Polish 2"** und **„Abschlussbestätigung"** weiter unten (30-rem-Fläche, 7-rem-Orb, Ring, eine Nebenzeile, fünf Store-Zustände plus `completed`). Die Abschnitte „Komposition" und „Kurze Viewports" beschreiben die Maße der Fassung PWA-1C.1 (34 rem, 8,5-rem-Orb, Sicherheitshinweis) und sind **HISTORICAL / SUPERSEDED**; sie bleiben nur, weil die Prinzipien (zentrierte Spalte, Orb als Mittelpunkt, Gauß-Verläufe, Desynchronisation, höhenbasierte Regeln) weiter gelten. Alles ist live (`16`).
+
+Kategorie neben den Statusmeldungen aus Phase 7B. Ein **Systemereignis** berichtet über die Anwendung selbst (aktuell genau ein Fall: „neue Nora-Version verfügbar"), eine **Statusmeldung** über eine Aktion, die der Benutzer gerade ausgelöst hat. Beide teilen Typografie, Radius und die Motion-Tokens — sie werden aber **nie** semantisch zusammengelegt: ein Update bekommt keine `operationId`, keinen Idempotency-Key und keinen Eintrag im Notification-/Operation-Store.
 
 **Stand PWA-1C.1:** die erste visuelle Fassung (kleine 30-rem-Zeile, Motiv links neben Text, zwei Buttons darunter) wurde vom Product Owner als generisch verworfen. Sie war technisch korrekt und von einer beliebigen Framework-Karte nicht zu unterscheiden. Ersetzt wurde nicht die Dekoration, sondern die **Komposition** — Begründung im Decision Log, „2026-08-30 – PWA-1C.1".
 

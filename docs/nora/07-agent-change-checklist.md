@@ -1,242 +1,159 @@
 # 07 – Agent Change Checklist
 
-Vor jeder Änderung:
+Status: CURRENT · Zweck: AUSFÜHRUNGS- UND RELEASE-SICHERHEIT · Zuletzt geprüft: 2026-09-04
 
-- [ ] `AGENTS.md` gelesen
-- [ ] relevante `docs/nora/*.md` gelesen
-- [ ] Ziel der Änderung verstanden
-- [ ] geprüft, ob UI, Konfiguration, Demo-Daten oder Datenmodell betroffen sind
-- [ ] keine unnötige DB-/Migration-Änderung geplant
-- [ ] keine Resource-Namen blind umbenannt
-- [ ] keine `dist/`-Dateien direkt bearbeitet
+Aufbau: **KRITISCH** gilt für jede Änderung. **WICHTIG** gilt, sobald der genannte Bereich berührt wird. **REFERENZ** sind Testrezepte je Subsystem. Rechtemodell und Datenfallen stehen in `03`, Architektur in `15`.
 
-Während der Änderung:
+## Release-Status-Glossar
 
-- [ ] sichtbare Texte in Deutsch gepflegt
-- [ ] keine Denglisch-Begriffe eingeführt
-- [ ] Nora-Brandfarbe zentral/konsequent genutzt
-- [ ] alte Atomic-Werte nicht unnötig gebrochen
-- [ ] Datenmodell-Doppelungen vermieden
+Genau diese Begriffe, keine Synonyme. Ein Agent darf höchstens `DEPLOYED` bzw. `PRODUCTION VERIFIED` feststellen; `PO UX ACCEPTED` erklärt nur der Product Owner.
 
-Nach der Änderung:
+| Status | Bedeutung |
+|---|---|
+| `LOCAL VERIFIED` | Alle Gates (Lint, Prettier, Typecheck, Vitest, Build, bei DB-Änderung `db reset` + SQL-Tests) sind lokal grün; bei UI zusätzlich im gestylten Browser geprüft. Nichts gepusht |
+| `RC VERIFIED` | Ein eingefrorener Release Candidate (Commit-SHA, bei Migration zusätzlich SHA-256 der Migrationsdatei) hat einen unabhängigen Review ohne offene BLOCKER/HIGH bestanden |
+| `DEPLOYED` | Der Commit ist auf `origin/main`, das Vercel-Production-Deployment ist READY auf exakt diesem SHA, bei DB-Änderung ist die Migration in `nora-crm-prod` angewendet und das Bookkeeping stimmt |
+| `PRODUCTION VERIFIED` | `DEPLOYED` plus nicht-schreibender Live-Nachweis gegen `nora.ergart.de` mit dem **neuen** Build (PWA-Regel unten), plus read-only DB-Nachverifikation, wenn die Welle Schema, RPCs oder Grants berührt hat |
+| `RELEASE COMPLETE` | `PRODUCTION VERIFIED` und Abschnitt 1 in `16` sowie der Status in `06`/`17` sind nachgezogen |
+| `PO UX ACCEPTED` | Orthogonal: sichtbare Abnahme durch den Product Owner. Technische Nachweise ersetzen sie nie |
 
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] bei Demo-Daten: `npm run dev:demo`
-- [ ] manuelle Prüfung relevanter Seiten
-- [ ] bei Kanban/Detail: Zoom 125 %/150 %, Hell/Dunkel, Maus + Trackpad
-- [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung — neuer Eintrag auch im Index am Anfang von `06-decision-log.md` verlinkt
-- [ ] Themen-Tabelle in `16-current-state.md` §9 aktualisiert, falls ein neues Thema/Dokument betroffen ist (sonst findet die nächste Session es nicht gezielt und liest unnötig viel)
-- [ ] Commit-Nachricht klar formuliert
+Veraltete Schreibweisen (`LOCAL RC APPROVED`, `READY FOR PRODUCT OWNER REVIEW`, `TECHNICALLY APPROVED — FREEZE`, `PHASE … COMPLETE`, `PRODUCTION BASELINE`) in älteren Decision-Log-Einträgen sind historisch und werden nicht neu verwendet.
 
-Bei jedem `apply_migration` gegen eine echte Production-Datenbank (Supabase MCP) zusätzlich:
+## KRITISCH — bei jeder Änderung
 
-- [ ] Zielprojekt vor JEDEM Write per `list_projects` gegen Name UND Ref bestätigt (nicht nur einmal zu Sessionbeginn)
-- [ ] Sofort nach dem Apply `list_migrations` prüfen: Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` hat bislang fünfmal (2026-08-25, zweimal 2026-08-28, 2026-08-28 Idempotency Wave, 2026-08-29 Operation Status Contract Wave) stattdessen den Anwendungszeitstempel eingetragen
-- [ ] Bei Drift: vor der Korrektur read-only verifizieren, dass die betroffene Zeile eindeutig zur gerade angewendeten Migration gehört (Name + Inhalt/`statements`-Spalte), dann transaktional exakt eine Zeile korrigieren, danach erneut read-only bestätigen (`list_migrations` deckt sich wieder 1:1 mit dem Repo, keine andere Zeile verändert)
-- [ ] Release-Reihenfolge bei schemaabhängigen Waves mit automatischem Vercel-Deploy: RC einfrieren (Commit-SHA + Migration-SHA-256) → Production-DB-Migration → DB-Verifikation → Git Push → automatisches Vercel-Deployment → Live-Smoke — **nicht** Push zuerst
+Vorher:
 
-Bei Nummern-/DB-Änderungen zusätzlich:
+- [ ] `AGENTS.md`, `00`, `16` gelesen; aufgabenspezifische Dokumente nach `AGENTS.md` Abschnitt D
+- [ ] Ziel und Scope klar; unabhängige Themen nicht vermischt
+- [ ] geprüft: nur UI/Label? Konfiguration? Demo-Daten? Supabase-Tabellen/Migration? `localStorage`? Entsteht doppelte Datenhaltung?
+- [ ] keine Migration ohne belegten Bedarf und Decision-Log-Eintrag; keine Resource-Namen umbenannt; kein `dist/` bearbeitet
+- [ ] Arbeit in isoliertem Worktree/Branch; dirty `main`, Stashes und `.cursor/mcp.json` unangetastet
 
-- [ ] `npx supabase db reset --local` (Migration reproduzierbar?)
-- [ ] NULL/Duplikat/Format-Check für `customer_number` / `case_number`
-- [ ] Immutability lokal getestet (`UPDATE` muss fehlschlagen)
-- [ ] INSERT mit Fake-Nummer erzeugt **keine** Client-Nummer (Hardening)
-- [ ] `next_*` nicht per RPC für `anon`/`authenticated` ausführbar
-- [ ] Keine zweite Nummernlogik in Demo/CSV/UI-Formularen
+Während:
 
-Bei Checklisten-/Audit-Migration (ab v0.3d2) zusätzlich:
+- [ ] sichtbare Texte deutsch, keine Denglisch-Begriffe; neue Keys in DE und EN gepflegt, FR-Struktur mitgeführt (`04`)
+- [ ] Nora-Brandfarbe und Tokens zentral genutzt (`02`)
+- [ ] keine zweite Implementierung einer bestehenden Regel (Effective Contact, Nummern, Audit, Feedback-Schicht)
 
-- [ ] `docs/nora/10-checklists-snippets-audit.md` gelesen
-- [ ] Kein JSONB-only als Haupt-Checklistenmodell
-- [ ] `label_snapshot` an `checklist_run_items` vorhanden
-- [ ] `audit_events` append-only (kein UPDATE/DELETE für App-Rollen)
-- [ ] `service_area_code` nicht mit `company_id` verwechselt
-- [ ] Vorlagen/Snippets: `is_active = false` statt DELETE
-- [ ] Keine Audit-Daten in Notizen/Freitext
-- [ ] FKs für deal, company, contact, checklist_run konsistent
-- [ ] `npx supabase db reset --local` nach Migration
-- [ ] `supabase/tests/checklists_audit_verification.sql` ausführen (Docker: `supabase_db_atomic-crm-demo`)
-- [ ] Checklisten-Start über RPC `start_checklist_run_from_template` — keine manuellen Run-Item-Inserts vom Client
-- [ ] v0.3d4: `DealProductionChecklistSection` in `DealShow` — Demo-Hinweis bei `VITE_IS_DEMO`
+Nachher:
 
-Bei Änderungen an `SECURITY DEFINER`-Functions/Views, `security_invoker`, Grants oder RLS zusätzlich:
+- [ ] `npm run lint`, `npm run prettier`, `npm run typecheck`, `npx vitest run`, `npm run build`, `node ./scripts/check-bundle-budget.mjs`
+- [ ] bei UI: `npm run dev:demo`, betroffene Seiten in Hell/Dunkel, 125 %/150 % Zoom, Mobile
+- [ ] bei DB: `npx supabase db reset --local` + betroffene `supabase/tests/*.sql` (Reihenfolge unter REFERENZ)
+- [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung (Titel auch im Index von `06`)
+- [ ] `16` Abschnitt 1 nur nach einem Release aktualisiert; Statuswörter nur laut Glossar
+- [ ] Commit-Nachricht klar; kein Push ohne PO-Freigabe
 
-- [ ] Zugriffsmatrix geprüft: `anon`, `authenticated viewer`, `authenticated office`, `authenticated admin`, `service_role` (nur soweit relevant)
-- [ ] UI niemals als Security Boundary behandelt — Prüfung erfolgt gegen Grants/RLS/Function-Body, nicht gegen sichtbare UI-Zustände
-- [ ] Bei `init_state`/`sales_directory`: bestehende Bewertung (`17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28") gilt nur für die dort geprüfte Projektion/Grants — bei Änderung neu bewerten, nicht die alte Einstufung übernehmen
+Wenn ein Fehler entsteht: Ursache dokumentieren, kleine nachvollziehbare Korrektur, keine hektische Komplettumschreibung, keine unnötige Migration oder Löschung von Bestandsdaten.
 
-Bei RBAC-/Kalender-Änderungen (ab v0.4a) zusätzlich:
+## WICHTIG — Production-Datenbank und Release
 
-- [ ] `docs/nora/11-google-calendar-rbac.md` gelesen
-- [ ] Keine parallele Benutzerverwaltung — Rolle an `sales`, nicht neue User-Tabelle
-- [ ] Kein zweites Terminsystem (`appointments`) — nur `google_calendar_events` als Cache
-- [ ] Google Kalender = System of Record für Termine; Nora nur Cache + Verknüpfung
-- [ ] Keine private iCal-Adresse; keine Tokens in Frontend, Audit oder Data-API-Tabellen
-- [ ] Kalender-ID nicht in UI-Komponenten hardcoden
-- [ ] `origin = google` vs. `origin = nora` bei Schreiboperationen beachten
-- [ ] OAuth-Scopes minimal: read-only zuerst, write als eigene Welle
-- [ ] `service_role` niemals im Browser
-- [ ] Bestehende Google-Labels/Farben/Freigaben nicht über Nora ändern
-- [ ] Audit-Events für Kalender über bestehende `audit_events` — keine neue Audit-Tabelle
+Bei jedem `apply_migration` oder SQL-Write gegen `nora-crm-prod` (Supabase MCP):
 
-Bei RBAC-/RLS-Härtung (v0.4b / v0.4b.1 / v0.4b.2) zusätzlich:
+- [ ] Ausdrückliche PO-Freigabe in dieser Session
+- [ ] Zielprojekt vor **jedem** Write per `list_projects` gegen Name **und** Ref (`kixxroxtfzbcbzctohex`) bestätigt
+- [ ] Sofort nach dem Apply `list_migrations` prüfen: Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen. `apply_migration` hat wiederholt den Anwendungszeitstempel eingetragen
+- [ ] Bei Drift: read-only verifizieren, dass die Zeile eindeutig zur gerade angewendeten Migration gehört (Name + `statements`), dann transaktional genau eine Zeile korrigieren, danach erneut read-only bestätigen (1:1 mit dem Repo, keine andere Zeile verändert)
+- [ ] Reihenfolge bei schemaabhängigen Wellen: RC einfrieren (Commit-SHA + Migration-SHA-256 aus dem Git-Blob, nicht aus dem CRLF-Arbeitsbaum) → Production-DB-Migration → DB-Verifikation → Git Push → automatisches Vercel-Deployment → Live-Smoke. **Nie** Push zuerst
+- [ ] Business-Zählstände vor/nach Apply unverändert; keine Testdaten in Produktion
 
-- [ ] Migrationen `20260714120000` + `20260714140000` + `20260714150000` angewendet
-- [ ] **Keine Testrolle** nach `db reset` ohne Setup (`rbac_rls_production_check.sql`)
-- [ ] Lokaler Testfluss: `production_check` → `first_admin_parallel` → `setup` → `matrix` → `final_hardening` → `checklists_audit` → `crm_audit` → `google_calendar` → `teardown` → `production_check`
-- [ ] Bekannter Windows-Tooling-Bug (bestätigt in zwei unabhängigen Sessions, 2026-08-29 Phase 6C und 6D.1): `rbac_rls_first_admin_parallel_runner.ps1` wirft `Write-Error "sales must be empty..."` trotz `count=0`, weil die Vorbedingungs-Regex die mehrzeilige `psql`-Spaltenausgabe falsch parst — kein SQL-/Produktfehler. Workaround: die im Skript enthaltene SQL (zwei parallele `docker exec ... psql`-Sessions gegen `auth.users`, danach Verifikation „exakt 1 admin + 1 viewer", Cleanup) manuell/per eigenem `Start-Job`-Aufruf ohne die Vorbedingungsprüfung nachbilden — nicht das `.ps1` patchen, ohne dass es explizit als eigene, bewusste Änderung entschieden wird.
-- [ ] Matrix als `postgres` mit `SET LOCAL ROLE nora_rls_test` — **kein** festes Testpasswort in Git
-- [ ] `nora_private` nicht in `config.toml` schemas
-- [ ] `nora_role_manager` NOLOGIN — kein Mitgliedschaft für `authenticated`
-- [ ] Teamlisten nutzen `sales_directory`, nicht `sales` (außer Admin-Verwaltung / eigenes Profil)
-- [ ] Keine GUC-Namen `nora.allow_sales_privilege_change` / `nora.privilege_rpc_token` im Code
-- [ ] `supabase/tests/checklists_audit_verification.sql`
-- [ ] `canAccess.ts` spiegelt Rollenmatrix; DB bleibt autoritativ
+Live-Smoke nach einem Deployment:
 
-Bei Google-Kalender-Grundlage (v0.4c.1) zusätzlich:
+- [ ] **Ein Reload genügt nicht.** Nora läuft mit `registerType: "prompt"`; ein neuer Service Worker bleibt WAITING, ein installierter Browser zeigt nach beliebig vielen Reloads den Vorgänger-Build. Entweder „Jetzt aktualisieren" auslösen oder in frischem Profil bzw. nach `unregister()` testen. Nachweis des neuen Builds: Asset-Hashes aus dem live ausgelieferten `index.html` gegen das DOM prüfen oder ein release-spezifisches Merkmal im Bundle
+- [ ] Nur nicht-schreibende Prüfung (Hotboard, Listen, Akten, Dialoge öffnen/schließen). Kein Schreib-Smoke ohne freigegebenen Testpfad
 
-- [ ] `docs/nora/14-google-calendar-readonly-implementation.md` gelesen
-- [ ] Migration `20260716120000_google_calendar_readonly.sql` angewendet
-- [ ] `supabase/tests/google_calendar_verification.sql` im Testfluss (nach `crm_audit`, vor `teardown`)
-- [ ] Keine `GOOGLE_*` Secrets in `VITE_*`
-- [ ] Edge Functions nur serverseitig; OAuth-Stubs geben 501/503 ohne Credentials — **kein** Fake-Erfolg
-- [ ] Demo: Hinweis „Google Kalender im Demomodus nicht verbunden“ — kein Fake-OAuth
-- [ ] Schema-Dateien (`01_tables` … `06_grants`) mit Migration synchron halten
+## WICHTIG — SECURITY DEFINER, RLS, Grants
 
-Bei rollenbewusster UX (v0.3k) zusätzlich:
+- [ ] Zugriffsmatrix geprüft: `anon`, `authenticated viewer`, `authenticated office`, `authenticated admin`, `service_role`
+- [ ] UI nie als Security Boundary; Prüfung gegen Grants/RLS/Function-Body
+- [ ] `search_path = ''` oder vollständig schema-qualifiziert; bei nicht-leerem `search_path` vorher prüfen, dass keine client-facing Rolle `CREATE` auf `public` hat
+- [ ] `nora_private` bleibt außerhalb der PostgREST-Schemas (`config.toml`); `nora_role_manager`, `nora_audit_writer`, `nora_calendar_linker` NOLOGIN, keine Mitgliedschaft für `authenticated`
+- [ ] `init_state` / `sales_directory`: Bewertung in `17` gilt nur für die dort geprüfte Projektion und Grants — bei Änderung neu bewerten
+- [ ] Teamlisten nutzen `sales_directory`, nicht `sales`; keine GUC-Token-Modelle (`nora.allow_sales_privilege_change`, `nora.privilege_rpc_token`, `nora.calendar_link_update`) wieder einführen
+- [ ] `canAccess.ts` spiegelt die Matrix; DB bleibt autoritativ
+- [ ] Kein Remote-Migration-Apply, kein Function-Deploy ohne Freigabe
 
-- [ ] Schreib-/Lösch-Buttons über `NoraAccessActions` oder `CanAccess` — nicht nur RLS-Fehler
-- [ ] `NoraReadOnlyBanner` für Viewer; keine Create-Aktion in Leerzuständen
-- [ ] Office: Archivieren sichtbar, Delete ausgeblendet
-- [ ] `normalizeCrmError` / `withCrmErrorHandler` — keine PostgREST-Rohtexte in Notifications
-- [ ] `DemoRoleSwitcher` nur bei `VITE_IS_DEMO=true`
-- [ ] `noraRbacUx.test.ts` grün
+## WICHTIG — Error Contract
 
-Bei v0.3k.1 (Dialog-Polish) zusätzlich:
+- [ ] Neuer Business-Fehler bekommt einen `NoraErrorCode` in `domain/noraErrorCodes.ts` **und** serverseitig `USING DETAIL = 'NORA_<CODE>'` — nie nur ein Regex-Pattern
+- [ ] `normalizeCrmError()` bleibt machine-code-first; kein `startsWith("NORA_")`-Raten; kein neuer generischer `CrmErrorKind`
+- [ ] FakeRest wirft denselben Code über `throwNoraError()`, sofern der Pfad dort modelliert ist — sonst als Debt in `17`
+- [ ] Migration additiv; `supabase/schemas/02_functions.sql` synchron; `supabase/tests/error_contract_verification.sql` grün
+- [ ] Human Message Independence: zwei Origins, gleicher `DETAIL`, unterschiedliche `MESSAGE`
 
-- [ ] `NoraAccessGuard` auf allen direkt erreichbaren Edit-/Create-Routen
-- [ ] Dirty-Dialog: X/Escape + blockiertes Outside-Close; Quick-Capture-Draft bleibt bei Abbrechen
-- [ ] `NoraShowBoundary` / `NoraListBoundary` / GlobalSearch-Fehler mit Retry
-- [ ] Import nur Admin; Import-Fähigkeiten in Decision-Log dokumentiert
-- [ ] `noraV03k1Ux.test.ts` grün
-- [ ] Manuelle Demo-Abnahme admin / office / viewer (Hotboard, Kanban, Show, Mobile)
+## WICHTIG — Operationen, Idempotency, Notifications
 
-Bei v0.3k.2 (Demo-Rollensimulation) zusätzlich:
+- [ ] Operation-ID: Einstieg mintet einmal; Transport überschreibt gültige IDs nicht; `operation_id` nie Auth, nie Geschäftslogik
+- [ ] `operation_id ≠ idempotency_key`; Idempotency nur über RPC-Parameter, Lock zuerst → Write → Persist in derselben Transaktion
+- [ ] `OperationStatus` bleibt `pending | success | error`; Presentation erfindet keinen Lifecycle (`03` Falle 37)
+- [ ] Ein Flow gehört genau einer Feedback-Schicht: Karte **oder** sonner, nie beide; sonner bleibt für nicht migrierte Flows
+- [ ] Operation-Slot nur registrieren, wenn die Operation wirklich startet; Fehler vor dem Start nicht in synthetische Records verwandeln (`QuickCaptureUnnotifiedError`-Muster)
+- [ ] `application/commands/*` importiert nichts aus `notifications/`; `NotificationProvider` liegt unter `OperationProvider`, kein zweiter Manager
+- [ ] Supabase- und FakeRest-Pfad gleiche Semantik; Texte aus `crm.notifications.*` in allen Katalogen
+- [ ] Overlay-/`z-index`-Verhalten im gestylten Browser abnehmen, nicht nur im Test; bei kritischen Overlays echter Hit-Test (`document.elementFromPoint()`) auf jedes betroffene Control
 
-- [ ] `demoSession.ts` ist einzige Demo-Session-Quelle — kein `setItem(DEFAULT_USER)` beim Import
-- [ ] `DemoRoleSwitcher` aktualisiert Profilmenü und Berechtigungen nach Wechsel
-- [ ] `demoRoleSimulation.test.ts` grün
-- [ ] `docs/nora/12-role-ux-acceptance.md` gepflegt
+## WICHTIG — PWA
 
-Bei CRM-Audit (v0.3l / v0.3l.1) zusätzlich:
+- [ ] PWA-Lifecycle ist keine Business-Operation: keine `operationId`, kein Idempotency-Key, kein Eintrag im Operation-/Notification-Store. UI konsumiert nur `usePwaUpdate()`
+- [ ] Eine ausgelöste Anfrage ist kein Erfolgssignal; belastbar ist `controllerchange`. Ausgelieferten Bibliothekscode (`node_modules/<paket>/dist/…`) lesen, nicht die README. Fristen beginnen beim Auslösen, nicht bei einer vorgelagerten Inszenierung
+- [ ] Große, sich verändernde Flächen bekommen keine Live-Rolle; Ansage getrennt über einen `sr-only`-Announcer (eine Ansage pro Zustandswechsel, Identität per React-Key)
+- [ ] `registerType: "prompt"` und der intakte Precache des laufenden Builds sind Produktionsvoraussetzung (kein `clients.claim()`); Vercel liefert `/assets/*` nicht `immutable`
 
-- [ ] `docs/nora/13-crm-audit-retention.md` gelesen
-- [ ] `npx supabase db reset --local` nach Audit-Migration
-- [ ] `supabase/tests/crm_audit_verification.sql` ausführen (Docker: `supabase_db_atomic-crm-demo`)
-- [ ] `supabase/tests/rbac_rls_matrix.sql` — Audit-Zeilen: Admin global ✅, Office nur RPC ✅, Viewer ❌
-- [ ] `supabase/tests/checklists_audit_verification.sql` — Checklisten-Audit unverändert, keine Doppel-Events
-- [ ] Kein Client-INSERT auf `audit_events`; Schreibweg nur Trigger + `nora_audit_writer`
-- [ ] Office: kein direktes `SELECT` auf `audit_events`; nur `get_entity_audit_events`
-- [ ] Viewer: `EntityAuditHistory` ausgeblendet (`CanAccess audit_events show`)
-- [ ] UI: keine rohen JSON-Dumps; `deal.stage_changed` und `deal.status_changed` gleiches Label
-- [ ] `auditUx.test.ts` grün
-- [ ] `npm run typecheck` / `npm run build`
-- [ ] `npm run dev:demo` — Rollenmatrix manuell: Admin `/audit` + Akte; Office nur Akte; Viewer weder noch
-- [ ] Demo-Seed: synthetische Events mit `source = demo`, fiktive Personen
+## WICHTIG — Routing, i18n, Views
 
-Bei Operation Correlation (Foundation Wave 1) zusätzlich:
+- [ ] Interne Navigation, `useMatch` und Redirect-Ziele über `noraCreatePath()`; englische Pfade nur als Legacy-Eingang; `LegacyPathRedirect` nicht entfernen
+- [ ] Neue View-Spalten in `companies_summary` / `contacts_summary` **ans Ende** anhängen (`create or replace view` erlaubt kein Einfügen)
+- [ ] Französischer Katalog: neue Keys mitführen, nie teilweise entfernen (`04`)
 
-- [ ] `nora_private.current_operation_id()` — INVOKER; nur UUID oder NULL; kein Auth/RLS-Effekt
-- [ ] Ownership: Einstieg mintet einmal; Transport überschreibt gültige IDs nicht
-- [ ] `audit_events.request_id` über zentralen Writer befüllt; keine zweite Spalte
-- [ ] Partial Index `audit_events_request_id_idx` (nicht unique)
-- [ ] Vertikaler Slice: `deals` update sendet `x-nora-operation-id`
-- [ ] `supabase/tests/operation_correlation_verification.sql` lokal nach `db reset`
-- [ ] HTTP: `node scripts/verify-operation-header.mjs` nur gegen lokal (mit + ohne Header)
-- [ ] Kein Remote-Migration-Apply / kein Function-Deploy ohne Freigabe
-- [ ] Altes Frontend ohne Header bleibt kompatibel (`request_id` NULL)
+## REFERENZ — Testreihenfolgen und Subsystem-Rezepte
 
-Bei Operation Manager + Catalog (Foundation Wave 2) zusätzlich:
+Kanonische SQL-Testsequenz nach `npx supabase db reset --local` (Docker-Container `supabase_db_atomic-crm-demo`):
 
-- [ ] Catalog typisiert; keine Fake-Systemschritte in Messages
-- [ ] Manager: pending → success|error; Exceptions nicht schlucken
-- [ ] Manager ohne React voll funktionsfähig (Singleton)
-- [ ] OperationProvider erzeugt keine zweite konkurrierende Instanz
-- [ ] Operation-ID Ownership: Manager Einstieg; Transport nur weiterreichen
-- [ ] In-memory only (kein DB/localStorage/Realtime)
-- [ ] `runtimeErrorId` nur session-ephemer (kein Server-Lookup bis Observatory)
-- [ ] `deal.update` Slice über Manager + Wave-1-Header
-- [ ] `deal.assign` nur Catalog, nicht als zweite Mutation erzwingen
-- [ ] `OperationProvider` in CRM; `useSyncExternalStore` für Listen
-- [ ] Retention: success kurz, error länger, pending nie auto-drop
-- [ ] Unit-Tests Manager A–M + Snapshot/Timer/Singleton + Wave-1 Regression
-- [ ] Keine Feedback-UI / kein Error Observatory in dieser Wave
+```
+rbac_rls_production_check → rbac_rls_first_admin_parallel → rbac_rls_setup → rbac_rls_matrix
+→ rbac_rls_final_hardening → checklists_audit_verification → crm_audit_verification
+→ google_calendar_verification → (wellenspezifische *_verification.sql)
+→ rbac_rls_teardown → rbac_rls_production_check
+```
 
-Bei Error Observatory Core (Foundation Wave 3) zusätzlich:
+- Matrix läuft als `postgres` mit `SET LOCAL ROLE nora_rls_test`; die Testrolle existiert nur über `rbac_rls_setup.sql`, nie in Migrationen, kein Passwort in Git
+- Windows: `rbac_rls_first_admin_parallel_runner.ps1` scheitert an einer Vorbedingungs-Regex trotz `count=0`. Workaround: die enthaltene SQL (zwei parallele `docker exec … psql`-Sessions gegen `auth.users`, danach „exakt 1 admin + 1 viewer", Cleanup) manuell nachbilden; das Skript nicht nebenbei patchen
 
-- [ ] `operation_errors` additiv; getrennt von `audit_events`
-- [ ] Keine Client-INSERT; nur `record_operation_error` / `report_operation_error`
-- [ ] Actor ausschließlich `safe_auth_uid()` — `operation_id` nie Auth
-- [ ] `public_ref` serverseitig UNIQUE (`NORA-E…`)
-- [ ] `technical_context` Allowlist; keine Bodies/Secrets/PII
-- [ ] Soft resource refs (kein FK auf Business-Tabellen)
-- [ ] Dedupe per `operation_id`; neue Attempts unterscheidbar
-- [ ] RLS: kein freier Browse; Admin SELECT; Report nur eigener Actor
-- [ ] `deal.update` Fehler → best-effort Record in eigener Transaktion
-- [ ] Observatory-Ausfall ersetzt Business-Exception nicht
-- [ ] `runtimeErrorId` ≠ `persistentErrorId` / `publicErrorRef`
-- [ ] `supabase/tests/error_observatory_verification.sql` nach `db reset`
-- [ ] Unit-Tests A–H + Kontakttermin-Regression
-- [ ] Keine Feedback-UI / keine Outbox / kein Remote-Apply ohne Freigabe
+Nummern (`customer_number` / `case_number`):
 
-Bei Customer & Contact Workflow Wave (2026-08-25) zusätzlich:
+- [ ] NULL/Duplikat/Format-Check; `UPDATE` muss mit „is immutable" fehlschlagen; `INSERT` mit Fake-Nummer wird überschrieben; `next_*`/`format_*` nicht für `anon`/`authenticated` ausführbar; keine zweite Nummernlogik in Demo/CSV/UI (`08`)
 
-- [ ] `companies.customer_kind` treibt Formularmodus — keine Business-Felder (Branche/Größe/Umsatz/Steuernummer) für `individual`
-- [ ] `contacts.is_primary` — max. 1 pro `company_id` (Partial Unique Index bleibt Autorität, nicht nur UI)
-- [ ] Kunde+Ansprechpartner-Anlage nur über RPC `create_customer_with_contact` — kein sequentielles Client-Create in `/kunden/create`
-- [ ] Hauptansprechpartner-Wechsel nur über RPC `set_primary_contact`
-- [ ] `links_jsonb` ersetzt LinkedIn-only-Validierung als UI-Quelle; `linkedin_url`/`website`/`context_links`/`phone_number` bleiben deprecated, nicht gelöscht
-- [ ] `companies_summary` / `contacts_summary` Views enthalten die neuen Spalten (sonst sieht Supabase-Mode sie nicht, obwohl die Basistabelle sie hat)
-- [ ] FakeRest-Demo nutzt den lifecycle-gewrappten `dataProvider`, nicht `baseDataProvider`, in `createCustomerWithContact`/`setPrimaryContact` (sonst fehlen `first_seen`/`customer_number`/`nb_contacts`-Defaults)
-- [ ] `npx supabase db reset --local` nach Migration (nicht in diesem Sandbox-Environment ausführbar — siehe Abschlussbericht)
-- [ ] `npm run typecheck` / `npm run build` / `npm run dev:demo` — Kunden-/Privatperson-Anlage manuell im Browser geprüft
+Checklisten / Audit (`10`, `13`):
 
-Bei Error-Contract-Änderungen (ab Error Contract Wave, 2026-08-28) zusätzlich:
+- [ ] relationale Tabellen, kein JSONB-only; `label_snapshot` an Run-Items; Vorlagen/Snippets `is_active = false` statt DELETE; `service_area_code` ≠ `company_id`
+- [ ] Run-Start nur über `start_checklist_run_from_template`; Demo-Hinweis bei `VITE_IS_DEMO`
+- [ ] `audit_events` append-only: kein Client-INSERT, Schreibweg nur Trigger + `nora_audit_writer`; Office nur `get_entity_audit_events`, Viewer nichts; neue Trigger schreiben `deal.status_changed` (Legacy `deal.stage_changed` bleibt lesbar); UI ohne rohe JSON-Dumps
+- [ ] Tests: `checklists_audit_verification.sql`, `crm_audit_verification.sql`, `rbac_rls_matrix.sql`, `auditUx.test.ts`
 
-- [ ] Neuer Business-Fehler bekommt einen `NoraErrorCode` in `domain/noraErrorCodes.ts` UND serverseitig `USING DETAIL = 'NORA_<CODE>'` — nicht nur ein neues Regex-Pattern
-- [ ] `normalizeCrmError()` bleibt machine-code-first: erkannter Code aus `.details`/explizitem `.code` vor der Regex-Kette
-- [ ] Kein `startsWith("NORA_")`-Raten — nur kanonisch gelistete Codes werden akzeptiert
-- [ ] Kein neuer generischer `CrmErrorKind`-Business-Zwischenwert (`domain_rejection` o. ä.) — neue Codes gehen direkt auf `messageKey`
-- [ ] FakeRest wirft denselben Code über `throwNoraError()` (`.details`), sofern FakeRest den Command-Pfad überhaupt modelliert — sonst als Debt dokumentieren, nicht Scope aufblasen
-- [ ] Migration additiv, neue Datei mit neuem Zeitstempel — bereits angewendete Migrationen nie editieren
-- [ ] `supabase/schemas/02_functions.sql` synchron nachgezogen
-- [ ] `supabase/tests/error_contract_verification.sql` (oder Erweiterung) nach `db reset --local` grün
-- [ ] Human Message Independence nachgewiesen, wenn zwei Origins denselben Code liefern (Test mit unterschiedlichem MESSAGE-Text, gleichem DETAIL)
-- [ ] `npm run typecheck` / `npm run build` / `npx vitest run`
+Google Kalender (`11`, `14`):
 
-Bei Notification-/Feedback-Änderungen (ab Phase 7B.4, 2026-08-29) zusätzlich:
+- [ ] Keine parallele Benutzertabelle; kein zweites Terminsystem (`appointments`); Google = System of Record, Nora = Cache + Verknüpfung
+- [ ] Keine iCal-Adresse; keine Tokens in Frontend, Audit oder Data-API-Tabellen; keine `GOOGLE_*`-Secrets in `VITE_*`; Kalender-ID nicht in Komponenten
+- [ ] `origin = google` read-only; Scopes minimal; `service_role` nie im Browser; Google-Labels/Freigaben nicht über Nora ändern
+- [ ] Edge Functions ohne Credentials liefern 501/503, kein Fake-Erfolg; Demo zeigt Hinweis ohne OAuth; Schema-Dateien `01_tables` … `06_grants` mit Migration synchron
+- [ ] `google_calendar_verification.sql` in der Sequenz nach `crm_audit`
 
-- [ ] **Ein Flow gehört genau einer Feedback-Schicht.** Wird ein Flow auf die Notification-Karte migriert, werden seine `notify()`-Aufrufe für dieselbe fachliche Aussage im selben Schritt entfernt — nie Karte *und* Toast nebeneinander
-- [ ] sonner bleibt für alle nicht migrierten Flows montiert; keine globale Toast-Bereinigung nebenbei
-- [ ] Ein Operation-Slot wird nur registriert, wenn die Operation auch wirklich startet (kein Phantom-Slot → sonst hängt die Karte für immer auf `pending`)
-- [ ] Fehler **vor** dem Start einer Operation werden nicht in einen synthetischen `OperationRecord` verwandelt — Feldfehler bleiben inline, alles andere meldet der Aufrufer selbst (`QuickCaptureUnnotifiedError`-Muster)
-- [ ] `application/commands/*` importiert weiterhin nichts aus `notifications/` (kein Display Context, kein i18n-Key, kein Tone)
-- [ ] Kein zweiter `OperationManager`: der `NotificationProvider` liegt unterhalb des `OperationProvider`
-- [ ] Neue sichtbare Texte kommen aus `crm.notifications.*` in **allen** registrierten Katalogen (Deutsch primär, Englisch gepflegt, französische Struktur nicht still brechen)
-- [ ] **Supabase- und FakeRest-Pfad haben dieselbe Semantik.** Keine Demo-Sonderlogik. Wo beide Provider denselben Execute-Wrapper benutzen, ist die Parität strukturell; wo ein Provider `manager.execute` selbst inlined, muss sie explizit nachgezogen und getestet werden
-- [ ] **Overlay-/Portal-/`z-index`-Verhalten wird in der echten gestylten App abgenommen, nicht nur im Test.** Im Browser-Test-Bundle sind Tailwind-Utilities nicht kompiliert — Aussagen über Geometrie, Sichtbarkeit und Klickbarkeit, die an `@apply`-Klassen hängen (`fixed`, `pointer-events-none`, Abstände), sind dort **nicht** bewiesen und können sogar aus dem falschen Grund grün sein. Belastbar sind im Test nur reine CSS-Deklarationen (`z-index`, `pointer-events` aus eigenen Regeln)
-- [ ] Bei kritischen Overlay-Änderungen **echter Hit-Test** (`document.elementFromPoint()` o. ä.) auf jedes betroffene Control der darunterliegenden Oberfläche — „sieht richtig aus" ist kein Nachweis
-- [ ] Nach einer finalen UX-Entscheidung werden Design-System-, Decision-Log- und Current-State-Doku **im selben Zug** nachgezogen; überholte Zwischenstände werden als überholt markiert statt gelöscht
-- [ ] `npm run typecheck` / `npm run build` / `npx vitest run`
-- [ ] **Live-Smoke direkt nach einem Deployment: ein Reload genügt nicht mehr.** Nora ist eine PWA (`vite-plugin-pwa`, `generateSW`) und läuft seit PWA-1B mit `registerType: "prompt"`: ein neuer Service Worker bleibt **WAITING**, bis der Benutzer aktualisiert. Ein bereits installierter Browser zeigt deshalb auch nach beliebig vielen Reloads weiter den **Vorgänger-Build** — das ist gewollt (der Precache des laufenden Builds bleibt intakt), macht aber jeden naiven Smoke-Test wertlos. Um den neuen Build wirklich zu prüfen, eines von beidem: den Update-Hinweis „Jetzt aktualisieren“ auslösen, **oder** in einem frischen Profil bzw. nach `unregister()` des Service Workers testen. Ursache und Reproduktion: siehe `docs/nora/17-known-issues-and-planned-waves.md`, Abschnitt „PWA-Update-Verhalten nach Deployment“. Verlässlicher Nachweis, dass wirklich der neue Build läuft: die Asset-Hashes aus dem live ausgelieferten `index.html` gegen das DOM prüfen bzw. auf einen release-spezifischen Marker im Bundle testen (bestätigt beim Phase-7B-Release 2026-08-30)
-- [ ] **PWA-Lifecycle nicht als Business-Operation modellieren.** Ein Update bekommt keine `operationId`, keinen Idempotency-Key, keinen Eintrag im OperationManager und keinen erfundenen `pending/success/error`-Verlauf im Notification-Store. UI konsumiert ausschließlich `usePwaUpdate()` und fasst `navigator.serviceWorker`/Workbox nie direkt an
-- [ ] **Eine ausgelöste Anfrage ist kein Erfolgssignal.** Wenn ein Zustand „hat geklappt" behaupten soll, muss dahinter ein reales Ereignis der Plattform stehen — nicht das Resolven eines Promise aus einer Fremdbibliothek. Vor dem Bauen den **ausgelieferten** Code der Bibliothek lesen (`node_modules/<paket>/dist/…`), nicht die README. Konkreter Fall: `updateServiceWorker()` aus `vite-plugin-pwa` resolved immer und sagt nichts über die Worker-Übernahme; das belastbare Signal ist `controllerchange`. Wer auf ein Ausbleiben reagieren will, braucht einen **Watchdog mit gemessener Frist** — und die Frist beginnt beim Auslösen, nicht am Anfang einer vorgelagerten Inszenierung
-- [ ] **Große, sich verändernde Flächen bekommen keine Live-Rolle.** `role="status"`/`role="alert"` bringen `aria-atomic="true"` mit: jede Mutation im Teilbaum wird als komplette Wiederholung vorgelesen. Sichtbare Präsentation und Screenreader-Ansage trennen (Muster: `NoraNotificationAnnouncer` in 7B, `UpdateAnnouncer` in der PWA-Schicht) — eine kurze Ansage pro Zustandswechsel, Identität über einen React-Key, kein Whitespace-Trick
+Rollenbewusste UX (`02`, `12`):
 
-Wenn ein Fehler entsteht:
+- [ ] Schreib-/Löschaktionen über `NoraAccessActions` / `CanAccess`; `NoraReadOnlyBanner` für Viewer; Office: Archivieren sichtbar, Delete ausgeblendet; `NoraAccessGuard` auf Edit-/Create-Routen; Import nur Admin
+- [ ] Dirty-Dialoge: X/Escape bestätigen, Außenklick blockiert; Quick-Capture-Draft bleibt bei Abbrechen; `DemoRoleSwitcher` nur bei `VITE_IS_DEMO=true`; `demoSession.ts` einzige Demo-Session-Quelle
+- [ ] Tests: `noraRbacUx.test.ts`, `noraV03k1Ux.test.ts`, `demoRoleSimulation.test.ts`
 
-1. Ursache dokumentieren.
-2. Keine hektische Komplettumschreibung.
-3. Kleine, nachvollziehbare Korrektur.
-4. Bestehende Daten nicht unnötig migrieren oder löschen.
+Operation Correlation / Manager / Error Observatory (`15`):
+
+- [ ] `nora_private.current_operation_id()` INVOKER, nur UUID oder NULL; `audit_events.request_id` über den zentralen Writer, partial Index nicht unique; altes Frontend ohne Header bleibt kompatibel
+- [ ] Manager ohne React funktionsfähig (Singleton), `OperationProvider` erzeugt keine zweite Instanz; in-memory only; Retention success kurz, error länger, pending nie auto-drop
+- [ ] `operation_errors` additiv, getrennt von `audit_events`; Writes nur über `record_operation_error` / `report_operation_error`; Actor nur `safe_auth_uid()`; `public_ref` serverseitig UNIQUE (`NORA-E…`); `technical_context` Allowlist ohne Bodies/Secrets/PII; Soft-Refs ohne FK auf Business-Tabellen
+- [ ] Tests: `operation_correlation_verification.sql`, `error_observatory_verification.sql`, `operation_status_disposition_verification.sql`; HTTP-Diagnose `node scripts/verify-operation-header.mjs` nur lokal
+
+Customer & Contact Workflow (`01`, `03`):
+
+- [ ] `customer_kind` treibt den Formularmodus; keine Business-Felder für `individual`; `contacts.is_primary` max. 1 pro `company_id` (Partial Unique Index ist Autorität)
+- [ ] Kunde+Ansprechpartner nur über `create_customer_with_contact`, Wechsel nur über `set_primary_contact`; `links_jsonb` statt LinkedIn-Sonderfall; Legacy-Spalten bleiben
+- [ ] FakeRest nutzt den lifecycle-gewrappten `dataProvider`, nicht `baseDataProvider`, für `createCustomerWithContact` / `setPrimaryContact`
+- [ ] Tests: `customer_contact_workflow_verification.sql`, `task_customer_context_verification.sql`

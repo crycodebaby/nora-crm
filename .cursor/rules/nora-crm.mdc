@@ -5,20 +5,16 @@ alwaysApply: true
 
 # Nora CRM Agent Rule
 
-Before making changes, read:
+`AGENTS.md` is the binding entry point. Read it first, then `docs/nora/00-project-context.md` and `docs/nora/16-current-state.md`. Pick further documents by task from AGENTS.md section D.
 
-- `AGENTS.md`
-- `docs/nora/00-project-context.md`
-- `docs/nora/01-domain-model.md`
-- `docs/nora/02-design-system.md`
-- `docs/nora/03-data-model-guardrails.md`
-- `docs/nora/04-routing-i18n.md`
-- `docs/nora/06-decision-log.md`
+Non-negotiable:
 
-Never blindly rename internal resources (`contacts`, `companies`, `deals`, `tasks`, `tags`). Use visible German labels and routes instead.
+- The database (RLS, SECURITY DEFINER RPCs) is the security boundary; UI guards are not.
+- No Supabase migration or DB change without a documented decision in `docs/nora/06-decision-log.md`.
+- Production DB writes and pushes to `origin/main` (= production deployment) only with explicit Product Owner authorization.
+- Never modify a dirty local `main`, existing stashes, or `.cursor/mcp.json`.
+- Never rename internal resources (`contacts`, `companies`, `deals`, `tasks`, `tags`, `sales`); German routes and labels are canonical.
+- Inherited Atomic CRM files (`README.md`, `doc/`, upstream skills, the `mcp` edge function) are not Nora product behavior.
+- Do not edit `dist/`.
 
-Do not edit `dist/` directly.
-
-Do not create Supabase migrations or DB changes without an explicit documented decision.
-
-Run `npm run typecheck` and `npm run build` after meaningful changes.
+Verification before commit: `npm run lint`, `npm run prettier`, `npm run typecheck`, `npx vitest run`, `npm run build`.

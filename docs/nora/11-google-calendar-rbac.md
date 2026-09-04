@@ -1,7 +1,9 @@
 # 11 – Google Kalender-Architektur und Nora-Rollenmodell (RBAC)
 
+Status: REFERENZ · Rollenmodell (Abschnitt C, D) ist **CURRENT und live**; Kalenderteil (Abschnitt A, B, E–M) ist **IMPLEMENTED IN REPOSITORY — NOT DEPLOYED IN PRODUCTION** (Edge Functions fehlen in `nora-crm-prod`, siehe `16`) · Abschnitt 0 ist eine **historische Ist-Analyse vor v0.4b** · Zuletzt geprüft: 2026-09-04
+
 **Welle v0.4a** — Spezifikation  
-**Status:** v0.4c.1 Grundlage implementiert — OAuth/Sync folgen v0.4c.2+ (siehe `14-google-calendar-readonly-implementation.md`)
+**Status damals:** v0.4c.1 Grundlage implementiert — OAuth/Sync folgen v0.4c.2+ (siehe `14-google-calendar-readonly-implementation.md`)
 
 Dieses Dokument spezifiziert die Google-Kalender-Integration und das Nora-Rollenmodell (`admin`, `office`, `viewer`) auf Basis des **bestehenden** Auth-/Benutzermodells. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `10-checklists-snippets-audit.md` und den Decision Log.
 
@@ -9,7 +11,9 @@ Dieses Dokument spezifiziert die Google-Kalender-Integration und das Nora-Rollen
 
 ---
 
-## 0. Ausgangslage (Ist-Analyse)
+## 0. Ausgangslage — HISTORISCH (Ist-Analyse vor v0.4b, 2026-07-14)
+
+> Dieser Abschnitt beschreibt den Zustand **vor** der RBAC-Härtung. Heute gilt: `sales.role` (`admin | office | viewer`) mit tiered RLS, `nora_private`-Helper, Rollenänderung nur über `set_sales_role_by_admin`, keine öffentliche Registrierung (Einladung durch Admin). Aktueller Stand: Abschnitt D.3/D.4 unten, `03` „RBAC- und RLS-Guardrails", `04` Auth-Routen.
 
 ### 0.1 Kanonischer CRM-Benutzer
 
@@ -21,7 +25,7 @@ Dieses Dokument spezifiziert die Google-Kalender-Integration und das Nora-Rollen
 | App-Identity | React-admin nutzt **`sales.id`** (bigint), nicht `auth.users.id` |
 | Privileg heute | `sales.administrator boolean` → App-Rolle `"admin"` / `"user"` |
 | Admin-Prüfung DB | `public.is_admin()` — EXISTS auf `sales` mit `administrator = true` |
-| Erster Nutzer | Sign-up nur wenn `init_state.is_initialized = 0`; erster `sales`-Datensatz erhält `administrator = TRUE` |
+| Erster Nutzer | *(damals)* Sign-up nur wenn `init_state.is_initialized = 0`; erster `sales`-Datensatz erhält `administrator = TRUE` — **heute:** kein öffentlicher Sign-up; erster Admin über `handle_new_user` + `resolve_first_signup_role`, weitere Nutzer per Einladung (`04`) |
 | Weitere Nutzer | Nur Admin über Edge Function `users` (service role) |
 | Deaktivierung | `sales.disabled` + Auth-Ban über Edge Function — **nicht** in `checkAuth` geprüft |
 
@@ -42,7 +46,7 @@ Dieses Dokument spezifiziert die Google-Kalender-Integration und das Nora-Rollen
 | `audit_events` | **admin only** (direkt); office via RPC | System only | blockiert | blockiert |
 | `configuration` | authenticated | **is_admin()** | **is_admin()** | — |
 
-**Befund:** Kern-CRM ist faktisch **Single-Tenant, alle authenticated = voller CRUD**. UI blockiert Nicht-Admins nur für `sales` und `configuration` (`canAccess.ts`) — **nicht API-sicher**.
+**Befund damals:** Kern-CRM war faktisch **Single-Tenant, alle authenticated = voller CRUD**; UI blockierte Nicht-Admins nur für `sales` und `configuration` — nicht API-sicher. **Behoben in v0.4b/v0.4b.1/v0.4b.2** (tiered RLS: viewer SELECT, office ohne DELETE, admin alles; Systemfelder per Trigger geschützt).
 
 ### 0.3 Ownership-Felder (ohne RLS-Durchsetzung)
 

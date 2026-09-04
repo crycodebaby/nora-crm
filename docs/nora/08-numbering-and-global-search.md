@@ -1,5 +1,7 @@
 # 08 – Kundennummern, Vorgangsnummern und globale Suche
 
+Status: IMPLEMENTED (Nummern, Hardening, globale Suche) · Zweck: REFERENZ · Die Abschnitte A–J unterhalb des Implementierungsstatus sind die **historische Spezifikation** und beschreiben teils Zustände „vor der Implementierung"; maßgeblich für den Ist-Zustand sind die Statusabschnitte oben und der Code.
+
 **Welle 6b** — Spezifikation  
 **Welle 6c** — Implementierung (Nummern + UI-Anzeige; globale Suche folgt in v0.2e)
 
@@ -239,7 +241,7 @@ Nora braucht feste, eindeutige Nummern für den operativen Alltag:
 
 ---
 
-## C. Empfohlene Datenfelder (noch nicht implementieren)
+## C. Empfohlene Datenfelder (historische Spezifikation — inzwischen implementiert, siehe Statusabschnitt oben)
 
 ### `companies.customer_number`
 
@@ -488,7 +490,7 @@ Navigation ausschließlich über `noraCreatePath({ resource, type: 'show', id })
 
 ---
 
-## G. UI-Auswirkungen (spätere Wellen)
+## G. UI-Auswirkungen (historische Spezifikation — umgesetzt, siehe „UI-Anzeigestellen" oben)
 
 | Stelle | Kundennummer | Vorgangsnummer |
 |---|---|---|

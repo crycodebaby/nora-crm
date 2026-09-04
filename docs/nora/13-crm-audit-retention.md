@@ -150,7 +150,7 @@ Welle v0.3l.1 schließt CRM-Audit für den Mitarbeiterbetrieb ab:
 | Thema | Stand |
 |---|---|
 | `event_hash` | Spalte vorbereitet — **keine** Befüllung in Triggern |
-| `request_id` | Spalte vorbereitet — **keine** Korrelation über HTTP-Requests |
+| `request_id` | *(damals leer)* — **seit Foundation Wave 1 (2026-08-10) befüllt** mit der `operation_id` aus dem Header `x-nora-operation-id` über `nora_private.current_operation_id()`; keine zweite Request-Identität (`03` Falle 36, `15` §5) |
 | WORM-Export | Kein externer unveränderlicher Speicher — nur DB append-only |
 | Purge / Archivierung | Keine automatische Löschfrist |
 
