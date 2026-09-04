@@ -108,6 +108,24 @@ E-Mail-Versand, echte GoTrue-Antworten und Live-Verhalten gegen
 `nora-crm-prod` — die `users` Edge Function ist zudem nicht automatisch
 deployt. Siehe Decision Log „2026-09-04 – Employee Onboarding & Access V1A".
 
+22. **Employee Onboarding & Access V1B** (2026-09-04): Präsentations-Welle
+über dem eingefrorenen V1A-Contract — Zustandsmaschine, Auth, Routen und
+Edge Function unverändert. Neue Login-Primitive (`OnboardingProgress`,
+`PasswordFieldWithVisibility`, `ConsentCheckbox`, `OnboardingSuccessMark`,
+`AccessStepFold`, `WaitingDots`, `onboardingSteps.ts`, `accessMotion.ts`),
+`EmployeeAccessShell` mit `--nora-access-*`-Tokens und 26-rem-Karte,
+`set-password-page.tsx` als Schrittfolge „Hallo {Vorname}" → Passwort →
+Profil (Variante B) → zentrierter Abschluss mit gezeichnetem grünen Haken;
+Ungültig/Gesperrt neutral. Admin: `EmployeeAccessStatus`-Pill in `SalesList`
+(neue Spalte „Rolle", alte Badges entfernt) und im `EmployeeAccessPanel`
+(Datumszeile, zustandsabhängige Aktionen, Verweis auf das eine Schreibfeld).
+Copy: Admin-Anlage „Mitarbeiter einladen". **Status: `V1B RC — LOCAL
+VERIFIED, AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`** — Branch
+`feat/nora-employee-onboarding-access-v1b`, nicht auf `main`, nicht deployt.
+Verifikation und Messwerte: Decision Log „2026-09-04 – Employee Onboarding &
+Access V1B"; Gestaltungsregeln: `02-design-system.md` „Mitarbeiter-Onboarding
+& Zugang (Welle V1B)".
+
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
 Vollständige Entscheidung: Decision Log "2026-08-25 – Customer & Contact Workflow Wave".
@@ -308,6 +326,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 | CRM-Audit-Retention | `13-crm-audit-retention.md` |
 | Google-Kalender-Implementierung (read-only) | `14-google-calendar-readonly-implementation.md` |
 | **Dieser Überblick** | `16-current-state.md` |
+| **Mitarbeiter-Onboarding & Zugang (Einladung → Passwort → Profil → Abschluss, Admin-Zugangsstatus)** | `02-design-system.md` „Mitarbeiter-Onboarding & Zugang (Welle V1B)" (Gestaltung) + `06-decision-log.md` „2026-09-04 – Employee Onboarding & Access V1A" (Contract) und „… V1B" (Präsentation) + `login/employeeOnboardingFlow.ts` (Zustandsmaschine) |
 | **Offene Bugs, geplante Waves im Detail** | `17-known-issues-and-planned-waves.md` |
 | **Error Contract (`NoraErrorCode`, `DETAIL`-Konvention, machine-code-first `normalizeCrmError`)** | `06-decision-log.md` „2026-08-28 – Error Contract Wave" + `domain/noraErrorCodes.ts` + `07-agent-change-checklist.md` |
 | **Operation Status Contract (`execution`/`errorCode`/`result` am `OperationRecord`, `_meta.disposition`)** | `06-decision-log.md` „2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)" + `operations/operationModel.ts` + `operations/operationManager.ts` |

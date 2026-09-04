@@ -101,6 +101,24 @@
   --nora-line-body: 1.55;
   --nora-line-readable: 1.65;
   --nora-touch-min: 2.75rem;
+  /* Employee access surface (Onboarding & Access V1B). The public shell is
+     light by decision; every colour it uses still goes through these tokens
+     so a later `.dark` block can redefine them without touching markup. */
+  --nora-access-ground: #e8e8ed;
+  --nora-access-surface: #f0f0f3;
+  --nora-access-field: #ffffff;
+  --nora-access-ink: #111111;
+  --nora-access-text: #1d1d1f;
+  --nora-access-muted: #3a3a3c;
+  --nora-access-hairline: color-mix(in oklab, #111111 6%, transparent);
+  --nora-access-hairline-strong: color-mix(in oklab, #111111 14%, transparent);
+  --nora-access-aside-top: #111111;
+  --nora-access-aside-bottom: #0a0a0a;
+  --nora-access-card-width: 26rem;
+  --nora-access-shadow:
+    0 1px 2px color-mix(in oklab, #111111 5%, transparent),
+    0 6px 16px color-mix(in oklab, #111111 5%, transparent),
+    0 24px 48px color-mix(in oklab, #111111 4%, transparent);
   /* Status semantics (Phase 7B.2). Nora red is deliberately NOT used for
      pending — it sits too close to --destructive and would make a running
      action read as a failure. Pending stays neutral. */
@@ -2562,5 +2580,795 @@ input[type="time"] {
   }
   79% {
     border-radius: 53% 47% 41% 59% / 59% 43% 57% 41%;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   Employee Onboarding & Access V1B — public access surface
+   -------------------------------------------------------------------------
+   One card, one reading direction: greeting → progress → copy → form →
+   action. Everything below only reads the `--nora-access-*` tokens. Motion
+   is limited to opacity, transform, stroke and the grid fold that the PWA
+   system event already proved safe; nothing loops except a genuine waiting
+   indicator, and nothing moves once a step has settled. */
+@layer components {
+  .nora-access-shell {
+    background: var(--nora-access-ground);
+    color: var(--nora-access-ink);
+  }
+
+  .nora-access-aside {
+    background: linear-gradient(
+      180deg,
+      var(--nora-access-aside-top) 0%,
+      var(--nora-access-aside-bottom) 100%
+    );
+  }
+
+  .nora-access-card {
+    position: relative;
+    width: 100%;
+    max-width: var(--nora-access-card-width);
+    margin-inline: auto;
+    padding: 2rem;
+    border-radius: 1.25rem;
+    border: 1px solid var(--nora-access-hairline);
+    background: var(--nora-access-surface);
+    box-shadow: var(--nora-access-shadow);
+    color: var(--nora-access-ink);
+    animation: nora-access-card-in 420ms var(--nora-motion-ease) both;
+  }
+
+  @media (max-width: 1023px) {
+    .nora-access-card {
+      max-width: min(30rem, 100%);
+      padding: 1.75rem;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .nora-access-card {
+      padding: 1.25rem;
+      border-radius: 1rem;
+    }
+  }
+
+  /* --- Typography ------------------------------------------------------- */
+  .nora-access-name {
+    color: var(--nora-access-muted);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25;
+  }
+
+  .nora-access-title {
+    color: var(--nora-access-ink);
+    font-size: 1.75rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    outline: none;
+  }
+
+  @media (max-width: 1023px) {
+    .nora-access-title {
+      font-size: 1.625rem;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .nora-access-title {
+      font-size: 1.5rem;
+    }
+  }
+
+  .nora-access-lead {
+    color: var(--nora-access-muted);
+    font-size: 0.9375rem;
+    line-height: var(--nora-line-body);
+    max-width: 60ch;
+  }
+
+  .nora-access-lead strong {
+    color: var(--nora-access-ink);
+    font-weight: 500;
+  }
+
+  .nora-access-muted-text {
+    color: var(--nora-access-muted);
+  }
+
+  .nora-access-note {
+    color: var(--nora-access-muted);
+    font-size: 0.875rem;
+    line-height: var(--nora-line-readable);
+  }
+
+  /* --- Identity chip ---------------------------------------------------- */
+  .nora-access-chip {
+    display: inline-flex;
+    max-width: 100%;
+    min-height: 2rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid var(--nora-access-hairline-strong);
+    background: color-mix(in oklab, var(--nora-access-field) 70%, transparent);
+    color: var(--nora-access-text);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .nora-access-chip svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+    color: var(--nora-access-muted);
+  }
+
+  /* --- Progress (informational, never interactive) --------------------- */
+  .nora-access-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--nora-access-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+
+  .nora-access-progress-dots {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .nora-access-progress-dot {
+    display: block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    border: 1.5px solid var(--nora-access-hairline-strong);
+    background: transparent;
+    transition:
+      background-color var(--nora-motion-base) var(--nora-motion-ease),
+      border-color var(--nora-motion-base) var(--nora-motion-ease),
+      transform var(--nora-motion-base) var(--nora-motion-ease);
+  }
+
+  .nora-access-progress-dot[data-state="done"] {
+    border-color: var(--nora-access-ink);
+    background: var(--nora-access-ink);
+  }
+
+  .nora-access-progress-dot[data-state="current"] {
+    border-color: var(--nora-brand);
+    background: var(--nora-brand);
+    box-shadow: inset 0 0 0 1.5px var(--nora-access-surface);
+    animation: nora-access-dot-settle var(--nora-motion-base)
+      var(--nora-motion-ease) both;
+  }
+
+  /* --- Waiting indicator (the only thing allowed to loop) -------------- */
+  .nora-wait-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 0.5rem;
+    vertical-align: middle;
+  }
+
+  .nora-wait-dot {
+    display: block;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.25;
+    animation: nora-wait-dot-fade 2400ms ease-in-out infinite;
+  }
+
+  .nora-wait-dot:nth-child(2) {
+    animation-delay: 400ms;
+  }
+
+  .nora-wait-dot:nth-child(3) {
+    animation-delay: 800ms;
+  }
+
+  /* --- Form primitives inside the card --------------------------------- */
+  .nora-access-card [data-slot="form-item"] {
+    gap: 0.5rem;
+  }
+
+  .nora-access-card [data-slot="form-label"] {
+    color: var(--nora-access-text);
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .nora-access-card input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: var(--nora-touch-min);
+    padding-inline: 0.875rem;
+    border-radius: var(--radius-lg);
+    background: var(--nora-access-field);
+    color: var(--nora-access-ink);
+    font-size: 0.9375rem;
+    transition:
+      border-color var(--nora-motion-fast) var(--nora-motion-ease),
+      box-shadow var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  @media (max-width: 639px) {
+    .nora-access-card input:not([type="checkbox"]):not([type="radio"]) {
+      min-height: 3rem;
+    }
+  }
+
+  .nora-access-card input:focus-visible {
+    border-color: color-mix(in oklab, var(--nora-brand) 45%, var(--border));
+    --tw-ring-color: var(--nora-brand-ring);
+  }
+
+  .nora-access-card [data-slot="form-description"] {
+    color: var(--nora-access-muted);
+    font-size: 0.8125rem;
+    line-height: var(--nora-line-body);
+  }
+
+  .nora-access-card [data-slot="form-error"],
+  .nora-access-field-error {
+    display: flex;
+    gap: 0.375rem;
+    align-items: flex-start;
+    color: var(--destructive);
+    font-size: 0.8125rem;
+    line-height: var(--nora-line-body);
+    animation: nora-access-rise-small 160ms var(--nora-motion-ease) both;
+  }
+
+  .nora-access-match {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--nora-success);
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    animation: nora-access-fade 160ms var(--nora-motion-ease) both;
+  }
+
+  .nora-access-match svg {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  /* Password field: the toggle is a full 44 px target anchored inside the
+     field. It never changes the box of the field, so revealing the password
+     cannot shift the layout. */
+  .nora-access-password-field {
+    position: relative;
+  }
+
+  .nora-access-password-field input {
+    padding-right: 3rem;
+  }
+
+  .nora-access-password-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: inline-flex;
+    width: var(--nora-touch-min);
+    min-height: var(--nora-touch-min);
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    color: var(--nora-access-muted);
+    outline: none;
+    transition: color var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-access-password-toggle:hover,
+  .nora-access-password-toggle[aria-pressed="true"] {
+    color: var(--nora-access-ink);
+  }
+
+  .nora-access-password-toggle:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--nora-brand-ring);
+    color: var(--nora-access-ink);
+  }
+
+  .nora-access-password-toggle svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+
+  /* Consent: a checkbox, not a settings switch. */
+  .nora-access-consent {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr;
+    gap: 0.75rem;
+    align-items: start;
+    min-height: var(--nora-touch-min);
+    padding-block: 0.375rem;
+  }
+
+  .nora-access-consent [data-slot="checkbox"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0.0625rem;
+    border-radius: 0.375rem;
+    background: var(--nora-access-field);
+  }
+
+  .nora-access-consent [data-slot="checkbox"][data-state="checked"] {
+    background: var(--nora-access-ink);
+    border-color: var(--nora-access-ink);
+  }
+
+  .nora-access-consent [data-slot="checkbox"]:focus-visible {
+    border-color: color-mix(in oklab, var(--nora-brand) 45%, var(--border));
+    --tw-ring-color: var(--nora-brand-ring);
+  }
+
+  .nora-access-consent-label {
+    color: var(--nora-access-text);
+    font-size: 0.9375rem;
+    line-height: var(--nora-line-body);
+    cursor: pointer;
+  }
+
+  /* --- Actions ----------------------------------------------------------- */
+  .nora-access-action {
+    width: 100%;
+    font-size: 0.9375rem;
+    border-radius: var(--radius-lg);
+  }
+
+  @media (max-width: 639px) {
+    .nora-access-action.nora-access-action {
+      min-height: 3rem;
+    }
+  }
+
+  .nora-access-action[aria-busy="true"] {
+    pointer-events: none;
+  }
+
+  .nora-access-action-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: nora-access-fade 180ms var(--nora-motion-ease) both;
+  }
+
+  .nora-access-link {
+    display: inline-flex;
+    min-height: var(--nora-touch-min);
+    align-items: center;
+    padding-inline: 0.25rem;
+    border-radius: var(--radius-md);
+    color: var(--nora-access-text);
+    font-size: 0.9375rem;
+    text-underline-offset: 4px;
+    outline: none;
+    transition: color var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-access-link:hover,
+  .nora-access-link:focus-visible {
+    color: var(--nora-access-ink);
+    text-decoration: underline;
+  }
+
+  .nora-access-link:focus-visible {
+    box-shadow: 0 0 0 3px var(--nora-brand-ring);
+  }
+
+  @media (max-width: 639px) {
+    .nora-access-link-row {
+      justify-content: center;
+    }
+  }
+
+  /* Provider failures live under the action, inline — never a toast. */
+  .nora-access-alert {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 0.75rem 0.875rem;
+    border-radius: var(--radius-lg);
+    background: color-mix(
+      in oklab,
+      var(--destructive) 6%,
+      var(--nora-access-surface)
+    );
+    color: var(--nora-access-ink);
+    font-size: 0.875rem;
+    line-height: var(--nora-line-body);
+    animation: nora-access-rise-small 200ms var(--nora-motion-ease) both;
+  }
+
+  .nora-access-alert svg {
+    flex: 0 0 auto;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.125rem;
+    color: var(--destructive);
+  }
+
+  /* Off-path states (invalid / blocked): neutral, never a warning colour. */
+  .nora-access-state-glyph {
+    display: inline-flex;
+    width: 2.5rem;
+    height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--nora-access-ink) 6%, transparent);
+    color: var(--nora-access-muted);
+  }
+
+  .nora-access-state-glyph svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  /* --- Step fold ---------------------------------------------------------
+     Same DOM, no page swap: the leaving step collapses 1fr → 0fr while the
+     entering step grows 0fr → 1fr, so the height of the card glides from one
+     natural height to the other without any height tween. Content fades
+     independently of the fold so it is never seen being squashed. */
+  .nora-access-steps {
+    display: grid;
+  }
+
+  .nora-access-fold {
+    display: grid;
+    grid-template-rows: 1fr;
+    width: 100%;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+      grid-template-rows 360ms var(--nora-choreo-ease),
+      opacity 260ms var(--nora-choreo-ease) 160ms,
+      transform 260ms var(--nora-choreo-ease) 160ms;
+  }
+
+  .nora-access-fold-inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .nora-access-fold[data-open="false"] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .nora-access-fold[data-open="false"][data-direction="out"] {
+    transform: translateY(-0.375rem);
+    transition:
+      grid-template-rows 360ms var(--nora-choreo-ease),
+      opacity 180ms var(--nora-motion-ease),
+      transform 180ms var(--nora-motion-ease);
+  }
+
+  .nora-access-fold[data-open="false"][data-direction="in"] {
+    transform: translateY(0.375rem);
+    transition: none;
+  }
+
+  .nora-access-fold[data-open="false"] .nora-access-fold-inner {
+    visibility: hidden;
+    transition: visibility 0s linear 180ms;
+  }
+
+  /* --- Completion ------------------------------------------------------- */
+  .nora-access-complete {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .nora-access-success-mark {
+    display: block;
+    width: 4rem;
+    height: 4rem;
+    overflow: visible;
+    animation: nora-access-mark-settle 240ms var(--nora-choreo-ease) 180ms both;
+  }
+
+  @media (max-width: 639px) {
+    .nora-access-success-mark {
+      width: 3.5rem;
+      height: 3.5rem;
+    }
+  }
+
+  .nora-access-mark-halo {
+    opacity: 0;
+    animation: nora-access-fade 220ms var(--nora-motion-ease) 300ms forwards;
+  }
+
+  .nora-access-mark-fill {
+    fill: var(--nora-success-soft);
+    opacity: 0;
+    animation: nora-access-fade 120ms var(--nora-motion-ease) 300ms forwards;
+  }
+
+  .nora-access-mark-ring {
+    fill: none;
+    stroke: var(--nora-success);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    animation: nora-access-draw 240ms var(--nora-choreo-ease) 180ms forwards;
+  }
+
+  .nora-access-mark-check {
+    fill: none;
+    stroke: var(--nora-success);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: nora-access-draw 260ms var(--nora-choreo-ease) 380ms forwards;
+  }
+
+  .nora-access-complete-title {
+    margin-top: 1.5rem;
+    animation: nora-access-rise 240ms var(--nora-choreo-ease) 620ms both;
+  }
+
+  .nora-access-complete-copy {
+    margin-top: 1rem;
+    animation: nora-access-rise 240ms var(--nora-choreo-ease) 700ms both;
+  }
+
+  .nora-access-complete-email {
+    display: block;
+    margin-block: 0.25rem;
+    color: var(--nora-access-ink);
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+
+  .nora-access-complete-action {
+    width: 100%;
+    margin-top: 2rem;
+    animation: nora-access-rise 240ms var(--nora-choreo-ease) 780ms both;
+  }
+
+  /* Once the sequence has run, the mark is a static drawing. */
+  .nora-access-complete[data-settled="true"] .nora-access-success-mark,
+  .nora-access-complete[data-settled="true"] .nora-access-mark-halo,
+  .nora-access-complete[data-settled="true"] .nora-access-mark-fill,
+  .nora-access-complete[data-settled="true"] .nora-access-mark-ring,
+  .nora-access-complete[data-settled="true"] .nora-access-mark-check,
+  .nora-access-complete[data-settled="true"] .nora-access-complete-title,
+  .nora-access-complete[data-settled="true"] .nora-access-complete-copy,
+  .nora-access-complete[data-settled="true"] .nora-access-complete-action {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transform: none;
+  }
+
+  .nora-access-complete[data-settled="true"] .nora-access-mark-ring {
+    transform: rotate(-90deg);
+  }
+
+  /* --- Admin: Nora-Zugang status pill ---------------------------------- */
+  .nora-access-pill {
+    display: inline-flex;
+    max-width: 100%;
+    min-height: 1.75rem;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+  }
+
+  .nora-access-pill svg {
+    flex: 0 0 auto;
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .nora-access-pill[data-state="invited"],
+  .nora-access-pill[data-state="unknown"] {
+    color: var(--muted-foreground);
+    background: color-mix(in oklab, var(--muted) 60%, transparent);
+    border-color: color-mix(in oklab, var(--foreground) 10%, transparent);
+  }
+
+  .nora-access-pill[data-state="unknown"] {
+    border-style: dashed;
+  }
+
+  .nora-access-pill[data-state="active"] {
+    color: var(--nora-success);
+    background: var(--nora-success-soft);
+    border-color: color-mix(in oklab, var(--nora-success) 25%, transparent);
+  }
+
+  .nora-access-pill[data-state="disabled"] {
+    color: var(--nora-warning);
+    background: var(--nora-warning-soft);
+    border-color: color-mix(in oklab, var(--nora-warning) 25%, transparent);
+  }
+
+  .nora-access-pill-hint {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    line-height: 1.25;
+  }
+}
+
+/* Touch-target guarantee for the access surface. Same trap as the system
+   event (see the note above `.nora-system-event-action`): `.nora-primary-action`
+   is a utilities-layer rule with `min-h-10`, and no layered rule can raise it.
+   An unlayered, doubled selector is the one construction that holds. */
+.nora-access-action.nora-access-action {
+  min-height: var(--nora-touch-min);
+}
+
+/* Same trap for inputs: the `h-9` of the shadcn Input is a utility and outranks any layered
+   min-height. Unlayered and doubled, the 44 px field (48 px on phones) holds. */
+.nora-access-card[data-access-card]
+  input:not([type="checkbox"]):not([type="radio"]) {
+  height: auto;
+  min-height: var(--nora-touch-min);
+}
+
+@media (max-width: 639px) {
+  .nora-access-card[data-access-card]
+    input:not([type="checkbox"]):not([type="radio"]) {
+    min-height: 3rem;
+  }
+}
+
+@keyframes nora-access-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes nora-access-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nora-access-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nora-access-rise-small {
+  from {
+    opacity: 0;
+    transform: translateY(0.125rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nora-access-dot-settle {
+  from {
+    transform: scale(0.8);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes nora-wait-dot-fade {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes nora-access-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes nora-access-mark-settle {
+  from {
+    transform: scale(0.92);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Reduced motion: every step still completes and in the same order; only the
+   movement is gone. The success mark appears already drawn, the text fades in
+   as one group, the fold snaps. The waiting dots keep their opacity cycle —
+   they are a genuine in-progress signal, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .nora-access-card,
+  .nora-access-progress-dot,
+  .nora-access-match,
+  .nora-access-alert,
+  .nora-access-field-error,
+  .nora-access-action-label,
+  .nora-access-card [data-slot="form-error"] {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+    transform: none !important;
+  }
+
+  .nora-access-fold {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    transform: none !important;
+  }
+
+  .nora-access-fold[data-open="false"] .nora-access-fold-inner {
+    transition-delay: 0ms !important;
+  }
+
+  .nora-access-success-mark,
+  .nora-access-mark-halo,
+  .nora-access-mark-fill,
+  .nora-access-mark-ring,
+  .nora-access-mark-check {
+    animation-duration: 1ms !important;
+    animation-delay: 100ms !important;
+  }
+
+  .nora-access-success-mark {
+    transform: none !important;
+  }
+
+  .nora-access-complete-title,
+  .nora-access-complete-copy,
+  .nora-access-complete-action {
+    animation-name: nora-access-fade !important;
+    animation-duration: 200ms !important;
+    animation-delay: 100ms !important;
+    transform: none !important;
   }
 }

@@ -117,7 +117,7 @@ describe("SetPasswordPage invalid/expired invite", () => {
     );
 
     await expect
-      .element(screen.getByText("Einladung ungültig oder abgelaufen"))
+      .element(screen.getByText("Dieser Link ist nicht mehr gültig"))
       .toBeVisible();
   });
 });

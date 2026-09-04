@@ -1,33 +1,42 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import type { ValidateForm } from "ra-core";
-import {
-  FieldTitle,
-  Form,
-  required,
-  useInput,
-  useNotify,
-  useTranslate,
-} from "ra-core";
+import { Form, required } from "ra-core";
+import { useWatch } from "react-hook-form";
 import type { FieldValues, SubmitHandler } from "react-hook-form";
-import { Eye, EyeOff } from "lucide-react";
-import { Link, useLocation, useNavigate } from "react-router";
-import { BooleanInput } from "@/components/admin/boolean-input";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { TextInput } from "@/components/admin/text-input";
 import {
-  FormControl,
-  FormError,
-  FormField,
-  FormLabel,
-} from "@/components/admin/form";
-import { InputHelperText } from "@/components/admin/input-helper-text";
+  CheckIcon,
+  CircleAlertIcon,
+  Link2OffIcon,
+  LockIcon,
+  MailIcon,
+} from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { Button } from "@/components/ui/button";
+import { TextInput } from "@/components/admin/text-input";
 import { EmployeeAccessShell } from "@/components/atomic-crm/login/EmployeeAccessShell";
+import { AccessStepFold } from "@/components/atomic-crm/login/AccessStepFold";
+import {
+  COMPLETION_SETTLE_MS,
+  COMPLETION_SETTLE_REDUCED_MS,
+  prefersReducedMotion,
+} from "@/components/atomic-crm/login/accessMotion";
+import { greetingFor } from "@/components/atomic-crm/login/onboardingSteps";
+import { ConsentCheckbox } from "@/components/atomic-crm/login/ConsentCheckbox";
+import { OnboardingProgress } from "@/components/atomic-crm/login/OnboardingProgress";
+import { OnboardingSuccessMark } from "@/components/atomic-crm/login/OnboardingSuccessMark";
+import { PasswordFieldWithVisibility } from "@/components/atomic-crm/login/PasswordFieldWithVisibility";
+import { WaitingDots } from "@/components/atomic-crm/login/WaitingDots";
 import {
   INITIAL_ONBOARDING_STATE,
-  ONBOARDING_PROGRESS_STEPS,
   onboardingReducer,
-  progressIndexOf,
+  type BlockedReason,
   type OnboardingStep,
 } from "@/components/atomic-crm/login/employeeOnboardingFlow";
 import {
@@ -40,65 +49,14 @@ import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
 import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
 
+/** V1A password contract: a recommendation, not a Nora minimum. Supabase validates. */
 const PASSWORD_GUIDANCE =
   "Empfohlen: mindestens 12 Zeichen. Verwenden Sie kein leicht erratbares Passwort.";
 
-interface PasswordInputProps {
-  label: string;
-  source: string;
-  autoComplete?: string;
-  validate?: Parameters<typeof useInput>[0]["validate"];
-  helperText?: string;
-}
-
-/**
- * Password field with a show/hide toggle. Each instance keeps its own
- * visibility state, so the password and confirm-password fields never
- * share a reveal state.
- */
-const PasswordInput = ({
-  label,
-  source,
-  autoComplete,
-  validate,
-  helperText,
-}: PasswordInputProps) => {
-  const [visible, setVisible] = useState(false);
-  const { id, field, isRequired } = useInput({ source, validate });
-
-  return (
-    <FormField id={id} name={field.name}>
-      <FormLabel>
-        <FieldTitle label={label} source={source} isRequired={isRequired} />
-      </FormLabel>
-      <div className="relative">
-        <FormControl>
-          <Input
-            {...field}
-            type={visible ? "text" : "password"}
-            autoComplete={autoComplete}
-            className="pr-10"
-          />
-        </FormControl>
-        <button
-          type="button"
-          onClick={() => setVisible((v) => !v)}
-          aria-label={visible ? "Passwort ausblenden" : "Passwort anzeigen"}
-          aria-pressed={visible}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
-        >
-          {visible ? (
-            <EyeOff className="h-4 w-4" aria-hidden="true" />
-          ) : (
-            <Eye className="h-4 w-4" aria-hidden="true" />
-          )}
-        </button>
-      </div>
-      <InputHelperText helperText={helperText} />
-      <FormError />
-    </FormField>
-  );
-};
+const PASSWORD_MISMATCH = "Die Passwörter stimmen nicht überein.";
+const CONSENT_REQUIRED = "Bitte bestätigen Sie den Hinweis.";
+const PROFILE_SAVE_FAILED =
+  "Ihr Passwort ist gespeichert. Der Name konnte gerade nicht gespeichert werden. Bitte versuchen Sie es noch einmal.";
 
 /**
  * Maps known Supabase auth failures during password setup to calm,
@@ -153,62 +111,81 @@ const EMPTY_IDENTITY: OnboardingIdentity = {
   email: "",
 };
 
-const STEP_LABEL: Record<(typeof ONBOARDING_PROGRESS_STEPS)[number], string> = {
-  welcome: "Willkommen",
-  password: "Passwort einrichten",
-  profile: "Profil bestätigen",
-  complete: "Fertig",
-};
+/** "Viktoriia P." — the quiet identity line above later step titles. */
+function nameLineFor(identity: OnboardingIdentity): string | null {
+  if (!identity.firstName) return null;
+  const initial = identity.lastName ? ` ${identity.lastName[0]}.` : "";
+  return `${identity.firstName}${initial}`;
+}
 
-const Progress = ({ current }: { current: OnboardingStep }) => {
-  const currentIndex = progressIndexOf(current);
+/* ---------------------------------------------------------------------- */
+/* Presentation primitives local to this page                              */
+/* ---------------------------------------------------------------------- */
+
+const StepTitle = ({ children }: { children: React.ReactNode }) => (
+  <h2 className="nora-access-title" tabIndex={-1} data-access-focus>
+    {children}
+  </h2>
+);
+
+/** Inline provider failure under the action — never a toast, never raw text. */
+const StepError = ({ message }: { message: string | null }) =>
+  message ? (
+    <div className="nora-access-alert" role="alert">
+      <CircleAlertIcon aria-hidden="true" />
+      <p>{message}</p>
+    </div>
+  ) : null;
+
+const ActionLabel = ({
+  submitting,
+  idle,
+  busy,
+}: {
+  submitting: boolean;
+  idle: string;
+  busy: string;
+}) =>
+  submitting ? (
+    <span key="busy" className="nora-access-action-label">
+      {busy}
+      <WaitingDots />
+    </span>
+  ) : (
+    <span key="idle" className="nora-access-action-label">
+      {idle}
+    </span>
+  );
+
+/** Quiet confirmation once both password fields agree. Never an error. */
+const PasswordMatchStatus = () => {
+  const [password, confirm] = useWatch({
+    name: ["password", "confirmPassword"],
+  }) as [string | undefined, string | undefined];
+  if (!password || !confirm || password !== confirm) return null;
   return (
-    <ol className="mb-6 grid grid-cols-4 gap-2" aria-label="Fortschritt">
-      {ONBOARDING_PROGRESS_STEPS.map((step, index) => {
-        const active = index === currentIndex;
-        const done = index < currentIndex;
-        return (
-          <li key={step} className="min-w-0">
-            <div
-              className={`h-1 rounded-full ${
-                done || active ? "bg-[#2c2c2c]" : "bg-black/10"
-              }`}
-              aria-hidden
-            />
-            <p
-              className={`mt-2 text-[11px] leading-snug truncate ${
-                active ? "text-foreground font-medium" : "text-muted-foreground"
-              }`}
-            >
-              <span className="sr-only">
-                {done ? "Erledigt: " : active ? "Aktuell: " : ""}
-              </span>
-              {STEP_LABEL[step]}
-            </p>
-          </li>
-        );
-      })}
-    </ol>
+    <p className="nora-access-match" data-testid="password-match">
+      <CheckIcon aria-hidden="true" />
+      <span>Stimmt überein.</span>
+    </p>
   );
 };
 
-/** Renders the current step error without leaking provider detail. */
-const StepError = ({ message }: { message: string | null }) =>
-  message ? (
-    <p className="text-sm text-destructive" role="alert">
-      {message}
-    </p>
-  ) : null;
+/* ---------------------------------------------------------------------- */
+/* Page                                                                    */
+/* ---------------------------------------------------------------------- */
 
 /**
  * Employee onboarding: invitation and password-setup links converge here.
  *
  * Tokens arrive via auth-callback.html → /zugang-einrichten → here, to avoid
- * HashRouter collisions. The Einmalcode (OTP) path arrives with a session
- * already established and no URL tokens. Both enter the same flow.
+ * HashRouter collisions. The Einmalcode path (invitation only) arrives with a
+ * session already established and no URL tokens. Both enter the same flow.
  *
- * All step transitions go through employeeOnboardingFlow's reducer, so the
- * later premium-UX wave can restyle every screen without touching auth logic.
+ * All step transitions go through employeeOnboardingFlow's reducer (V1A,
+ * unchanged). V1B only restyles what each step looks like: the fold between
+ * steps, the progress line, the password treatment and the completion mark
+ * are presentation — none of them decides which step is shown.
  */
 export const SetPasswordPage = () => {
   const [flow, dispatch] = useReducer(
@@ -229,8 +206,6 @@ export const SetPasswordPage = () => {
   const refresh_token = inviteTokens.refresh_token;
   const hasInviteTokens = Boolean(access_token && refresh_token);
 
-  const notify = useNotify();
-  const translate = useTranslate();
   const navigate = useNavigate();
 
   const isSupabaseConfigured = Boolean(
@@ -315,11 +290,10 @@ export const SetPasswordPage = () => {
   const validatePassword = (values: PasswordFormData) => {
     const errors: Record<string, string> = {};
     if (values.password !== values.confirmPassword) {
-      errors.password = "ra-supabase.validation.password_mismatch";
-      errors.confirmPassword = "ra-supabase.validation.password_mismatch";
+      errors.confirmPassword = PASSWORD_MISMATCH;
     }
     if (!values.privacyAccepted) {
-      errors.privacyAccepted = "Bitte bestätigen Sie den Hinweis.";
+      errors.privacyAccepted = CONSENT_REQUIRED;
     }
     return errors;
   };
@@ -388,297 +362,446 @@ export const SetPasswordPage = () => {
 
         dispatch({ type: "passwordSucceeded" });
       } catch (error) {
-        const message = mapPasswordSetupError(error);
-        dispatch({ type: "passwordFailed", error: message });
-        notify(message, { type: "error", messageArgs: { _: message } });
-      }
-    },
-    [access_token, hasInviteTokens, notify, refresh_token],
-  );
-
-  const submitProfile = useCallback(
-    async (values: ProfileFormData) => {
-      dispatch({ type: "onProfileSubmit" });
-
-      try {
-        const client = getSupabaseClient();
-        const first_name = String(values.first_name ?? "").trim();
-        const last_name = String(values.last_name ?? "").trim();
-
-        const { error: metaError } = await client.auth.updateUser({
-          data: { first_name, last_name },
+        dispatch({
+          type: "passwordFailed",
+          error: mapPasswordSetupError(error),
         });
-        if (metaError) throw metaError;
-
-        const { data: sessionData } = await client.auth.getUser();
-        const userId = sessionData.user?.id;
-        if (!userId) throw new Error("missing user");
-
-        const { data: sale, error: saleError } = await client
-          .from("sales")
-          .update({ first_name, last_name })
-          .eq("user_id", userId)
-          .select(
-            "id, first_name, last_name, avatar, administrator, role, disabled",
-          )
-          .single();
-        if (saleError || !sale) throw saleError ?? new Error("missing sale");
-
-        if (sale.disabled) {
-          dispatch({ type: "accessBlocked", reason: "disabled" });
-          return;
-        }
-
-        // Keep header identity in sync once the user enters the app.
-        setCurrentSaleCache(sale);
-
-        // Role is never writable from the client — omit intentionally.
-        await client.auth.refreshSession();
-        // Run finished: a later password-setup link must start at WELCOME.
-        clearPasswordSetMark();
-        dispatch({ type: "profileSucceeded" });
-      } catch {
-        const message =
-          "Das Profil konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.";
-        dispatch({ type: "profileFailed", error: message });
-        notify(message, { type: "error", messageArgs: { _: message } });
       }
     },
-    [notify],
+    [access_token, hasInviteTokens, refresh_token],
   );
 
-  if (flow.step === "checking") {
-    return (
-      <EmployeeAccessShell mode="einladung">
-        <Progress current="welcome" />
-        <p className="text-sm text-muted-foreground">Einladung wird geprüft…</p>
-      </EmployeeAccessShell>
-    );
-  }
+  const submitProfile = useCallback(async (values: ProfileFormData) => {
+    dispatch({ type: "onProfileSubmit" });
 
-  if (flow.step === "invalid") {
-    return (
-      <EmployeeAccessShell mode="einladung">
-        <Progress current="welcome" />
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Einladung ungültig oder abgelaufen
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Der Link ist nur einmal und nur begrenzt gültig — er kann auch durch
-            eine automatische E-Mail-Prüfung Ihres Systems bereits verbraucht
-            worden sein. Bitte fordern Sie bei Ihrer Administration einen neuen
-            Einladungs- oder Passwortlink an.
-          </p>
-          <Button asChild className="w-full nora-touch-target">
-            <Link to="/login?mode=einladung">Zur Aktivierung</Link>
-          </Button>
-          <Button asChild variant="ghost" className="w-full nora-touch-target">
-            <Link to="/login?mode=anmelden">Zur Anmeldung</Link>
-          </Button>
-        </div>
-      </EmployeeAccessShell>
-    );
-  }
+    try {
+      const client = getSupabaseClient();
+      const first_name = String(values.first_name ?? "").trim();
+      const last_name = String(values.last_name ?? "").trim();
 
-  if (flow.step === "blocked") {
-    return (
-      <EmployeeAccessShell mode="einladung">
-        <div className="space-y-4" role="status">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {flow.blockedReason === "unverified"
-              ? "Zugang konnte nicht geprüft werden"
-              : "Zugang nicht verfügbar"}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {flow.blockedReason === "unverified"
-              ? "Ihr Passwort wurde gespeichert. Ihr Zugang liess sich gerade nicht prüfen. Bitte melden Sie sich in Kürze mit Ihrem neuen Passwort an oder wenden Sie sich an Ihre Administration."
-              : "Für diese Adresse ist derzeit kein Nora-Zugang aktiv. Bitte wenden Sie sich an Ihre Administration."}
-          </p>
-          <Button asChild variant="ghost" className="w-full nora-touch-target">
-            <Link to="/login?mode=anmelden">Zur Anmeldung</Link>
-          </Button>
-        </div>
-      </EmployeeAccessShell>
-    );
-  }
+      const { error: metaError } = await client.auth.updateUser({
+        data: { first_name, last_name },
+      });
+      if (metaError) throw metaError;
 
-  if (flow.step === "complete") {
-    return (
-      <EmployeeAccessShell mode="einladung">
-        <Progress current="complete" />
-        <div
-          className="space-y-4 text-center lg:text-left"
-          role="status"
-          data-testid="onboarding-complete"
-        >
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Zugang eingerichtet
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Ihr persönliches Passwort ist gespeichert. Sie können sich ab jetzt
-            mit {identity.email || "Ihrer geschäftlichen E-Mail-Adresse"}{" "}
-            anmelden.
-          </p>
-          <Button
-            type="button"
-            className="w-full nora-primary-action nora-touch-target"
-            onClick={() => navigate("/")}
-          >
-            Weiter zu Nora
-          </Button>
-        </div>
-      </EmployeeAccessShell>
-    );
-  }
+      const { data: sessionData } = await client.auth.getUser();
+      const userId = sessionData.user?.id;
+      if (!userId) throw new Error("missing user");
 
-  if (flow.step === "profile") {
-    return (
-      <EmployeeAccessShell mode="einladung">
-        <Progress current="profile" />
-        <div className="space-y-6">
-          <div className="space-y-2 text-center lg:text-left">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              Profil bestätigen
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Ihr Passwort ist bereits gespeichert. Prüfen Sie zum Abschluss
-              Vor- und Nachname. Ihre Rolle wird ausschließlich von der
-              Administration festgelegt.
-            </p>
-          </div>
-          <StepError message={flow.error} />
-          <Form<ProfileFormData>
-            className="space-y-5"
-            onSubmit={submitProfile as SubmitHandler<FieldValues>}
-            defaultValues={{
-              first_name: identity.firstName,
-              last_name: identity.lastName,
-            }}
-          >
-            <TextInput
-              label="Vorname"
-              source="first_name"
-              autoComplete="given-name"
-              validate={required()}
-            />
-            <TextInput
-              label="Nachname"
-              source="last_name"
-              autoComplete="family-name"
-              validate={required()}
-            />
-            <Button
-              type="submit"
-              className="w-full nora-primary-action nora-touch-target"
-              disabled={flow.submitting}
-            >
-              Speichern und abschließen
-            </Button>
-          </Form>
-        </div>
-      </EmployeeAccessShell>
-    );
-  }
+      const { data: sale, error: saleError } = await client
+        .from("sales")
+        .update({ first_name, last_name })
+        .eq("user_id", userId)
+        .select(
+          "id, first_name, last_name, avatar, administrator, role, disabled",
+        )
+        .single();
+      if (saleError || !sale) throw saleError ?? new Error("missing sale");
 
-  if (flow.step === "welcome") {
-    return (
-      <EmployeeAccessShell mode="einladung">
-        <Progress current="welcome" />
-        <div className="space-y-6">
-          <div className="space-y-2 text-center lg:text-left">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              {identity.firstName
-                ? `Hallo ${identity.firstName}`
-                : "Willkommen bei Nora"}
-            </h2>
-            {/* Deliberately makes no claim about the password — it is not set yet. */}
-            <p className="text-sm text-muted-foreground">
-              Richten Sie jetzt Ihren persönlichen Nora-Zugang ein. Im nächsten
-              Schritt vergeben Sie Ihr eigenes Passwort.
-            </p>
-            {identity.email ? (
-              <p className="text-sm text-muted-foreground">
-                Ihre Anmeldeadresse für Nora:{" "}
-                <span className="font-medium text-foreground">
-                  {identity.email}
-                </span>
-              </p>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            className="w-full nora-primary-action nora-touch-target"
-            onClick={() => dispatch({ type: "onContinue" })}
-          >
-            Zugang einrichten
-          </Button>
-        </div>
-      </EmployeeAccessShell>
-    );
-  }
+      if (sale.disabled) {
+        dispatch({ type: "accessBlocked", reason: "disabled" });
+        return;
+      }
+
+      // Keep header identity in sync once the user enters the app.
+      setCurrentSaleCache(sale);
+
+      // Role is never writable from the client — omit intentionally.
+      await client.auth.refreshSession();
+      // Run finished: a later password-setup link must start at WELCOME.
+      clearPasswordSetMark();
+      dispatch({ type: "profileSucceeded" });
+    } catch {
+      // Variant B: the password is already saved; only the name failed.
+      dispatch({ type: "profileFailed", error: PROFILE_SAVE_FAILED });
+    }
+  }, []);
 
   return (
     <EmployeeAccessShell mode="einladung">
-      <Progress current="password" />
-      <div className="space-y-6">
-        <div className="space-y-2 text-center lg:text-left">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {translate("ra-supabase.set_password.new_password", {
-              _: "Neues Passwort festlegen",
-            })}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Wählen Sie ein persönliches Passwort. Gemeinsame Konten sind nicht
-            zulässig.
-          </p>
-        </div>
-        <StepError message={flow.error} />
-        <Form<PasswordFormData>
-          className="space-y-5"
-          onSubmit={submitPassword as SubmitHandler<FieldValues>}
-          validate={validatePassword as ValidateForm}
-          defaultValues={{ privacyAccepted: false }}
-        >
-          <PasswordInput
-            label="Passwort"
-            autoComplete="new-password"
-            source="password"
-            validate={required()}
-            helperText={PASSWORD_GUIDANCE}
-          />
-          <PasswordInput
-            label="Passwort bestätigen"
-            source="confirmPassword"
-            autoComplete="new-password"
-            validate={required()}
-          />
-          <BooleanInput
-            source="privacyAccepted"
-            label="Ich bestätige, dass ich diesen Zugang ausschließlich persönlich und für dienstliche Zwecke nutze."
-          />
-          <Button
-            type="submit"
-            className="w-full nora-primary-action nora-touch-target"
-            disabled={flow.submitting}
-          >
-            Passwort speichern
-          </Button>
-          {/* Allowed only before the password succeeds — the reducer ignores
-              this event from PROFILE, COMPLETE and BLOCKED. */}
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full nora-touch-target"
-            disabled={flow.submitting}
-            onClick={() => dispatch({ type: "onBack" })}
-          >
-            Zurück
-          </Button>
-        </Form>
-      </div>
+      <AccessStepFold stepKey={flow.step}>
+        {renderStep({
+          step: flow.step,
+          blockedReason: flow.blockedReason,
+          submitting: flow.submitting,
+          error: flow.error,
+          identity,
+          onContinue: () => dispatch({ type: "onContinue" }),
+          onBack: () => dispatch({ type: "onBack" }),
+          submitPassword,
+          submitProfile,
+          validatePassword,
+          onEnter: () => navigate("/"),
+        })}
+      </AccessStepFold>
     </EmployeeAccessShell>
   );
 };
 
 SetPasswordPage.path = "set-password";
+
+/* ---------------------------------------------------------------------- */
+/* Steps                                                                   */
+/* ---------------------------------------------------------------------- */
+
+type StepProps = {
+  step: OnboardingStep;
+  blockedReason?: BlockedReason;
+  submitting: boolean;
+  error: string | null;
+  identity: OnboardingIdentity;
+  onContinue: () => void;
+  onBack: () => void;
+  submitPassword: (values: PasswordFormData) => Promise<void>;
+  submitProfile: (values: ProfileFormData) => Promise<void>;
+  validatePassword: (values: PasswordFormData) => Record<string, string>;
+  onEnter: () => void;
+};
+
+function renderStep(props: StepProps) {
+  switch (props.step) {
+    case "checking":
+      return <CheckingStep />;
+    case "invalid":
+      return <InvalidStep />;
+    case "blocked":
+      return (
+        <BlockedStep reason={props.blockedReason} identity={props.identity} />
+      );
+    case "complete":
+      return <CompleteStep identity={props.identity} onEnter={props.onEnter} />;
+    case "profile":
+      return <ProfileStep {...props} />;
+    case "password":
+      return <PasswordStep {...props} />;
+    case "welcome":
+    default:
+      return <WelcomeStep {...props} />;
+  }
+}
+
+const CheckingStep = () => (
+  <div className="space-y-6" role="status">
+    {/* Reserved heading height: the greeting lands here without moving the card. */}
+    <div className="nora-access-title" aria-hidden="true">
+      &nbsp;
+    </div>
+    <p className="nora-access-lead flex items-center gap-3">
+      <span>Einladung wird geprüft…</span>
+      <WaitingDots />
+    </p>
+  </div>
+);
+
+const WelcomeStep = ({ identity, onContinue }: StepProps) => (
+  <div className="space-y-6">
+    <div className="space-y-3">
+      <StepTitle>{greetingFor(identity)}</StepTitle>
+      <OnboardingProgress current="welcome" />
+    </div>
+    <div className="space-y-4">
+      {/* Deliberately makes no claim about the password — it is not set yet. */}
+      <p className="nora-access-lead">
+        Ihr persönlicher Nora-Zugang wird jetzt eingerichtet.
+      </p>
+      {identity.email ? (
+        <p>
+          <span className="nora-access-chip" data-testid="onboarding-identity">
+            <MailIcon aria-hidden="true" />
+            <span>{identity.email}</span>
+          </span>
+        </p>
+      ) : null}
+      <p className="nora-access-lead">
+        Sie legen ein persönliches Passwort fest und prüfen kurz Ihren Namen.
+        Das dauert etwa eine Minute.
+      </p>
+    </div>
+    <Button
+      type="button"
+      size="lg"
+      className="nora-access-action nora-primary-action"
+      onClick={onContinue}
+    >
+      Zugang einrichten
+    </Button>
+  </div>
+);
+
+const PasswordStep = ({
+  identity,
+  submitting,
+  error,
+  submitPassword,
+  validatePassword,
+  onBack,
+}: StepProps) => {
+  const nameLine = nameLineFor(identity);
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        {nameLine ? <p className="nora-access-name">{nameLine}</p> : null}
+        <StepTitle>Persönliches Passwort festlegen</StepTitle>
+        <OnboardingProgress current="password" />
+      </div>
+      <p className="nora-access-lead">
+        Dieses Passwort gehört nur Ihnen. Sie brauchen es bei jeder Anmeldung.
+      </p>
+      <Form<PasswordFormData>
+        className="space-y-5"
+        disableInvalidFormNotification
+        onSubmit={submitPassword as SubmitHandler<FieldValues>}
+        validate={validatePassword as ValidateForm}
+        defaultValues={{ privacyAccepted: false }}
+      >
+        <PasswordFieldWithVisibility
+          label="Passwort"
+          autoComplete="new-password"
+          source="password"
+          validate={required()}
+          helperText={PASSWORD_GUIDANCE}
+        />
+        <PasswordFieldWithVisibility
+          label="Passwort wiederholen"
+          source="confirmPassword"
+          autoComplete="new-password"
+          validate={required()}
+          status={<PasswordMatchStatus />}
+        />
+        <ConsentCheckbox
+          source="privacyAccepted"
+          label="Ich nutze diesen Zugang nur persönlich und dienstlich."
+        />
+        <div className="space-y-3 pt-1">
+          <Button
+            type="submit"
+            size="lg"
+            className="nora-access-action nora-primary-action"
+            disabled={submitting}
+            aria-busy={submitting || undefined}
+          >
+            <ActionLabel
+              submitting={submitting}
+              idle={error ? "Erneut versuchen" : "Passwort speichern"}
+              busy="Wird gespeichert…"
+            />
+          </Button>
+          <StepError message={error} />
+        </div>
+        {/* Allowed only before the password succeeds — the reducer ignores
+            this event from PROFILE, COMPLETE and BLOCKED. */}
+        <p className="nora-access-link-row flex">
+          <button
+            type="button"
+            className="nora-access-link"
+            disabled={submitting}
+            onClick={onBack}
+          >
+            Zurück
+          </button>
+        </p>
+      </Form>
+    </div>
+  );
+};
+
+const ProfileStep = ({
+  identity,
+  submitting,
+  error,
+  submitProfile,
+}: StepProps) => {
+  const nameLine = nameLineFor(identity);
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        {nameLine ? <p className="nora-access-name">{nameLine}</p> : null}
+        <StepTitle>Bitte prüfen Sie Ihren Namen</StepTitle>
+        <OnboardingProgress current="profile" />
+        {/* Variant B: the password step is genuinely behind the employee. */}
+        <p className="nora-access-match" data-testid="password-saved">
+          <CheckIcon aria-hidden="true" />
+          <span>Passwort gespeichert.</span>
+        </p>
+      </div>
+      <p className="nora-access-lead">
+        So erscheinen Sie für Kolleginnen und Kollegen in Nora. Ihre Rolle legt
+        die Administration fest.
+      </p>
+      <Form<ProfileFormData>
+        className="space-y-5"
+        disableInvalidFormNotification
+        onSubmit={submitProfile as SubmitHandler<FieldValues>}
+        defaultValues={{
+          first_name: identity.firstName,
+          last_name: identity.lastName,
+        }}
+      >
+        <div className="grid gap-5 sm:grid-cols-2">
+          <TextInput
+            label="Vorname"
+            source="first_name"
+            autoComplete="given-name"
+            validate={required()}
+          />
+          <TextInput
+            label="Nachname"
+            source="last_name"
+            autoComplete="family-name"
+            validate={required()}
+          />
+        </div>
+        <div className="space-y-3 pt-1">
+          <Button
+            type="submit"
+            size="lg"
+            className="nora-access-action nora-primary-action"
+            disabled={submitting}
+            aria-busy={submitting || undefined}
+          >
+            <ActionLabel
+              submitting={submitting}
+              idle={error ? "Erneut versuchen" : "Weiter"}
+              busy="Wird gespeichert…"
+            />
+          </Button>
+          <StepError message={error} />
+        </div>
+      </Form>
+    </div>
+  );
+};
+
+const CompleteStep = ({
+  identity,
+  onEnter,
+}: {
+  identity: OnboardingIdentity;
+  onEnter: () => void;
+}) => {
+  const [settled, setSettled] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // The choreography only decides how success appears. When it has run, the
+  // mark becomes a static drawing and focus lands on the one way forward.
+  useEffect(() => {
+    const wait = prefersReducedMotion()
+      ? COMPLETION_SETTLE_REDUCED_MS
+      : COMPLETION_SETTLE_MS;
+    const timer = window.setTimeout(() => {
+      setSettled(true);
+      rootRef.current
+        ?.querySelector<HTMLButtonElement>("button")
+        ?.focus({ preventScroll: true });
+    }, wait);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <div
+      ref={rootRef}
+      className="nora-access-complete"
+      role="status"
+      data-testid="onboarding-complete"
+      data-settled={settled ? "true" : "false"}
+    >
+      <OnboardingSuccessMark />
+      <h2 className="nora-access-title nora-access-complete-title">
+        Ihr Nora-Zugang ist eingerichtet
+      </h2>
+      <p className="nora-access-lead nora-access-complete-copy">
+        Sie melden sich künftig mit
+        <span className="nora-access-complete-email">
+          {identity.email || "Ihrer geschäftlichen E-Mail-Adresse"}
+        </span>
+        und Ihrem persönlichen Passwort an.
+      </p>
+      <Button
+        type="button"
+        size="lg"
+        className="nora-access-action nora-access-complete-action nora-primary-action"
+        onClick={onEnter}
+      >
+        Weiter zu Nora
+      </Button>
+    </div>
+  );
+};
+
+/**
+ * Invitation and password-setup links land on the same page and, once
+ * invalid, cannot be told apart. The copy therefore covers both without
+ * blaming the employee. The Einmalcode fallback is offered for the invitation
+ * only — that is the one flow the contract proves can consume it.
+ */
+const InvalidStep = () => (
+  <div className="space-y-6">
+    <div className="space-y-4">
+      <span className="nora-access-state-glyph">
+        <Link2OffIcon aria-hidden="true" />
+      </span>
+      <StepTitle>Dieser Link ist nicht mehr gültig</StepTitle>
+    </div>
+    <p className="nora-access-lead">
+      Zugangslinks funktionieren nur einmal und nur für begrenzte Zeit. Manchmal
+      hat auch eine automatische E-Mail-Prüfung den Link bereits geöffnet.
+      Bitten Sie Ihre Administration um eine neue Einladung oder einen neuen
+      Link zum Einrichten des Passworts.
+    </p>
+    <div className="space-y-3">
+      <Button
+        asChild
+        size="lg"
+        className="nora-access-action nora-primary-action"
+      >
+        <Link to="/login?mode=anmelden">Zur Anmeldung</Link>
+      </Button>
+      <p className="nora-access-link-row flex">
+        <Link to="/login?mode=einladung" className="nora-access-link">
+          Einladung mit Einmalcode aktivieren
+        </Link>
+      </p>
+    </div>
+  </div>
+);
+
+const BlockedStep = ({
+  reason,
+  identity,
+}: {
+  reason?: BlockedReason;
+  identity: OnboardingIdentity;
+}) => {
+  const unverified = reason === "unverified";
+  return (
+    <div className="space-y-6" role="status">
+      <div className="space-y-4">
+        <span className="nora-access-state-glyph">
+          <LockIcon aria-hidden="true" />
+        </span>
+        <div className="space-y-2">
+          {identity.firstName ? (
+            <p className="nora-access-name">{greetingFor(identity)}</p>
+          ) : null}
+          <StepTitle>
+            {unverified
+              ? "Zugang konnte nicht geprüft werden"
+              : "Ihr Nora-Zugang ist derzeit nicht aktiv"}
+          </StepTitle>
+        </div>
+      </div>
+      <p className="nora-access-lead">
+        {unverified
+          ? "Ihr Passwort ist gespeichert. Ihr Zugang ließ sich gerade nicht prüfen. Bitte melden Sie sich in Kürze mit Ihrem neuen Passwort an oder wenden Sie sich an Ihre Administration."
+          : "Bitte wenden Sie sich an Ihre Administration, wenn Sie Nora nutzen sollen."}
+      </p>
+      <Button
+        asChild
+        size="lg"
+        className="nora-access-action nora-primary-action"
+      >
+        <Link to="/login?mode=anmelden">Zur Anmeldung</Link>
+      </Button>
+    </div>
+  );
+};

@@ -528,6 +528,28 @@ Was in V1A **nachweislich** gilt: der Client-Pfad ist hart einladungsbasiert.
 Registrierung an — durch Tests abgesichert. Das schützt aber nur die Nora-UI,
 **nicht** den direkt erreichbaren GoTrue-Endpunkt.
 
+## Employee Onboarding & Access V1B — RC (2026-09-04): `LOCAL VERIFIED — AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`
+
+Präsentations-Welle über V1A (Branch `feat/nora-employee-onboarding-access-v1b`,
+nicht auf `main`, nicht deployt). Kein Eingriff in Zustandsmaschine, Auth,
+Routen, Edge Function oder Datenbank. Details: `06-decision-log.md`
+„2026-09-04 – Employee Onboarding & Access V1B", Gestaltung:
+`02-design-system.md`.
+
+**Offen, bewusst nicht Teil von V1B:**
+
+- Visuelle Abnahme durch den Product Owner (Desktop 1440, Tablet ~800, Phone
+  ~400, Fokus, Reduced Motion, Erfolgsanimation) — automatisierte Messungen
+  belegen Geometrie und Zustände, nicht „fühlt sich hochwertig an".
+- Dark-Mode der öffentlichen Shell (Tokens vorbereitet, kein `.dark`-Block).
+- Reduced Motion wurde über die injizierte Stylesheet-Regel gemessen, nicht
+  über die echte Browsereinstellung; `matchMedia`-Pfade (Fokus-Timing 300 ms)
+  sind dadurch nur durch Code-Review gedeckt.
+- Echter Screenreader-Lauf.
+- Der Pflicht-Stern an Labels („Passwort *") ist react-admin-Standard und wurde
+  nicht neu gestaltet; falls der Product Owner ihn auf der Mitarbeiterfläche
+  nicht will, ist das eine Folgeentscheidung (projektweit).
+
 ## `users` Edge Function ist nicht automatisch deployt (Stand 2026-09-04)
 
 Die Employee-Access-Serverlogik (`GET /users`, die beiden POST-Aktionen) lebt in

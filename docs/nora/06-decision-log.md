@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract | [Springen](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) |
 | 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert | [Springen](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) |
 | 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt | [Springen](#2026-09-01--customer-create-speed--clarity-land-ausgeblendet-bundesland-nrw-weitere-angaben-eingeklappt) |
 | 2026-09-01 – PWA Completion Acknowledgement: „Aktualisierung abgeschlossen" nach dem Reload, genau einmal | [Springen](#2026-09-01--pwa-completion-acknowledgement-aktualisierung-abgeschlossen-nach-dem-reload-genau-einmal) |
@@ -96,6 +97,89 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract
+
+**Kontext.** V1A hat das Onboarding als reine Zustandsmaschine gebaut und ist
+in Produktion (ein echter Mitarbeiter hat sein Passwort über den Live-Pfad
+gesetzt). Die Oberfläche war bewusst funktional: Vier-Balken-Stepper mit
+abgeschnittenen Labels, Toast-Fehler, Abschluss ohne Erfolgsbild, Eingaben mit
+36 px, Admin-Status als Outline-Badge. Der Product Owner hat die
+Design-Discovery und den Design Freeze Candidate abgenommen und die
+Implementierung gegen den eingefrorenen Contract freigegeben.
+
+**Entscheidung 1 — Präsentation berührt keine Semantik.** `employeeOnboardingFlow.ts`,
+`passwordSetupMarker.ts`, `AccessLinkLandingPage`, Routen, Auth-Aufrufe,
+`users` Edge Function und `employeeAccessContract.ts` (bis auf einen additiven
+Hinweistext) sind unverändert. Der Erfolgs-Mark rendert ausschließlich im
+Reducer-Zustand `complete`; die Choreografie entscheidet nur, *wie* Erfolg
+erscheint. Tests fahren jeden Zustand durch den echten Reducer gegen einen
+Fake-Supabase-Client und prüfen: kein Mark vor `complete`, abgelehntes Passwort
+bleibt im Passwortschritt, Profilfehler impliziert nie Passwortfehler,
+deaktivierter Mitarbeiter landet in `blocked`.
+
+**Entscheidung 2 — drei menschliche Schritte.** Zugang → Passwort → Profil,
+Abschluss ist Erfolgszustand, kein „Schritt 4 von 4". Reine Anzeige-Abbildung
+in `onboardingSteps.ts` über den V1A-Schritten; `ONBOARDING_PROGRESS_STEPS`
+bleibt unangetastet. Fortschritt ist informativ und nie klickbar.
+
+**Entscheidung 3 — Begrüßung nur aus der Session.** „Hallo {Vorname}" aus
+`user_metadata.first_name`, Fallback „Willkommen bei Nora", nie aus
+URL-Parametern (V1A-Regel, jetzt auch getestet).
+
+**Entscheidung 4 — Variante B für das Profil.** Der Profilschritt sagt
+„Passwort gespeichert." und ein Profilfehler sagt „Ihr Passwort ist
+gespeichert. Der Name konnte gerade nicht gespeichert werden." Kein Weg zurück
+in einen Zustand, der ein ungesetztes Passwort impliziert (Reducer ignoriert
+`onBack` ab `profile`).
+
+**Entscheidung 5 — Einmalcode nur für die Einladung.** Der ungültige Zustand
+bietet „Einladung mit Einmalcode aktivieren" (Ziel: bestehender
+`/login?mode=einladung`-Flow, der den 6-stelligen Einladungscode verifiziert).
+Für Passwort-/Recovery-Links gibt es keinen Code-Pfad, also auch keinen
+Hinweis. Weil dieselbe Seite beide Link-Arten empfängt und im ungültigen
+Zustand nicht unterscheiden kann, heißt der Titel „Dieser Link ist nicht mehr
+gültig" statt „Einladungslink" — eine Abweichung vom Design Freeze zugunsten
+der Wahrheit.
+
+**Entscheidung 6 — Fehler inline, nie als Toast.** Provider- und Profilfehler
+stehen als `role="alert"`-Block unter der Aktion; die `notify()`-Toasts von
+V1A für diese beiden Fälle sind entfernt, react-admins „The form is not valid"
+über `disableInvalidFormNotification` abgeschaltet. Die gemappten Texte aus
+`mapPasswordSetupError` sind unverändert.
+
+**Entscheidung 7 — Admin-Status als Pill, ein Schreibpfad.** `EmployeeAccessStatus`
+zeigt Glyphe + Wort + Farbe; `unknown` bleibt sichtbar mit „Technische
+Prüfung erforderlich" und ohne Aktion. Aktivieren/Deaktivieren bleibt das
+Formularfeld „Zugang deaktiviert"; das Panel verweist darauf, statt einen
+zweiten Mutationspfad zu bauen. `invitedAt`/`activatedAt` erscheinen nur als
+je eine Zeile, wo sie den Zustand erklären.
+
+**Entscheidung 8 — hell, aber tokenisiert.** Kein Dark-Mode der öffentlichen
+Shell in dieser Welle; alle Farben laufen über `--nora-access-*`, damit ein
+späterer `.dark`-Block ohne Markup-Änderung möglich ist.
+
+**Abweichungen vom Design Freeze (bewusst):** Titel des ungültigen Zustands
+generalisiert (s. o.); „Zurück" auf dem Passwortschritt als Textlink beibehalten
+(V1A-Verhalten, vom Reducer nur vor Passwort-Erfolg erlaubt); Pflichtsternchen
+an Labels bleiben (react-admin-Konvention, projektweit); Blocked-Titel „Ihr
+Nora-Zugang ist derzeit nicht aktiv" statt „… ist deaktiviert", weil der
+`disabled`-Grund auch eine fehlende `sales`-Zuordnung abdeckt.
+
+**Verifikation.** `typecheck`, ESLint (0 Fehler), Prettier, `build`, App-Suite
+96 Dateien / 852 Tests grün (neu: `set-password-page.v1b.test.tsx` 12 Tests,
+`EmployeeAccessStatus.test.tsx` 6 Tests). Gestylte Messung in Chromium über
+einen temporären Screenshot-Harness (nicht committed) auf 1440 × 900, 800 × 1100
+und 400 × 860: Karte 416 / 480 / 366 px, Eingaben 44 / 44 / 51 px, Toggle
+44 × 44 / 47 × 51, Primäraktion 44 / 44 / 47 px, Mark 64 / 64 / 60 px, kein
+horizontaler Overflow, 0 px Verschiebung beim Auge-Toggle, Titel fokussiert
+nach dem Fold, Abschluss `data-settled="true"` mit Fokus auf „Weiter zu Nora",
+Reduced-Motion-Regel (aus dem echten Stylesheet injiziert) zeigt den Haken
+sofort gezeichnet. **Nicht verifiziert:** echter Screenreader, echte
+Browser-Einstellung für Reduced Motion, Live-Verhalten gegen `nora-crm-prod`.
+
+**Status:** `V1B RC — LOCAL VERIFIED, AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`.
+Kein Push nach `main`, kein Deployment.
 
 ## 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert
 

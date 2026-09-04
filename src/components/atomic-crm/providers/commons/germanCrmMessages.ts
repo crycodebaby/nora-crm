@@ -426,10 +426,10 @@ export const germanCrmMessages = {
         disabled: "Deaktiviert",
       },
       create: {
-        error: "Beim Anlegen des Benutzers ist ein Fehler aufgetreten.",
+        error: "Die Einladung konnte nicht gesendet werden.",
         success:
-          "Benutzer angelegt. In Kürze erhält er eine E-Mail zum Festlegen des Passworts.",
-        title: "Neuen Benutzer anlegen",
+          "Einladung gesendet. Die Person erhält eine E-Mail zum Einrichten ihres Nora-Zugangs.",
+        title: "Mitarbeiter einladen",
       },
       edit: {
         error: "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",

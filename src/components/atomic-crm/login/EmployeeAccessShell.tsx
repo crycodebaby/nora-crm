@@ -15,20 +15,24 @@ type EmployeeAccessShellProps = {
 };
 
 /**
- * Shared public shell for employee access (login / invite / password reset).
+ * Shared public shell for employee access (login / invite / password setup).
  * Brand hierarchy: Ergart → Zugangszweck → Smairys (technical).
  * Nora product branding stays inside the authenticated app.
+ *
+ * V1B: the card is the only surface the employee reads. It is 26 rem on
+ * desktop, fluid below, and every colour on this shell goes through the
+ * `--nora-access-*` tokens (light by decision — a later dark variant only
+ * has to redefine the tokens). Three compositions, not one scaled layout:
+ * two columns from 1024 px, a stacked brand block on tablets, a single brand
+ * row on phones with Smairys below the fold.
  */
 export const EmployeeAccessShell = ({ children }: EmployeeAccessShellProps) => {
   return (
-    <div className="min-h-svh flex bg-[#e8e8ed] text-[#111111]">
+    <div className="nora-access-shell min-h-svh flex">
       <div className="relative grid w-full lg:grid-cols-2">
         <aside
-          className="relative hidden lg:flex flex-col px-16 py-16 text-white"
+          className="nora-access-aside relative hidden lg:flex flex-col px-16 py-16 text-white"
           aria-label="Markenbereich"
-          style={{
-            background: "linear-gradient(180deg, #111111 0%, #0a0a0a 100%)",
-          }}
         >
           <div className="relative z-10 flex min-h-0 flex-1 flex-col justify-between">
             <div className="flex flex-col gap-14">
@@ -64,37 +68,49 @@ export const EmployeeAccessShell = ({ children }: EmployeeAccessShellProps) => {
           </div>
         </aside>
 
-        <main className="flex flex-col justify-center w-full px-6 py-10 sm:px-10 lg:px-16">
-          <div className="lg:hidden mb-10 space-y-8">
-            <img
-              src={defaultOperatorMark}
-              alt={defaultOperatorName}
-              className="h-14 w-auto max-w-[11rem] object-contain"
-            />
-            <div className="space-y-2">
-              <p className="text-[1.375rem] font-semibold tracking-[-0.02em] leading-snug">
-                Mitarbeiterzugang der Ergart Gruppe
-              </p>
-              <p className="text-[0.9375rem] text-[#3a3a3c] leading-relaxed">
-                Sicherer Zugang zu den digitalen Arbeitsbereichen
-              </p>
+        {/* `my-auto` on the column, not `justify-center` on the flex parent:
+            centred when there is room, scrolls from the top when there is
+            not — a tall step on a short viewport must never clip its heading. */}
+        <main className="flex w-full flex-col px-4 py-6 sm:px-10 sm:py-10 lg:px-16">
+          <div className="my-auto w-full">
+            {/* Phone: one brand row. Tablet: stacked block. */}
+            <div className="lg:hidden mb-6 sm:mb-10">
+              <div className="flex items-center gap-4 sm:block sm:space-y-8">
+                <img
+                  src={defaultOperatorMark}
+                  alt={defaultOperatorName}
+                  className="h-10 w-auto max-w-[7rem] shrink-0 object-contain sm:h-14 sm:max-w-[11rem]"
+                />
+                <div className="min-w-0 sm:space-y-2">
+                  <p className="text-[1.0625rem] font-semibold tracking-[-0.02em] leading-snug sm:text-[1.375rem]">
+                    Mitarbeiterzugang der Ergart Gruppe
+                  </p>
+                  <p className="hidden text-[0.9375rem] leading-relaxed nora-access-muted-text sm:block">
+                    Sicherer Zugang zu den digitalen Arbeitsbereichen
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="w-full mx-auto lg:max-w-[22.5rem]">
-            <div className="rounded-[1.25rem] bg-[#f0f0f3] px-7 py-9 shadow-[0_2px_24px_rgba(0,0,0,0.06)] sm:px-8 text-[#111111] [&_.text-muted-foreground]:text-[#3a3a3c] [&_h2]:text-[#111111] [&_label]:text-[#1d1d1f] [&_a]:text-[#1d1d1f] [&_button.text-muted-foreground]:text-[#3a3a3c]">
+            <div
+              data-access-card
+              className="nora-access-card [&_.text-muted-foreground]:nora-access-muted-text [&_h2]:text-[var(--nora-access-ink)] [&_label]:text-[var(--nora-access-text)]"
+            >
               {children}
             </div>
 
-            <div className="lg:hidden mt-12 space-y-4">
+            <div className="lg:hidden mt-10 space-y-3 sm:mt-12 sm:space-y-4">
               <div className="h-px w-full bg-black/10" />
-              <p className="text-[0.6875rem] font-medium tracking-[0.08em] text-[#3a3a3c]">
+              <p className="text-[0.6875rem] font-medium tracking-[0.08em] nora-access-muted-text">
                 Technische Entwicklung
               </p>
+              {/* The PNG is a square with a white frame around the wordmark: the
+                  negative margins trim the frame, `mix-blend-multiply` lets the
+                  white disappear into the ground so no box is drawn. */}
               <img
                 src={defaultSmairysDarkLogo}
                 alt="Smairys"
-                className="h-12 w-auto max-w-[14rem] object-contain"
+                className="-my-10 h-32 w-auto max-w-full object-contain object-left mix-blend-multiply sm:-my-12 sm:h-36"
               />
             </div>
           </div>

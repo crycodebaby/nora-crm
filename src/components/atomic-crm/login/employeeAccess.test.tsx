@@ -68,7 +68,7 @@ describe("Employee access public surface", () => {
     );
 
     await expect
-      .element(screen.getByText("Einladung ungültig oder abgelaufen"))
+      .element(screen.getByText("Dieser Link ist nicht mehr gültig"))
       .toBeVisible();
     await expect
       .poll(() => screen.container.textContent?.includes("Nora-Rolle") ?? false)
@@ -122,7 +122,7 @@ describe("Access email landing (access-link convergence)", () => {
     );
 
     await expect
-      .element(screen.getByText("Einladung ungültig oder abgelaufen"))
+      .element(screen.getByText("Dieser Link ist nicht mehr gültig"))
       .toBeVisible();
   });
 

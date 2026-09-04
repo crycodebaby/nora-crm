@@ -65,6 +65,16 @@ export const EMPLOYEE_ACCESS_STATE_DESCRIPTION: Record<
     "Zu diesem Benutzer lässt sich kein Zugang ermitteln. Bitte an die technische Betreuung wenden.",
 };
 
+/**
+ * Supporting line for states that need one sentence more than their label.
+ * "unknown" is visible on purpose and offers no action — the hint says why.
+ */
+export const EMPLOYEE_ACCESS_STATE_HINT: Partial<
+  Record<EmployeeAccessState, string>
+> = {
+  unknown: "Technische Prüfung erforderlich",
+};
+
 export const EMPLOYEE_ACCESS_ACTION_LABEL: Record<
   EmployeeAccessAction,
   string

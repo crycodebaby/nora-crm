@@ -619,3 +619,60 @@ Im echten Betrieb erscheint es frühestens nach einem Deployment. Für die Gesta
 `Update anzeigen` · `Wartender Worker: an/aus` · `Dokument kontrolliert: an/aus` · `Übernahme simulieren` · `Ablehnung: an/aus` · `Hell / Dunkel` · `Orb-Tempo ×1/×8` · `Reduced Motion` · `Abschluss anzeigen` · `Neu laden`
 
 Alle sechs sichtbaren Zustände sind damit herstellbar: **available** (Standard) · **applying / slow / verlängert** („Jetzt aktualisieren" ohne „Übernahme simulieren": Commit nach 8 s, „Gleich bereit" nach 13 s, „Weiterarbeiten" nach 18 s) · **reloadRequired** („Wartender Worker: aus" + „Dokument kontrolliert: aus", dann „Update anzeigen") · **failed** („Ablehnung: an", dann „Jetzt aktualisieren") · **completed** auf dem echten Weg („Jetzt aktualisieren", nach 8 s „Übernahme simulieren" — Nora lädt nach 1,5 s selbst neu und die frische Seite bestätigt) oder direkt über „Abschluss anzeigen" (setzt nur das Bit und lädt neu; ein zweites „Neu laden" zeigt nichts mehr — der Beweis, dass ein gewöhnlicher Reload keine Bestätigung erzeugt). Das Werkzeug fasst ausschließlich `pwaUpdateStore` an, übernimmt die Registrierung erst beim Klick und ist reines DOM ohne Eintrag in `index.css`. Production-Freiheit: nur über einen dynamischen Import innerhalb von `if (import.meta.env.DEV)` in `src/main.tsx` **und** `demo/main.tsx`; `dist/` enthält null Treffer für `nora-dev-pwa-panel`.
+
+## Mitarbeiter-Onboarding & Zugang (Welle V1B, 2026-09-04)
+
+Reine Präsentations-Welle über dem technischen Fundament V1A. Die Zustandsmaschine `login/employeeOnboardingFlow.ts`, die Auth-Semantik, Routen und die `users` Edge Function sind **unverändert**; V1B entscheidet nur, wie jeder Zustand aussieht — nie, welcher Zustand gezeigt wird. Status: `RC — LOCAL VERIFIED, AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`.
+
+### Karte und Shell (`EmployeeAccessShell`)
+
+| Element | Regel |
+|---|---|
+| Farben | ausschließlich über `--nora-access-*`-Tokens in `:root` (Ground `#e8e8ed`, Surface `#f0f0f3`, Ink `#111`, Text `#1d1d1f`, Muted `#3a3a3c`, Hairline 6 %, Aside `#111 → #0a0a0a`). Bewusst **kein** `.dark`-Block in dieser Welle; ein späterer braucht nur die Tokens. |
+| Karte | `--nora-access-card-width: 26rem` (gemessen 416 px), Padding 2 rem, Radius 1,25 rem, 1-px-Hairline, drei flache Schattenstopps. Tablet: `min(30rem, 100 %)`, Padding 1,75 rem. Phone: volle Breite minus 2 rem, Padding 1,25 rem, Radius 1 rem. |
+| Zentrierung | `my-auto` auf der Inhaltsspalte, nicht `justify-center` — bei Platz zentriert, sonst scrollt die Seite von oben; ein Titel wird nie abgeschnitten. |
+| Kompositionen | ≥ 1024 px zwei Spalten mit dunkler Aside; 640–1023 px gestapelter Markenblock; < 640 px **eine Markenzeile** (Marke 2,5 rem, Titel zweizeilig, keine Subline), Smairys unter der Karte. Kein proportional verkleinertes Desktop-Layout. |
+| Smairys (helle Spalte) | das schwarze Wortmarken-PNG trägt einen weißen Rahmen; negative Ränder beschneiden ihn, `mix-blend-multiply` lässt das Weiß im Ground verschwinden. |
+
+### Schritt-Anatomie (alle Schritte gleiche Leserichtung)
+
+Namenszeile (13 px, nur Schritt 2–3) → Titel (`.nora-access-title`, 28/26/24 px, semibold, −0.02em) → Fortschritt → Text (15 px, lh 1,55, max. 60ch) → Formular (20 px Abstand) → **eine** rote Primäraktion (volle Breite, ≥ 44 px, Phone 48 px) → Inline-Fehler → Textlink.
+
+- **Fortschritt (`OnboardingProgress`)**: drei Punkte plus „Schritt n von 3 · Zugang | Passwort | Profil". Abschluss ist **kein** Schritt 4; Checking/Invalid/Blocked zeigen keinen Fortschritt. Rein informativ, nichts fokussierbar (Test deckt „keine Links/Buttons/tabindex" ab).
+- **Begrüßung**: „Hallo {Vorname}" aus `user.user_metadata.first_name` der authentifizierten Session, sonst „Willkommen bei Nora". Nie aus URL-Parametern. Danach überall „Sie".
+- **Identitäts-Chip**: E-Mail aus `user.email` als Fakt, nicht interaktiv.
+- **Eingaben**: 44 px hoch (Phone 48 px), weiße Fläche auf der Karte, Fokus = Brand-Border 45 % + Brand-Ring. **Falle:** innerhalb von `FormControl` trägt das `<input>` `data-slot="form-control"`, nicht `"input"` — Selektoren müssen auf `input` zielen. Die 44 px halten nur über eine **ungelayerte** Regel (`.nora-access-card[data-access-card] input`), weil `h-9` eine Utility ist (dieselbe Falle wie `.nora-primary-action`, siehe Systemereignis).
+- **Passwortfeld (`PasswordFieldWithVisibility`)**: Auge-Toggle als 44 × 44-Ziel im Feld, `type="button"`, `aria-pressed`, „Passwort anzeigen/ausblenden", pro Feld eigener Zustand; Toggle ändert nur `type` — gemessen 0 px Layout-Verschiebung. „Stimmt überein." erscheint als ruhige grüne Zeile unter dem zweiten Feld, sobald beide gleich sind; Nichtübereinstimmung nur beim Absenden unter dem zweiten Feld. Kein Stärkemesser, keine Farbbalken. Hilfetext bleibt die V1A-Empfehlung (12 Zeichen, keine Nora-Mindestlänge).
+- **Bestätigung (`ConsentCheckbox`)**: Checkbox statt Switch, 44-px-Zeile, Label klickbar.
+- **Aktionen**: `.nora-access-action` + `.nora-primary-action`; beim Senden Label „Wird gespeichert…" mit Wartepunkten, Breite bleibt, `aria-busy`. Provider-Fehler als Inline-Block (`role="alert"`) **unter** dem Button, nie als Toast; die react-admin-Toastmeldung bei ungültigem Formular ist abgeschaltet (`disableInvalidFormNotification`). Nach einem Fehler heißt der Button „Erneut versuchen".
+- **Profil (Variante B)**: „Passwort gespeichert." steht sichtbar über dem Text; ein Fehler sagt „Ihr Passwort ist gespeichert. Der Name konnte gerade nicht gespeichert werden." — nie, dass das Passwort scheiterte. Kein „Später"-Link (Contract erlaubt keinen Abschluss ohne Profil).
+- **Abschluss**: einzige zentrierte Karte. `OnboardingSuccessMark` (64 px, Phone 56 px), Titel, „Sie melden sich künftig mit {E-Mail} und Ihrem persönlichen Passwort an.", „Weiter zu Nora". Kein Auto-Redirect. Rendert **nur** im Reducer-Zustand `complete`.
+- **Ungültig / Gesperrt**: neutrale Glyphe (Link-off / Schloss) in gedämpfter Fläche, kein Rot, kein Warnsymbol. Ungültig: „Dieser Link ist nicht mehr gültig" (deckt Einladungs- **und** Passwortlink ab, weil die Seite sie nicht unterscheiden kann), Primär „Zur Anmeldung", Textlink „Einladung mit Einmalcode aktivieren" (nur die Einladung kann den Code verarbeiten — für Passwort-/Recovery-Links wird **kein** Einmalcode beworben). Gesperrt: `disabled` → „Ihr Nora-Zugang ist derzeit nicht aktiv" (deckt auch fehlende `sales`-Zuordnung wahrheitsgemäß ab), `unverified` → „Zugang konnte nicht geprüft werden" mit dem Hinweis, dass das Passwort gespeichert ist.
+
+### Motion
+
+Nur `opacity`, `transform`, `stroke-dashoffset`, Farbe und der bewährte Grid-Fold. Nichts loopt außer den Wartepunkten (`WaitingDots`, reine Deckkraft, 2,4 s), und nur solange wirklich gewartet wird.
+
+| Element | Auslöser | Dauer / Kurve |
+|---|---|---|
+| Karte | erster Paint | 420 ms, `--nora-motion-ease`, Opacity + 8 px + Scale 0,985 |
+| Schrittwechsel (`AccessStepFold`) | Reducer wechselt `step` | verlassender Block: Opacity/Transform 180 ms, Grid-Rows 1fr → 0fr 360 ms; eintretender Block 0fr → 1fr 360 ms, Inhalt 260 ms ab 160 ms, `--nora-choreo-ease`. Beide Blöcke bleiben montiert, die Kartenhöhe gleitet ohne Höhen-Tween. Nach 420 ms Fokus auf den neuen Titel (`data-access-focus`, `tabindex=-1`). |
+| Fortschrittspunkt | Schrittwechsel | 220 ms Farbe, aktueller Punkt Scale 0,8 → 1 |
+| Fokus / Hilfetext / Fehler / Match-Check | Fokus / Validierung | 150–220 ms |
+| Abschluss | `complete` | 0–180 ms Fold; 180–420 ms Ring zeichnet ab 12 Uhr, Mark Scale 0,92 → 1; 300–420 ms Füllung; 300–520 ms Halo; 380–640 ms Haken; 620/700/780 ms Titel, Text, Button je 240 ms; ab 1020 ms `data-settled="true"`, alles statisch, Fokus auf „Weiter zu Nora". |
+
+**Reduced Motion** (`@media (prefers-reduced-motion: reduce)`): Fold und Karte 1 ms, keine Transforms; Mark sofort vollständig gezeichnet (gemessen: `stroke-dashoffset: 0`, Transform `none` nach 350 ms), Titel/Text/Button als eine Gruppe 200 ms Fade nach 100 ms; Fokus nach 300 ms. Die Wartepunkte behalten ihren Deckkraftzyklus (echtes Fortschrittssignal).
+
+### Accessibility
+
+Titel erhält bei jedem Schrittwechsel den Fokus (gemessen), Tab-Reihenfolge = Leserichtung, sichtbare Ringe auf Feld, Toggle, Checkbox und Button (Brand-Ring), Toggle 44 × 44 (Phone 47 × 51), Buttons 44/47 px, Karte `role="status"` im Abschluss mit Titel als `aria-labelledby`, Fehler `role="alert"`, Mark und Punkte `aria-hidden`. Kein horizontaler Overflow auf 1440/800/400 px (gemessen).
+
+### Admin `/benutzer`
+
+- `EmployeeAccessStatus`: Pill aus Glyphe + Wort + zurückhaltender Farbe, nie Farbe allein — `invited` hohler Kreis neutral, `active` Check auf `--nora-success-soft`, `disabled` Minus-Kreis auf `--nora-warning-soft` (bewusst nicht `--destructive`), `unknown` Fragezeichen mit gestrichelter Hairline und Hinweis „Technische Prüfung erforderlich". Labels unverändert aus `employeeAccessContract.ts`.
+- Liste: Spalten Vorname, Nachname, E-Mail, **Rolle** (Text: Administrator / Büro / Lesen) und **Nora-Zugang** (Pill). Die alten Badges „Administrator"/„Deaktiviert" entfallen — Rolle ist eine Rolle, kein Status, und „Deaktiviert" ist jetzt die Pill.
+- `EmployeeAccessPanel`: Kopfblock mit Pill, Satz, Anmeldeadresse und **einer** Datumszeile („Eingeladen am …" bei `invited`, „Zugang aktiv seit …" bei `active`), darunter genau die Aktionen des Zustands. Aktivieren/Deaktivieren bleibt der einzige Schreibpfad über das Feld „Zugang deaktiviert" im Formular — das Panel benennt es, statt einen zweiten Schalter zu bauen. `unknown` bietet keine Aktion.
+
+### Texte
+
+Deutsch, ohne Magic Link / OTP / Auth / Token / Callback / Recovery / Session / Konto / Login. „Einmalcode" nur dort, wo der Einladungs-Flow ihn wirklich verarbeitet. Admin-Anlage heißt jetzt „Mitarbeiter einladen", Erfolg „Einladung gesendet. …" (die alten i18n-Keys „Neuen Benutzer anlegen" / „Benutzer angelegt …" haben bis V1B die neueren Fallbacks im Code überstimmt).
