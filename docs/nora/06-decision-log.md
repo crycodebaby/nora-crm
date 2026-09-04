@@ -177,12 +177,21 @@ vertraut.
 Änderung der Login-E-Mail einer aktivierten Person — beides gehört zu
 `NORA USER LIFECYCLE ADMIN V1`. Ebenso kein Premium-Visual (V1B).
 
-**Offen / an den Product Owner:** `supabase/config.toml` enthält
-`[auth.email] enable_signup = true`. Das ist die **lokale** Stack-Konfiguration;
-die Produktionseinstellung liegt im Supabase-Dashboard und wurde in dieser
-Session **nicht** verändert und **nicht** verifiziert. Der Client-Pfad
-(`dataProvider.signUp`, `SignupPage`) bleibt hart einladungsbasiert. Siehe
-`17-known-issues-and-planned-waves.md`.
+**Nachtrag 2026-09-04 (unabhängige Produktionsprüfung):** die offene Frage zur
+Selbstregistrierung ist beantwortet — `nora-crm-prod` meldet
+`disable_signup: false`, öffentliche Selbstregistrierung ist also **aktiv** und
+führt über `handle_new_user` zu einer `sales`-Zeile mit Lesezugriff auf alle
+Kunden-, Kontakt- und Vorgangsdaten. Das ist ein Bestandsproblem, kein
+V1A-Fehler, blockiert aber das V1A-Release, weil V1A Einladungsexklusivität
+zusichert. Vollständige Nachweiskette und Behebungsanleitung:
+`17-known-issues-and-planned-waves.md`. `supabase/config.toml` bleibt bewusst
+unverändert (lokale Konfiguration, steuert Produktion nicht).
+
+Die Prüfung hat den Zustandskontrakt zugleich gegen echte Produktionsdaten
+bestätigt: alle fünf `sales`-Zeilen werden truthful abgeleitet, insbesondere die
+deaktivierte Zeile mit `sales.disabled = true` bei gleichzeitig
+`banned_until = null` — sie wird korrekt als `disabled` gemeldet und bekommt
+keine Einladung angeboten. Genau dafür verodert der Kontrakt beide Fakten.
 
 ## 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt
 

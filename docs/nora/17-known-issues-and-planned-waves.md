@@ -452,27 +452,81 @@ Aus einer früheren Analyse vor der Customer & Contact Workflow Wave als „beka
 
 Diese Liste ist bewusst knapp gehalten, da keine Detailanalyse aus dieser Session vorliegt, die über die Kategorienamen hinausgeht.
 
-## Offene Frage: `enable_signup` (Stand 2026-09-04, Employee Onboarding & Access V1A)
+## BLOCKER: Öffentliche Selbstregistrierung ist in Produktion AKTIV (verifiziert 2026-09-04)
 
-`supabase/config.toml` enthält unter `[auth.email]` weiterhin
-`enable_signup = true`. Das ist die **lokale** Supabase-Stack-Konfiguration.
-Ob in `nora-crm-prod` öffentliche Selbstregistrierung am Auth-Provider
-aktiviert ist, liegt in den Dashboard-Einstellungen und wurde in der V1A-Welle
-**nicht verändert und nicht verifiziert** — eine Änderung der produktiven
-Auth-Provider-Einstellung ist eine bewusste Product-Owner-Entscheidung, keine
-Nebenwirkung einer Code-Welle.
+**Status: offen, release-blockierend. Read-only am Live-System nachgewiesen.**
+
+Der öffentliche GoTrue-Endpunkt
+`https://kixxroxtfzbcbzctohex.supabase.co/auth/v1/settings` liefert am
+2026-09-04:
+
+```json
+{ "disable_signup": false, "mailer_autoconfirm": false, "external": { "email": true } }
+```
+
+`disable_signup: false` bedeutet: **jede Person im Internet kann sich mit einer
+beliebigen E-Mail-Adresse selbst bei Nora registrieren.** Das widerspricht der
+ausdrücklichen Produktentscheidung „Nora ist ausschließlich einladungsbasiert".
+
+**Vollständig nachverfolgte Auswirkung** (jeder Schritt read-only in
+`nora-crm-prod` belegt):
+
+1. `POST /auth/v1/signup` legt einen `auth.users`-Datensatz an.
+2. Der Trigger `on_auth_user_created` ruft `public.handle_new_user()`.
+3. Diese Funktion legt **automatisch eine `public.sales`-Zeile** an, mit
+   `disabled = false` (Spaltendefault) und Rolle aus
+   `nora_private.resolve_first_signup_role()` — bei bereits vorhandenen
+   Benutzern `viewer` (nicht `admin`; die Eskalation auf `admin` greift nur beim
+   allerersten Benutzer, das ist hier nicht mehr möglich).
+4. `nora_private.is_active_user()` prüft ausschließlich „nicht deaktivierte
+   `sales`-Zeile vorhanden" — für diesen Selbstregistrierer also **wahr**.
+5. Die RLS-Policies `Companies select active`, `Contacts select active` und
+   `Deals select active` erlauben `SELECT` an jeden `authenticated`-Benutzer,
+   für den `is_active_user()` wahr ist.
+
+**Ergebnis: Lesezugriff auf sämtliche echten Kunden-, Kontakt- und
+Vorgangsdaten der Ergart Gruppe.** Wegen `mailer_autoconfirm: false` muss die
+Person vorher ihre eigene E-Mail-Adresse bestätigen — das ist eine triviale
+Hürde, kein Schutz.
+
+**Nicht ausgenutzt:** alle 5 vorhandenen `sales`-Zeilen wurden am 2026-09-04
+geprüft und sind legitim (1 Dashboard-Erstadmin, 4 eingeladen). Es existiert
+kein Hinweis auf eine Selbstregistrierung.
+
+**Wichtig:** dies ist ein **Bestandsproblem**, kein von V1A verursachter Fehler.
+Es besteht unabhängig von dieser Welle und wurde erst durch die V1A-Prüfung
+belegt. Es blockiert das V1A-Release aber, weil V1A genau die Zusage macht,
+Nora sei einladungsbasiert.
+
+**Erforderliche Behebung (nur der Product Owner / ein Konto mit
+Dashboard-Zugriff kann das ausführen — MCP bietet dafür kein Werkzeug):**
+
+Supabase Dashboard → Projekt `nora-crm-prod` → Authentication → Sign In / Up →
+Email → **„Allow new users to sign up" ausschalten**.
+
+Danach zwingend nachprüfen:
+
+1. `curl -H "apikey: <publishable key>" https://kixxroxtfzbcbzctohex.supabase.co/auth/v1/settings`
+   muss `"disable_signup": true` liefern.
+2. Einladung über `/benutzer` funktioniert weiterhin (Admin-Invite ist ein
+   getrennter Endpunkt und wird von dieser Einstellung nicht erfasst — nach der
+   Umstellung dennoch **real nachweisen**, nicht annehmen).
+3. „Passwort einrichten lassen" / Passwort-vergessen funktioniert weiterhin
+   (betrifft nur bestehende Benutzer).
+4. Normale Anmeldung bestehender Benutzer funktioniert weiterhin.
+
+`supabase/config.toml` enthält unter `[auth.email]` ebenfalls
+`enable_signup = true`. Das ist die **lokale** Stack-Konfiguration und steuert
+Produktion nicht. Sie wurde bewusst nicht geändert, damit `supabase db reset
+--local` und die lokale Entwicklung unverändert bleiben; sie sollte in einer
+eigenen kleinen Welle nachgezogen werden, wenn Produktion umgestellt ist.
 
 Was in V1A **nachweislich** gilt: der Client-Pfad ist hart einladungsbasiert.
 `dataProvider.signUp` wirft („Öffentliche Registrierung ist deaktiviert"), die
 `/sign-up`-Seite zeigt nur „Zugang nur per Einladung", und keiner der drei
 öffentlichen Login-Modi (`anmelden`, `einladung`, `passwort`) bietet eine
-Registrierung an — durch Tests abgesichert.
-
-**Empfohlene nächste Handlung (Product Owner):** im Supabase-Dashboard von
-`nora-crm-prod` prüfen, ob „Allow new users to sign up" deaktiviert ist, und das
-Ergebnis hier festhalten. Damit wäre der seit längerem offene Punkt „Offene
-Selbstregistrierung (Status unklar)" aus `16-current-state.md` §3 endgültig
-bewertet.
+Registrierung an — durch Tests abgesichert. Das schützt aber nur die Nora-UI,
+**nicht** den direkt erreichbaren GoTrue-Endpunkt.
 
 ## `users` Edge Function ist nicht automatisch deployt (Stand 2026-09-04)
 

@@ -32,7 +32,7 @@ Vollständiges Domänenmodell: `01-domain-model.md`. Datenmodell-Fallen: `03-dat
 **Supabase Security Advisor Baseline: abgeschlossen (Stand 2026-08-28).** Der zu diesem Zeitpunkt bekannte Advisor-Backlog ist vollständig bewertet — jedes Finding ist entweder `ASSESSED/KEEP` (bewusste, geprüfte Architektur) oder `RESOLVED` (behoben und per Advisor-Re-Check bestätigt). Kein Finding wurde ungeprüft als „ok" markiert. Details, Einzelbewertungen und die Guardrail für künftige Änderungen: Abschnitt 6a unten, `06-decision-log.md`, `17-known-issues-and-planned-waves.md`. **Diese Abgeschlossenheit gilt nur für den geprüften Snapshot** — jede neue Migration, Function/RPC, Grant-Änderung oder neue Advisor-Lint-Kategorie erfordert eine eigene, neue Bewertung.
 
 **Separat davon — bekannte, noch offene Ops-/Betriebs-Themen** (aus einer früheren Analyse vor der Customer & Contact Workflow Wave, **nicht** Teil der Security-Advisor-Bewertung und weiterhin nicht in einer Session verifiziert — vor Umsetzung gegen aktuellen Code prüfen):
-- Offene Selbstregistrierung (Status unklar, `handle_new_user`/`init_state`-Logik prüfen)
+- **Offene Selbstregistrierung — Status GEKLÄRT und AKTIV (2026-09-04): `disable_signup: false` in `nora-crm-prod` read-only nachgewiesen. Jede beliebige E-Mail-Adresse kann sich selbst registrieren und erhält über `handle_new_user` automatisch eine `sales`-Zeile mit Leserechten auf alle Kunden-/Kontakt-/Vorgangsdaten. Bestandsproblem, nicht durch eine Welle verursacht, aber release-blockierend — Details, Nachweiskette und Behebungsanleitung in `17-known-issues-and-planned-waves.md`.**
 - Attachment-Bucket-Konfiguration
 - Nicht deployte Edge Functions
 - Rollen-Cache-Verhalten im Frontend
