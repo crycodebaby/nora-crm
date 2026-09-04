@@ -566,7 +566,13 @@ Release-Ablaufs dieser Welle, nicht ein Fehler im Code.
 
 ### V1C-A.1 Migration wurde gegen keine Postgres-Instanz ausgeführt
 
-**Status: OPEN (2026-09-04)**
+**Status: CLOSED (2026-09-04)** — beim kontrollierten DB-First-Release auf
+`nora-crm-prod` angewendet und live verifiziert: Spalten/Typen, 12 CHECKs,
+Unique-Dedupe-Index, RLS mit Admin-Only-Policy, keine `UPDATE`/`DELETE`-Grants
+für Anwendungsrollen, beide RPCs `SECURITY DEFINER` mit leerem `search_path`.
+Nicht-Admin-Aufruf des Lesemodells liefert real `42501 forbidden`,
+Duplikat-Ingest liefert `stored = false` ohne zweite Zeile. Ursprünglicher
+Befund unten zur Nachvollziehbarkeit.
 
 `20260904120000_nora_email_delivery_observability.sql` ist geschrieben und
 review-fest, aber in der erstellenden Session lief **kein** Apply: Docker war
@@ -583,7 +589,10 @@ Nicht-Admin-Aufruf des Lesemodells (muss `42501` liefern).
 
 ### V1C-A.2 Produktions-SMTP-Transport nur indirekt beurteilt
 
-**Status: OPEN (2026-09-04)**
+**Status: CLOSED (2026-09-04)** — durch den realen E2E belegt: eine echte
+Nora-Zugangs-E-Mail lief über Brevo und erzeugte `request` und `delivered` mit
+Brevo-Message-ID. Der Transport ist damit nachgewiesen, nicht mehr nur
+erschlossen. Ursprünglicher Befund unten zur Nachvollziehbarkeit.
 
 Die SMTP-Konfiguration von Supabase Auth ist über die verfügbaren
 Management-/MCP-Werkzeuge **nicht lesbar**. Aus den Auth-Logs von
@@ -602,12 +611,55 @@ SMTP Settings (Anbieter, Host, Absender `zugang@nora.ergart.de`, Anzeigename
 
 ### V1C-A.3 Edge Function nicht deployt, Brevo-Webhook nicht angelegt
 
-**Status: OPEN (2026-09-04)**
+**Status: CLOSED (2026-09-04)** — `brevo-email-events` ist als Version 1 mit
+`verify_jwt = false` deployt, `BREVO_WEBHOOK_TOKEN` gesetzt, der
+Brevo-Outgoing-Webhook aktiv und der Pfad End-to-End belegt. Ursprünglicher
+Befund unten zur Nachvollziehbarkeit.
 
 `brevo-email-events` existiert nur im Repository. Weder ist die Function
 deployt, noch ist `BREVO_WEBHOOK_TOKEN` gesetzt, noch existiert ein
 Brevo-Webhook. Bis dahin erreicht Nora kein einziges Zustellereignis. Ablauf
 und Reihenfolge: `18-email-delivery-observability.md` Abschnitt 7.
+
+### V1C-A.7 `mail_kind` bleibt im echten Betrieb `unknown`
+
+**Status: OPEN (2026-09-04) — vor V1C-B zu klären**
+
+Im realen Production-E2E wurden beide Zeilen mit `mail_kind = unknown`
+gespeichert. `classifyMailKind()` vergleicht den Betreff der Brevo-Nutzlast
+gegen `MAIL_KIND_SUBJECTS` (`einladung zu nora`,
+`persönliches passwort für nora einrichten`); getroffen hat keine der beiden
+Needles. Das ist der bewusst entworfene degradierte, aber ehrliche Pfad — die
+Zustellwahrheit (`EMAIL_ACCEPTED` / `EMAIL_DELIVERED`), die Korrelation und das
+Lesemodell sind davon **nicht** betroffen.
+
+**Folge:** `employee_email_delivery_status()` gruppiert nach
+`(employee_sale_id, mail_kind)`. Solange alles `unknown` ist, kann V1C-B
+Einladung und Passwort-Einrichtung nicht auseinanderhalten und würde beide
+Vorgänge in einer Zeile zusammenfassen.
+
+**Zu klären, bevor V1C-B UI baut:** sendet Brevo im Outgoing-Webhook überhaupt
+ein `subject`-Feld, oder weichen die konfigurierten Auth-Betreffzeilen ab
+(Dashboard → Authentication → Email Templates)? Die robustere Lösung wäre, die
+Mailart nicht aus dem Betreff abzuleiten, sondern aus dem auslösenden
+Auth-Ereignis — das ist eine eigene Entscheidung und **nicht** Teil von V1C-A.
+
+### V1C-A.8 Edge-Log-Stream für erfolgreiche Aufrufe unvollständig
+
+**Status: OPEN (2026-09-04) — Beobachtbarkeitslücke, kein Funktionsfehler**
+
+Im E2E-Fenster (15:08–15:35 UTC) enthielt `function_edge_logs` **keine**
+Einträge für die erfolgreichen Brevo-Aufrufe von `brevo-email-events` — auch
+der auslösende `POST /users` fehlt, während `GET`/`OPTIONS` derselben Minute
+protokolliert sind. Die eigenen 401-Smoke-Tests von 15:03–15:04 sind dagegen
+vollständig vorhanden.
+
+Die gespeicherten Zeilen sind der belastbare Beweis, dass der Webhook
+authentifiziert und erfolgreich ingestiert hat: nur `service_role` besitzt
+`INSERT`, und der einzige Schreibpfad ist die SECURITY-DEFINER-RPC. Eine
+`200`-Antwort ließ sich aber **nicht** aus dem Log belegen. Wer künftig
+Zustellprobleme untersucht, sollte sich nicht auf diesen Log-Stream verlassen,
+sondern auf `email_delivery_events` und die Webhook-Historie in Brevo.
 
 ### V1C-A.4 Deterministische Korrelation bleibt offene Architekturfrage
 

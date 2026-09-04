@@ -174,6 +174,36 @@ ausschließlich über `public.ingest_email_delivery_event()` (SECURITY DEFINER,
 Vokabular-Spiegel `sales/emailDeliveryContract.ts` (keine Komponente, kein
 Barrel-Export), damit V1C-B gegen Nora-Begriffe statt gegen Provider-Strings
 baut.
+
+**Status:** `V1C-A PRODUCTION VERIFIED` (2026-09-04). Kontrollierter
+DB-First-Release: Migration vor dem Git-Push auf `nora-crm-prod`
+(`kixxroxtfzbcbzctohex`) angewendet und live verifiziert (Spalten, 12 CHECKs,
+Unique-Dedupe-Index, RLS, Admin-Only-Policy, keine `UPDATE`/`DELETE`-Grants,
+beide RPCs mit leerem `search_path`); Bookkeeping-Version nach bekanntem Muster
+auf den Dateinamen-Zeitstempel korrigiert (sechstes Auftreten). Danach
+Fast-Forward `87c7c302..8e80c44b`, Edge Function `brevo-email-events` Version 1
+mit `verify_jwt = false`, Sicherheits-Smoke 401/401/401/401 und 405.
+
+**Realer E2E (2026-09-04).** Eine echte Passwort-Einrichtungs-E-Mail an ein vom
+Product Owner kontrolliertes Postfach erzeugte genau zwei Zeilen: `request` →
+`EMAIL_ACCEPTED` (`event_at` 15:09:36Z) und `delivered` → `EMAIL_DELIVERED`
+(`event_at` 15:09:37Z), beide `recipient_match = employee`,
+`correlation_confidence = best_effort`, `employee_sale_id = 1`. Das Lesemodell
+antwortet `outcome = delivered`. Bestätigt nebenbei die Entwurfsannahme, dass
+Ankunftsreihenfolge ≠ Ereignisreihenfolge ist: `delivered` traf **vor**
+`request` ein (`received_at` 15:09:41.07 vs. 15:09:42.37) und wird trotzdem
+korrekt über `event_at` geordnet. Ein Replay derselben Ereignisidentität liefert
+`stored = false` und legt keine zweite Zeile an.
+
+**Befund aus dem E2E — `mail_kind` bleibt `unknown`.** Der Betreff der
+Brevo-Nutzlast passte auf keine der Needles in `MAIL_KIND_SUBJECTS`
+(`einladung zu nora`, `persönliches passwort für nora einrichten`). Das ist der
+bewusst entworfene degradierte, aber ehrliche Pfad — die Zustellwahrheit ist
+unberührt. Folge: V1C-B kann Einladung und Passwort-Einrichtung noch **nicht**
+auseinanderhalten. Vor der UI-Welle ist zu klären, ob Brevo `subject` im
+Webhook überhaupt sendet oder ob der konfigurierte Auth-Betreff abweicht; eine
+Ableitung aus dem Auth-Ereignis statt aus dem Betreff wäre die robustere
+Lösung. Nicht in V1C-A ändern.
 ## 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract
 
 **Kontext.** V1A hat das Onboarding als reine Zustandsmaschine gebaut und ist

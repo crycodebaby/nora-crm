@@ -140,16 +140,30 @@ ausgeschlossen. **Korrelation ist `BEST_EFFORT`** (Zuordnung über die
 Empfängeradresse; Supabase Auth versendet über SMTP und erlaubt keinen
 Nora-eigenen Korrelationswert in der Nachricht) — „zugestellt" beweist weder
 Lesen noch abgeschlossenes Onboarding. Migration
-`20260904120000_nora_email_delivery_observability.sql` ist additiv und
-**nicht** angewendet. **Status: `BACKEND RC` — nicht deployt, kein
-Brevo-Webhook angelegt, Production-SMTP unverändert.** Verifiziert: `typecheck`,
+`20260904120000_nora_email_delivery_observability.sql` ist additiv und in
+Production angewendet (genau ein Eintrag, Version auf den Dateinamen-Zeitstempel
+korrigiert). **Status: `V1C-A PRODUCTION VERIFIED` (2026-09-04)** — Release-SHA
+`8e80c44b`, Edge Function `brevo-email-events` Version 1 (`verify_jwt = false`),
+Brevo-Outgoing-Webhook aktiv, echter E2E mit einer realen Zugangs-E-Mail
+bestätigt: `request` → `EMAIL_ACCEPTED` und `delivered` → `EMAIL_DELIVERED`,
+beide `best_effort` und korrekt auf `sales.id = 1` aufgelöst, Lesemodell liefert
+`outcome = delivered`. Kein Öffnungs-/Klick-Datensatz. Wiederholtes Ingest
+derselben Ereignisidentität legt keine zweite Zeile an. **Offener Befund:**
+`mail_kind` blieb `unknown`, weil der Betreff der Brevo-Nutzlast nicht auf die
+konfigurierten Needles passte — die Zustellwahrheit ist davon unberührt, aber
+V1C-B kann Einladung und Passwort-Einrichtung noch nicht unterscheiden (siehe
+`17-known-issues-and-planned-waves.md`). Verifiziert: `typecheck`,
 `build`, ESLint sowie die Function-Suite (13 Dateien, 251 Tests) grün — darunter
 repräsentative Brevo-Nutzlasten mit den echten `snake_case`-Ereigniswerten
 (`soft_bounce`, `hard_bounce`, `invalid_email`), die sich von den camelCase-
 Namen des Webhook-Abos unterscheiden. **Nicht
 verifiziert:** die Migration wurde gegen **keine** Postgres-Instanz ausgeführt
 (kein Docker in der Session, siehe `17-known-issues-and-planned-waves.md`), und
-der Produktions-SMTP-Transport konnte nur indirekt beurteilt werden. Details:
+der Produktions-SMTP-Transport konnte nur indirekt beurteilt werden — beides ist
+mit dem Production-Release und dem realen E2E nachgeholt. Nicht belegbar blieb
+allein die 200-Antwort des Webhooks im Edge-Log (Log-Stream für dieses Fenster
+unvollständig, auch der auslösende `POST /users` fehlt); die Zeilen selbst sind
+der Beweis, weil nur `service_role` einfügen darf. Details:
 `18-email-delivery-observability.md`, Decision Log „2026-09-04 – Employee Access
 V1C-A".
 
