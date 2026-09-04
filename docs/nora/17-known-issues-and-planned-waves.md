@@ -229,6 +229,63 @@ RLS aktiviert, keine Policy — aber kein Tabellen-Grant für `anon`/`authentica
 
 Vollständige Herleitung: `06-decision-log.md` „2026-08-28 – Residual Security Advisor Closure".
 
+## Default-Privilegien im Schema `public` vergeben TRUNCATE an API-Rollen (Folgebefund aus Security Hardening Wave 0)
+
+**Status: OPEN / PLANNED FOLLOW-UP** (festgestellt 2026-09-04, gegen `nora-crm-prod` verifiziert)
+
+Security Hardening Wave 0 hat `TRUNCATE` auf `public.audit_events` geschlossen (Details und Begründung: `06-decision-log.md`, „2026-09-04 – Security Hardening Wave 0"). Die **Ursache** dieses Befunds ist bewusst **nicht** mitbehoben worden, weil sie jede künftige Tabelle betrifft und damit ein eigener, breiterer Eingriff ist.
+
+### Der Mechanismus
+
+Die Default-Tabellen-Privilegien des Schemas `public` (Grantor `postgres`) vergeben an `anon`, `authenticated` und `service_role` bei **jedem** `CREATE TABLE` automatisch:
+
+```
+Dxtm  =  TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
+```
+
+Empirisch in Production nachgewiesen (Probetabelle in einer zurückgerollten Transaktion): eine frisch angelegte Tabelle in `public` trägt sofort `authenticated=Dxtm` — **inklusive `TRUNCATE`, noch bevor irgendein Grant geschrieben wurde**.
+
+Eine Migration, die anschließend nur additiv `grant select ...` schreibt, lässt dieses Erbe stehen. Genau so ist der `audit_events`-Befund entstanden.
+
+### Warum das mehr ist als Kosmetik
+
+`TRUNCATE` ist **kein** zeilenweises DML: es umgeht Row Level Security vollständig und feuert keine Row-Trigger. Für Tabellen, auf denen `authenticated` ohnehin `DELETE` besitzt, ist das trotzdem eine echte Rechteausweitung — `DELETE` wird durch RLS pro Zeile gefiltert, `TRUNCATE` nicht. Ein `viewer`, dem die RLS-Policies das Löschen fremder Zeilen verwehren, könnte die Tabelle dennoch in einer Anweisung leeren.
+
+### Aktueller Stand in Production (nach Wave 0)
+
+| Klassifikation | Tabellen |
+|---|---|
+| sauber (kein TRUNCATE für `authenticated`) | `audit_events` ✅ (Wave 0), `email_delivery_events`, `number_counters`, `operation_errors` |
+| **read-only für `authenticated`, aber truncatable** — dieselbe Form wie der `audit_events`-Bug | `configuration`, `google_calendar_connections`, `google_calendar_events` |
+| truncatable, besitzt aber ohnehin `DELETE` (RLS-Bypass bleibt relevant) | `checklist_run_items`, `checklist_runs`, `checklist_template_items`, `checklist_templates`, `companies`, `contact_notes`, `contacts`, `deal_notes`, `deals`, `favicons_excluded_domains`, `sales`, `saved_text_snippets`, `tags`, `tasks` |
+
+Die mittlere Gruppe ist der naheliegende nächste Schritt: dort ist `TRUNCATE` unstrittig unbeabsichtigt, weil `authenticated` dort bewusst nur lesen (bzw. bei `configuration` lesen/ändern) soll. `google_calendar_connections` / `google_calendar_events` sind exakt aus demselben Grund betroffen wie `audit_events` — `06_grants.sql` verwendet dort `revoke insert, update, delete ...` statt `revoke all ...`.
+
+### Zusätzliche Repo-/Production-Drift
+
+`supabase/schemas/06_grants.sql` deklariert
+
+```sql
+alter default privileges for role postgres in schema public grant all on tables to anon;
+alter default privileges for role postgres in schema public grant all on tables to authenticated;
+alter default privileges for role postgres in schema public grant all on tables to service_role;
+```
+
+also `arwdDxtm`, während Production tatsächlich nur `Dxtm` vergibt. Diese Verengung ist in **keiner** Repo-Migration enthalten (die einzigen `alter default privileges`-Anweisungen im Migrationsverzeichnis betreffen `nora_private`-Funktionen) und stammt offenbar aus einer manuellen bzw. plattformseitigen Änderung.
+
+**Praktische Konsequenz:** ein reiner `npx supabase db reset` reproduziert Production nicht — lokal erhält `authenticated` auf neuen Tabellen `arwdDxt`, also **mehr** Rechte als live. Sicherheitsaussagen, die nur lokal geprüft wurden, sind für Production daher nicht automatisch gültig; umgekehrt kann eine lokal harmlose Migration live anders wirken. Wave 0 hat das dadurch umgangen, dass die Migration mit `revoke all` + gezieltem `grant` in beiden Umgebungen denselben Endzustand erzwingt — **das ist das Muster, das für Folgewellen übernommen werden sollte.**
+
+### Vorschlag für eine eigene Welle (nicht Teil von Wave 0)
+
+1. `configuration`, `google_calendar_connections`, `google_calendar_events` auf das Muster „`revoke all` → gezielter `grant`" bringen.
+2. Entscheiden, ob die Default-Privilegien in `public` dauerhaft auf `Dxtm` (oder enger) korrigiert und im Repo als Migration festgeschrieben werden — damit Repo und Production wieder deckungsgleich sind.
+3. Entscheiden, ob `service_role` `TRUNCATE` auf `audit_events` behalten soll (in Wave 0 bewusst unangetastet, siehe Decision Log).
+4. `public.init_state` mitnehmen — dort ist derselbe `grant all`-Befund bereits als optionales Defense-in-Depth notiert (siehe oben, „Security Advisor Findings").
+
+Jede dieser Änderungen berührt Grants breit und braucht denselben Ablauf wie Wave 0: lokaler Replay, Verhaltensnachweis pro Rolle, Production-Apply, Live-Verifikation.
+
+---
+
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
 **Status: `ASSESSED — LOW — PLANNED FOLLOW-UP`**

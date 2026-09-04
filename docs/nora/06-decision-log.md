@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen | [Springen](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) |
 | 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht | [Springen](#2026-09-04--employee-access-v1c-b-zustellstatus-wird-gezeigt-die-mailart-nicht) |
 | 2026-09-04 – Employee Access V1C-A: Zustellbeobachtung ist Best-Effort-Korrelation, kein Öffnungs-Tracking | [Springen](#2026-09-04--employee-access-v1c-a-zustellbeobachtung-ist-best-effort-korrelation-kein-öffnungs-tracking) |
 | 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract | [Springen](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) |
@@ -99,6 +100,122 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen
+
+**Status: PRODUCTION VERIFIED** (Migration `20260904174013_nora_audit_events_truncate_hardening`, angewendet und live gegen `nora-crm-prod` / `kixxroxtfzbcbzctohex` nachgeprüft am 2026-09-04).
+
+### Kontext
+
+Nora behandelt `public.audit_events` als dauerhafte, unveränderliche Geschäfts- und Admin-Historie. Abgesichert war dieser Vertrag bisher durch zwei Mechanismen: die RLS-Policies (`"Audit events read admin only"` für `authenticated`, `"Audit events insert audit writer"` für `nora_audit_writer`) und die beiden Append-only-Trigger `prevent_audit_events_update` / `prevent_audit_events_delete`.
+
+Die Discovery zu User Lifecycle Admin V1 meldete, dass `authenticated` auf `public.audit_events` das Recht `TRUNCATE` besitze. Read-only gegen Production bestätigt (Stand vor der Migration):
+
+```
+audit_events   authenticated = rDxtm   → SELECT, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
+```
+
+`has_table_privilege('authenticated', 'public.audit_events', 'TRUNCATE')` = `true`. `UPDATE`, `DELETE` und `INSERT` waren korrekt entzogen — die gesamte Historie war also mit **einer** Anweisung löschbar, während das Ändern oder Löschen einer **einzelnen** Zeile blockiert war.
+
+### Warum RLS und Row-Trigger hier nicht greifen
+
+Das ist der Kern des Befunds und der Grund, warum die vorhandenen Schutzmechanismen den Bug nicht aufgefangen haben:
+
+- **RLS ist ein Zeilenfilter.** `TRUNCATE` ist keine zeilenweise DML-Operation, sondern arbeitet auf Tabellenebene. PostgreSQL wertet für `TRUNCATE` **keine** Row-Policy aus. Die Admin-only-Lesepolicy ist damit wirkungslos.
+- **`prevent_audit_mutation` sind `FOR EACH ROW`-Trigger** auf `BEFORE UPDATE` und `BEFORE DELETE`. `TRUNCATE` feuert keine Row-Trigger (nur `BEFORE/AFTER TRUNCATE`-*Statement*-Trigger, die hier nicht existieren) und läuft an beiden vorbei.
+
+Beide Guards sind also strukturell blind für `TRUNCATE`. Der einzig wirksame Hebel ist das **Tabellenprivileg** selbst.
+
+### Ursache (Kategorie C: Default Privileges)
+
+Kein expliziter `grant truncate` — das Recht stammt aus den Default-Privilegien des Schemas `public`. Empirisch in Production nachgewiesen: eine frisch angelegte Tabelle (Probe in einer zurückgerollten Transaktion) erhält sofort
+
+```
+{postgres=arwdDxtm/postgres, anon=Dxtm/postgres, authenticated=Dxtm/postgres, service_role=Dxtm/postgres}
+```
+
+also `D` (TRUNCATE), `x` (REFERENCES), `t` (TRIGGER), `m` (MAINTAIN) — ohne `SELECT`.
+
+`audit_events` wurde in `20260628150000_checklists_snippets_audit` erzeugt und erbte damit `Dxtm`. Sowohl diese Migration als auch `20260714140000_nora_rbac_hardening` haben anschließend **nur additiv** `grant select on table public.audit_events to authenticated` ergänzt, ohne vorheriges `revoke all`. Ergebnis exakt: `Dxtm` (Default) + `r` (expliziter Grant) = `rDxtm`.
+
+Gegenprobe, die die Herleitung bestätigt:
+
+- `anon` war bereits sauber — `20260714140000` enthält `revoke all on table public.audit_events from anon`.
+- `operation_errors` und `email_delivery_events` waren nie betroffen: deren Migrationen führen erst `revoke all ... from authenticated` aus und vergeben danach `grant select`.
+
+Der Unterschied liegt also ausschließlich im Muster „revoke-then-grant" gegenüber „nur grant".
+
+### Entscheidung
+
+`authenticated` wird auf `public.audit_events` auf **genau `SELECT`** normalisiert — nach demselben Muster, das für `operation_errors` und `email_delivery_events` bereits gilt:
+
+```sql
+revoke all on table public.audit_events from authenticated;
+grant select on table public.audit_events to authenticated;
+revoke all on table public.audit_events from public;
+revoke all on table public.audit_events from anon;
+```
+
+Bewusst `revoke all` statt eines punktuellen `revoke truncate`:
+
+- Es entfernt zugleich `TRIGGER` — sonst könnte ein Client einen eigenen Trigger an `audit_events` hängen und die Append-only-Zusage von innen aushebeln — sowie `REFERENCES` und `MAINTAIN`.
+- Es ist versionsunabhängig: `MAINTAIN` existiert erst ab PG17 (Production läuft 17.6, die lokale Supabase-Umgebung 15). Ein `revoke ... maintain ...` wäre lokal ein Syntaxfehler.
+- Es ist idempotent und erzeugt in **jeder** Umgebung denselben Endzustand. Das ist hier nicht theoretisch: ein reiner `db reset` aus dem Repo-Stand liefert lokal `authenticated=arwdDxt`, also **mehr** Rechte als Production, weil die lokalen Default-Privilegien `grant all on tables` vergeben. Ein punktuelles `revoke truncate` hätte lokal `INSERT`/`UPDATE`/`DELETE` stehen lassen.
+
+Die Migration verifiziert sich am Ende selbst (`do $$ ... raise exception ... $$`) und schlägt fehl, falls der Endzustand nicht dem Vertrag entspricht oder ein legitimer Pfad (Admin-`SELECT`, `nora_audit_writer`-`INSERT`, die beiden Append-only-Trigger) verloren ginge.
+
+Zusätzlich wurde `supabase/schemas/06_grants.sql` auf dasselbe Muster gebracht. Ohne das hätte ein Neuaufbau aus dem deklarativen Schema den Befund reproduziert, weil dieselbe Datei weiter unten `alter default privileges ... grant all on tables to authenticated` deklariert.
+
+### Bewusst nicht in dieser Welle
+
+- **`service_role` behält `TRUNCATE`.** Vertrauenswürdige serverseitige Rolle; sie besitzt ohnehin `UPDATE`/`DELETE` (die allerdings von den Append-only-Triggern blockiert werden, auch für den Owner — lokal verifiziert). Ein Entzug wäre eine eigene Entscheidung mit Rückwirkung auf mögliche Retention-/Purge-Pfade (`audit_events.retention_class`) und gehört nicht in eine Welle, die einen konkreten Befund schließt. Festgehalten als bewusst akzeptiertes Restrisiko.
+- **Die schemaweiten Default-Privilegien bleiben unverändert.** Sie betreffen jede künftige Tabelle in `public` und sind damit ein eigener, breiter Eingriff — siehe Folgebefund in `17-known-issues-and-planned-waves.md`.
+- **Keine Änderung** an RLS-Policies, an den Triggern, am Audit-Schreibpfad, an `nora_audit_writer`, am Audit-Subsystem oder an bestehenden Zeilen.
+
+### Vorher / Nachher (Production, `nora-crm-prod`)
+
+| | vorher | nachher |
+|---|---|---|
+| ACL `audit_events` | `authenticated=rDxtm` | `authenticated=r` |
+| `authenticated` TRUNCATE | `true` | `false` |
+| `authenticated` UPDATE / DELETE / INSERT | `false` | `false` |
+| `authenticated` TRIGGER / REFERENCES / MAINTAIN | `true` | `false` |
+| `authenticated` SELECT | `true` | `true` |
+| `anon` (alle Rechte) | keine | keine |
+| `nora_audit_writer` INSERT | `true` | `true` |
+| `service_role` | `arwdDxtm` | `arwdDxtm` (unverändert) |
+| Zeilen / neueste Zeile | 276 / 2026-09-04 15:09:35Z | 276 / 2026-09-04 15:09:35Z (unberührt) |
+
+### Verifikation
+
+Lokal (`npx supabase db reset`, vollständiger Migrations-Replay, PG15):
+
+- Neues Skript `supabase/tests/audit_immutability_privilege_verification.sql`. Es wurde bewusst **zuerst gegen den ungefixten Stand** ausgeführt und ist dort fehlgeschlagen (`FAIL: authenticated holds TRUNCATE on audit_events`), danach grün — der Test prüft also tatsächlich etwas.
+- Verhaltensnachweis, nicht nur Katalogabfrage: `set local role authenticated` und danach echte `TRUNCATE` / `UPDATE` / `DELETE` / `INSERT`-Versuche — alle mit `insufficient_privilege` abgewiesen. Sämtliche destruktiven Proben laufen in einer zurückgerollten Transaktion (`TRUNCATE` ist in PostgreSQL transaktional).
+- Schreibpfad `nora_private.write_audit_event()` weiterhin funktionsfähig; Append-only-Trigger blockieren `UPDATE`/`DELETE` weiterhin auch für privilegierte Rollen; `operation_errors` / `email_delivery_events` unverändert.
+- Bestehende DB-Suiten grün: `crm_audit_verification`, `checklists_audit_verification`, `error_observatory_verification`, `core_indexes_verification`, `customer_contact_workflow_verification`, `error_contract_verification`, `operation_correlation_verification`, `operation_status_disposition_verification`, `safe_auth_role_verification`, `task_customer_context_verification`, `google_calendar_verification` sowie der vollständige RBAC/RLS-Ablauf (`rbac_rls_verification` → `setup` → `matrix` → `final_hardening` → `teardown` → `rbac_rls_verification`).
+
+Production (live, nach dem Apply, alle Proben in einer zurückgerollten Transaktion — **keine** künstliche Audit-Historie erzeugt):
+
+| Prüfung | Ergebnis |
+|---|---|
+| `authenticated` TRUNCATE | abgewiesen (`insufficient_privilege`) |
+| `authenticated` UPDATE | abgewiesen |
+| `authenticated` DELETE | abgewiesen |
+| `authenticated` direktes INSERT | abgewiesen |
+| `authenticated` SELECT | erlaubt; RLS liefert ohne Admin-Claim 0 Zeilen |
+| `nora_private.write_audit_event()` | funktionsfähig (276 → 277, danach zurückgerollt) |
+
+Nach dem Rollback: 276 Zeilen, unveränderter `max(created_at)`, keine Probe-Zeilen, keine Probe-Tabelle.
+
+Kein `typecheck`/`build` und **kein** Vercel-Deployment nötig: die Welle ändert ausschließlich `.sql`-Dateien, kein Anwendungs-Bundle.
+
+### Migration
+
+`supabase/migrations/20260904174013_nora_audit_events_truncate_hardening.sql`
+SHA-256 `48e349410f2e4d0c74876987db5083a05046cc0728c13d79a66a22a33855d189`
+
+Der Dateiname trägt bewusst die Version, die Production beim Apply vergeben hat (`20260904174013`), damit Repo-Ledger und `supabase_migrations.schema_migrations` deckungsgleich bleiben.
 
 ## 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht
 
