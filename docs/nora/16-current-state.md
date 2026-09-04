@@ -90,7 +90,18 @@ gültiger `sales`-Zuordnung und nicht deaktiviertem Zugang erreichbar. Lokale
 Invite-/Recovery-E-Mail-Templates auf deutsche Nora-Terminologie umgestellt
 („Einladung zu Nora", „Nora-Zugang einrichten", „Einmalcode") inkl. Korrektur
 des fehlerhaften `{{ .ConfirmationURL }}/auth-callback.html`-Links.
-**Status: `RC — NOT YET PRODUCTION VERIFIED` (Release vorbereitet, blockiert durch die aktive Selbstregistrierung in Produktion — siehe `17-known-issues-and-planned-waves.md`).** Verifikation lokal: `typecheck`,
+**Status: `V1A DEPLOYED — HUMAN E2E PENDING` (2026-09-04).** Oeffentliche
+Selbstregistrierung wurde vom Product Owner in `nora-crm-prod` deaktiviert und
+unabhaengig nachgewiesen: `/auth/v1/settings` meldet `disable_signup: true`,
+`POST /auth/v1/signup` antwortet `422 signup_disabled`. Login-Pfad und Recovery
+bestehender Benutzer weiterhin funktionsfaehig (`invalid_credentials` statt
+Blockade; `recovery_sent_at` real gesetzt); der Admin-Invite-Endpunkt ist
+bearer-gated (`401 no_authorization`) und von der Signup-Einstellung nicht
+betroffen. `users` Edge Function als **Version 3** deployt und live verifiziert
+(CORS meldet jetzt `GET, POST, PATCH, DELETE`; ungueltiges JWT ergibt auf
+GET/POST/PATCH weiterhin 401). **Noch offen:** kontrollierter manueller
+End-to-End-Test durch den Product Owner mit einem eigenen Test-Postfach.
+**Erst danach `PRODUCTION VERIFIED`.** Verifikation lokal: `typecheck`,
 `build`, App-Suite (92 Dateien, 815 Tests, 1 übersprungen) und Function-Suite
 (11 Dateien, 163 Tests) grün, ESLint 0 Fehler. **Nicht verifiziert:** echter
 E-Mail-Versand, echte GoTrue-Antworten und Live-Verhalten gegen
