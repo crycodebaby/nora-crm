@@ -178,8 +178,19 @@ Reduced-Motion-Regel (aus dem echten Stylesheet injiziert) zeigt den Haken
 sofort gezeichnet. **Nicht verifiziert:** echter Screenreader, echte
 Browser-Einstellung für Reduced Motion, Live-Verhalten gegen `nora-crm-prod`.
 
-**Status:** `V1B RC — LOCAL VERIFIED, AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`.
-Kein Push nach `main`, kein Deployment.
+**Entscheidung 9 — Demo-Simulation bleibt im Code.** Für die visuelle
+Abnahme wurde im Demo-Modus (`VITE_IS_DEMO=true`) ein Simulationspfad
+für Session, Passwort und Profil ergänzt (Persona „Otto Office", 0,7 s
+Latenz, Szenarien `?demo=weak|blocked|unverified|profile-error`). Er
+bleibt erhalten, weil er künftige visuelle Regressionen und PO-Reviews
+ohne Backend ermöglicht. Gating: Build-Zeit-Konstante `isNoraDemoMode`;
+das Production-Bundle enthält den Pfad nicht, `getSupabaseClient()` wird
+im Demo nie aufgerufen, URL-Token werden nur auf Vorhandensein geprüft
+(`set-password-page.demo.test.tsx`).
+
+**Status:** `PO UX ACCEPTED — READY FOR RELEASE` (2026-09-04). Der Product
+Owner hat den kompletten Demo-Ablauf und alle Zustände visuell abgenommen.
+Kein Push nach `main`, kein Deployment in dieser Welle.
 
 ## 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert
 

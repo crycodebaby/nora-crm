@@ -528,7 +528,7 @@ Was in V1A **nachweislich** gilt: der Client-Pfad ist hart einladungsbasiert.
 Registrierung an — durch Tests abgesichert. Das schützt aber nur die Nora-UI,
 **nicht** den direkt erreichbaren GoTrue-Endpunkt.
 
-## Employee Onboarding & Access V1B — RC (2026-09-04): `LOCAL VERIFIED — AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`
+## Employee Onboarding & Access V1B — RC (2026-09-04): `PO UX ACCEPTED — READY FOR RELEASE`
 
 Präsentations-Welle über V1A (Branch `feat/nora-employee-onboarding-access-v1b`,
 nicht auf `main`, nicht deployt). Kein Eingriff in Zustandsmaschine, Auth,
@@ -538,9 +538,10 @@ Routen, Edge Function oder Datenbank. Details: `06-decision-log.md`
 
 **Offen, bewusst nicht Teil von V1B:**
 
-- Visuelle Abnahme durch den Product Owner (Desktop 1440, Tablet ~800, Phone
-  ~400, Fokus, Reduced Motion, Erfolgsanimation) — automatisierte Messungen
-  belegen Geometrie und Zustände, nicht „fühlt sich hochwertig an".
+- ~~Visuelle Abnahme durch den Product Owner~~ — erteilt am 2026-09-04 über
+  den kompletten Demo-Ablauf (`npm run dev:demo`, Simulation siehe
+  `02-design-system.md`). Offen bleibt nur der Release selbst (Push, Vercel,
+  Live-Smoke).
 - Dark-Mode der öffentlichen Shell (Tokens vorbereitet, kein `.dark`-Block).
 - Reduced Motion wurde über die injizierte Stylesheet-Regel gemessen, nicht
   über die echte Browsereinstellung; `matchMedia`-Pfade (Fokus-Timing 300 ms)

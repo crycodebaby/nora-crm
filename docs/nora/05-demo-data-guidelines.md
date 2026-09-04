@@ -132,3 +132,7 @@ Gesamtsumme der Demo-Pipeline: **60.020 €** (Stand Seed-Korrektur).
 Für Kontakte kann ein CSV im Atomic-/Nora-Exportformat verwendet werden (`demo-data/nora_contacts_import_duesseldorf_neuss.csv`).
 
 Für relationale Demo-Daten ist die TypeScript-Seed-Datei die Quelle der Wahrheit; JSON dient als lesbare Dokumentation.
+
+## Onboarding-Simulation im Demo-Modus (V1B, 2026-09-04)
+
+`/set-password?access_token=demo&refresh_token=demo` durchläuft im Demo-Modus den kompletten Mitarbeiter-Onboarding-Ablauf ohne Backend (Persona „Otto Office", 0,7 s simulierte Latenz). Szenarien: `&demo=weak` (Passwort abgelehnt), `&demo=profile-error`, `&demo=blocked`, `&demo=unverified`; ohne Token der ungültige Link. Nur hinter `VITE_IS_DEMO=true`, nicht im Production-Bundle — Details in `02-design-system.md` („Demo-Simulation").

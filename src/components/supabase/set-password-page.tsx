@@ -45,7 +45,9 @@ import {
   linkFingerprint,
   markPasswordSet,
 } from "@/components/atomic-crm/login/passwordSetupMarker";
+import { isNoraDemoMode } from "@/components/atomic-crm/misc/noraDemoMode";
 import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
+import { DEMO_SALES_BY_ROLE } from "@/components/atomic-crm/providers/fakerest/demoSession";
 import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
 
@@ -57,6 +59,17 @@ const PASSWORD_MISMATCH = "Die Passwörter stimmen nicht überein.";
 const CONSENT_REQUIRED = "Bitte bestätigen Sie den Hinweis.";
 const PROFILE_SAVE_FAILED =
   "Ihr Passwort ist gespeichert. Der Name konnte gerade nicht gespeichert werden. Bitte versuchen Sie es noch einmal.";
+
+/**
+ * Demo mode (FakeRest, `npm run dev:demo`) has no auth backend. So the whole
+ * flow can be reviewed visually, the three backend calls are simulated there
+ * with a short delay. Optional `?demo=` scenarios: `weak` (password rejected),
+ * `blocked`, `unverified`, `profile-error`. Every step still goes through the
+ * reducer; production builds never enter these branches.
+ */
+const DEMO_LATENCY_MS = 700;
+const demoWait = () =>
+  new Promise<void>((resolve) => setTimeout(resolve, DEMO_LATENCY_MS));
 
 /**
  * Maps known Supabase auth failures during password setup to calm,
@@ -207,6 +220,9 @@ export const SetPasswordPage = () => {
   const hasInviteTokens = Boolean(access_token && refresh_token);
 
   const navigate = useNavigate();
+  const demoScenario = isNoraDemoMode
+    ? new URLSearchParams(location.search).get("demo")
+    : null;
 
   const isSupabaseConfigured = Boolean(
     import.meta.env.VITE_SUPABASE_URL &&
@@ -217,6 +233,22 @@ export const SetPasswordPage = () => {
     let cancelled = false;
 
     (async () => {
+      if (isNoraDemoMode) {
+        if (cancelled) return;
+        if (!hasInviteTokens) {
+          dispatch({ type: "sessionMissing" });
+          return;
+        }
+        const sale = DEMO_SALES_BY_ROLE.office;
+        setIdentity({
+          firstName: sale.first_name,
+          lastName: sale.last_name,
+          email: sale.email,
+        });
+        dispatch({ type: "sessionResolved" });
+        return;
+      }
+
       if (!isSupabaseConfigured) {
         // Without a configured backend the link itself is the only signal.
         if (!cancelled) {
@@ -307,6 +339,26 @@ export const SetPasswordPage = () => {
     async (values: PasswordFormData) => {
       dispatch({ type: "onPasswordSubmit" });
 
+      if (isNoraDemoMode) {
+        await demoWait();
+        if (demoScenario === "blocked" || demoScenario === "unverified") {
+          dispatch({
+            type: "accessBlocked",
+            reason: demoScenario === "blocked" ? "disabled" : "unverified",
+          });
+          return;
+        }
+        if (demoScenario === "weak") {
+          dispatch({
+            type: "passwordFailed",
+            error: mapPasswordSetupError({ message: "weak" }),
+          });
+          return;
+        }
+        dispatch({ type: "passwordSucceeded" });
+        return;
+      }
+
       try {
         const client = getSupabaseClient();
 
@@ -368,54 +420,67 @@ export const SetPasswordPage = () => {
         });
       }
     },
-    [access_token, hasInviteTokens, refresh_token],
+    [access_token, demoScenario, hasInviteTokens, refresh_token],
   );
 
-  const submitProfile = useCallback(async (values: ProfileFormData) => {
-    dispatch({ type: "onProfileSubmit" });
+  const submitProfile = useCallback(
+    async (values: ProfileFormData) => {
+      dispatch({ type: "onProfileSubmit" });
 
-    try {
-      const client = getSupabaseClient();
-      const first_name = String(values.first_name ?? "").trim();
-      const last_name = String(values.last_name ?? "").trim();
-
-      const { error: metaError } = await client.auth.updateUser({
-        data: { first_name, last_name },
-      });
-      if (metaError) throw metaError;
-
-      const { data: sessionData } = await client.auth.getUser();
-      const userId = sessionData.user?.id;
-      if (!userId) throw new Error("missing user");
-
-      const { data: sale, error: saleError } = await client
-        .from("sales")
-        .update({ first_name, last_name })
-        .eq("user_id", userId)
-        .select(
-          "id, first_name, last_name, avatar, administrator, role, disabled",
-        )
-        .single();
-      if (saleError || !sale) throw saleError ?? new Error("missing sale");
-
-      if (sale.disabled) {
-        dispatch({ type: "accessBlocked", reason: "disabled" });
+      if (isNoraDemoMode) {
+        await demoWait();
+        if (demoScenario === "profile-error") {
+          dispatch({ type: "profileFailed", error: PROFILE_SAVE_FAILED });
+          return;
+        }
+        dispatch({ type: "profileSucceeded" });
         return;
       }
 
-      // Keep header identity in sync once the user enters the app.
-      setCurrentSaleCache(sale);
+      try {
+        const client = getSupabaseClient();
+        const first_name = String(values.first_name ?? "").trim();
+        const last_name = String(values.last_name ?? "").trim();
 
-      // Role is never writable from the client — omit intentionally.
-      await client.auth.refreshSession();
-      // Run finished: a later password-setup link must start at WELCOME.
-      clearPasswordSetMark();
-      dispatch({ type: "profileSucceeded" });
-    } catch {
-      // Variant B: the password is already saved; only the name failed.
-      dispatch({ type: "profileFailed", error: PROFILE_SAVE_FAILED });
-    }
-  }, []);
+        const { error: metaError } = await client.auth.updateUser({
+          data: { first_name, last_name },
+        });
+        if (metaError) throw metaError;
+
+        const { data: sessionData } = await client.auth.getUser();
+        const userId = sessionData.user?.id;
+        if (!userId) throw new Error("missing user");
+
+        const { data: sale, error: saleError } = await client
+          .from("sales")
+          .update({ first_name, last_name })
+          .eq("user_id", userId)
+          .select(
+            "id, first_name, last_name, avatar, administrator, role, disabled",
+          )
+          .single();
+        if (saleError || !sale) throw saleError ?? new Error("missing sale");
+
+        if (sale.disabled) {
+          dispatch({ type: "accessBlocked", reason: "disabled" });
+          return;
+        }
+
+        // Keep header identity in sync once the user enters the app.
+        setCurrentSaleCache(sale);
+
+        // Role is never writable from the client — omit intentionally.
+        await client.auth.refreshSession();
+        // Run finished: a later password-setup link must start at WELCOME.
+        clearPasswordSetMark();
+        dispatch({ type: "profileSucceeded" });
+      } catch {
+        // Variant B: the password is already saved; only the name failed.
+        dispatch({ type: "profileFailed", error: PROFILE_SAVE_FAILED });
+      }
+    },
+    [demoScenario],
+  );
 
   return (
     <EmployeeAccessShell mode="einladung">

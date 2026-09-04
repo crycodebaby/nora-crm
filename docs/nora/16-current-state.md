@@ -119,8 +119,9 @@ Profil (Variante B) → zentrierter Abschluss mit gezeichnetem grünen Haken;
 Ungültig/Gesperrt neutral. Admin: `EmployeeAccessStatus`-Pill in `SalesList`
 (neue Spalte „Rolle", alte Badges entfernt) und im `EmployeeAccessPanel`
 (Datumszeile, zustandsabhängige Aktionen, Verweis auf das eine Schreibfeld).
-Copy: Admin-Anlage „Mitarbeiter einladen". **Status: `V1B RC — LOCAL
-VERIFIED, AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`** — Branch
+Copy: Admin-Anlage „Mitarbeiter einladen". Demo-Modus simuliert das
+Onboarding-Backend (nur `VITE_IS_DEMO=true`, nicht im Production-Bundle).
+**Status: `PO UX ACCEPTED — READY FOR RELEASE`** (2026-09-04) — Branch
 `feat/nora-employee-onboarding-access-v1b`, nicht auf `main`, nicht deployt.
 Verifikation und Messwerte: Decision Log „2026-09-04 – Employee Onboarding &
 Access V1B"; Gestaltungsregeln: `02-design-system.md` „Mitarbeiter-Onboarding

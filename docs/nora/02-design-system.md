@@ -622,7 +622,7 @@ Alle sechs sichtbaren Zustände sind damit herstellbar: **available** (Standard)
 
 ## Mitarbeiter-Onboarding & Zugang (Welle V1B, 2026-09-04)
 
-Reine Präsentations-Welle über dem technischen Fundament V1A. Die Zustandsmaschine `login/employeeOnboardingFlow.ts`, die Auth-Semantik, Routen und die `users` Edge Function sind **unverändert**; V1B entscheidet nur, wie jeder Zustand aussieht — nie, welcher Zustand gezeigt wird. Status: `RC — LOCAL VERIFIED, AWAITING PRODUCT OWNER VISUAL ACCEPTANCE`.
+Reine Präsentations-Welle über dem technischen Fundament V1A. Die Zustandsmaschine `login/employeeOnboardingFlow.ts`, die Auth-Semantik, Routen und die `users` Edge Function sind **unverändert**; V1B entscheidet nur, wie jeder Zustand aussieht — nie, welcher Zustand gezeigt wird. Status: `PO UX ACCEPTED — READY FOR RELEASE` (2026-09-04, siehe Abschnitt „Demo-Simulation").
 
 ### Karte und Shell (`EmployeeAccessShell`)
 
@@ -676,3 +676,9 @@ Titel erhält bei jedem Schrittwechsel den Fokus (gemessen), Tab-Reihenfolge = L
 ### Texte
 
 Deutsch, ohne Magic Link / OTP / Auth / Token / Callback / Recovery / Session / Konto / Login. „Einmalcode" nur dort, wo der Einladungs-Flow ihn wirklich verarbeitet. Admin-Anlage heißt jetzt „Mitarbeiter einladen", Erfolg „Einladung gesendet. …" (die alten i18n-Keys „Neuen Benutzer anlegen" / „Benutzer angelegt …" haben bis V1B die neueren Fallbacks im Code überstimmt).
+
+### Demo-Simulation (Bestandteil des RC)
+
+Im Demo-Modus (`npm run dev:demo`, `VITE_IS_DEMO=true`) gibt es kein Auth-Backend. Damit der komplette Ablauf visuell geprüft werden kann, simuliert `set-password-page.tsx` dort die drei Backend-Aufrufe (Session, Passwort, Profil) mit 0,7 s Latenz und der Demo-Persona „Otto Office". Szenarien über `?demo=weak | blocked | unverified | profile-error`, ohne Token erscheint der ungültige Zustand. Die Verzweigung hängt an `isNoraDemoMode` (Build-Zeit-Konstante) und ist im Production-Bundle nicht enthalten (nachgewiesen: `dist/` enthält weder `nora.demo` noch die Simulationsstrings); `getSupabaseClient()` wird im Demo-Modus nie aufgerufen, die URL-Token werden nur auf Vorhandensein geprüft und nie als Zugangsdaten verwendet (Test `set-password-page.demo.test.tsx`). Jeder Schritt läuft weiterhin durch den V1A-Reducer.
+
+**Status: `PO UX ACCEPTED — READY FOR RELEASE` (2026-09-04).** Der Product Owner hat den kompletten Demo-Ablauf und alle Zustände visuell abgenommen. Kein Push nach `main`, kein Deployment in dieser Welle.
