@@ -51,6 +51,30 @@ grant all on function public.handle_update_user() to service_role;
 
 -- v0.4b.1: RBAC helpers in nora_private — see migration 20260714140000 for EXECUTE grants.
 
+-- Nora User Lifecycle W1 (2026-09-04): employee access mutations have ONE
+-- privileged path (users Edge Function → service_role → executor RPC).
+-- No browser role may execute either RPC; see migration 20260904220000.
+revoke all on function public.set_sales_role_by_admin(bigint, text, boolean) from public;
+revoke all on function public.set_sales_role_by_admin(bigint, text, boolean) from anon;
+revoke all on function public.set_sales_role_by_admin(bigint, text, boolean) from authenticated;
+grant execute on function public.set_sales_role_by_admin(bigint, text, boolean) to service_role;
+
+revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from public;
+revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from anon;
+revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from authenticated;
+grant execute on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) to service_role;
+
+revoke all on function nora_private.active_admin_count(bigint) from public;
+revoke all on function nora_private.active_admin_count(bigint) from anon;
+revoke all on function nora_private.active_admin_count(bigint) from authenticated;
+revoke all on function nora_private.active_admin_count(bigint) from service_role;
+grant execute on function nora_private.active_admin_count(bigint) to postgres;
+
+revoke all on function nora_private.guard_last_active_admin() from public;
+revoke all on function nora_private.guard_last_active_admin() from anon;
+revoke all on function nora_private.guard_last_active_admin() from authenticated;
+revoke all on function nora_private.guard_last_active_admin() from service_role;
+
 grant all on function public.lowercase_email_jsonb() to anon;
 grant all on function public.lowercase_email_jsonb() to authenticated;
 grant all on function public.lowercase_email_jsonb() to service_role;

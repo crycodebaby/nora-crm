@@ -64,6 +64,9 @@ begin
         );
         raise exception 'disabled admin must not call set_sales_role_by_admin';
     exception
+        -- W1: no authenticated JWT may execute the RPC at all any more.
+        when insufficient_privilege then
+            null;
         when others then
             if sqlerrm not like '%forbidden%' then
                 raise;
@@ -181,6 +184,8 @@ begin
         );
         raise exception 'office must not call set_sales_role_by_admin';
     exception
+        when insufficient_privilege then
+            null;
         when others then
             if sqlerrm not like '%forbidden%' then
                 raise;
@@ -218,15 +223,34 @@ begin
     delete from public.contacts where id = v_contact_id;
     delete from public.companies where id = v_company_id;
 
-    perform public.set_sales_role_by_admin(
-        (select id from public.sales where user_id = v_viewer),
-        'office'
-    );
-
-    perform public.set_sales_role_by_admin(
-        (select id from public.sales where user_id = v_viewer),
-        'viewer'
-    );
+    -- W1: an admin JWT can no longer call either access RPC directly. The
+    -- only path is the users Edge Function (service_role) — see
+    -- lifecycle_single_executor_verification.sql for the executor matrix.
+    begin
+        perform public.set_sales_role_by_admin(
+            (select id from public.sales where user_id = v_viewer),
+            'office'
+        );
+        raise exception 'W1: admin JWT must not call set_sales_role_by_admin directly';
+    exception
+        when insufficient_privilege then
+            null;
+    end;
+    begin
+        perform public.set_sales_access_by_executor(
+            v_admin,
+            (select id from public.sales where user_id = v_viewer),
+            'office',
+            null
+        );
+        raise exception 'W1: admin JWT must not call set_sales_access_by_executor directly';
+    exception
+        when insufficient_privilege then
+            null;
+    end;
+    if (select role from public.sales where user_id = v_viewer) <> 'viewer' then
+        raise exception 'W1: refused direct RPC calls must not change anything';
+    end if;
 
     -- role/administrator mirror invariant
     if exists (

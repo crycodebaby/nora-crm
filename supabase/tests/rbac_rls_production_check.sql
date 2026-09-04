@@ -85,6 +85,29 @@ begin
         raise exception 'authenticated must not EXECUTE apply_sales_role_change';
     end if;
 
+    -- W1: single executor — no browser role may execute either access RPC
+    if has_function_privilege('authenticated', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
+        raise exception 'W1: authenticated must not EXECUTE set_sales_role_by_admin';
+    end if;
+    if not has_function_privilege('service_role', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
+        raise exception 'W1: service_role must EXECUTE set_sales_role_by_admin (release window)';
+    end if;
+    if has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE')
+       or has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+        raise exception 'W1: only service_role may EXECUTE set_sales_access_by_executor';
+    end if;
+    if not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+        raise exception 'W1: service_role must EXECUTE set_sales_access_by_executor';
+    end if;
+    if not exists (
+        select 1 from pg_trigger
+        where tgrelid = 'public.sales'::regclass
+          and tgname = 'guard_last_active_admin_trigger'
+          and tgenabled <> 'D'
+    ) then
+        raise exception 'W1: guard_last_active_admin_trigger missing';
+    end if;
+
     if not exists (
         select 1 from information_schema.views
         where table_schema = 'public' and table_name = 'sales_directory'

@@ -55,27 +55,46 @@ begin
     set local role nora_rls_test;
     set local role authenticated;
 
-    -- B. Role RPC matrix
+    -- B. Role RPC matrix (W1: single executor)
     perform set_config('request.jwt.claim.sub', v_admin::text, true);
     select id into v_viewer_sale_id from public.sales where user_id = v_viewer;
 
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'office');
+    -- An admin JWT is refused on the legacy RPC — direct browser access is closed.
+    begin
+        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'office');
+        raise exception 'W1: admin JWT must not call set_sales_role_by_admin';
+    exception
+        when insufficient_privilege then
+            null;
+    end;
+
+    -- The executor path (users Edge Function → service_role) with the admin as actor.
+    perform set_config('request.jwt.claim.role', 'service_role', true);
+    set local role service_role;
+
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'office', null);
     if (select role from public.sales where id = v_viewer_sale_id) <> 'office' then
-        raise exception 'admin RPC must set viewer to office';
+        raise exception 'executor must set viewer to office';
     end if;
 
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'viewer', true);
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'viewer', true);
     if (select disabled from public.sales where id = v_viewer_sale_id) is distinct from true then
-        raise exception 'admin RPC must deactivate user';
+        raise exception 'executor must deactivate user';
     end if;
 
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'viewer', false);
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'viewer', false);
+
+    set local role nora_rls_test;
+    set local role authenticated;
+    perform set_config('request.jwt.claim.role', '', true);
 
     perform set_config('request.jwt.claim.sub', v_office::text, true);
     begin
         perform public.set_sales_role_by_admin(v_viewer_sale_id, 'admin');
         raise exception 'office must not call role RPC';
     exception
+        when insufficient_privilege then
+            null;
         when others then
             if sqlerrm not like '%forbidden%' then
                 raise;
@@ -87,6 +106,8 @@ begin
         perform public.set_sales_role_by_admin(v_viewer_sale_id, 'admin');
         raise exception 'viewer must not call role RPC';
     exception
+        when insufficient_privilege then
+            null;
         when others then
             if sqlerrm not like '%forbidden%' then
                 raise;

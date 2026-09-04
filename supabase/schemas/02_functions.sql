@@ -1009,10 +1009,11 @@ BEGIN
         RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
     END IF;
 
+    -- W1 (2026-09-04): service_role only. Deprecated; kept for the release
+    -- window of the users Edge Function. See set_sales_access_by_executor.
     IF coalesce(nora_private.safe_auth_role(), '') <> 'service_role' THEN
-        IF NOT nora_private.is_admin() THEN
-            RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-        END IF;
+        RAISE EXCEPTION 'forbidden'
+            USING ERRCODE = '42501', DETAIL = 'NORA_PERMISSION_DENIED';
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM public.sales WHERE id = p_sale_id) THEN
@@ -1022,6 +1023,133 @@ BEGIN
     PERFORM nora_private.apply_sales_role_change(p_sale_id, p_role, p_disabled);
 END;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Nora User Lifecycle W1 (2026-09-04): single executor + access invariants
+-- (see migration 20260904220000_nora_lifecycle_single_executor.sql)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION nora_private.active_admin_count(
+    p_exclude_sale_id bigint DEFAULT NULL
+)
+RETURNS integer
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+    SELECT count(*)::integer
+    FROM public.sales s
+    WHERE s.role = 'admin'
+      AND s.disabled = false
+      AND (p_exclude_sale_id IS NULL OR s.id <> p_exclude_sale_id);
+$$;
+
+ALTER FUNCTION nora_private.active_admin_count(bigint) OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION nora_private.guard_last_active_admin()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_remaining integer;
+BEGIN
+    IF NOT (old.role = 'admin' AND old.disabled = false) THEN
+        RETURN new;
+    END IF;
+    IF new.role = 'admin' AND new.disabled = false THEN
+        RETURN new;
+    END IF;
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(89142421, 2);
+
+    v_remaining := nora_private.active_admin_count(old.id);
+    IF v_remaining < 1 THEN
+        RAISE EXCEPTION 'at least one active administrator must remain'
+            USING ERRCODE = '23514',
+                  DETAIL = 'NORA_LAST_ACTIVE_ADMIN_REQUIRED';
+    END IF;
+
+    RETURN new;
+END;
+$$;
+
+ALTER FUNCTION nora_private.guard_last_active_admin() OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.set_sales_access_by_executor(
+    p_actor_user_id uuid,
+    p_sale_id bigint,
+    p_role text DEFAULT NULL,
+    p_disabled boolean DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_actor public.sales%rowtype;
+    v_target public.sales%rowtype;
+    v_next_role text;
+    v_next_disabled boolean;
+BEGIN
+    IF coalesce(nora_private.safe_auth_role(), '') <> 'service_role' THEN
+        RAISE EXCEPTION 'forbidden'
+            USING ERRCODE = '42501', DETAIL = 'NORA_PERMISSION_DENIED';
+    END IF;
+
+    IF p_actor_user_id IS NULL THEN
+        RAISE EXCEPTION 'actor required' USING ERRCODE = '22023';
+    END IF;
+    IF p_role IS NOT NULL AND p_role NOT IN ('admin', 'office', 'viewer') THEN
+        RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
+    END IF;
+    IF p_role IS NULL AND p_disabled IS NULL THEN
+        RAISE EXCEPTION 'nothing to change' USING ERRCODE = '22023';
+    END IF;
+
+    SELECT * INTO v_actor FROM public.sales WHERE user_id = p_actor_user_id;
+    IF NOT FOUND OR v_actor.role <> 'admin' OR v_actor.disabled THEN
+        RAISE EXCEPTION 'forbidden'
+            USING ERRCODE = '42501', DETAIL = 'NORA_PERMISSION_DENIED';
+    END IF;
+
+    SELECT * INTO v_target FROM public.sales WHERE id = p_sale_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'sales profile not found: %', p_sale_id
+            USING ERRCODE = 'P0002';
+    END IF;
+
+    v_next_role := coalesce(p_role, v_target.role);
+    v_next_disabled := coalesce(p_disabled, v_target.disabled);
+
+    IF v_target.user_id = p_actor_user_id
+       AND (
+           v_next_role IS DISTINCT FROM v_target.role
+           OR v_next_disabled IS DISTINCT FROM v_target.disabled
+       )
+    THEN
+        RAISE EXCEPTION 'administrators cannot change their own role or access'
+            USING ERRCODE = '42501', DETAIL = 'NORA_SELF_ACCESS_CHANGE_FORBIDDEN';
+    END IF;
+
+    PERFORM nora_private.apply_sales_role_change(p_sale_id, v_next_role, v_next_disabled);
+
+    SELECT * INTO v_target FROM public.sales WHERE id = p_sale_id;
+
+    RETURN jsonb_build_object(
+        'id', v_target.id,
+        'user_id', v_target.user_id,
+        'role', v_target.role,
+        'disabled', v_target.disabled
+    );
+END;
+$$;
+
+ALTER FUNCTION public.set_sales_access_by_executor(uuid, bigint, text, boolean) OWNER TO postgres;
 
 -- Nora CRM v0.3l: CRM audit writer, diff builders, entity triggers, read RPCs
 -- Role nora_audit_writer is created in migration 20260715120000_nora_crm_audit.sql

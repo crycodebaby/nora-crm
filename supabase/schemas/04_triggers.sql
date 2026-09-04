@@ -183,6 +183,11 @@ create or replace trigger audit_sales_privilege_change_trigger
     after update of role, disabled on public.sales
     for each row execute function public.audit_sales_privilege_change();
 
+-- Nora User Lifecycle W1 (2026-09-04): never leave zero active administrators
+create or replace trigger guard_last_active_admin_trigger
+    before update of role, disabled on public.sales
+    for each row execute function nora_private.guard_last_active_admin();
+
 create or replace trigger audit_checklist_run_changes_trigger
     after insert or update on public.checklist_runs
     for each row execute function public.audit_checklist_run_changes();

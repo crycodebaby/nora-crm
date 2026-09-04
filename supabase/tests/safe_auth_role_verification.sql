@@ -76,7 +76,8 @@ begin
     -- restore viewer for further checks
     perform public.set_sales_role_by_admin(v_viewer_sale_id, 'viewer');
 
-    -- 5) Nora admin JWT may change role
+    -- 5) W1: a Nora admin JWT may NOT call the legacy RPC any more (single
+    --    executor). The executor path with the admin as verified actor works.
     set local role authenticated;
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', v_admin::text, true);
@@ -85,12 +86,30 @@ begin
         json_build_object('role', 'authenticated', 'sub', v_admin::text)::text,
         true
     );
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'office');
+    begin
+        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'office');
+        raise exception 'W1: admin JWT must not call set_sales_role_by_admin';
+    exception
+        when insufficient_privilege then
+            null;
+    end;
+
+    perform set_config('request.jwt.claim.sub', '', true);
+    perform set_config('request.jwt.claim.role', 'service_role', true);
+    perform set_config(
+        'request.jwt.claims',
+        json_build_object('role', 'service_role')::text,
+        true
+    );
+    set local role service_role;
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'office', null);
     if (select role from public.sales where id = v_viewer_sale_id) <> 'office' then
-        raise exception 'admin JWT must set viewer to office';
+        raise exception 'executor with admin actor must set viewer to office';
     end if;
 
-    -- 6) viewer forbidden
+    -- 6) viewer forbidden (no EXECUTE at all for authenticated)
+    set local role authenticated;
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', v_viewer::text, true);
     perform set_config(
         'request.jwt.claims',
@@ -109,14 +128,16 @@ begin
             end if;
     end;
 
-    -- restore baseline
-    perform set_config('request.jwt.claim.sub', v_admin::text, true);
+    -- restore baseline through the service path
+    perform set_config('request.jwt.claim.sub', '', true);
+    perform set_config('request.jwt.claim.role', 'service_role', true);
     perform set_config(
         'request.jwt.claims',
-        json_build_object('role', 'authenticated', 'sub', v_admin::text)::text,
+        json_build_object('role', 'service_role')::text,
         true
     );
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'viewer');
+    set local role service_role;
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'viewer', null);
 
     raise notice 'safe_auth_role_verification OK';
 end;
