@@ -286,9 +286,9 @@ Jede dieser Änderungen berührt Grants breit und braucht denselben Ablauf wie W
 
 ---
 
-## User Lifecycle W1 — Zugangs-Drift in Production, Reparatur ausstehend
+## User Lifecycle W1 — Zugangs-Drift in Production, repariert
 
-**Status: `RC VERIFIED — REPAIR PENDING RELEASE` (2026-09-05)**
+**Status: `PRODUCTION VERIFIED — DRIFT REPAIRED` (2026-09-05)**
 
 Read-only gegen `nora-crm-prod` (2026-09-04, Reconnaissance) und lokal
 reproduziert: genau **ein** Mitarbeiter hat `sales.disabled = true`, aber
@@ -319,12 +319,24 @@ Drift als `accessConsistency = inconsistent` (Details: Decision Log
    unverändert.
 4. Kein rohes Production-SQL, keine Dashboard-Bearbeitung des Datensatzes.
 
+**Ausgeführt am 2026-09-05 (kontrollierter Release):** Ziel unabhängig
+bestätigt (genau eine Zeile mit `sales.disabled = true` ohne aktiven Bann:
+`sales.id = 4`, Rolle `office`, nie aktiviertes Testkonto). Reparatur über
+„Zugangsstatus synchronisieren" im Admin-UI auf dem neuen Bundle. Danach
+`banned_until` in 2036, `sales.disabled` unverändert `true`,
+`GET /users?sales_id=4` → `accessConsistency = consistent`,
+`user.disabled`-Ereignisse für diese `sale_id` unverändert 1, `audit_events`
+insgesamt unverändert. Kein Production-SQL, keine Dashboard-Bearbeitung.
+Der Migrations-Ledger wurde nach Halt und expliziter PO-Freigabe mit einer
+einzigen `update`-Zeile von der Apply-Zeit `20260904224445` auf den
+Datei-Zeitstempel `20260904220000` korrigiert (Decision Log, Nachtrag Release).
+
 **Bewusst offen nach W1:** service_role-Audit-Ereignisse bleiben `System`
 (W3); keine Session-Revokation beim Deaktivieren (Bann stoppt Refresh, ein
 laufendes Access-Token läuft regulär aus; RLS verweigert sofort) — W5; die
 Legacy-RPC wird in W2 entfernt; FakeRest kennt die neuen Guards nicht
 (Demo-Modus hat keine Autorisierung auf Datenebene, bestehende Lücke); die
-SQL-Suiten laufen weiterhin nicht in CI (W9).
+SQL-Suiten laufen weiterhin nicht in CI (W9); Nebenbefund aus dem Release: die 401-Antworten aus `_shared/authentication.ts` tragen noch den Fehlertext der JOSE-Bibliothek (technisches Vokabular, keine Daten) — Follow-up.
 
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 

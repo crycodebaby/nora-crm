@@ -204,12 +204,15 @@ Erfolg), Konsistenzfakt `accessConsistency` + `noraDisabled` in `GET /users`
 und eine Reparatur „Zugangsstatus synchronisieren" im `EmployeeAccessPanel`.
 Migration `20260904220000_nora_lifecycle_single_executor.sql`, neue SQL-Suite
 `lifecycle_single_executor_verification.sql`, `users/lifecycle.ts` (+17 Tests).
-**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`** (Branch
-`security/nora-lifecycle-w1-single-executor`, nicht auf `main`, nicht deployt,
-nicht Production Verified). Der eine in Production inkonsistente Datensatz
-(`sales.disabled = true`, kein Auth-Bann) wird **erst im Release** über den
-neuen Pfad repariert — siehe `17-known-issues-and-planned-waves.md` und
-Decision Log „2026-09-05 – User Lifecycle W1".
+**Status: `PRODUCTION VERIFIED` (2026-09-05).** Migration in `nora-crm-prod`
+angewendet (Ledger nach PO-freigegebener Einzeilen-Korrektur unter
+`20260904220000`), `users` Edge Function v5, `main = a58650a0`
+(Fast-Forward), Vercel READY auf exakt diesem SHA, Live-Smoke der
+Benutzerverwaltung grün. Der eine inkonsistente Datensatz wurde über
+„Zugangsstatus synchronisieren" repariert (Bann gesetzt, kein doppeltes
+Audit-Ereignis, `accessConsistency = consistent`). Details: Decision Log
+„2026-09-05 – User Lifecycle W1", Nachtrag Release; offene Punkte in
+`17-known-issues-and-planned-waves.md`.
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
