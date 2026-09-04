@@ -28,7 +28,7 @@ import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
 
 const PASSWORD_GUIDANCE =
-  "Mindestens 12 Zeichen. Verwenden Sie kein leicht erratbares Passwort.";
+  "Empfohlen: mindestens 12 Zeichen. Verwenden Sie kein leicht erratbares Passwort.";
 
 interface PasswordInputProps {
   label: string;
@@ -105,7 +105,7 @@ export function mapPasswordSetupError(error: unknown): string {
     return "Dieses Passwort ist zu leicht zu erraten. Bitte wählen Sie ein längeres und persönlicheres Passwort.";
   }
   if (/too short|should be at least/i.test(message)) {
-    return "Das Passwort ist zu kurz. Verwenden Sie mindestens 12 Zeichen.";
+    return "Das Passwort ist zu kurz. Empfehlung: mindestens 12 Zeichen.";
   }
   if (status === 401 || status === 403 || /session|jwt|token/i.test(message)) {
     return "Dieser Link ist nicht mehr gültig. Bitte fordern Sie einen neuen Link an.";

@@ -106,7 +106,7 @@ describe("SetPasswordPage password visibility", () => {
     await expect
       .element(
         screen.getByText(
-          "Mindestens 12 Zeichen. Verwenden Sie kein leicht erratbares Passwort.",
+          "Empfohlen: mindestens 12 Zeichen. Verwenden Sie kein leicht erratbares Passwort.",
         ),
       )
       .toBeVisible();
@@ -139,12 +139,12 @@ describe("mapPasswordSetupError", () => {
     );
   });
 
-  it("maps too-short password rejections to the 12-character guidance", () => {
+  it("maps too-short password rejections to the 12-character recommendation", () => {
     expect(
       mapPasswordSetupError({
         message: "Password should be at least 6 characters.",
       }),
-    ).toBe("Das Passwort ist zu kurz. Verwenden Sie mindestens 12 Zeichen.");
+    ).toBe("Das Passwort ist zu kurz. Empfehlung: mindestens 12 Zeichen.");
   });
 
   it("maps expired/invalid session errors to a re-request message", () => {
