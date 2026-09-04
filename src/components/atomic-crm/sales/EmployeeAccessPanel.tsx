@@ -15,6 +15,7 @@ import {
   type EmployeeAccessRecord,
 } from "./employeeAccessContract";
 import { EmployeeAccessStatus } from "./EmployeeAccessStatus";
+import { EmployeeMailDeliveryStatus } from "./EmployeeMailDeliveryStatus";
 import {
   EMPLOYEE_ACCESS_QUERY_KEY,
   useEmployeeAccessStatus,
@@ -155,6 +156,10 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
             </div>
           ) : null}
         </dl>
+
+        {/* Secondary, and placed after the access facts on purpose: what the
+            administrator acts on is the access state above, not transport. */}
+        <EmployeeMailDeliveryStatus salesId={salesId} />
       </div>
 
       {canResend || canRequestPassword ? (

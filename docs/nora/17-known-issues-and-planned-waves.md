@@ -623,7 +623,8 @@ und Reihenfolge: `18-email-delivery-observability.md` Abschnitt 7.
 
 ### V1C-A.7 `mail_kind` bleibt im echten Betrieb `unknown`
 
-**Status: OPEN (2026-09-04) — vor V1C-B zu klären**
+**Status: OPEN (2026-09-04) — Ursache eingegrenzt, entscheidbar beim nächsten
+echten Versand. Blockiert V1C-B NICHT.**
 
 Im realen Production-E2E wurden beide Zeilen mit `mail_kind = unknown`
 gespeichert. `classifyMailKind()` vergleicht den Betreff der Brevo-Nutzlast
@@ -633,16 +634,60 @@ Needles. Das ist der bewusst entworfene degradierte, aber ehrliche Pfad — die
 Zustellwahrheit (`EMAIL_ACCEPTED` / `EMAIL_DELIVERED`), die Korrelation und das
 Lesemodell sind davon **nicht** betroffen.
 
-**Folge:** `employee_email_delivery_status()` gruppiert nach
-`(employee_sale_id, mail_kind)`. Solange alles `unknown` ist, kann V1C-B
-Einladung und Passwort-Einrichtung nicht auseinanderhalten und würde beide
-Vorgänge in einer Zeile zusammenfassen.
+**Ursachenanalyse (V1C-B).** Nicht abschließend bestimmbar mit den vorhandenen
+Belegen, weil der Betreff bewusst nirgends gespeichert wird und weder Auth-
+noch Function-Logs ihn enthalten. Zwei Ursachen bleiben möglich:
 
-**Zu klären, bevor V1C-B UI baut:** sendet Brevo im Outgoing-Webhook überhaupt
-ein `subject`-Feld, oder weichen die konfigurierten Auth-Betreffzeilen ab
-(Dashboard → Authentication → Email Templates)? Die robustere Lösung wäre, die
-Mailart nicht aus dem Betreff abzuleiten, sondern aus dem auslösenden
-Auth-Ereignis — das ist eine eigene Entscheidung und **nicht** Teil von V1C-A.
+- **A — Betreff-Drift.** Der gehostete Auth-Betreff weicht von
+  `supabase/config.toml` ab. Das Repository enthält **keine** CI, die
+  `supabase config push` ausführt; die Dashboard-Betreffzeilen sind reine
+  Handkonfiguration. Das macht A zur wahrscheinlicheren Ursache.
+- **B — Kein `subject` in der Nutzlast.** Brevo liefert für SMTP-Relay-
+  Ereignisse kein Betreff-Feld. Dann ist `unknown` dauerhaft korrekt.
+
+**Kein Matcher wurde in V1C-B geändert.** Ein Matcher auf geratene
+Standardbetreffzeilen („Reset Your Password") erzeugte eine selbstbewusst
+falsche statt einer ehrlich degradierten Antwort; die Tests halten fest, dass
+solche Betreffzeilen **nicht** gemappt werden.
+
+**Entscheidbar gemacht:** die Edge Function protokolliert bei `unknown` genau
+ein inhaltsfreies Bit — `subject_present: true|false`. `false` ⇒ Ursache B (dann
+schließen). `true` ⇒ Ursache A, Betreff im Dashboard angleichen
+(→ Authentication → Email Templates). Der Betreff selbst wird weiterhin nirgends
+geloggt oder gespeichert.
+
+**Warum V1C-B trotzdem ausgeliefert werden kann:** die Zustell-UI rendert die
+Mailart gar nicht (Best-Effort-Korrelation trägt keine Aussage über *einen*
+Sendeversuch) und fasst ohnehin auf eine Zeile „Letzte E-Mail-Zustellung"
+zusammen. `mail_kind` ist damit heute ohne Produktwirkung.
+
+### V1C-B.1 PARKED — deterministische Sendekorrelation
+
+**Status: PARKED (2026-09-04) — bewusst nicht in V1C-B**
+
+Solange Supabase Auth über reines SMTP versendet, kann Nora der Nachricht keinen
+eigenen Korrelationswert mitgeben; Ereignisse werden über die Empfängeradresse
+zugeordnet (`correlation_confidence = best_effort`). Deterministisch würde es
+erst über den Supabase **Send Email Hook**: Supabase erzeugt den sicheren Link,
+Nora versendet selbst über die Brevo-API mit eigener Korrelations-ID bzw. Tags.
+
+Das ersetzt den Auth-Mailversand, ist eine eigene Architekturentscheidung mit
+eigenem Risiko und war ausdrücklich **kein** Teil dieser Welle — ebenso wenig
+wie eine Mail-Warteschlange, ein Sendeversuchs-Subsystem, Öffnungs-/Klick-
+Tracking oder ein User Lifecycle Admin V1.
+
+Erst danach dürfte eine Oberfläche „**diese** Einladung wurde zugestellt" sagen.
+
+### V1C-B.2 PARKED — feinere Unterscheidung innerhalb `undeliverable`
+
+**Status: PARKED (2026-09-04)**
+
+Das Lesemodell `employee_email_delivery_status()` fasst Hard Bounce, Blocked und
+Invalid zu `undeliverable` zusammen. Die UI zeigt deshalb einen Hinweis
+(„E-Mail-Adresse prüfen") statt „Zustellung blockiert" / „E-Mail-Adresse
+ungültig". Der nächste Schritt des Administrators ist in allen drei Fällen
+derselbe; eine feinere Unterscheidung wäre eine eigene Erweiterung des
+Lesemodells.
 
 ### V1C-A.8 Edge-Log-Stream für erfolgreiche Aufrufe unvollständig
 

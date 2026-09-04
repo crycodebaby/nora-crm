@@ -135,6 +135,24 @@ export async function handleBrevoWebhook(
       continue;
     }
 
+    if (result.event.mailKind === "unknown") {
+      // A Nora access mail whose kind we cannot name is stored anyway — the
+      // delivery outcome is still true and the UI is built for it. It is
+      // logged because the two possible reasons need different fixes:
+      // subject_present=false means the provider does not report subjects at
+      // all (nothing to classify), subject_present=true means a configured
+      // Auth template subject has drifted away from MAIL_KIND_SUBJECTS.
+      // The subject itself is never logged.
+      console.error(
+        JSON.stringify({
+          operation: "brevo_email_events",
+          stage: "classify",
+          error: "unknown_mail_kind",
+          subject_present: result.subjectPresent,
+        }),
+      );
+    }
+
     try {
       const { stored } = await deps.ingest(result.event);
       if (stored) summary.stored += 1;

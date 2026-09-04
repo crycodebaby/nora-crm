@@ -1,6 +1,7 @@
 # 18 – E-Mail-Zustellbeobachtung (Employee Access V1C-A)
 
-Stand: 2026-09-04. Status: **BACKEND RC — nicht deployt, nicht in Produktion aktiv.**
+Stand: 2026-09-04. Status: **V1C-A PRODUCTION VERIFIED. V1C-B (Zustell-UI) RC —
+nicht deployt.**
 
 Dieses Dokument beschreibt den technischen Vertrag und die manuelle
 Konfiguration. Produktentscheidungen stehen im Decision Log
@@ -12,8 +13,8 @@ Konfiguration. Produktentscheidungen stehen im Decision Log
 |---|---|---|
 | V1A | Employee Access (abgeleiteter Zugangsstatus, `GET /users`, zwei Admin-Aktionen) | live |
 | V1B | Premium UX & Motion für Mitarbeiter/Admin | parallele RC-Entwicklung, **nicht** Teil dieser Welle |
-| V1C-A | Zustellbeobachtung Backend (diese Welle) | RC |
-| V1C-B | `/benutzer`-Zustell-UI | nicht begonnen |
+| V1C-A | Zustellbeobachtung Backend | Production Verified |
+| V1C-B | `/benutzer`-Zustell-UI | RC (diese Welle) |
 
 ## 2. Absender
 
@@ -260,6 +261,120 @@ Policy verlangt zusätzlich `nora_private.is_admin()`. Normale Mitarbeiter sehen
 die technische Zustellhistorie nicht. Es gibt **kein** `UPDATE`- und kein
 `DELETE`-Grant für irgendeine Rolle — genau das macht die Tabelle append-only
 (`service_role` umgeht RLS, aber keine Grants).
+
+## 6a. V1C-B — die Zustell-UI
+
+### Platzierung
+
+Die Zustellinformation sitzt **im bestehenden `EmployeeAccessPanel`**, unter den
+Zugangsfakten und vor den Aktionen. Sie ist bewusst dem Zugangszustand
+untergeordnet: was ein Administrator entscheidet, steht oben
+(`Zugang aktiv` / `Zugang deaktiviert` / `Einladung gesendet` / `Zugang unklar`),
+der Transport erklärt nur, warum eine eingeladene Person noch nicht erschienen
+ist. Deshalb: schlichter, gedämpfter Text — **keine zweite Status-Pille, kein
+Dashboard.**
+
+```
+Zugang aktiv
+
+Letzte E-Mail-Zustellung
+Zugestellt am 04.09.2026 um 17:09
+```
+
+### Wortlaut
+
+| Ausgang | Zeile | Handlungshinweis |
+|---|---|---|
+| `delivered` | „Zugestellt am {Datum} um {Zeit}" | — |
+| `accepted` | „E-Mail versendet" | — |
+| `delayed` | „Zustellung verzögert" | „Der Anbieter versucht es weiter zuzustellen." |
+| `undeliverable` | „E-Mail konnte nicht zugestellt werden" | „E-Mail-Adresse prüfen" |
+| `spam_reported` | „Als Spam markiert – Zustellung eingeschränkt" | „Keine automatische erneute Zustellung" |
+| keine Historie | **nichts** | — |
+
+Ohne brauchbaren Zeitstempel fällt `delivered` auf die undatierte Beschriftung
+„E-Mail zugestellt" zurück — eine erfundene Uhrzeit wäre schlimmer als keine.
+
+Zeitstempel werden fest in `Europe/Berlin` gerendert. Der Administrator
+vergleicht diese Zeile mit einem Postfach und mit dem Provider-Log; eine in der
+Browser-Zeitzone gerenderte Uhrzeit widerspräche stillschweigend beiden.
+
+### Was die UI nicht sagt
+
+- kein „geöffnet", „gelesen", „geklickt", „Onboarding abgeschlossen"
+- **keine Mailart.** `mail_kind` wird gelesen, aber nie gerendert: „Einladung
+  zugestellt" wäre eine Aussage über *einen* Sendeversuch, die Best-Effort-
+  Korrelation nicht trägt. Die Überschrift „Letzte E-Mail-Zustellung" trägt die
+  Einschränkung, damit keine einzelne Zeile sie wiederholen muss.
+  `describeEmployeeMailKind()` hält diese Regel als prüfbaren Vertrag fest.
+- **keine leere Zustandsmeldung.** Ohne Historie erscheint der Block gar nicht.
+  „Keine Zustellinformation" läse sich wie ein Befund.
+
+### Ableitung
+
+Das Lesemodell antwortet je Mitarbeiter **und Mailart**. Die Oberfläche zeigt
+eine Zeile: `summariseEmployeeMailDelivery()` nimmt das neueste Ereignis über
+alle Mailarten hinweg, bei gleichem Zeitstempel entscheidet derselbe
+Schweregrad-Rang wie in SQL (`accepted` < `delayed` < `delivered` <
+`spam_reported` < `undeliverable`). Zeilen ohne lesbaren Zeitstempel werden
+übersprungen, nicht geraten.
+
+### Datenzugriff
+
+Der Browser liest **ausschließlich** über die RPC
+`public.employee_email_delivery_status(p_sales_id)` — nie direkt
+`email_delivery_events`. Die Funktion ist Admin-only (`forbidden` für alle
+anderen); der React-Query-Gate auf `sales:edit` ist nur Bequemlichkeit. Ein
+Lesefehler wird **nicht** als Fehlermeldung gezeigt: Zustellstatus ist
+Sekundärinformation, also rendert die Oberfläche in dem Fall nichts.
+
+Im Demo-Modus (FakeRest) gibt es keine Zustellhistorie und es wird auch keine
+erfunden — genau das Verhalten eines echten Mitarbeiters ohne Historie.
+
+### Nicht unterschieden
+
+`undeliverable` fasst Hard Bounce, Blocked und Invalid zusammen, weil der
+nächste Schritt des Administrators derselbe ist („E-Mail-Adresse prüfen"). Eine
+feinere Unterscheidung („Zustellung blockiert") gäbe das Lesemodell heute nicht
+her; sie wäre eine eigene Erweiterung von
+`employee_email_delivery_status()` und ist **PARKED**.
+
+## 6b. Offener Befund: `mail_kind = unknown` im echten Produktionslauf
+
+Der echte Produktions-E2E vom 2026-09-04 (`user_recovery_requested` 15:09:35 →
+`request` 15:09:36 → `delivered` 15:09:37) speicherte für eine **echte
+Passwort-Einrichtungs-Mail** `mail_kind = unknown`.
+
+Die Ursache ist mit den vorhandenen Belegen **nicht abschließend bestimmbar**,
+weil der Betreff bewusst nirgends gespeichert wird (Abschnitt 4.6) und weder
+Auth- noch Function-Logs ihn enthalten. Zwei Ursachen sind möglich und
+erfordern unterschiedliche Korrekturen:
+
+| Ursache | Beobachtung | Korrektur |
+|---|---|---|
+| **A — Betreff-Drift** | Der gehostete Auth-Betreff weicht von `supabase/config.toml` ab (dieses Repository hat keine CI, die `supabase config push` ausführt; die Dashboard-Betreffzeilen sind reine Handkonfiguration, siehe 7A). | Betreff im Dashboard angleichen **oder** `MAIL_KIND_SUBJECTS` an den tatsächlichen Betreff angleichen. |
+| **B — Kein Betreff in der Nutzlast** | Brevo liefert für SMTP-Relay-Ereignisse kein `subject`-Feld. | Keine. `unknown` bleibt korrekt; die UI ist bereits darauf ausgelegt. |
+
+**In V1C-B wurde deshalb kein Matcher „repariert".** Ein Matcher auf geratene
+Standardbetreffzeilen („Reset Your Password") würde eine selbstbewusst falsche
+Antwort erzeugen statt einer ehrlich degradierten — die Tests halten
+ausdrücklich fest, dass solche Betreffzeilen **nicht** gemappt werden.
+
+Stattdessen protokolliert die Edge Function jetzt beim Ausgang `unknown`
+genau ein zusätzliches, inhaltsfreies Bit:
+
+```
+{"operation":"brevo_email_events","stage":"classify",
+ "error":"unknown_mail_kind","subject_present":true|false}
+```
+
+`subject_present=false` ⇒ Ursache **B**. `subject_present=true` ⇒ Ursache **A**,
+und der Betreff im Dashboard ist anzugleichen. **Der Betreff selbst wird
+weiterhin nirgends geloggt oder gespeichert.** Der nächste echte Versand
+entscheidet den Befund.
+
+Bis dahin ist `mail_kind` ohne Produktwirkung: die UI rendert die Mailart
+ohnehin nicht (Abschnitt 6a).
 
 ## 7. Manuelle Konfiguration (Operator)
 

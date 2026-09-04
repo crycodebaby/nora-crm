@@ -151,8 +151,10 @@ beide `best_effort` und korrekt auf `sales.id = 1` aufgelöst, Lesemodell liefer
 derselben Ereignisidentität legt keine zweite Zeile an. **Offener Befund:**
 `mail_kind` blieb `unknown`, weil der Betreff der Brevo-Nutzlast nicht auf die
 konfigurierten Needles passte — die Zustellwahrheit ist davon unberührt, aber
-V1C-B kann Einladung und Passwort-Einrichtung noch nicht unterscheiden (siehe
-`17-known-issues-and-planned-waves.md`). Verifiziert: `typecheck`,
+die Ursache ist auf zwei Möglichkeiten eingegrenzt (Betreff-Drift im Dashboard
+vs. fehlendes `subject`-Feld in der Brevo-Nutzlast) und wird beim nächsten echten
+Versand durch ein inhaltsfreies `subject_present`-Log entschieden (siehe
+`17-known-issues-and-planned-waves.md`, V1C-A.7). Verifiziert: `typecheck`,
 `build`, ESLint sowie die Function-Suite (13 Dateien, 251 Tests) grün — darunter
 repräsentative Brevo-Nutzlasten mit den echten `snake_case`-Ereigniswerten
 (`soft_bounce`, `hard_bounce`, `invalid_email`), die sich von den camelCase-
@@ -166,6 +168,25 @@ unvollständig, auch der auslösende `POST /users` fehlt); die Zeilen selbst sin
 der Beweis, weil nur `service_role` einfügen darf. Details:
 `18-email-delivery-observability.md`, Decision Log „2026-09-04 – Employee Access
 V1C-A".
+
+24. **Employee Access V1C-B – Zustellstatus-UI** (2026-09-04): das
+`EmployeeAccessPanel` zeigt unter den Zugangsfakten eine untergeordnete Zeile
+„Letzte E-Mail-Zustellung" — „Zugestellt am 04.09.2026 um 17:09",
+„E-Mail versendet", „Zustellung verzögert", „E-Mail konnte nicht zugestellt
+werden" (+ „E-Mail-Adresse prüfen") oder „Als Spam markiert – Zustellung
+eingeschränkt". **Ohne Historie erscheint der Block gar nicht.** Gelesen wird
+ausschließlich über die Admin-only-RPC
+`public.employee_email_delivery_status()`, nie direkt über
+`email_delivery_events`; ein Lesefehler zeigt nichts an statt einer Fehlermeldung,
+weil Zustellstatus Sekundärinformation ist. Der Zugangszustand bleibt die
+primäre Information. **Die Mailart wird bewusst nie gerendert** — die Korrelation
+ist Best-Effort, „diese Einladung wurde zugestellt" wäre eine Aussage, die die
+Daten nicht tragen. Kein „geöffnet"/„gelesen"/„geklickt". Zeitstempel fest in
+`Europe/Berlin`. **Status: `V1C-B RC` (2026-09-04)** — nicht deployt, wartet auf
+Product-Owner-Review. Verifiziert: `typecheck`, `build`, ESLint (0 Fehler),
+Prettier für die geänderten Dateien, App-Suite (98 Dateien, 886 Tests) und
+Function-Suite (13 Dateien, 259 Tests) grün. Details:
+`18-email-delivery-observability.md` Abschnitt 6a/6b.
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 

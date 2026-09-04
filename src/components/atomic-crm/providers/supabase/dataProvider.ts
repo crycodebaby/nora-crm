@@ -30,6 +30,11 @@ import type {
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
 import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
+import type {
+  EmployeeMailDeliveryOutcome,
+  EmployeeMailDeliveryStatus,
+  EmployeeMailKind,
+} from "../../sales/emailDeliveryContract";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
@@ -312,6 +317,38 @@ const getDataProviderWithCustomMethods = () => {
       return invokeEmployeeAccessCommand("request_password_setup", salesId);
     },
 
+    /**
+     * Employee mail delivery observability (V1C-B read path).
+     *
+     * Goes through the admin-only read model
+     * `public.employee_email_delivery_status()`, never through
+     * `email_delivery_events` itself: the function is what decides one product
+     * outcome per employee and mail kind, and it is what keeps provider
+     * vocabulary (hardBounce, message ids, subjects) out of the browser
+     * entirely. A non-admin caller is rejected inside the function, not here.
+     */
+    async getEmployeeMailDeliveryStatus(
+      salesId?: Identifier,
+    ): Promise<EmployeeMailDeliveryStatus[]> {
+      const { data, error } = await getSupabaseClient().rpc(
+        "employee_email_delivery_status",
+        { p_sales_id: salesId == null ? null : Number(salesId) },
+      );
+
+      if (error) {
+        console.error("employee_email_delivery_status.error");
+        throw new Error("employee_mail_delivery_failed");
+      }
+
+      return (data ?? []).map((row: EmployeeMailDeliveryStatusRow) => ({
+        employeeId: Number(row.employee_id),
+        mailKind: row.mail_kind as EmployeeMailKind,
+        outcome: row.outcome as EmployeeMailDeliveryOutcome,
+        lastEventAt: row.last_event_at,
+        eventCount: Number(row.event_count),
+      }));
+    },
+
     async unarchiveDeal(deal: Deal) {
       // get all deals where stage is the same as the deal to unarchive
       const { data: deals } = await baseDataProvider.getList<Deal>("deals", {
@@ -514,6 +551,15 @@ async function invokeEmployeeAccessCommand(
   }
   return data.data;
 }
+
+/** Raw shape of one `employee_email_delivery_status()` row. */
+type EmployeeMailDeliveryStatusRow = {
+  employee_id: number | string;
+  mail_kind: string;
+  outcome: string;
+  last_event_at: string;
+  event_count: number | string;
+};
 
 export type CrmDataProvider = ReturnType<
   typeof getDataProviderWithCustomMethods

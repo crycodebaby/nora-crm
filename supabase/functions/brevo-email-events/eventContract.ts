@@ -204,7 +204,21 @@ export type NormalisedEmailEvent = {
 };
 
 export type NormaliseResult =
-  | { status: "ok"; event: NormalisedEmailEvent }
+  | {
+      status: "ok";
+      event: NormalisedEmailEvent;
+      /**
+       * Whether the provider sent a usable `subject` field at all.
+       *
+       * Diagnostics only — never stored, never returned to a caller. It is the
+       * one bit that separates the two reasons a mail kind can be "unknown":
+       * the provider omitted the subject (nothing we can classify), or it sent
+       * a subject that no longer matches a configured Nora template. The
+       * subject itself is deliberately NOT carried here: knowing whether it
+       * existed is enough to tell those two apart.
+       */
+      subjectPresent: boolean;
+    }
   | {
       status: "ignored";
       providerEvent: string;
@@ -330,6 +344,7 @@ export function normaliseProviderEvent(raw: unknown): NormaliseResult {
 
   return {
     status: "ok",
+    subjectPresent: readString(payload["subject"]) !== null,
     event: {
       providerEvent: providerEventName,
       eventType: classification.eventType,

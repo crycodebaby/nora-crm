@@ -77,6 +77,7 @@ import {
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 
 import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
+import type { EmployeeMailDeliveryStatus } from "../../sales/emailDeliveryContract";
 /**
  * FakeRest mirror of nora_private.idempotency_check/idempotency_persist
  * (Idempotency Wave, 2026-08-29) — minimal contract parity, not a
@@ -665,6 +666,17 @@ export const createDataProvider = ({
       });
       return toDemoAccessRecord(data);
     },
+
+    /**
+     * Delivery observability (V1C-B) — FakeRest parity.
+     *
+     * The demo sends no mail, so there is no delivery history to report and
+     * none is invented. The surface then renders no delivery status at all,
+     * which is precisely the behaviour a real employee with no history gets.
+     */
+    getEmployeeMailDeliveryStatus: async (
+      _salesId?: Identifier,
+    ): Promise<EmployeeMailDeliveryStatus[]> => [],
     updatePassword: async (id: Identifier): Promise<true> => {
       const currentUser = await getIdentity();
       if (!currentUser) {

@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht | [Springen](#2026-09-04--employee-access-v1c-b-zustellstatus-wird-gezeigt-die-mailart-nicht) |
 | 2026-09-04 – Employee Access V1C-A: Zustellbeobachtung ist Best-Effort-Korrelation, kein Öffnungs-Tracking | [Springen](#2026-09-04--employee-access-v1c-a-zustellbeobachtung-ist-best-effort-korrelation-kein-öffnungs-tracking) |
 | 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract | [Springen](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) |
 | 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert | [Springen](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) |
@@ -96,6 +97,60 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-07-23 – DB-Lint: Funktionsvolatilität und ungenutzte Variablen | [Springen](#2026-07-23-db-lint-funktionsvolatilität-und-ungenutzte-variablen) |
 | 2026-08-10 – Foundation Wave 1: Operation Correlation | [Springen](#2026-08-10-foundation-wave-1-operation-correlation) |
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
+
+---
+
+## 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht
+
+**Kontext.** V1C-A speichert Zustellereignisse und beantwortet sie über das
+Admin-Lesemodell `employee_email_delivery_status()`. Bis V1C-B sah ein
+Administrator davon nichts: die Wahrheit lag in der Datenbank, nicht auf dem
+Bildschirm. Gleichzeitig blieb aus dem echten Produktionslauf der Befund offen,
+dass `mail_kind` für eine echte Passwort-Mail `unknown` war.
+
+**Entscheidung 1 — die Mailart wird nicht gerendert.** Die Oberfläche zeigt eine
+Zeile unter der Überschrift „Letzte E-Mail-Zustellung" und nennt nie, um welche
+Mail es ging. Grund: die Korrelation ist Best-Effort (Zuordnung über die
+Empfängeradresse, kein Nora-eigener Korrelationswert in der Nachricht). „Die
+Einladung wurde zugestellt" wäre eine Aussage über *einen* Sendeversuch, die die
+Daten nicht tragen. `describeEmployeeMailKind()` hält die Regel als prüfbaren
+Vertrag fest, damit sie nicht als Lücke „repariert" wird.
+
+**Folge:** der offene Befund `mail_kind = unknown` blockiert V1C-B nicht — er ist
+für das Produkt heute wirkungslos.
+
+**Entscheidung 2 — Zustellstatus ist untergeordnet, nicht gleichrangig.** Der
+Block sitzt im bestehenden `EmployeeAccessPanel` unter den Zugangsfakten, als
+gedämpfter Text ohne eigene Status-Pille. Was ein Administrator entscheidet, ist
+der Zugangszustand; der Transport erklärt nur, warum eine eingeladene Person
+noch nicht erschienen ist. Kein Dashboard.
+
+**Entscheidung 3 — ohne Historie erscheint nichts.** Kein „Keine
+Zustellinformation vorhanden": das läse sich wie ein Befund, wo schlicht nichts
+zu berichten ist. Dieselbe Stille gilt bei Ladefehler und fehlender Berechtigung
+— Zustellstatus ist Sekundärinformation, eine Fehlermeldung daneben wäre
+lauter als die Sache wert ist.
+
+**Entscheidung 4 — kein Matcher wurde geraten.** Der Betreff der echten Mail ist
+nicht rekonstruierbar (er wird bewusst nirgends gespeichert). Ein Matcher auf
+vermutete Supabase-Standardbetreffzeilen hätte eine selbstbewusst falsche
+Antwort erzeugt statt einer ehrlich degradierten. Stattdessen protokolliert die
+Edge Function bei `unknown` genau ein inhaltsfreies Bit (`subject_present`), das
+die zwei möglichen Ursachen beim nächsten echten Versand auseinanderhält.
+Details: `17-known-issues-and-planned-waves.md`, V1C-A.7.
+
+**Entscheidung 5 — Zeitangaben in `Europe/Berlin`.** Der Administrator vergleicht
+die Zeile mit einem Postfach und mit dem Provider-Log; die Browser-Zeitzone
+widerspräche stillschweigend beiden.
+
+**Nicht entschieden, ausdrücklich geparkt:** deterministische Sendekorrelation
+über den Supabase Send Email Hook, Brevo-API-Versand, Warteschlange,
+Sendeversuchs-Subsystem, Öffnungs-/Klick-Tracking, User Lifecycle Admin V1,
+sowie die feinere Aufschlüsselung innerhalb `undeliverable`
+(`17-known-issues-and-planned-waves.md`, V1C-B.1 / V1C-B.2).
+
+**Status:** `V1C-B RC` (2026-09-04) — nicht deployt, wartet auf
+Product-Owner-Review.
 
 ---
 

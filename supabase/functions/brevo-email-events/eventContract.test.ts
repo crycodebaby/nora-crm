@@ -271,6 +271,85 @@ describe("classifyMailKind", () => {
     expect(classifyMailKind(undefined)).toBe("unknown");
     expect(classifyMailKind("   ")).toBe("unknown");
   });
+
+  /**
+   * The two subjects below are the ones configured in `supabase/config.toml`
+   * for the Auth invite and recovery templates. They are asserted verbatim so
+   * that editing one of them without editing MAIL_KIND_SUBJECTS fails here
+   * rather than silently degrading every future mail to "unknown".
+   */
+  it("matches the configured Auth template subjects verbatim", () => {
+    expect(classifyMailKind("Einladung zu Nora")).toBe("employee_invite");
+    expect(classifyMailKind("Persönliches Passwort für Nora einrichten")).toBe(
+      "employee_password_setup",
+    );
+  });
+
+  it("tolerates casing and surrounding whitespace from the provider", () => {
+    expect(classifyMailKind("  EINLADUNG ZU NORA  ")).toBe("employee_invite");
+    expect(classifyMailKind("Persönliches Passwort für Nora einrichten ")).toBe(
+      "employee_password_setup",
+    );
+  });
+
+  it("does not match a German subject that is not a Nora template", () => {
+    // The default Supabase subjects are deliberately NOT mapped: guessing at
+    // an unconfigured template would produce a confident wrong answer.
+    expect(classifyMailKind("Reset Your Password")).toBe("unknown");
+    expect(classifyMailKind("You have been invited")).toBe("unknown");
+  });
+});
+
+describe("subject availability diagnostics", () => {
+  /**
+   * Production stored `mail_kind = unknown` for a genuine password-setup mail.
+   * Two causes are possible and need different fixes, so normalisation reports
+   * whether a subject was present at all — never the subject itself.
+   */
+  it("reports a present subject", () => {
+    const result = normaliseProviderEvent({
+      ...BASE_EVENT,
+      subject: "Newsletter September",
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.subjectPresent).toBe(true);
+    expect(result.event.mailKind).toBe("unknown");
+  });
+
+  it("reports an absent subject", () => {
+    const { subject: _subject, ...withoutSubject } = BASE_EVENT;
+    const result = normaliseProviderEvent(withoutSubject);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.subjectPresent).toBe(false);
+    expect(result.event.mailKind).toBe("unknown");
+  });
+
+  it("treats a blank subject as absent", () => {
+    const result = normaliseProviderEvent({ ...BASE_EVENT, subject: "   " });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.subjectPresent).toBe(false);
+  });
+
+  it("still stores the delivery outcome when the kind is unknown", () => {
+    const { subject: _subject, ...withoutSubject } = BASE_EVENT;
+    const result = normaliseProviderEvent(withoutSubject);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.event.eventType).toBe("EMAIL_DELIVERED");
+  });
+
+  it("never carries the subject text out of normalisation", () => {
+    const result = normaliseProviderEvent({
+      ...BASE_EVENT,
+      subject: "Einladung zu Nora",
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(JSON.stringify(result)).not.toContain("Einladung zu Nora");
+  });
 });
 
 describe("buildDedupeKey", () => {
