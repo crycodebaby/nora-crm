@@ -151,7 +151,9 @@
         function interceptAuthCallback() {
                 const {access_token, refresh_token, type} = getUrlParams();
                 // Move Supabase hash tokens into HashRouter query params.
-                window.location.href = `./#/auth-callback?access_token=${encodeURIComponent(access_token || '')}&refresh_token=${encodeURIComponent(refresh_token || '')}&type=${encodeURIComponent(type || '')}`;
+                // Target is Nora's own /zugang-einrichten route, NOT
+                // react-admin's reserved /auth-callback route.
+                window.location.href = `./#/zugang-einrichten?access_token=${encodeURIComponent(access_token || '')}&refresh_token=${encodeURIComponent(refresh_token || '')}&type=${encodeURIComponent(type || '')}`;
         }
 
         interceptAuthCallback();

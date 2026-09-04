@@ -169,6 +169,14 @@ export const getAuthProvider = (): AuthProvider => {
       ) {
         return;
       }
+      // Users just followed an access email — the callback only forwards
+      // tokens to /set-password and must not be bounced to login first.
+      if (
+        window.location.pathname === "/zugang-einrichten" ||
+        window.location.hash.includes("#/zugang-einrichten")
+      ) {
+        return;
+      }
       // Users are on the forgot-password page, nothing to do
       if (
         window.location.pathname === "/forgot-password" ||

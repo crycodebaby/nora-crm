@@ -4,13 +4,24 @@ import { SetPasswordPage, mapPasswordSetupError } from "./set-password-page";
 
 const INVITE_ENTRY = "/set-password?access_token=at-1&refresh_token=rt-1";
 
+/**
+ * The onboarding flow now opens on the WELCOME step (V1A), so the password
+ * screen is one deliberate "Zugang einrichten" click away. The assertions
+ * below are unchanged — only the entry into the password step is explicit.
+ */
+const renderPasswordStep = async () => {
+  const screen = await render(
+    <StoryWrapper initialEntries={[INVITE_ENTRY]}>
+      <SetPasswordPage />
+    </StoryWrapper>,
+  );
+  await screen.getByRole("button", { name: "Zugang einrichten" }).click();
+  return screen;
+};
+
 describe("SetPasswordPage password visibility", () => {
   it("starts with both password fields hidden", async () => {
-    const screen = await render(
-      <StoryWrapper initialEntries={[INVITE_ENTRY]}>
-        <SetPasswordPage />
-      </StoryWrapper>,
-    );
+    const screen = await renderPasswordStep();
 
     await expect
       .poll(() =>
@@ -29,11 +40,7 @@ describe("SetPasswordPage password visibility", () => {
   });
 
   it("toggles the password field independently of confirm-password", async () => {
-    const screen = await render(
-      <StoryWrapper initialEntries={[INVITE_ENTRY]}>
-        <SetPasswordPage />
-      </StoryWrapper>,
-    );
+    const screen = await renderPasswordStep();
 
     const toggles = screen.getByRole("button", { name: "Passwort anzeigen" });
     await toggles.first().click();
@@ -59,11 +66,7 @@ describe("SetPasswordPage password visibility", () => {
   });
 
   it("hides the password again on a second toggle click", async () => {
-    const screen = await render(
-      <StoryWrapper initialEntries={[INVITE_ENTRY]}>
-        <SetPasswordPage />
-      </StoryWrapper>,
-    );
+    const screen = await renderPasswordStep();
 
     const toggle = screen
       .getByRole("button", { name: "Passwort anzeigen" })
@@ -84,11 +87,7 @@ describe("SetPasswordPage password visibility", () => {
   });
 
   it("uses type=button on the visibility toggles so they never submit the form", async () => {
-    const screen = await render(
-      <StoryWrapper initialEntries={[INVITE_ENTRY]}>
-        <SetPasswordPage />
-      </StoryWrapper>,
-    );
+    const screen = await renderPasswordStep();
 
     const toggle = screen
       .getByRole("button", { name: "Passwort anzeigen" })
@@ -97,11 +96,7 @@ describe("SetPasswordPage password visibility", () => {
   });
 
   it("shows the password length/strength guidance", async () => {
-    const screen = await render(
-      <StoryWrapper initialEntries={[INVITE_ENTRY]}>
-        <SetPasswordPage />
-      </StoryWrapper>,
-    );
+    const screen = await renderPasswordStep();
 
     await expect
       .element(
@@ -124,6 +119,44 @@ describe("SetPasswordPage invalid/expired invite", () => {
     await expect
       .element(screen.getByText("Einladung ungültig oder abgelaufen"))
       .toBeVisible();
+  });
+});
+
+describe("SetPasswordPage welcome step", () => {
+  it("opens on the welcome step and never claims the password is already set", async () => {
+    const screen = await render(
+      <StoryWrapper initialEntries={[INVITE_ENTRY]}>
+        <SetPasswordPage />
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zugang einrichten" }))
+      .toBeVisible();
+    await expect
+      .poll(
+        () =>
+          screen.container.textContent?.includes("Zugang eingerichtet") ??
+          false,
+      )
+      .toBe(false);
+    await expect
+      .poll(
+        () => screen.container.querySelector('input[name="password"]') !== null,
+      )
+      .toBe(false);
+  });
+
+  it("reaches the password fields only after the continue action", async () => {
+    const screen = await renderPasswordStep();
+
+    await expect
+      .poll(() =>
+        screen.container
+          .querySelector('input[name="password"]')
+          ?.getAttribute("type"),
+      )
+      .toBe("password");
   });
 });
 

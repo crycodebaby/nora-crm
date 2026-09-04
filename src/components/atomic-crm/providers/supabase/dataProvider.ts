@@ -29,6 +29,7 @@ import type {
 } from "../../audit/auditTypes";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
+import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
 import { createOperationContext } from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
@@ -275,6 +276,42 @@ const getDataProviderWithCustomMethods = () => {
 
       return passwordUpdated;
     },
+
+    /**
+     * Employee Access (V1A). The three calls below are the ONLY way the Nora
+     * browser learns anything about an employee's Auth state, and the only way
+     * it triggers an access email. Every one of them is admin-gated inside the
+     * users Edge Function — the UI is never the security boundary.
+     */
+    async getEmployeeAccessStatus(
+      salesId?: Identifier,
+    ): Promise<EmployeeAccessRecord[]> {
+      const query =
+        salesId != null
+          ? `?sales_id=${encodeURIComponent(String(salesId))}`
+          : "";
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: EmployeeAccessRecord[];
+      }>(`users${query}`, { method: "GET" });
+
+      if (error || !data?.data) {
+        throw new Error(await readEmployeeAccessErrorCode(error));
+      }
+      return data.data;
+    },
+
+    async resendEmployeeInvitation(
+      salesId: Identifier,
+    ): Promise<EmployeeAccessRecord> {
+      return invokeEmployeeAccessCommand("resend_invitation", salesId);
+    },
+
+    async requestEmployeePasswordSetup(
+      salesId: Identifier,
+    ): Promise<EmployeeAccessRecord> {
+      return invokeEmployeeAccessCommand("request_password_setup", salesId);
+    },
+
     async unarchiveDeal(deal: Deal) {
       // get all deals where stage is the same as the deal to unarchive
       const { data: deals } = await baseDataProvider.getList<Deal>("deals", {
@@ -443,6 +480,40 @@ const getDataProviderWithCustomMethods = () => {
 
   return provider;
 };
+
+/**
+ * Reads the machine-readable error code out of a failed Edge Function call.
+ * Never surfaces the raw provider payload — callers map the code to German
+ * copy via mapEmployeeAccessError().
+ */
+async function readEmployeeAccessErrorCode(error: unknown): Promise<string> {
+  const context = (error as { context?: { json?: () => Promise<any> } })
+    ?.context;
+  try {
+    const details = (await context?.json?.()) ?? {};
+    if (typeof details?.error === "string") return details.error;
+  } catch {
+    // fall through to the neutral code
+  }
+  return "employee_access_failed";
+}
+
+async function invokeEmployeeAccessCommand(
+  action: "resend_invitation" | "request_password_setup",
+  salesId: Identifier,
+): Promise<EmployeeAccessRecord> {
+  const { data, error } = await getSupabaseClient().functions.invoke<{
+    data: EmployeeAccessRecord;
+  }>("users", {
+    method: "POST",
+    body: { action, sales_id: salesId },
+  });
+
+  if (error || !data?.data) {
+    throw new Error(await readEmployeeAccessErrorCode(error));
+  }
+  return data.data;
+}
 
 export type CrmDataProvider = ReturnType<
   typeof getDataProviderWithCustomMethods

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import type { ValidateForm } from "ra-core";
 import {
   FieldTitle,
@@ -23,6 +23,13 @@ import {
 } from "@/components/admin/form";
 import { InputHelperText } from "@/components/admin/input-helper-text";
 import { EmployeeAccessShell } from "@/components/atomic-crm/login/EmployeeAccessShell";
+import {
+  INITIAL_ONBOARDING_STATE,
+  ONBOARDING_PROGRESS_STEPS,
+  onboardingReducer,
+  progressIndexOf,
+  type OnboardingStep,
+} from "@/components/atomic-crm/login/employeeOnboardingFlow";
 import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
 import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
@@ -124,58 +131,85 @@ interface ProfileFormData {
   last_name: string;
 }
 
-type OnboardingStep = 1 | 2 | 3 | 4;
+/**
+ * Greeting identity. Sourced exclusively from the authenticated Supabase user
+ * (metadata + login email). URL query parameters are never trusted as identity.
+ */
+type OnboardingIdentity = {
+  firstName: string;
+  lastName: string;
+  email: string;
+};
 
-const STEPS: { step: OnboardingStep; label: string }[] = [
-  { step: 1, label: "Einladung prüfen" },
-  { step: 2, label: "Zugang absichern" },
-  { step: 3, label: "Profil vervollständigen" },
-  { step: 4, label: "Abschluss" },
-];
+const EMPTY_IDENTITY: OnboardingIdentity = {
+  firstName: "",
+  lastName: "",
+  email: "",
+};
 
-const Progress = ({ current }: { current: OnboardingStep }) => (
-  <ol className="mb-6 grid grid-cols-4 gap-2" aria-label="Fortschritt">
-    {STEPS.map(({ step, label }) => {
-      const active = step === current;
-      const done = step < current;
-      return (
-        <li key={step} className="min-w-0">
-          <div
-            className={`h-1 rounded-full ${
-              done || active ? "bg-[#2c2c2c]" : "bg-black/10"
-            }`}
-            aria-hidden
-          />
-          <p
-            className={`mt-2 text-[11px] leading-snug truncate ${
-              active ? "text-foreground font-medium" : "text-muted-foreground"
-            }`}
-          >
-            <span className="sr-only">
-              {done ? "Erledigt: " : active ? "Aktuell: " : ""}
-            </span>
-            {label}
-          </p>
-        </li>
-      );
-    })}
-  </ol>
-);
+const STEP_LABEL: Record<(typeof ONBOARDING_PROGRESS_STEPS)[number], string> = {
+  welcome: "Willkommen",
+  password: "Passwort einrichten",
+  profile: "Profil bestätigen",
+  complete: "Fertig",
+};
+
+const Progress = ({ current }: { current: OnboardingStep }) => {
+  const currentIndex = progressIndexOf(current);
+  return (
+    <ol className="mb-6 grid grid-cols-4 gap-2" aria-label="Fortschritt">
+      {ONBOARDING_PROGRESS_STEPS.map((step, index) => {
+        const active = index === currentIndex;
+        const done = index < currentIndex;
+        return (
+          <li key={step} className="min-w-0">
+            <div
+              className={`h-1 rounded-full ${
+                done || active ? "bg-[#2c2c2c]" : "bg-black/10"
+              }`}
+              aria-hidden
+            />
+            <p
+              className={`mt-2 text-[11px] leading-snug truncate ${
+                active ? "text-foreground font-medium" : "text-muted-foreground"
+              }`}
+            >
+              <span className="sr-only">
+                {done ? "Erledigt: " : active ? "Aktuell: " : ""}
+              </span>
+              {STEP_LABEL[step]}
+            </p>
+          </li>
+        );
+      })}
+    </ol>
+  );
+};
+
+/** Renders the current step error without leaking provider detail. */
+const StepError = ({ message }: { message: string | null }) =>
+  message ? (
+    <p className="text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  ) : null;
 
 /**
- * Invite / recovery password setup with multi-step onboarding.
- * Tokens arrive via auth-callback.html to avoid HashRouter collisions.
- * OTP activation may already have a session without URL tokens.
+ * Employee onboarding: invitation and password-setup links converge here.
+ *
+ * Tokens arrive via auth-callback.html → /auth-callback → here, to avoid
+ * HashRouter collisions. The Einmalcode (OTP) path arrives with a session
+ * already established and no URL tokens. Both enter the same flow.
+ *
+ * All step transitions go through employeeOnboardingFlow's reducer, so the
+ * later premium-UX wave can restyle every screen without touching auth logic.
  */
 export const SetPasswordPage = () => {
-  const [loading, setLoading] = useState(false);
-  const [bootstrapping, setBootstrapping] = useState(true);
-  const [hasSession, setHasSession] = useState(false);
-  const [step, setStep] = useState<OnboardingStep>(2);
-  const [profileDefaults, setProfileDefaults] = useState({
-    first_name: "",
-    last_name: "",
-  });
+  const [flow, dispatch] = useReducer(
+    onboardingReducer,
+    INITIAL_ONBOARDING_STATE,
+  );
+  const [identity, setIdentity] = useState<OnboardingIdentity>(EMPTY_IDENTITY);
 
   const location = useLocation();
   const inviteTokens = useMemo(() => {
@@ -192,42 +226,77 @@ export const SetPasswordPage = () => {
   const notify = useNotify();
   const translate = useTranslate();
   const navigate = useNavigate();
-  // Tokens: URL query (via auth-callback.html). OTP path: existing session.
+
+  const isSupabaseConfigured = Boolean(
+    import.meta.env.VITE_SUPABASE_URL &&
+      import.meta.env.VITE_SB_PUBLISHABLE_KEY,
+  );
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
-      const url = import.meta.env.VITE_SUPABASE_URL;
-      const key = import.meta.env.VITE_SB_PUBLISHABLE_KEY;
-      if (!url || !key) {
-        setHasSession(false);
-        setBootstrapping(false);
+      if (!isSupabaseConfigured) {
+        // Without a configured backend the link itself is the only signal.
+        if (!cancelled) {
+          dispatch(
+            hasInviteTokens
+              ? { type: "sessionResolved" }
+              : { type: "sessionMissing" },
+          );
+        }
         return;
       }
 
       try {
         const client = getSupabaseClient();
-        const { data } = await client.auth.getSession();
-        if (cancelled) return;
-        const session = data.session;
-        setHasSession(Boolean(session));
-        if (session?.user) {
-          const meta = session.user.user_metadata ?? {};
-          setProfileDefaults({
-            first_name: normalizePersonName(meta.first_name),
-            last_name: normalizePersonName(meta.last_name),
+
+        // Establishing the session here (rather than at submit time) is what
+        // lets the welcome screen greet the employee truthfully.
+        if (hasInviteTokens && access_token && refresh_token) {
+          const { error } = await client.auth.setSession({
+            access_token,
+            refresh_token,
           });
+          if (error) throw error;
         }
+
+        const { data } = await client.auth.getUser();
+        const user = data.user;
+
+        if (cancelled) return;
+
+        if (!user) {
+          dispatch(
+            hasInviteTokens
+              ? { type: "sessionResolved" }
+              : { type: "sessionMissing" },
+          );
+          return;
+        }
+
+        const meta = user.user_metadata ?? {};
+        setIdentity({
+          firstName: normalizePersonName(meta.first_name),
+          lastName: normalizePersonName(meta.last_name),
+          email: user.email ?? "",
+        });
+        dispatch({ type: "sessionResolved" });
       } catch {
-        if (!cancelled) setHasSession(false);
-      } finally {
-        if (!cancelled) setBootstrapping(false);
+        if (!cancelled) {
+          dispatch(
+            hasInviteTokens
+              ? { type: "sessionResolved" }
+              : { type: "sessionMissing" },
+          );
+        }
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [access_token, hasInviteTokens, isSupabaseConfigured, refresh_token]);
 
   const validatePassword = (values: PasswordFormData) => {
     const errors: Record<string, string> = {};
@@ -241,19 +310,129 @@ export const SetPasswordPage = () => {
     return errors;
   };
 
-  if (bootstrapping) {
+  /**
+   * Success contract: completion may only follow a password update that
+   * genuinely succeeded AND a still-valid, non-disabled employee mapping.
+   * A disabled employee is routed to "blocked" and never reaches completion.
+   */
+  const submitPassword = useCallback(
+    async (values: PasswordFormData) => {
+      dispatch({ type: "onPasswordSubmit" });
+
+      try {
+        const client = getSupabaseClient();
+
+        // Defensive: the bootstrap normally established the session already.
+        if (hasInviteTokens && access_token && refresh_token) {
+          const { data: sessionData } = await client.auth.getSession();
+          if (!sessionData.session) {
+            const { error: sessionError } = await client.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+            if (sessionError) throw sessionError;
+          }
+        }
+
+        const { error } = await client.auth.updateUser({
+          password: values.password,
+        });
+        if (error) throw error;
+
+        const { data } = await client.auth.getUser();
+        const user = data.user;
+        if (!user) throw new Error("missing user");
+
+        const meta = user.user_metadata ?? {};
+        setIdentity({
+          firstName: normalizePersonName(meta.first_name),
+          lastName: normalizePersonName(meta.last_name),
+          email: user.email ?? "",
+        });
+
+        const { data: sale } = await client
+          .from("sales")
+          .select("id, disabled")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!sale || sale.disabled) {
+          dispatch({ type: "accessBlocked" });
+          return;
+        }
+
+        dispatch({ type: "passwordSucceeded" });
+      } catch (error) {
+        const message = mapPasswordSetupError(error);
+        dispatch({ type: "passwordFailed", error: message });
+        notify(message, { type: "error", messageArgs: { _: message } });
+      }
+    },
+    [access_token, hasInviteTokens, notify, refresh_token],
+  );
+
+  const submitProfile = useCallback(
+    async (values: ProfileFormData) => {
+      dispatch({ type: "onProfileSubmit" });
+
+      try {
+        const client = getSupabaseClient();
+        const first_name = String(values.first_name ?? "").trim();
+        const last_name = String(values.last_name ?? "").trim();
+
+        const { error: metaError } = await client.auth.updateUser({
+          data: { first_name, last_name },
+        });
+        if (metaError) throw metaError;
+
+        const { data: sessionData } = await client.auth.getUser();
+        const userId = sessionData.user?.id;
+        if (!userId) throw new Error("missing user");
+
+        const { data: sale, error: saleError } = await client
+          .from("sales")
+          .update({ first_name, last_name })
+          .eq("user_id", userId)
+          .select(
+            "id, first_name, last_name, avatar, administrator, role, disabled",
+          )
+          .single();
+        if (saleError || !sale) throw saleError ?? new Error("missing sale");
+
+        if (sale.disabled) {
+          dispatch({ type: "accessBlocked" });
+          return;
+        }
+
+        // Keep header identity in sync once the user enters the app.
+        setCurrentSaleCache(sale);
+
+        // Role is never writable from the client — omit intentionally.
+        await client.auth.refreshSession();
+        dispatch({ type: "profileSucceeded" });
+      } catch {
+        const message =
+          "Das Profil konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.";
+        dispatch({ type: "profileFailed", error: message });
+        notify(message, { type: "error", messageArgs: { _: message } });
+      }
+    },
+    [notify],
+  );
+
+  if (flow.step === "checking") {
     return (
       <EmployeeAccessShell mode="einladung">
-        <Progress current={1} />
+        <Progress current="welcome" />
         <p className="text-sm text-muted-foreground">Einladung wird geprüft…</p>
       </EmployeeAccessShell>
     );
   }
 
-  if (!hasInviteTokens && !hasSession) {
+  if (flow.step === "invalid") {
     return (
       <EmployeeAccessShell mode="einladung">
-        <Progress current={1} />
+        <Progress current="welcome" />
         <div className="space-y-4">
           <h2 className="text-2xl font-semibold tracking-tight">
             Einladung ungültig oder abgelaufen
@@ -273,100 +452,41 @@ export const SetPasswordPage = () => {
     );
   }
 
-  const submitPassword = async (values: PasswordFormData) => {
-    try {
-      setLoading(true);
-      const client = getSupabaseClient();
-
-      if (hasInviteTokens && access_token && refresh_token) {
-        const { error: sessionError } = await client.auth.setSession({
-          access_token,
-          refresh_token,
-        });
-        if (sessionError) throw sessionError;
-      }
-
-      const { error } = await client.auth.updateUser({
-        password: values.password,
-      });
-      if (error) throw error;
-
-      const { data } = await client.auth.getUser();
-      const meta = data.user?.user_metadata ?? {};
-      setProfileDefaults({
-        first_name: normalizePersonName(meta.first_name),
-        last_name: normalizePersonName(meta.last_name),
-      });
-      setStep(3);
-    } catch (error) {
-      const message = mapPasswordSetupError(error);
-      notify(message, {
-        type: "error",
-        messageArgs: { _: message },
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const submitProfile = async (values: ProfileFormData) => {
-    try {
-      setLoading(true);
-      const client = getSupabaseClient();
-      const first_name = String(values.first_name ?? "").trim();
-      const last_name = String(values.last_name ?? "").trim();
-
-      const { error: metaError } = await client.auth.updateUser({
-        data: { first_name, last_name },
-      });
-      if (metaError) throw metaError;
-
-      const { data: sessionData } = await client.auth.getUser();
-      const userId = sessionData.user?.id;
-      if (!userId) throw new Error("missing user");
-
-      const { data: sale, error: saleError } = await client
-        .from("sales")
-        .update({ first_name, last_name })
-        .eq("user_id", userId)
-        .select(
-          "id, first_name, last_name, avatar, administrator, role, disabled",
-        )
-        .single();
-      if (saleError || !sale) throw saleError ?? new Error("missing sale");
-
-      // Keep header identity in sync once the user enters the app.
-      setCurrentSaleCache(sale);
-
-      // Role is never writable from the client — omit intentionally.
-      await client.auth.refreshSession();
-      setStep(4);
-    } catch {
-      notify(
-        "Das Profil konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
-        {
-          type: "error",
-          messageArgs: {
-            _: "Das Profil konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
-          },
-        },
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (step === 4) {
+  if (flow.step === "blocked") {
     return (
       <EmployeeAccessShell mode="einladung">
-        <Progress current={4} />
-        <div className="space-y-4 text-center lg:text-left">
+        <div className="space-y-4" role="status">
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Zugang nicht verfügbar
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Für diese Adresse ist derzeit kein Nora-Zugang aktiv. Bitte wenden
+            Sie sich an Ihre Administration.
+          </p>
+          <Button asChild variant="ghost" className="w-full nora-touch-target">
+            <Link to="/login?mode=anmelden">Zur Anmeldung</Link>
+          </Button>
+        </div>
+      </EmployeeAccessShell>
+    );
+  }
+
+  if (flow.step === "complete") {
+    return (
+      <EmployeeAccessShell mode="einladung">
+        <Progress current="complete" />
+        <div
+          className="space-y-4 text-center lg:text-left"
+          role="status"
+          data-testid="onboarding-complete"
+        >
           <h2 className="text-2xl font-semibold tracking-tight">
             Zugang eingerichtet
           </h2>
           <p className="text-sm text-muted-foreground">
-            Ihr Zugang ist bereit. Sie werden jetzt zur Anwendung
-            weitergeleitet.
+            Ihr persönliches Passwort ist gespeichert. Sie können sich ab jetzt
+            mit {identity.email || "Ihrer geschäftlichen E-Mail-Adresse"}{" "}
+            anmelden.
           </p>
           <Button
             type="button"
@@ -380,24 +500,28 @@ export const SetPasswordPage = () => {
     );
   }
 
-  if (step === 3) {
+  if (flow.step === "profile") {
     return (
       <EmployeeAccessShell mode="einladung">
-        <Progress current={3} />
+        <Progress current="profile" />
         <div className="space-y-6">
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Profil vervollständigen
+              Profil bestätigen
             </h2>
             <p className="text-sm text-muted-foreground">
               Prüfen Sie Vor- und Nachname. Ihre Rolle wird ausschließlich von
               der Administration festgelegt.
             </p>
           </div>
+          <StepError message={flow.error} />
           <Form<ProfileFormData>
             className="space-y-5"
             onSubmit={submitProfile as SubmitHandler<FieldValues>}
-            defaultValues={profileDefaults}
+            defaultValues={{
+              first_name: identity.firstName,
+              last_name: identity.lastName,
+            }}
           >
             <TextInput
               label="Vorname"
@@ -414,7 +538,7 @@ export const SetPasswordPage = () => {
             <Button
               type="submit"
               className="w-full nora-primary-action nora-touch-target"
-              disabled={loading}
+              disabled={flow.submitting}
             >
               Speichern und abschließen
             </Button>
@@ -424,9 +548,46 @@ export const SetPasswordPage = () => {
     );
   }
 
+  if (flow.step === "welcome") {
+    return (
+      <EmployeeAccessShell mode="einladung">
+        <Progress current="welcome" />
+        <div className="space-y-6">
+          <div className="space-y-2 text-center lg:text-left">
+            <h2 className="text-2xl font-semibold tracking-tight">
+              {identity.firstName
+                ? `Hallo ${identity.firstName}`
+                : "Willkommen bei Nora"}
+            </h2>
+            {/* Deliberately makes no claim about the password — it is not set yet. */}
+            <p className="text-sm text-muted-foreground">
+              Richten Sie jetzt Ihren persönlichen Nora-Zugang ein. Im nächsten
+              Schritt vergeben Sie Ihr eigenes Passwort.
+            </p>
+            {identity.email ? (
+              <p className="text-sm text-muted-foreground">
+                Ihre Anmeldeadresse für Nora:{" "}
+                <span className="font-medium text-foreground">
+                  {identity.email}
+                </span>
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            className="w-full nora-primary-action nora-touch-target"
+            onClick={() => dispatch({ type: "onContinue" })}
+          >
+            Zugang einrichten
+          </Button>
+        </div>
+      </EmployeeAccessShell>
+    );
+  }
+
   return (
     <EmployeeAccessShell mode="einladung">
-      <Progress current={2} />
+      <Progress current="password" />
       <div className="space-y-6">
         <div className="space-y-2 text-center lg:text-left">
           <h2 className="text-2xl font-semibold tracking-tight">
@@ -439,6 +600,7 @@ export const SetPasswordPage = () => {
             zulässig.
           </p>
         </div>
+        <StepError message={flow.error} />
         <Form<PasswordFormData>
           className="space-y-5"
           onSubmit={submitPassword as SubmitHandler<FieldValues>}
@@ -465,7 +627,7 @@ export const SetPasswordPage = () => {
           <Button
             type="submit"
             className="w-full nora-primary-action nora-touch-target"
-            disabled={loading}
+            disabled={flow.submitting}
           >
             Passwort speichern
           </Button>

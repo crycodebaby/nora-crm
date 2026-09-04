@@ -76,6 +76,7 @@ import {
 } from "./internal/taskContextCheck";
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 
+import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
 /**
  * FakeRest mirror of nora_private.idempotency_check/idempotency_persist
  * (Idempotency Wave, 2026-08-29) — minimal contract parity, not a
@@ -203,7 +204,8 @@ const createCustomerWithContactCore = async (
       // nora_private.create_customer_with_contact_core()'s CREATE-path
       // guard: a Privatkundenakte's representing contact must have a
       // resolvable name (Error Contract Wave, 2026-08-28).
-      const derivedName = `${selfContact.first_name ?? ""} ${selfContact.last_name ?? ""}`.trim();
+      const derivedName =
+        `${selfContact.first_name ?? ""} ${selfContact.last_name ?? ""}`.trim();
       if (derivedName === "") {
         throwNoraError(
           "Privatkundenakte benoetigt einen Vor- oder Nachnamen des repraesentierenden Kontakts",
@@ -231,7 +233,8 @@ const createCustomerWithContactCore = async (
       }
     }
 
-    const alreadyMember = String(selfContact.company_id ?? "") === String(companyId);
+    const alreadyMember =
+      String(selfContact.company_id ?? "") === String(companyId);
     await dataProvider.update("companies", {
       id: companyId,
       data: {
@@ -623,6 +626,45 @@ export const createDataProvider = ({
       }
       return true;
     },
+    /**
+     * Employee Access (V1A) — FakeRest parity. The demo has no Supabase Auth,
+     * so the state is derived from the demo sales row alone: "disabled" when
+     * the row is disabled, otherwise "active". No mail is ever sent; the two
+     * commands answer with the unchanged record so the admin UI is exercisable
+     * in demo mode without pretending an email left the building.
+     */
+    getEmployeeAccessStatus: async (
+      salesId?: Identifier,
+    ): Promise<EmployeeAccessRecord[]> => {
+      if (salesId != null) {
+        const { data } = await dataProvider.getOne<Sale>("sales", {
+          id: salesId,
+        });
+        return data ? [toDemoAccessRecord(data)] : [];
+      }
+      const { data } = await dataProvider.getList<Sale>("sales", {
+        filter: {},
+        pagination: { page: 1, perPage: 1000 },
+        sort: { field: "id", order: "ASC" },
+      });
+      return data.map(toDemoAccessRecord);
+    },
+    resendEmployeeInvitation: async (
+      salesId: Identifier,
+    ): Promise<EmployeeAccessRecord> => {
+      const { data } = await dataProvider.getOne<Sale>("sales", {
+        id: salesId,
+      });
+      return toDemoAccessRecord(data);
+    },
+    requestEmployeePasswordSetup: async (
+      salesId: Identifier,
+    ): Promise<EmployeeAccessRecord> => {
+      const { data } = await dataProvider.getOne<Sale>("sales", {
+        id: salesId,
+      });
+      return toDemoAccessRecord(data);
+    },
     updatePassword: async (id: Identifier): Promise<true> => {
       const currentUser = await getIdentity();
       if (!currentUser) {
@@ -822,19 +864,16 @@ export const createDataProvider = ({
               if (params.companyId == null && params.contactId == null) {
                 throw new Error("p_company_id or p_contact_id required");
               }
-              const { data: task } = await dataProvider.create<Task>(
-                "tasks",
-                {
-                  data: {
-                    contact_id: params.contactId ?? undefined,
-                    company_id: params.companyId ?? undefined,
-                    type: params.type ?? undefined,
-                    text: params.text ?? undefined,
-                    due_date: params.dueDate ?? undefined,
-                    sales_id: params.salesId ?? undefined,
-                  } as Task,
-                },
-              );
+              const { data: task } = await dataProvider.create<Task>("tasks", {
+                data: {
+                  contact_id: params.contactId ?? undefined,
+                  company_id: params.companyId ?? undefined,
+                  type: params.type ?? undefined,
+                  text: params.text ?? undefined,
+                  due_date: params.dueDate ?? undefined,
+                  sales_id: params.salesId ?? undefined,
+                } as Task,
+              });
               return { task_id: Number(task.id) };
             },
           );
@@ -865,7 +904,9 @@ export const createDataProvider = ({
           });
           await Promise.all(
             siblings
-              .filter((c: Contact) => c.id !== contact.id && (c as any).is_primary)
+              .filter(
+                (c: Contact) => c.id !== contact.id && (c as any).is_primary,
+              )
               .map((c: Contact) =>
                 dataProvider.update("contacts", {
                   id: c.id,
@@ -1097,7 +1138,8 @@ export const createDataProvider = ({
           // currently represents a Privatkundenakte (Error Contract Wave,
           // 2026-08-28).
           if ("first_name" in params.data || "last_name" in params.data) {
-            const derivedName = `${params.data.first_name ?? ""} ${params.data.last_name ?? ""}`.trim();
+            const derivedName =
+              `${params.data.first_name ?? ""} ${params.data.last_name ?? ""}`.trim();
             if (derivedName === "") {
               const { data: represented } = await dataProvider.getList(
                 "companies",
@@ -1128,7 +1170,10 @@ export const createDataProvider = ({
           const { data: represented } = await dataProvider.getList(
             "companies",
             {
-              filter: { self_contact_id: params.id, customer_kind: "individual" },
+              filter: {
+                self_contact_id: params.id,
+                customer_kind: "individual",
+              },
               pagination: { page: 1, perPage: 1 },
               sort: { field: "id", order: "ASC" },
             },
@@ -1378,6 +1423,18 @@ export const createDataProvider = ({
 
   return dataProvider;
 };
+
+/** Demo-only projection of a sales row onto the Employee Access Contract. */
+function toDemoAccessRecord(sale: Sale): EmployeeAccessRecord {
+  return {
+    employeeId: Number(sale.id),
+    email: sale.email,
+    accessState: sale.disabled ? "disabled" : "active",
+    disabled: Boolean(sale.disabled),
+    invitedAt: null,
+    activatedAt: null,
+  };
+}
 
 export const dataProvider = withCrmErrorHandler(createDataProvider());
 

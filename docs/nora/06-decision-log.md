@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert | [Springen](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) |
 | 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt | [Springen](#2026-09-01--customer-create-speed--clarity-land-ausgeblendet-bundesland-nrw-weitere-angaben-eingeklappt) |
 | 2026-09-01 – PWA Completion Acknowledgement: „Aktualisierung abgeschlossen" nach dem Reload, genau einmal | [Springen](#2026-09-01--pwa-completion-acknowledgement-aktualisierung-abgeschlossen-nach-dem-reload-genau-einmal) |
 | 2026-09-01 – PWA Visual Polish 2: Ring statt Spektakel, kein Reload-Angebot bei wartendem Worker | [Springen](#2026-09-01--pwa-visual-polish-2-ring-statt-spektakel-kein-reload-angebot-bei-wartendem-worker) |
@@ -95,6 +96,93 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-09-04 – Employee Onboarding & Access V1A: Zugangsstatus wird abgeleitet, nicht gespeichert
+
+**Kontext.** Nora ist einladungsbasiert. Administratoren konnten bisher weder
+sehen, ob eine eingeladene Person ihren Zugang tatsächlich eingerichtet hat,
+noch gezielt die passende Zugangs-E-Mail auslösen. Der Browser darf `auth.users`
+nicht sehen, und `public.sales` kennt nur `disabled`.
+
+**Entscheidung 1 — kein redundantes Statusfeld.** Der produktseitige Zustand des
+Nora-Zugangs wird **abgeleitet**, nicht gespeichert. Autoritative Quellen sind
+ausschließlich Supabase Auth (`email_confirmed_at`/`confirmed_at`,
+`banned_until`, `invited_at`) und `public.sales.disabled`. Es gibt **keine**
+Migration und **keine** neue Statusspalte — das wäre genau die doppelte
+Datenhaltung, die `03-data-model-guardrails.md` verbietet.
+
+**Entscheidung 2 — vier Zustände, nicht drei.** Produktvokabular:
+
+| Zustand | Technische Wahrheit | Erlaubte Admin-Aktion |
+|---|---|---|
+| `invited` („Einladung gesendet") | Auth-Identität existiert, E-Mail **nicht** bestätigt | „Einladung erneut senden", deaktivieren |
+| `active` („Zugang aktiv") | E-Mail bestätigt, nicht deaktiviert | „Passwort einrichten lassen", deaktivieren |
+| `disabled` („Zugang deaktiviert") | `sales.disabled` **oder** aktiver Auth-Bann | aktivieren |
+| `unknown` („Zugang unklar") | `sales`-Zeile ohne auflösbare Auth-Identität | **keine** |
+
+`unknown` ist bewusst ergänzt und begründet: eine solche Zeile ist nicht
+deaktiviert (niemand hat sie deaktiviert) und darf **nicht** als `invited`
+behandelt werden, weil eine erneute Einladung dann eine *zweite* Auth-Identität
+für dieselbe Person erzeugen würde. `unknown` bietet deshalb keine Aktion an.
+
+**Entscheidung 3 — `last_sign_in_at` ist kein Zustandssignal.** Wer seinen
+Zugang eingerichtet, sich aber nie angemeldet hat, ist `active`. Wessen Session
+abgelaufen ist, ist nicht wieder `invited`. Bestätigung der E-Mail-Adresse ist
+die einzige Tatsache, die „hat den Einladungslink benutzt" von „hat ihn nicht
+benutzt" trennt. `last_sign_in_at` ist deshalb nicht einmal Teil des gelesenen
+Faktenausschnitts.
+
+**Entscheidung 4 — zwei getrennte Admin-Aktionen statt einer.** Für eine
+**aktive** Person ist „Einladung erneut senden" fachlich falsch — sie braucht
+keine Erst-Einladung. Sie erhält „Passwort einrichten lassen". Technisch ist das
+der Supabase-Recovery-Mechanismus; das bleibt ein internes Implementierungsdetail
+und heißt im Administrationsablauf **nicht** „Passwort vergessen". Der
+Administrator erzeugt kein Passwort, sieht keinen Token und erfährt das Passwort
+der Person nicht.
+
+**Entscheidung 5 — GoTrue-Semantik explizit behandelt, nicht geraten.** Eine
+erneute Einladung an eine existierende, **unbestätigte** Auth-Identität sendet
+die Einladung erneut auf demselben Benutzer. `email_exists` liefert GoTrue nur
+für eine bereits **bestätigte** Identität. Genau so ist der Server-Handler
+gebaut: `email_exists` wird nicht als Fehler behandelt, sondern als Beweis, dass
+der abgeleitete Zustand veraltet war — die Antwort ist `action_not_applicable`
+mit `accessState: "active"`. Es wird kein zweiter `sales`-Datensatz und keine
+zweite Auth-Identität erzeugt.
+
+**Entscheidung 6 — `/auth-callback` gehört react-admin, nicht Nora.**
+`public/auth-callback.html` leitete die Supabase-Tokens bisher auf
+`#/auth-callback` weiter. Diese Route ist von react-admin für
+`authProvider.handleCallback` reserviert, das Nora nicht implementiert — beide
+E-Mail-Wege (Einladung **und** Passwort-Link) endeten dadurch auf „Something
+went wrong". Nora besitzt jetzt die eigene Route `/zugang-einrichten`, die
+Einladungs- und Recovery-Weg auf dieselbe Passwortvergabe zusammenführt.
+
+**Entscheidung 7 — WELCOME behauptet nichts, COMPLETE ist bewiesen.** Der
+Onboarding-Ablauf ist eine reine Zustandsmaschine
+(`login/employeeOnboardingFlow.ts`): `checking → welcome → password → profile →
+complete`, mit den Nebenzuständen `invalid` und `blocked`. `welcome` behauptet
+ausdrücklich **nicht**, dass ein Passwort gesetzt ist. `complete` ist nur
+erreichbar, wenn alle vier Bedingungen aus `SUCCESS_PRECONDITIONS` gelten:
+authentifizierte Session, erfolgreiche Passwortänderung, gültige
+`sales`-Zuordnung, Zugang nicht deaktiviert. Eine deaktivierte Person landet aus
+jedem Schritt in `blocked` und erreicht `complete` nie. Animation darf diese
+Übergänge nicht auslösen.
+
+**Entscheidung 8 — Begrüßungsdaten nur aus authentifizierter Identität.**
+„Hallo Viktoriia" und die Anmeldeadresse stammen aus `user.user_metadata` bzw.
+`user.email` der echten Session. URL-Query-Parameter werden nie als Identität
+vertraut.
+
+**Nicht Teil dieser Welle (bewusst):** endgültiges Hard Delete von Benutzern und
+Änderung der Login-E-Mail einer aktivierten Person — beides gehört zu
+`NORA USER LIFECYCLE ADMIN V1`. Ebenso kein Premium-Visual (V1B).
+
+**Offen / an den Product Owner:** `supabase/config.toml` enthält
+`[auth.email] enable_signup = true`. Das ist die **lokale** Stack-Konfiguration;
+die Produktionseinstellung liegt im Supabase-Dashboard und wurde in dieser
+Session **nicht** verändert und **nicht** verifiziert. Der Client-Pfad
+(`dataProvider.signUp`, `SignupPage`) bleibt hart einladungsbasiert. Siehe
+`17-known-issues-and-planned-waves.md`.
 
 ## 2026-09-01 – Customer Create Speed & Clarity: Land ausgeblendet, Bundesland NRW, „Weitere Angaben" eingeklappt
 

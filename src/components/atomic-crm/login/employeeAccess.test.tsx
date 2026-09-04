@@ -94,3 +94,88 @@ describe("EmployeeAccessShell", () => {
     await expect.element(screen.getByAltText("Smairys").first()).toBeVisible();
   });
 });
+
+describe("Access email landing (access-link convergence)", () => {
+  it("forwards an invitation link to the onboarding flow", async () => {
+    const screen = await render(
+      <StoryWrapper
+        initialEntries={[
+          "/zugang-einrichten?access_token=at-1&refresh_token=rt-1",
+        ]}
+      >
+        <div />
+      </StoryWrapper>,
+    );
+
+    // Both the invitation and the password-setup link land here and converge
+    // on the same password-setup experience.
+    await expect
+      .element(screen.getByRole("button", { name: "Zugang einrichten" }))
+      .toBeVisible();
+  });
+
+  it("shows the calm invalid state when the link carries no tokens", async () => {
+    const screen = await render(
+      <StoryWrapper initialEntries={["/zugang-einrichten"]}>
+        <div />
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByText("Einladung ungültig oder abgelaufen"))
+      .toBeVisible();
+  });
+
+  it("never exposes tokens as visible page content", async () => {
+    const screen = await render(
+      <StoryWrapper
+        initialEntries={[
+          "/zugang-einrichten?access_token=at-1&refresh_token=rt-1",
+        ]}
+      >
+        <div />
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByRole("button", { name: "Zugang einrichten" }))
+      .toBeVisible();
+    await expect
+      .poll(() => screen.container.textContent?.includes("at-1") ?? false)
+      .toBe(false);
+    await expect
+      .poll(() => screen.container.textContent?.includes("rt-1") ?? false)
+      .toBe(false);
+  });
+});
+
+describe("Public self-registration stays impossible", () => {
+  it.each(["anmelden", "einladung", "passwort"])(
+    "offers no registration affordance in mode=%s",
+    async (mode) => {
+      const screen = await render(
+        <StoryWrapper initialEntries={[`/login?mode=${mode}`]}>
+          <StartPage />
+        </StoryWrapper>,
+      );
+
+      // Every public entry point must be invite-only: no way to turn an
+      // arbitrary email address into a Nora user.
+      await expect
+        .poll(() => screen.container.textContent?.length ?? 0)
+        .toBeGreaterThan(0);
+      for (const forbidden of [
+        "Registrieren",
+        "Konto erstellen",
+        "Konto anlegen",
+        "Jetzt registrieren",
+      ]) {
+        await expect
+          .poll(
+            () => screen.container.textContent?.includes(forbidden) ?? false,
+          )
+          .toBe(false);
+      }
+    },
+  );
+});

@@ -99,11 +99,11 @@ double_confirm_changes = true
 enable_confirmations = false
 
 [auth.email.template.invite]
-subject = "You've been invited to Atomic CRM"
+subject = "Einladung zu Nora"
 content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.recovery]
-subject = "Reset your Atomic CRM Password"
+subject = "Persönliches Passwort für Nora einrichten"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.sms]

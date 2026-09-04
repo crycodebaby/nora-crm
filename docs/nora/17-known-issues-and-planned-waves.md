@@ -451,3 +451,34 @@ Aus einer früheren Analyse vor der Customer & Contact Workflow Wave als „beka
 - Audit-Retention-/Löschstrategie
 
 Diese Liste ist bewusst knapp gehalten, da keine Detailanalyse aus dieser Session vorliegt, die über die Kategorienamen hinausgeht.
+
+## Offene Frage: `enable_signup` (Stand 2026-09-04, Employee Onboarding & Access V1A)
+
+`supabase/config.toml` enthält unter `[auth.email]` weiterhin
+`enable_signup = true`. Das ist die **lokale** Supabase-Stack-Konfiguration.
+Ob in `nora-crm-prod` öffentliche Selbstregistrierung am Auth-Provider
+aktiviert ist, liegt in den Dashboard-Einstellungen und wurde in der V1A-Welle
+**nicht verändert und nicht verifiziert** — eine Änderung der produktiven
+Auth-Provider-Einstellung ist eine bewusste Product-Owner-Entscheidung, keine
+Nebenwirkung einer Code-Welle.
+
+Was in V1A **nachweislich** gilt: der Client-Pfad ist hart einladungsbasiert.
+`dataProvider.signUp` wirft („Öffentliche Registrierung ist deaktiviert"), die
+`/sign-up`-Seite zeigt nur „Zugang nur per Einladung", und keiner der drei
+öffentlichen Login-Modi (`anmelden`, `einladung`, `passwort`) bietet eine
+Registrierung an — durch Tests abgesichert.
+
+**Empfohlene nächste Handlung (Product Owner):** im Supabase-Dashboard von
+`nora-crm-prod` prüfen, ob „Allow new users to sign up" deaktiviert ist, und das
+Ergebnis hier festhalten. Damit wäre der seit längerem offene Punkt „Offene
+Selbstregistrierung (Status unklar)" aus `16-current-state.md` §3 endgültig
+bewertet.
+
+## `users` Edge Function ist nicht automatisch deployt (Stand 2026-09-04)
+
+Die Employee-Access-Serverlogik (`GET /users`, die beiden POST-Aktionen) lebt in
+`supabase/functions/users/`. Edge Functions werden **nicht** durch den
+Vercel-Deploy ausgeliefert. Ohne ein `supabase functions deploy users` gegen
+`nora-crm-prod` zeigt die Admin-Oberfläche „Der Zugangsstatus konnte nicht
+geladen werden." und die beiden Aktionen schlagen fehl. Das ist Teil des
+Release-Ablaufs dieser Welle, nicht ein Fehler im Code.

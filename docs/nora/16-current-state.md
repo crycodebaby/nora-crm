@@ -65,6 +65,38 @@ Chronologisch, Details im Decision Log (`06-decision-log.md`):
 
 20. **Vorgänge-Kanban Navigation Rail** (2026-08-30): Die erste Pfeil-/Scrollbar-Präsentation wurde vom Product Owner visuell verworfen; ihr früherer `UX ACCEPTED`-Status gilt nicht mehr. Der lokale Nachfolger behandelt das Kanban als horizontale Arbeitsfläche: bottom-sticky integriertes Rail als einzige sichtbare horizontale Steuerung, proportionaler und direkt ziehbarer Viewport-Thumb mit 44-px-Touch-Minimum, echte Spaltenmarker, Track-Klick auf reale Position, integrierte 44-px-Pfeile, korrekte Scrollbar-ARIA-Semantik und schwächere Edge-Fades. Die Browser-Scrollbar ist visuell ausgeblendet; native Trackpad-/Touch-/Wheel-Fähigkeit und Momentum bleiben erhalten. Alle Wege schreiben ausschließlich dasselbe `scrollLeft`; Karten-DnD und freier Board-Pan bleiben getrennt. Reine Frontend-/UX-Wave, keine Migration und keine Domain-/Persistenzänderung. **`KANBAN NAVIGATION RAIL PRODUCTION VERIFIED`** (2026-09-01): Product Owner UX-Abnahme erteilt; kontrollierter Release als Fast-Forward `90f3dfc4..fe962c58` (kein Force, kein Squash, kein Merge-Commit), Vercel Production `dpl_A9GhyFNPvUPfuprbtrERDPgHBvwU` READY auf exakt diesem SHA, Alias `nora.ergart.de`. **Bewusst keine DB-Wave:** der Diff gegen die Production-Basis `90f3dfc4` beruehrt keine Datei unter `supabase/` und kein `*.sql` — keine Migration, keine RPC-/RLS-/Audit-Aenderung. Live nicht-schreibend nachgemessen (Dark und Light, 1151 px und 916 px effektive Breite): bei nur drei belegten Statusspalten liegt kein Overflow vor und das Rail blendet sich korrekt aus (`data-visible="false"`, beide Pfeile disabled); mit „Alle Status anzeigen“ (12 Spalten, `scrollWidth` 4060) erscheint es, Pfeil = exakt eine Spalte (340 px = 320 + 20 Gap) mit Klammerung an beiden Enden, `End`/`Home` auf `scrollWidth - clientWidth` bzw. 0 ohne Seitenscroll, Track-Klick zentriert auf 1 px genau, Thumb-Drag proportional und punktgenau mit sauberem `data-dragging`-Reset, Edge-Fades richtungsabhaengig, Rail sticky und durch die Arbeitsflaeche begrenzt (`padding-bottom: 76px`, Karten frei), 44-px-Touchziele, `overflow-x: auto` bei ausgeblendeter Browserleiste, kein horizontaler Seiten-Overflow, Konsole ohne Meldungen. Karten-DnD blieb intakt (RFD-Kontext live, Pointer-Down auf einer Karte startet keinen Board-Pan) — ein echter Karten-Drop wurde in Production **nicht** ausgefuehrt, weil er eine Statusaenderung an einem realen Vorgang geschrieben haette; dieser Pfad bleibt durch die Suite und die lokale Abnahme gedeckt. Unterhalb des MobileLayout-Breakpoints (gemessen 749 px) rendert das Kanban wie bisher nicht — unveraendertes Bestandsverhalten, nicht Teil dieser Welle. Decision Log „2026-08-30 – Vorgänge-Kanban Navigation Rail".
 
+21. **Employee Onboarding & Access V1A** (2026-09-04): technisches Fundament für
+Mitarbeiterzugänge — **kein** Design-/Motion-Wave. Der produktseitige
+Zugangsstatus wird aus Supabase Auth + `sales.disabled` **abgeleitet**
+(`invited` / `active` / `disabled` / `unknown`), **keine Migration, keine neue
+Statusspalte**. Neuer admin-only Serverpfad an der bestehenden `users` Edge
+Function: `GET /users[?sales_id=]` liefert ausschließlich
+`employeeId/email/accessState/disabled/invitedAt/activatedAt` (keine Tokens,
+keine Provider-Metadaten); `POST` mit `action: "resend_invitation" |
+"request_password_setup"` sind die zwei zustandsabhängigen Admin-Aktionen, jede
+serverseitig gegen denselben Zustand geprüft und auditiert
+(`user.invitation_resent`, `user.password_setup_requested`). Client:
+`application/commands/employeeAccess.ts` als benannte Anwendungsoperationen,
+`sales/employeeAccessContract.ts` als Vokabular-Spiegel,
+`sales/EmployeeAccessPanel.tsx` + Statusspalte in `SalesList`.
+**Behobener Bestandsdefekt:** `public/auth-callback.html` leitete auf
+`#/auth-callback` weiter — eine von react-admin für `handleCallback` reservierte
+Route, die Nora nicht implementiert; Einladungs- **und** Passwort-Link endeten
+auf „Something went wrong". Neue Nora-eigene Route `/zugang-einrichten` führt
+beide Wege auf dieselbe Passwortvergabe. Onboarding ist jetzt eine reine
+Zustandsmaschine (`login/employeeOnboardingFlow.ts`): `welcome` behauptet
+nie, das Passwort sei gesetzt; `complete` ist nur nach echtem Passwort-Erfolg,
+gültiger `sales`-Zuordnung und nicht deaktiviertem Zugang erreichbar. Lokale
+Invite-/Recovery-E-Mail-Templates auf deutsche Nora-Terminologie umgestellt
+(„Einladung zu Nora", „Nora-Zugang einrichten", „Einmalcode") inkl. Korrektur
+des fehlerhaften `{{ .ConfirmationURL }}/auth-callback.html`-Links.
+**Status: `RC — NOT YET PRODUCTION VERIFIED`.** Verifikation lokal: `typecheck`,
+`build`, App-Suite (92 Dateien, 815 Tests, 1 übersprungen) und Function-Suite
+(11 Dateien, 163 Tests) grün, ESLint 0 Fehler. **Nicht verifiziert:** echter
+E-Mail-Versand, echte GoTrue-Antworten und Live-Verhalten gegen
+`nora-crm-prod` — die `users` Edge Function ist zudem nicht automatisch
+deployt. Siehe Decision Log „2026-09-04 – Employee Onboarding & Access V1A".
+
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
 Vollständige Entscheidung: Decision Log "2026-08-25 – Customer & Contact Workflow Wave".

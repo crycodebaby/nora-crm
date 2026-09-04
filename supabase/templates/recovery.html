@@ -1,10 +1,11 @@
 <!doctype html>
-<html>
+<html lang="de">
   <head>
+    <meta charset="utf-8" />
     <style>
       body {
-        font-family: Arial, sans-serif;
-        background-color: #f4f4f4;
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #f7f6f4;
         margin: 0;
         padding: 0;
       }
@@ -15,60 +16,66 @@
         background-color: #ffffff;
         padding: 20px;
         border-radius: 8px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       }
       .header {
-        text-align: center;
         padding: 10px 0;
       }
       .header h2 {
         margin: 0;
-        color: #333333;
+        color: #111111;
       }
       .content {
         padding: 20px;
         line-height: 1.6;
-        color: #555555;
+        color: #3a3a3c;
       }
       .content p {
         margin: 0 0 10px;
       }
       .button {
         display: block;
-        width: 200px;
-        margin: 20px auto;
-        padding: 10px;
+        width: 240px;
+        margin: 20px 0;
+        padding: 12px;
         text-align: center;
-        background-color: #007bff;
+        background-color: #ff3b1f;
         color: #ffffff !important;
         text-decoration: none;
-        border-radius: 5px;
+        border-radius: 6px;
+      }
+      .fallback {
+        font-size: 13px;
+        color: #6b6b6f;
       }
     </style>
   </head>
   <body>
     <div class="container">
       <div class="header">
-        <h2>Reset Your Atomic CRM Password</h2>
+        <h2>Persönliches Passwort für Nora einrichten</h2>
       </div>
       <div class="content">
-        <p>Hello,</p>
+        <p>Hallo,</p>
         <p>
-          We've received a request to reset the password for the Atomic CRM
-          account associated with the email {{ .Email }}. No changes have been
-          made to your account yet.
+          Für Ihren Nora-Zugang mit der Adresse {{ .Email }} wurde ein Link zum
+          Einrichten eines persönlichen Passworts angefordert. An Ihrem Zugang
+          wurde bisher nichts geändert.
         </p>
-        <p>You can reset your password by clicking the button below.</p>
+        <!-- ConfirmationURL already carries the redirect back to Nora.
+             Do not append a path to it. -->
         <p>
-          <a href="{{ .ConfirmationURL }}/auth-callback.html" class="button"
-            >Reset your password</a
+          <a href="{{ .ConfirmationURL }}" class="button"
+            >Passwort jetzt einrichten</a
           >
         </p>
-        <p>
-          If you did not request a new password, please contact the Atomic CRM
-          administrator immediately.
+        <p class="fallback">
+          Alternativ können Sie den Einmalcode eingeben: {{ .Token }}
         </p>
-        <p>The Atomic CRM team</p>
+        <p>
+          Wenn Sie das nicht erwartet haben, wenden Sie sich bitte an Ihre
+          Administration.
+        </p>
+        <p>Ihr Nora-Team der Ergart Gruppe</p>
       </div>
     </div>
   </body>

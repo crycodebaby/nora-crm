@@ -20,6 +20,7 @@ import type { CrmDataProvider } from "../providers/types";
 import { syncCurrentSaleCacheIfSelf } from "../providers/supabase/authProvider";
 import type { Sale, SalesFormData } from "../types";
 import { SalesInputs } from "./SalesInputs";
+import { EmployeeAccessPanel } from "./EmployeeAccessPanel";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
 
 function EditToolbar() {
@@ -147,6 +148,12 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
             record={record}
           >
             <SaleEditTitle />
+            {record ? (
+              <>
+                <EmployeeAccessPanel salesId={record.id} />
+                <hr className="my-6 border-border" />
+              </>
+            ) : null}
             <SalesInputs />
           </SimpleForm>
         </CardContent>
