@@ -17,4 +17,4 @@ Non-negotiable:
 - Inherited Atomic CRM files (`README.md`, `doc/`, upstream skills, the `mcp` edge function) are not Nora product behavior.
 - Do not edit `dist/`.
 
-Verification before commit: `npm run lint`, `npm run prettier`, `npm run typecheck`, `npx vitest run`, `npm run build`.
+Verification before commit: `npm run lint`, `npm run prettier`, `npm run typecheck`, `npm run test:unit:app -- --run`, `npm run test:unit:functions -- --run`, `npm run build`, `node ./scripts/check-bundle-budget.mjs`. A bare `npx vitest run` skips `supabase/functions`.

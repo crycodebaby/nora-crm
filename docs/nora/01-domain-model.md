@@ -1,5 +1,7 @@
 # 01 – Fachliches Domänenmodell
 
+Status: CURRENT (Domänenregeln) · Zweck: FACHLICHE REFERENZ · Zuletzt geprüft: 2026-09-04. Abschnitte tragen Wellen-Namen aus ihrer Entstehung; was heute live ist, führt `16-current-state.md`. Bei Widerspruch gilt `16`.
+
 ## Zentrale fachliche Unterscheidung
 
 Kunde ist nicht Vorgang.
@@ -36,7 +38,7 @@ Kunde
 | Ansprechpartner | `contacts` | Person beim Kunden |
 | Vorgang | `deals` | Anfrage, Auftrag, Angebot, Nachfassung |
 | Aufgabe | `tasks` | Rückruf, Besichtigung, Angebot nachfassen |
-| Notiz | `notes` | Kontakt- oder Vorgangsnotiz |
+| Notiz | `contact_notes` / `deal_notes` | Kontakt- bzw. Vorgangsnotiz (zwei Tabellen, kein generisches `notes`) |
 | Markierung | `tags` | fachliche Kennzeichnung |
 | Kundentyp | `companies.sector` | vorläufig fachlich umgenutzt |
 
@@ -61,7 +63,7 @@ Diese Werte beschreiben den Arbeitsstand und nicht klassische Sales-Stages.
 
 ## Aktuelle technische Einschränkungen
 
-- Kein separates Feld `customer_type`
+- Kein separates Feld `customer_type`; **Kundentyp** ist `companies.sector`. Davon zu unterscheiden ist die seit 2026-08-25 vorhandene **Kundenart** `companies.customer_kind` (`business` | `individual`), siehe Abschnitt „Kunden-/Ansprechpartner-Erfassung"
 - Kein separates Feld `priority`
 - Kein separates Objekt-/Baustellenmodell
 - Kein Aufmaßmodell
@@ -119,14 +121,16 @@ Suche Kunde → Ansprechpartner → Vorgang (+ optional Aufgabe)
 
 Google Kalender bleibt das **einzige führende Terminsystem** für Zeit, Titel, Ort, Wiederholung und Existenz von Terminen.
 
+**Produktionsstand (2026-09-04):** Schema und RPCs sind in `nora-crm-prod` angewendet, die Edge Functions (`calendar-*`) sind **nicht deployed**. „im Repository" in der Tabelle heißt: Code vorhanden, in Produktion **nicht nutzbar** (`14`, `16`, `17` P14).
+
 | Fachlich | Technisch (Ziel) | Status |
 |---|---|---|
-| Geschäftskalender (ein Kalender) | `google_calendar_connections.calendar_id` | v0.4c.1 implementiert |
-| Gespiegelte Termine | `google_calendar_events` (Cache + CRM-Verknüpfung) | v0.4c.1 implementiert |
+| Geschäftskalender (ein Kalender) | `google_calendar_connections.calendar_id` | v0.4c.1 im Repository, nicht deployed |
+| Gespiegelte Termine | `google_calendar_events` (Cache + CRM-Verknüpfung) | v0.4c.1 im Repository, nicht deployed |
 | Termin-Herkunft | `origin` = `google` \| `nora` | v0.4c.1 (nur Import `google`) |
 | CRM-Verknüpfung | `company_id`, `contact_id`, `deal_id` (bigint FKs) | v0.4c.1 RPC link/unlink |
-| Hotboard „Heutige Termine“ | liest `google_calendar_events` | v0.4d geplant |
-| Nora-Termin anlegen | Google API write scope, Extended Properties | v0.4e geplant |
+| Hotboard „Heutige Termine“ | liest `google_calendar_events` | nicht gebaut (`17` P14) |
+| Nora-Termin anlegen | Google API write scope, Extended Properties | nicht gebaut (`17` P14) |
 
 **Nicht:** paralleles `appointments`-Modell, private iCal-Adresse, zweites Terminsystem in Nora.
 
@@ -189,12 +193,14 @@ Vollständige Entscheidung: `06-decision-log.md` (2026-08-25).
 
 Vollständige Entscheidung inkl. Alternativen: `06-decision-log.md` „2026-08-26 – Self Contact Wave".
 
-## Erweiterungen geplant (Welle 7b)
+## Checklisten, Textbausteine, Audit (Welle 7b — umgesetzt)
 
-| Fachlich | Technisch (Ziel) | Status |
+| Fachlich | Technisch | Stand (2026-09-04) |
 |---|---|---|
-| Modulare Checkliste | `checklist_templates`, `checklist_runs`, `checklist_run_items` | spezifiziert |
-| Textbausteine (Plus/Minus) | `saved_text_snippets` | spezifiziert |
-| Audit / Nachvollziehbarkeit | `audit_events` (append-only) | ✅ v0.3l (CRM + Checklisten) |
-| Servicebereich | `service_area_code` (`FENS`, `HAUS`, `IMMO`) | spezifiziert |
-| Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2 ✅ |
+| Modulare Checkliste | `checklist_templates`, `checklist_runs`, `checklist_run_items` | Schema in Produktion (Migration v0.3d2); Checkliste „Produktionsfreigabe Fenster" live im Supabase-Modus (`16`) |
+| Textbausteine (Plus/Minus) | `saved_text_snippets` | Tabelle in Produktion angewendet; eine sichtbare Textbaustein-Funktion wird in `16` nicht als live geführt |
+| Audit / Nachvollziehbarkeit | `audit_events` (append-only) | live (v0.3l, CRM + Checklisten) |
+| Servicebereich | `service_area_code` (`FENS`, `HAUS`, `IMMO`) | Schema in Produktion |
+| Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2, live |
+
+Spezifikation und Guardrails: `10-checklists-snippets-audit.md`, `13-crm-audit-retention.md`.

@@ -24,7 +24,7 @@ Diese Datei ersetzt die frühere Regel „alle Nora-Dokumente lesen". Pflicht f�
 8. **Deutsche Routen sind kanonisch** (`/kunden`, `/kontakte`, `/vorgaenge`), gebaut über `noraCreatePath()`. Englische Pfade sind nur Legacy-Eingang über `LegacyPathRedirect` — der Redirect ist tragend, nicht entfernen (`04`).
 9. **Resource-Namen** (`contacts`, `companies`, `deals`, `tasks`, `tags`, `sales`) nie umbenennen. DataProvider, Tabellen, Tests und gespeicherte Daten hängen daran.
 10. **Eine Welle, ein Thema.** Unabhängige Änderungen nicht mischen, keine Aufräumarbeiten nebenbei, keine Dependency-Updates im Feature-Commit.
-11. **Geerbter Atomic-CRM-Bestand ist nicht automatisch Nora-Verhalten.** `README.md`, `doc/`, `.github/CONTRIBUTING.md`, `CHANGELOG.md` und `.claude/skills/*` sind Upstream-Material. Nora-Dokumentation und Decision Log haben Vorrang. Konkret: Nora-Schreibpfade sind serverseitige RPCs (SECURITY DEFINER, ein Funktionskörper = eine Transaktion, `DETAIL = NORA_*`), **nicht** „Edge Function bevorzugt, RPC weniger", wie der Upstream-Skill `backend-dev` behauptet.
+11. **Geerbter Atomic-CRM-Bestand ist nicht automatisch Nora-Verhalten.** `README.md`, `doc/`, `.github/CONTRIBUTING.md`, `CHANGELOG.md` und `.claude/skills/*` sind Upstream-Material. Nora-Dokumentation und Decision Log haben Vorrang. Konkret: Gewöhnliche autorisierte CRUD-Flows laufen weiterhin über ra-core-DataProvider → PostgREST unter RLS. **Atomare, privilegierte oder mehrere Datensätze umfassende Geschäftsoperationen** laufen über das etablierte serverseitige RPC-Muster (SECURITY DEFINER, ein Funktionskörper = eine Transaktion, `DETAIL = NORA_*`), **nicht** „Edge Function bevorzugt, RPC weniger", wie der Upstream-Skill `backend-dev` behauptet. Neue externe Schreibpfade geben nie rohes SQL oder Tabellen frei (`15`).
 12. **Der geerbte MCP-Server** (`supabase/functions/mcp`, Profil-Abschnitt „MCP Server") ist kein Nora-Feature: nicht deployen, nicht erweitern, nicht als „die KI-Integration" behandeln. Status PARKED (`15`, `16`).
 
 ## C. Architektur in 60 Sekunden
@@ -66,7 +66,8 @@ Vor jedem Commit dieselben Gates wie CI (`.github/workflows/check.yml`):
 npm run lint
 npm run prettier
 npm run typecheck
-npx vitest run                      # app + supabase/functions
+npm run test:unit:app -- --run       # App-Tests (vitest.config.ts schließt supabase/** aus)
+npm run test:unit:functions -- --run # Edge-Function-Tests (vitest.functions.config.ts) — ein `npx vitest run` allein deckt sie nicht ab
 npm run build && node ./scripts/check-bundle-budget.mjs
 ```
 

@@ -10,7 +10,7 @@ Genau diese Begriffe, keine Synonyme. Ein Agent darf höchstens `DEPLOYED` bzw. 
 
 | Status | Bedeutung |
 |---|---|
-| `LOCAL VERIFIED` | Alle Gates (Lint, Prettier, Typecheck, Vitest, Build, bei DB-Änderung `db reset` + SQL-Tests) sind lokal grün; bei UI zusätzlich im gestylten Browser geprüft. Nichts gepusht |
+| `LOCAL VERIFIED` | Alle Gates (Lint, Prettier, Typecheck, Vitest App **und** Functions, Build, bei DB-Änderung `db reset` + SQL-Tests) sind lokal grün; bei UI zusätzlich im gestylten Browser geprüft. Nichts gepusht |
 | `RC VERIFIED` | Ein eingefrorener Release Candidate (Commit-SHA, bei Migration zusätzlich SHA-256 der Migrationsdatei) hat einen unabhängigen Review ohne offene BLOCKER/HIGH bestanden |
 | `DEPLOYED` | Der Commit ist auf `origin/main`, das Vercel-Production-Deployment ist READY auf exakt diesem SHA, bei DB-Änderung ist die Migration in `nora-crm-prod` angewendet und das Bookkeeping stimmt |
 | `PRODUCTION VERIFIED` | `DEPLOYED` plus nicht-schreibender Live-Nachweis gegen `nora.ergart.de` mit dem **neuen** Build (PWA-Regel unten), plus read-only DB-Nachverifikation, wenn die Welle Schema, RPCs oder Grants berührt hat |
@@ -37,7 +37,7 @@ Während:
 
 Nachher:
 
-- [ ] `npm run lint`, `npm run prettier`, `npm run typecheck`, `npx vitest run`, `npm run build`, `node ./scripts/check-bundle-budget.mjs`
+- [ ] `npm run lint`, `npm run prettier`, `npm run typecheck`, `npm run test:unit:app -- --run`, `npm run test:unit:functions -- --run`, `npm run build`, `node ./scripts/check-bundle-budget.mjs` — beide Vitest-Konfigurationen wie in CI; ein `npx vitest run` allein lässt `supabase/functions` aus
 - [ ] bei UI: `npm run dev:demo`, betroffene Seiten in Hell/Dunkel, 125 %/150 % Zoom, Mobile
 - [ ] bei DB: `npx supabase db reset --local` + betroffene `supabase/tests/*.sql` (Reihenfolge unter REFERENZ)
 - [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung (Titel auch im Index von `06`)
