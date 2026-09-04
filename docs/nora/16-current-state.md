@@ -90,7 +90,7 @@ gültiger `sales`-Zuordnung und nicht deaktiviertem Zugang erreichbar. Lokale
 Invite-/Recovery-E-Mail-Templates auf deutsche Nora-Terminologie umgestellt
 („Einladung zu Nora", „Nora-Zugang einrichten", „Einmalcode") inkl. Korrektur
 des fehlerhaften `{{ .ConfirmationURL }}/auth-callback.html`-Links.
-**Status: `RC — NOT YET PRODUCTION VERIFIED`.** Verifikation lokal: `typecheck`,
+**Status: `RC — NOT YET PRODUCTION VERIFIED` (Release vorbereitet, blockiert durch die aktive Selbstregistrierung in Produktion — siehe `17-known-issues-and-planned-waves.md`).** Verifikation lokal: `typecheck`,
 `build`, App-Suite (92 Dateien, 815 Tests, 1 übersprungen) und Function-Suite
 (11 Dateien, 163 Tests) grün, ESLint 0 Fehler. **Nicht verifiziert:** echter
 E-Mail-Versand, echte GoTrue-Antworten und Live-Verhalten gegen

@@ -64,3 +64,38 @@ describe("users patchHelpers", () => {
     ).toEqual({ error: "invalid_payload" });
   });
 });
+
+describe("disabled changes must always reach Supabase Auth", () => {
+  /**
+   * Regression guard for the activate defect found in the V1A production
+   * review: clearing sales.disabled without lifting the Auth ban left an
+   * "activated" employee still unable to sign in. Both authoritative facts
+   * must move together, so a disabled-only patch counts as needing an Auth
+   * Admin update even though it changes no profile field.
+   */
+  it("flags a disabled-only patch as needing an Auth Admin update", () => {
+    const plan = buildPatchPlan({ sales_id: 7, disabled: true });
+    expect("error" in plan).toBe(false);
+    if ("error" in plan) return;
+
+    expect(plan.wantsDisabled).toBe(true);
+    expect(plan.wantsName).toBe(false);
+    expect(plan.wantsEmail).toBe(false);
+    expect(needsAuthAdminUpdate(plan)).toBe(true);
+  });
+
+  it("flags re-enabling the same way", () => {
+    const plan = buildPatchPlan({ sales_id: 7, disabled: false });
+    if ("error" in plan) throw new Error("unexpected");
+    expect(plan.disabled).toBe(false);
+    expect(needsAuthAdminUpdate(plan)).toBe(true);
+  });
+
+  it("still exempts a pure role change from Auth Admin", () => {
+    const plan = buildPatchPlan({ sales_id: 7, role: "office" });
+    if ("error" in plan) throw new Error("unexpected");
+    expect(plan.wantsRole).toBe(true);
+    expect(plan.wantsDisabled).toBe(false);
+    expect(needsAuthAdminUpdate(plan)).toBe(false);
+  });
+});

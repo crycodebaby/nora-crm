@@ -37,8 +37,16 @@ export type OnboardingEvent =
   | { type: "sessionMissing" }
   /** The employee exists but their Nora access is disabled. */
   | { type: "accessBlocked" }
+  /**
+   * Bootstrap found that this browser already completed the password step of
+   * an interrupted run. Enters PROFILE directly so the employee is never told
+   * their password is unset after it has actually been changed.
+   */
+  | { type: "passwordAlreadySet" }
   /** WELCOME → PASSWORD. The only way out of welcome. */
   | { type: "onContinue" }
+  /** PASSWORD → WELCOME. Allowed only before the password actually succeeds. */
+  | { type: "onBack" }
   | { type: "onPasswordSubmit" }
   | { type: "passwordFailed"; error: string }
   /** Password genuinely updated AND the employee mapping re-verified. */
@@ -85,9 +93,22 @@ export function onboardingReducer(
       // A disabled employee can never reach completion, from any step.
       return { step: "blocked", submitting: false, error: null };
 
+    case "passwordAlreadySet":
+      // Only from bootstrap — never rewinds or advances an in-progress run.
+      return state.step === "checking"
+        ? { step: "profile", submitting: false, error: null }
+        : state;
+
     case "onContinue":
       return state.step === "welcome"
         ? { step: "password", submitting: false, error: null }
+        : state;
+
+    case "onBack":
+      // Never reachable once the password succeeded: from PROFILE, COMPLETE or
+      // BLOCKED this is ignored, so no state can imply "password still unset".
+      return state.step === "password" && !state.submitting
+        ? { step: "welcome", submitting: false, error: null }
         : state;
 
     case "onPasswordSubmit":

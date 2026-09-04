@@ -187,6 +187,40 @@ zusichert. Vollständige Nachweiskette und Behebungsanleitung:
 `17-known-issues-and-planned-waves.md`. `supabase/config.toml` bleibt bewusst
 unverändert (lokale Konfiguration, steuert Produktion nicht).
 
+
+**Nachtrag 2026-09-04 (Release-Härtung aus den gezielten Edge-Case-Prüfungen):**
+
+1. **`sales.disabled` und Auth-Bann werden jetzt immer gemeinsam gesetzt.** Der
+   PATCH-Zweig „nur Rolle/Deaktiviert" änderte bisher ausschließlich
+   `sales.disabled`, während der kombinierte Zweig (Deaktivierung zusammen mit
+   Namens-/E-Mail-Änderung) zusätzlich `ban_duration` setzte. Wer über den
+   zweiten Weg deaktiviert und über den ersten wieder aktiviert wurde, blieb in
+   Auth gebannt und konnte sich trotz „Zugang aktiv" **nicht anmelden**. Neu:
+   `syncAuthBanState()` wird bei **jeder** Änderung von `disabled` aufgerufen,
+   in beiden Zweigen. Reine Rollenänderungen lösen weiterhin keinen
+   Auth-Admin-Aufruf aus.
+2. **Kein Einmalcode in der Passwort-E-Mail.** `verifyOtp` ist in Nora
+   ausschließlich für `type: "invite"` verdrahtet; eine Eingabemaske für einen
+   Recovery-Code existiert nicht. Die Einmalcode-Zeile wurde deshalb aus der
+   Recovery-Vorlage entfernt — ein Versprechen, das das Produkt nicht einlösen
+   kann, ist schlechter als kein Versprechen. Die Einladungs-Vorlage behält den
+   Einmalcode, weil dieser Weg real funktioniert.
+3. **Unterbrochener Ablauf nach erfolgreichem Passwort.** `passwordSetupMarker`
+   (eine `localStorage`-Notiz, 30 Minuten gültig, an die User-ID gebunden)
+   verhindert, dass ein Reload nach erfolgreicher Passwortänderung wieder bei
+   WELCOME startet und damit implizit behauptet, das Passwort sei noch nicht
+   gesetzt. Die Notiz ist ausdrücklich **kein** Autorisierungssignal; der Server
+   liest sie nie. Die Ablaufzeit ist notwendig, damit ein *späterer* neuer
+   Passwortlink wieder regulär bei WELCOME beginnt.
+4. **Profil ist ein Schritt nach dem Passwort, kein Freischaltkriterium.** Das
+   Passwort ist bereits gültig, bevor das Profil gespeichert wird; der
+   Profilschritt sagt das jetzt explizit, und ein Fehler dort meldet
+   ausschließlich einen Profilfehler.
+5. **Navigationskontrakt.** `onBack` führt nur von PASSWORD (und nur vor Erfolg
+   und außerhalb eines laufenden Submits) zurück zu WELCOME. Aus PROFILE,
+   COMPLETE und BLOCKED ist es wirkungslos — kein Zustand nach erfolgreicher
+   Passwortänderung kann behaupten, das Passwort sei ungesetzt.
+
 Die Prüfung hat den Zustandskontrakt zugleich gegen echte Produktionsdaten
 bestätigt: alle fünf `sales`-Zeilen werden truthful abgeleitet, insbesondere die
 deaktivierte Zeile mit `sales.disabled = true` bei gleichzeitig

@@ -30,6 +30,11 @@ import {
   progressIndexOf,
   type OnboardingStep,
 } from "@/components/atomic-crm/login/employeeOnboardingFlow";
+import {
+  clearPasswordSetMark,
+  hasPasswordBeenSet,
+  markPasswordSet,
+} from "@/components/atomic-crm/login/passwordSetupMarker";
 import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
 import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
@@ -197,7 +202,7 @@ const StepError = ({ message }: { message: string | null }) =>
 /**
  * Employee onboarding: invitation and password-setup links converge here.
  *
- * Tokens arrive via auth-callback.html → /auth-callback → here, to avoid
+ * Tokens arrive via auth-callback.html → /zugang-einrichten → here, to avoid
  * HashRouter collisions. The Einmalcode (OTP) path arrives with a session
  * already established and no URL tokens. Both enter the same flow.
  *
@@ -281,6 +286,14 @@ export const SetPasswordPage = () => {
           lastName: normalizePersonName(meta.last_name),
           email: user.email ?? "",
         });
+
+        // An interrupted run (reload / closed tab) must not restart at WELCOME
+        // and imply the password is still unset — it is not.
+        if (hasPasswordBeenSet(user.id)) {
+          dispatch({ type: "passwordAlreadySet" });
+          return;
+        }
+
         dispatch({ type: "sessionResolved" });
       } catch {
         if (!cancelled) {
@@ -350,6 +363,10 @@ export const SetPasswordPage = () => {
           email: user.email ?? "",
         });
 
+        // The password is now genuinely changed. Record that before any
+        // further step can fail, so an interruption cannot misreport it.
+        markPasswordSet(user.id);
+
         const { data: sale } = await client
           .from("sales")
           .select("id, disabled")
@@ -409,6 +426,8 @@ export const SetPasswordPage = () => {
 
         // Role is never writable from the client — omit intentionally.
         await client.auth.refreshSession();
+        // Run finished: a later password-setup link must start at WELCOME.
+        clearPasswordSetMark();
         dispatch({ type: "profileSucceeded" });
       } catch {
         const message =
@@ -438,8 +457,10 @@ export const SetPasswordPage = () => {
             Einladung ungültig oder abgelaufen
           </h2>
           <p className="text-sm text-muted-foreground">
-            Bitte öffnen Sie erneut den Link aus Ihrer Einladungs-E-Mail oder
-            fordern Sie bei Ihrer Administration eine neue Einladung an.
+            Der Link ist nur einmal und nur begrenzt gültig — er kann auch durch
+            eine automatische E-Mail-Prüfung Ihres Systems bereits verbraucht
+            worden sein. Bitte fordern Sie bei Ihrer Administration einen neuen
+            Einladungs- oder Passwortlink an.
           </p>
           <Button asChild className="w-full nora-touch-target">
             <Link to="/login?mode=einladung">Zur Aktivierung</Link>
@@ -510,8 +531,9 @@ export const SetPasswordPage = () => {
               Profil bestätigen
             </h2>
             <p className="text-sm text-muted-foreground">
-              Prüfen Sie Vor- und Nachname. Ihre Rolle wird ausschließlich von
-              der Administration festgelegt.
+              Ihr Passwort ist bereits gespeichert. Prüfen Sie zum Abschluss
+              Vor- und Nachname. Ihre Rolle wird ausschließlich von der
+              Administration festgelegt.
             </p>
           </div>
           <StepError message={flow.error} />
@@ -630,6 +652,17 @@ export const SetPasswordPage = () => {
             disabled={flow.submitting}
           >
             Passwort speichern
+          </Button>
+          {/* Allowed only before the password succeeds — the reducer ignores
+              this event from PROFILE, COMPLETE and BLOCKED. */}
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full nora-touch-target"
+            disabled={flow.submitting}
+            onClick={() => dispatch({ type: "onBack" })}
+          >
+            Zurück
           </Button>
         </Form>
       </div>

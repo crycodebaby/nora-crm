@@ -154,3 +154,83 @@ describe("employee onboarding flow", () => {
     expect(progressIndexOf("invalid")).toBe(0);
   });
 });
+
+describe("interrupted run must not deny a password that was already set", () => {
+  it("resumes into profile from bootstrap when the password step already succeeded", () => {
+    const state = run([{ type: "passwordAlreadySet" }]);
+    expect(state.step).toBe("profile");
+  });
+
+  it("never rewinds an in-progress run", () => {
+    const onPassword = run([
+      { type: "sessionResolved" },
+      { type: "onContinue" },
+    ]);
+    expect(
+      onboardingReducer(onPassword, { type: "passwordAlreadySet" }).step,
+    ).toBe("password");
+
+    const done = run([
+      { type: "sessionResolved" },
+      { type: "onContinue" },
+      { type: "onPasswordSubmit" },
+      { type: "passwordSucceeded" },
+      { type: "onProfileSubmit" },
+      { type: "profileSucceeded" },
+    ]);
+    expect(onboardingReducer(done, { type: "passwordAlreadySet" }).step).toBe(
+      "complete",
+    );
+  });
+});
+
+describe("back navigation contract", () => {
+  it("allows password → welcome before the password succeeds", () => {
+    const state = run([
+      { type: "sessionResolved" },
+      { type: "onContinue" },
+      { type: "onBack" },
+    ]);
+    expect(state.step).toBe("welcome");
+  });
+
+  it("is ignored while a submit is in flight", () => {
+    const state = run([
+      { type: "sessionResolved" },
+      { type: "onContinue" },
+      { type: "onPasswordSubmit" },
+      { type: "onBack" },
+    ]);
+    expect(state.step).toBe("password");
+    expect(state.submitting).toBe(true);
+  });
+
+  it("can never return to a state implying the password is unset", () => {
+    const afterSuccess = run([
+      { type: "sessionResolved" },
+      { type: "onContinue" },
+      { type: "onPasswordSubmit" },
+      { type: "passwordSucceeded" },
+    ]);
+    expect(onboardingReducer(afterSuccess, { type: "onBack" }).step).toBe(
+      "profile",
+    );
+
+    const complete = onboardingReducer(
+      onboardingReducer(afterSuccess, { type: "onProfileSubmit" }),
+      { type: "profileSucceeded" },
+    );
+    expect(onboardingReducer(complete, { type: "onBack" }).step).toBe(
+      "complete",
+    );
+    expect(onboardingReducer(complete, { type: "onContinue" }).step).toBe(
+      "complete",
+    );
+
+    const blocked = onboardingReducer(afterSuccess, { type: "accessBlocked" });
+    expect(onboardingReducer(blocked, { type: "onBack" }).step).toBe("blocked");
+    expect(onboardingReducer(blocked, { type: "onContinue" }).step).toBe(
+      "blocked",
+    );
+  });
+});

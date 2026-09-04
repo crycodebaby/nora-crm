@@ -268,6 +268,36 @@ async function inviteUser(req: Request, currentUserSale: any) {
   }
 }
 
+/**
+ * Keeps the Supabase Auth ban in sync with sales.disabled.
+ *
+ * Both facts are authoritative for the derived access state, so applying only
+ * one half is a real defect: an employee "activated" by clearing
+ * sales.disabled would stay banned in Auth and still be unable to sign in.
+ * Called for every disabled change, in both PATCH branches.
+ */
+async function syncAuthBanState(
+  userId: string,
+  disabled: boolean,
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+    userId,
+    { ban_duration: disabled ? "87600h" : "none" },
+  );
+
+  if (!data?.user || error) {
+    console.error(
+      JSON.stringify({
+        operation: "sync_auth_ban",
+        stage: "auth_admin",
+        error: "auth_update_failed",
+      }),
+    );
+    return false;
+  }
+  return true;
+}
+
 async function applyRolePatch(
   plan: PatchPlan,
   sale: { id: number; role: NoraRole; disabled?: boolean },
@@ -323,13 +353,23 @@ async function patchUser(req: Request, currentUserSale: any) {
     });
   }
 
-  // Role / disabled only — no Auth Admin side effects.
+  // Role / disabled only. A pure role change still performs no Auth Admin
+  // call; a disabled change must, so both authoritative facts stay in sync.
   if (
     (plan.wantsRole || plan.wantsDisabled) &&
     !plan.wantsName &&
     !plan.wantsEmail &&
     !plan.wantsAvatar
   ) {
+    if (plan.wantsDisabled && typeof plan.disabled === "boolean") {
+      const synced = await syncAuthBanState(sale.user_id, plan.disabled);
+      if (!synced) {
+        return createErrorResponse(500, "Internal Server Error", {
+          error: "internal_error",
+        });
+      }
+    }
+
     try {
       const updated = await applyRolePatch(plan, sale);
       return new Response(JSON.stringify({ data: updated }), {
@@ -368,6 +408,8 @@ async function patchUser(req: Request, currentUserSale: any) {
         authUpdate.email = plan.email;
       }
 
+      // Same rule as the role/disabled-only branch above: a disabled change
+      // always moves the Auth ban too, never only sales.disabled.
       if (plan.wantsDisabled && typeof plan.disabled === "boolean") {
         authUpdate.ban_duration = plan.disabled ? "87600h" : "none";
       }
