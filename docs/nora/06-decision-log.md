@@ -3684,11 +3684,13 @@ unnötiger Arbeit nachgewiesen, die weder Fachlogik noch Datenmodell berühren:
 
 ### Entscheidung
 
-- Der Visualizer läuft nur noch im Vite-Mode `analyze`
-  (`npm run build:analyze`, gleiches Muster wie Mode `e2e`) und schreibt nach
-  `bundle-analysis/stats.html` (gitignored) — nie nach `dist/`. Gilt für
-  `vite.config.ts` und `vite.demo.config.ts`. CI baut mit `build:analyze`,
-  sichert den Report von dort als Artefakt und
+- Der Visualizer läuft nur noch mit `NORA_BUNDLE_ANALYZE=1`
+  (`npm run build:analyze` → `scripts/build-analyze.mjs`, plattformneutral
+  ohne cross-env) und schreibt nach `bundle-analysis/stats.html`
+  (gitignored) — nie nach `dist/`. Gilt für `vite.config.ts` und
+  `vite.demo.config.ts`. **Bewusst kein eigener Vite-Mode** (Review-Nachtrag,
+  siehe unten). CI baut weiterhin `npm run build` und setzt nur die Variable,
+  sichert den Report aus `bundle-analysis/` als Artefakt;
   `scripts/check-bundle-budget.mjs` schlägt zusätzlich fehl, sobald
   `dist/stats.html` wieder existiert. Budgetwerte unverändert.
 - Neue Helper-Funktion `normalizeReferenceIds()` in
@@ -3709,8 +3711,8 @@ Route-Splitting, Indizes/Migrationen/RLS, Edge Functions — spätere PERF-Welle
 - `npm run typecheck`, ESLint und Prettier für alle geänderten Dateien grün.
 - `CI=1 npm run build`: kein `dist/stats.html`, `sw.js` ohne Report,
   Precache **37 Einträge / 3415 KiB** (vorher 38 / 5730 KiB, −2315 KiB).
-- `CI=1 npm run build:analyze`: Report unter `bundle-analysis/stats.html`,
-  `dist/` unverändert sauber.
+- `CI=1 npm run build:analyze` (bzw. `NORA_BUNDLE_ANALYZE=1 npm run build`):
+  Report unter `bundle-analysis/stats.html`, `dist/` unverändert sauber.
 - Budget-Guard: ein absichtlich nach `dist/stats.html` kopierter Report lässt
   das Skript mit klarer Meldung fehlschlagen.
 - `hotboardUtils.test.ts`: acht neue Fälle (Duplikate, `null`, `undefined`,
@@ -3724,3 +3726,27 @@ Welle überschritten (gemessen 1057 kB, identisch vor und nach PERF-01A). CI
 schlägt daher unabhängig von PERF-01A am Budget-Schritt fehl. Nicht in dieser
 Welle behoben — Rekalibrierung oder Chunk-Diät ist eine eigene Entscheidung,
 siehe `17-known-issues-and-planned-waves.md`.
+
+### Review-Nachtrag (2026-09-04): Vite-Mode `analyze` durch Umgebungsvariable ersetzt
+
+Die erste Fassung (`fe564162`) schaltete den Visualizer über
+`vite build --mode analyze`. Gemessen war das Ergebnis am Stand `e20a5685`
+zwar byte-identisch mit `vite build` (alle 42 `dist/`-Dateien gleiche
+MD5) — aber nur, weil derzeit kein Code `import.meta.env.MODE` liest und
+weder `.env.analyze` noch `.env.production` existieren. Latent ist ein
+eigener Mode nicht produktionsäquivalent: Vite inlined `MODE` (wäre
+`"analyze"` statt `"production"`) und lädt Env-Dateien nach Mode — ein
+späteres `.env.production` würde im Analyse-Build stillschweigend fehlen.
+`import.meta.env.PROD` bliebe `true`. Bundle-Analyse ist Instrumentierung,
+keine eigene Anwendungsumgebung. Daher: `NORA_BUNDLE_ANALYZE=1`, Mode
+bleibt `production`; CI validiert denselben Build wie Vercel und erzeugt den
+Report im selben Durchlauf (kein zweiter Build). Nachweis: `dist/` mit und
+ohne Variable byte-identisch (42/42 Dateien inkl. `sw.js`).
+
+Ebenfalls im Nachtrag: `HotboardOpenTasks.test.tsx` beweist die Integration
+für den Leerfall — bei ausschließlich kontaktlosen Aufgaben wird
+`dataProvider.getMany("contacts")` nicht aufgerufen (ra-core deaktiviert die
+Query über `enabled: false`; selbst eine aktive Query mit leerer ID-Liste
+löst laut ra-core-Quelle `[]` auf, ohne den Provider zu rufen), und die
+Aufgaben werden ohne Kontaktnamen gerendert. Bei `[1, 1, null]` geht genau
+ein `getMany` mit `ids: [1]` heraus.

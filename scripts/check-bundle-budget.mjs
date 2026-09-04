@@ -79,7 +79,7 @@ const failures = [];
 if (existsSync(ANALYZER_REPORT_IN_DIST)) {
   failures.push(
     "dist/stats.html gefunden — der Bundle-Analyse-Report darf nicht im " +
-      'Deploy-Ordner liegen (siehe vite.config.ts, Mode "analyze").',
+      "Deploy-Ordner liegen (siehe vite.config.ts, NORA_BUNDLE_ANALYZE).",
   );
 }
 

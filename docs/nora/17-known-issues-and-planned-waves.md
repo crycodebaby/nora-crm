@@ -692,7 +692,7 @@ Bei PERF-01A gemessen: `index-*.js` 1057 kB an `e20a5685` — vor und nach der W
 
 ## PERF-01A — Safe Waste Cleanup (2026-09-04): `LOCAL VERIFIED / RC`
 
-Analyzer-Report nicht mehr in `dist/`/Precache (Precache 5730 → 3415 KiB), kein `in.(1,1,,)`-Kontaktrequest mehr vom Hotboard, gleichwertige Firmen-ID-Mengen ergeben denselben Query-Key. Lokale Bundle-Analyse: `npm run build:analyze` → `bundle-analysis/stats.html`. Nicht deployt. Details: Decision Log „2026-09-04 – PERF-01A".
+Analyzer-Report nicht mehr in `dist/`/Precache (Precache 5730 → 3415 KiB), kein `in.(1,1,,)`-Kontaktrequest mehr vom Hotboard, gleichwertige Firmen-ID-Mengen ergeben denselben Query-Key. Lokale Bundle-Analyse: `npm run build:analyze` (setzt `NORA_BUNDLE_ANALYZE=1`, Vite-Mode bleibt `production`) → `bundle-analysis/stats.html`. Nicht deployt. Details: Decision Log „2026-09-04 – PERF-01A".
 
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 

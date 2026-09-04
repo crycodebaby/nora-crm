@@ -11,14 +11,19 @@ import type { Deal } from "../types";
 export const HOTBOARD_DEAL_LIMIT = 5;
 
 /**
- * Bereitet Referenz-IDs fuer `useGetMany` auf (PERF-01A).
+ * Bereitet Hotboard-Referenz-IDs (`contact_id`, `company_id`) fuer
+ * `useGetMany` auf (PERF-01A).
  *
  * Entfernt `null`/`undefined`/leere Strings/NaN, dedupliziert und sortiert
- * deterministisch (Zahlen aufsteigend vor Strings, Strings lexikographisch).
- * Damit erreicht kein leerer Wert mehr den PostgREST-Filter (`id=in.(1,1,,)`
- * lieferte HTTP 400), und gleichwertige ID-Mengen ergeben denselben
- * Query-Key, statt als `(2,13,5)` und `(2,5,13)` zwei Requests auszuloesen.
- * Gueltige IDs gehen dabei nie verloren.
+ * deterministisch. Damit erreicht kein leerer Wert mehr den PostgREST-Filter
+ * (`id=in.(1,1,,)` lieferte HTTP 400), und gleichwertige ID-Mengen ergeben
+ * denselben Query-Key, statt als `(2,13,5)` und `(2,5,13)` zwei Requests
+ * auszuloesen. Gueltige IDs gehen dabei nie verloren.
+ *
+ * Gedacht fuer Noras bigint-Spalten: Zahlen werden numerisch sortiert. Der
+ * `Identifier`-Typ laesst Strings zu; sie werden nur toleriert (lexikographisch
+ * hinter den Zahlen), ohne UUID-Semantik — `10` und `"10"` bleiben zwei IDs.
+ * Kein allgemeiner Referenz-Normalizer fuer andere Ressourcen.
  */
 export function normalizeReferenceIds(
   ids: ReadonlyArray<Identifier | null | undefined>,

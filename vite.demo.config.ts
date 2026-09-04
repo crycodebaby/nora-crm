@@ -6,13 +6,13 @@ import { visualizer } from "rollup-plugin-visualizer";
 import createHtmlPlugin from "vite-plugin-simple-html";
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // Bundle-Report nur auf Wunsch (Mode "analyze"), nie in dist/ — siehe
-    // vite.config.ts (PERF-01A).
-    ...(mode === "analyze"
+    // Bundle-Report nur auf Wunsch (NORA_BUNDLE_ANALYZE=1), nie in dist/ —
+    // siehe vite.config.ts (PERF-01A).
+    ...(process.env.NORA_BUNDLE_ANALYZE === "1"
       ? [
           visualizer({
             open: !process.env.CI,
@@ -56,4 +56,4 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-}));
+});

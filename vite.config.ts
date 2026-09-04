@@ -8,13 +8,18 @@ import { VitePWA } from "vite-plugin-pwa";
 
 /**
  * Bundle-Analyse (PERF-01A): Der Visualizer-Report wird nur noch auf
- * ausdruecklichen Wunsch erzeugt (`npm run build:analyze`, Mode "analyze")
- * und landet ausserhalb von `dist/`. Vorher lag `dist/stats.html` (~2 MB)
- * in jedem Produktions-Build, wurde mit deployt und vom Service Worker
- * precached. `scripts/check-bundle-budget.mjs` bricht ab, falls der Report
- * doch wieder in `dist/` auftaucht.
+ * ausdruecklichen Wunsch erzeugt und landet ausserhalb von `dist/`. Vorher
+ * lag `dist/stats.html` (~2 MB) in jedem Produktions-Build, wurde mit
+ * deployt und vom Service Worker precached. `scripts/check-bundle-budget.mjs`
+ * bricht ab, falls der Report doch wieder in `dist/` auftaucht.
+ *
+ * Schalter ist die Umgebungsvariable NORA_BUNDLE_ANALYZE=1 (siehe
+ * `npm run build:analyze`), bewusst kein eigener Vite-Mode: ein Mode
+ * "analyze" haette `import.meta.env.MODE` im Bundle veraendert und
+ * `.env.production` nicht mehr geladen. So bleibt der Build in jeder
+ * Hinsicht der Produktions-Build, nur mit Report-Instrumentierung.
  */
-const BUNDLE_ANALYSIS_MODE = "analyze";
+const BUNDLE_ANALYSIS_ENABLED = process.env.NORA_BUNDLE_ANALYZE === "1";
 const BUNDLE_ANALYSIS_REPORT = "./bundle-analysis/stats.html";
 
 // https://vitejs.dev/config/
@@ -22,7 +27,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    ...(mode === BUNDLE_ANALYSIS_MODE
+    ...(BUNDLE_ANALYSIS_ENABLED
       ? [
           visualizer({
             // GitHub Actions setzt CI=true, nicht NODE_ENV=CI — sonst versucht
