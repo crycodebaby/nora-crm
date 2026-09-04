@@ -32,6 +32,8 @@ supabase/.temp
 .supabase-e2e/
 
 dist/
+# Bundle-Analyse-Report (npm run build:analyze)
+/bundle-analysis/
 /lib/
 .env
 *storybook.log

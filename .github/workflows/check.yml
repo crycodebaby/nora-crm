@@ -186,8 +186,11 @@ jobs:
             - name: 📥 Download deps
               run: npm ci
 
+            # Mode "analyze" ist der Produktions-Build plus Visualizer-Report
+            # ausserhalb von dist/ (PERF-01A). Das Budget misst dist/assets;
+            # der Report darf dort nicht mehr liegen.
             - name: 🔨 Build
-              run: npm run build
+              run: npm run build:analyze
 
             - name: 📦 Bundle-Budget
               run: node ./scripts/check-bundle-budget.mjs
@@ -197,6 +200,6 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: bundle-stats-${{ github.run_id }}
-                  path: dist/stats.html
+                  path: bundle-analysis/stats.html
                   if-no-files-found: warn
                   retention-days: 7

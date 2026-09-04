@@ -16,7 +16,7 @@ import { AddTask } from "../tasks/AddTask";
 import { noraCreatePath } from "../routing/noraRoutes";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Task } from "../types";
-import { HOTBOARD_DEAL_LIMIT } from "./hotboardUtils";
+import { HOTBOARD_DEAL_LIMIT, normalizeReferenceIds } from "./hotboardUtils";
 
 export const HotboardOpenTasks = ({ className }: { className?: string }) => {
   const translate = useTranslate();
@@ -37,8 +37,10 @@ export const HotboardOpenTasks = ({ className }: { className?: string }) => {
     [tasks],
   );
 
+  // Aufgaben ohne Kontakt (contact_id null) und Mehrfachnennungen duerfen
+  // nicht in den in.(…)-Filter gelangen — siehe normalizeReferenceIds.
   const contactIds = useMemo(
-    () => openTasks.map((task) => task.contact_id),
+    () => normalizeReferenceIds(openTasks.map((task) => task.contact_id)),
     [openTasks],
   );
 

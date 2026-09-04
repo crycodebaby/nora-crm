@@ -22,6 +22,7 @@ import {
   sortProductionReleaseHotboardEntries,
   type ProductionReleaseHotboardEntry,
 } from "./productionReleaseHotboardUtils";
+import { normalizeReferenceIds } from "./hotboardUtils";
 
 const isDemoMode = import.meta.env.VITE_IS_DEMO === "true";
 
@@ -85,7 +86,7 @@ export const HotboardOpenProductionReleases = ({
   );
 
   const companyIds = useMemo(
-    () => [...new Set((deals ?? []).map((entry) => entry.company_id))],
+    () => normalizeReferenceIds((deals ?? []).map((entry) => entry.company_id)),
     [deals],
   );
 

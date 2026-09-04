@@ -10,6 +10,34 @@ import type { Deal } from "../types";
 
 export const HOTBOARD_DEAL_LIMIT = 5;
 
+/**
+ * Bereitet Referenz-IDs fuer `useGetMany` auf (PERF-01A).
+ *
+ * Entfernt `null`/`undefined`/leere Strings/NaN, dedupliziert und sortiert
+ * deterministisch (Zahlen aufsteigend vor Strings, Strings lexikographisch).
+ * Damit erreicht kein leerer Wert mehr den PostgREST-Filter (`id=in.(1,1,,)`
+ * lieferte HTTP 400), und gleichwertige ID-Mengen ergeben denselben
+ * Query-Key, statt als `(2,13,5)` und `(2,5,13)` zwei Requests auszuloesen.
+ * Gueltige IDs gehen dabei nie verloren.
+ */
+export function normalizeReferenceIds(
+  ids: ReadonlyArray<Identifier | null | undefined>,
+): Identifier[] {
+  const unique = new Set<Identifier>();
+  for (const id of ids) {
+    if (id == null) continue;
+    if (typeof id === "number" && !Number.isFinite(id)) continue;
+    if (typeof id === "string" && id.trim() === "") continue;
+    unique.add(id);
+  }
+  return [...unique].sort((a, b) => {
+    if (typeof a === "number" && typeof b === "number") return a - b;
+    if (typeof a === "number") return -1;
+    if (typeof b === "number") return 1;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+}
+
 export const OFFER_FOLLOW_UP_STAGES = [
   "angebot-gesendet",
   "nachfassen",

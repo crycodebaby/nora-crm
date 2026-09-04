@@ -22,6 +22,7 @@ import {
   filterOfferFollowUpDeals,
   filterWaitingManufacturerDeals,
   HOTBOARD_DEAL_LIMIT,
+  normalizeReferenceIds,
   sortDealsByCreatedDesc,
   sortDealsByFollowUpDate,
   prepareFocusColumnDeals,
@@ -103,12 +104,11 @@ export const Hotboard = () => {
   );
 
   const companyIds = useMemo(
-    () => [
-      ...new Set([
+    () =>
+      normalizeReferenceIds([
         ...displayedDeals.map((deal) => deal.company_id),
         ...focusBoardCompanyIds,
       ]),
-    ],
     [displayedDeals, focusBoardCompanyIds],
   );
 

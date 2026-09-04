@@ -686,6 +686,14 @@ Damit unterschreitet die Nora-Primäraktion Noras eigenes Touch-Minimum von 44 p
 
 **Empfohlener Fix (eigene kleine Welle).** `min-h-10` aus `.nora-primary-action` entfernen und die Höhe dort über `--nora-touch-min` setzen, dann alle Aufrufstellen einmal nachmessen. Vorher prüfen, ob irgendwo bewusst ein 40-px-Button gewollt ist.
 
+## Bundle-Budget: Entry-Chunk überschreitet 1050 kB bereits an `origin/main` (2026-09-04)
+
+Bei PERF-01A gemessen: `index-*.js` 1057 kB an `e20a5685` — vor und nach der Welle identisch, also nicht durch sie verursacht. `node ./scripts/check-bundle-budget.mjs` und damit der CI-Build-Job schlagen aktuell fehl. Offen: Budget bewusst rekalibrieren (letzte Kalibrierung 2026-08-15 bei 955 kB) oder den Entry-Chunk verkleinern (Route-Splitting ist als spätere PERF-Welle vorgesehen). Keine Auswirkung auf Vercel-Deployments, die den Budget-Schritt nicht ausführen.
+
+## PERF-01A — Safe Waste Cleanup (2026-09-04): `LOCAL VERIFIED / RC`
+
+Analyzer-Report nicht mehr in `dist/`/Precache (Precache 5730 → 3415 KiB), kein `in.(1,1,,)`-Kontaktrequest mehr vom Hotboard, gleichwertige Firmen-ID-Mengen ergeben denselben Query-Key. Lokale Bundle-Analyse: `npm run build:analyze` → `bundle-analysis/stats.html`. Nicht deployt. Details: Decision Log „2026-09-04 – PERF-01A".
+
 ## Bekannte, nicht in dieser Wave untersuchte Themen
 
 Aus einer früheren Analyse vor der Customer & Contact Workflow Wave als „bekannt, nicht Kern des Auftrags" benannt, hier zur Vollständigkeit aufgeführt — **nicht in dieser Session verifiziert oder detailliert**, vor Bearbeitung gegen aktuellen Code/Produktion neu prüfen:

@@ -14,7 +14,7 @@
  * setzen. Dann faengt der Job kuenftige Zuwaechse ab.
  */
 
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -30,7 +30,14 @@ const ENTRY_BUDGET_KB = 1050;
  */
 const TOTAL_BUDGET_KB = 2600;
 
-const ASSETS_DIR = join(process.cwd(), "dist", "assets");
+const DIST_DIR = join(process.cwd(), "dist");
+const ASSETS_DIR = join(DIST_DIR, "assets");
+/**
+ * Der Visualizer-Report gehoert nicht ins Deploy (PERF-01A): Er wurde frueher
+ * als dist/stats.html (~2 MB) ausgeliefert und vom Service Worker precached.
+ * Seitdem entsteht er nur per `npm run build:analyze` unter bundle-analysis/.
+ */
+const ANALYZER_REPORT_IN_DIST = join(DIST_DIR, "stats.html");
 
 const kb = (bytes) => Math.round(bytes / 1024);
 
@@ -38,7 +45,9 @@ let files;
 try {
   files = readdirSync(ASSETS_DIR).filter((f) => f.endsWith(".js"));
 } catch {
-  console.error(`❌ ${ASSETS_DIR} nicht gefunden — wurde "npm run build" ausgefuehrt?`);
+  console.error(
+    `❌ ${ASSETS_DIR} nicht gefunden — wurde "npm run build" ausgefuehrt?`,
+  );
   process.exit(1);
 }
 
@@ -61,9 +70,18 @@ for (const c of chunks) {
   const marker = c === entry ? " ← Entry" : "";
   console.log(`  ${String(kb(c.bytes)).padStart(6)} kB  ${c.name}${marker}`);
 }
-console.log(`  ${String(totalKb).padStart(6)} kB  GESAMT (${chunks.length} Chunks)\n`);
+console.log(
+  `  ${String(totalKb).padStart(6)} kB  GESAMT (${chunks.length} Chunks)\n`,
+);
 
 const failures = [];
+
+if (existsSync(ANALYZER_REPORT_IN_DIST)) {
+  failures.push(
+    "dist/stats.html gefunden — der Bundle-Analyse-Report darf nicht im " +
+      'Deploy-Ordner liegen (siehe vite.config.ts, Mode "analyze").',
+  );
+}
 
 if (!entry) {
   console.warn(
@@ -84,7 +102,7 @@ if (failures.length > 0) {
   console.error("❌ Bundle-Budget ueberschritten:");
   for (const f of failures) console.error(`   - ${f}`);
   console.error(
-    "\n   dist/stats.html im CI-Artefakt zeigt, welche Abhaengigkeit gewachsen ist.",
+    "\n   bundle-analysis/stats.html (CI-Artefakt, npm run build:analyze) zeigt, welche Abhaengigkeit gewachsen ist.",
   );
   process.exit(1);
 }

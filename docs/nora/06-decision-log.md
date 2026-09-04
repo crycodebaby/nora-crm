@@ -12,6 +12,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-09-05 – User Lifecycle W2: Referenzintegrität und historische Identität | [Springen](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) |
 | 2026-09-05 – User Lifecycle W1: ein privilegierter Executor, Selbst-/Letzter-Admin-Schutz, Zugangskonsistenz | [Springen](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) |
 | 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen | [Springen](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) |
+| 2026-09-04 – PERF-01A: Analyzer-Report raus aus dem Deploy, Referenz-IDs normalisiert | [Springen](#2026-09-04--perf-01a-analyzer-report-raus-aus-dem-deploy-referenz-ids-normalisiert) |
 | 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht | [Springen](#2026-09-04--employee-access-v1c-b-zustellstatus-wird-gezeigt-die-mailart-nicht) |
 | 2026-09-04 – Employee Access V1C-A: Zustellbeobachtung ist Best-Effort-Korrelation, kein Öffnungs-Tracking | [Springen](#2026-09-04--employee-access-v1c-a-zustellbeobachtung-ist-best-effort-korrelation-kein-öffnungs-tracking) |
 | 2026-09-04 – Employee Onboarding & Access V1B: Präsentation über dem eingefrorenen V1A-Contract | [Springen](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) |
@@ -3660,3 +3661,66 @@ stillschweigend grün gewesen. Jetzt über `pg_class.relname` +
 
 `20260815120000_nora_core_indexes.sql` — lokal anwenden; **kein** Remote-Apply
 in diesem Commit.
+
+## 2026-09-04 – PERF-01A: Analyzer-Report raus aus dem Deploy, Referenz-IDs normalisiert
+
+### Kontext
+
+Der Performance-Baseline-Audit (2026-09-04, `8e80c44b`) hat drei Quellen
+unnötiger Arbeit nachgewiesen, die weder Fachlogik noch Datenmodell berühren:
+
+1. `dist/stats.html` (rollup-plugin-visualizer) lag in jedem Produktions-Build,
+   wurde nach Vercel deployt und vom Workbox-Precache mitgeladen
+   (live ≈ 1,7 MB, lokal an `e20a5685` 2.370.830 Bytes; Precache 38 Einträge
+   / 5730 KiB, davon rund 40 % der Report).
+2. `HotboardOpenTasks` reichte `task.contact_id` ungefiltert an
+   `useGetMany("contacts")`. Aufgaben ohne Kontakt erzeugten
+   `contacts?id=in.(1,1,,)` → HTTP 400, Postgres-Log
+   `invalid input syntax for type bigint: ""`.
+3. Die Firmen-`useGetMany`-Aufrufe in `Hotboard` und
+   `HotboardOpenProductionReleases` deduplizierten zwar, sortierten aber
+   nicht. `(2,13,5)` und `(2,5,13)` sind für react-query verschiedene Keys
+   und lösten doppelte Requests aus.
+
+### Entscheidung
+
+- Der Visualizer läuft nur noch im Vite-Mode `analyze`
+  (`npm run build:analyze`, gleiches Muster wie Mode `e2e`) und schreibt nach
+  `bundle-analysis/stats.html` (gitignored) — nie nach `dist/`. Gilt für
+  `vite.config.ts` und `vite.demo.config.ts`. CI baut mit `build:analyze`,
+  sichert den Report von dort als Artefakt und
+  `scripts/check-bundle-budget.mjs` schlägt zusätzlich fehl, sobald
+  `dist/stats.html` wieder existiert. Budgetwerte unverändert.
+- Neue Helper-Funktion `normalizeReferenceIds()` in
+  `dashboard/hotboardUtils.ts`: entfernt `null`/`undefined`/leere
+  Strings/NaN, dedupliziert, sortiert deterministisch (Zahlen aufsteigend vor
+  Strings). Genutzt an genau den drei auditierten Stellen (Kontakte in
+  `HotboardOpenTasks`, Firmen in `Hotboard` und
+  `HotboardOpenProductionReleases`). Keine globale Caching-Abstraktion, kein
+  Eingriff in den Data Provider, keine `staleTime`-/QueryClient-Änderung.
+
+### Bewusst nicht enthalten
+
+Avatare/Storage, Produktionsdaten-Reparatur, N+1-Refactor der Kundenliste,
+Route-Splitting, Indizes/Migrationen/RLS, Edge Functions — spätere PERF-Wellen.
+
+### Verifikation (lokal, Worktree auf `e20a5685`)
+
+- `npm run typecheck`, ESLint und Prettier für alle geänderten Dateien grün.
+- `CI=1 npm run build`: kein `dist/stats.html`, `sw.js` ohne Report,
+  Precache **37 Einträge / 3415 KiB** (vorher 38 / 5730 KiB, −2315 KiB).
+- `CI=1 npm run build:analyze`: Report unter `bundle-analysis/stats.html`,
+  `dist/` unverändert sauber.
+- Budget-Guard: ein absichtlich nach `dist/stats.html` kopierter Report lässt
+  das Skript mit klarer Meldung fehlschlagen.
+- `hotboardUtils.test.ts`: acht neue Fälle (Duplikate, `null`, `undefined`,
+  Leerstrings, gemischt, leer, gleichwertige Mengen, numerische Sortierung).
+  App-Suite gesamt: 98 Dateien, 894 Tests grün, 1 übersprungen.
+
+### Nebenbefund
+
+Das Entry-Chunk-Budget (1050 kB) ist an `origin/main` bereits **vor** dieser
+Welle überschritten (gemessen 1057 kB, identisch vor und nach PERF-01A). CI
+schlägt daher unabhängig von PERF-01A am Budget-Schritt fehl. Nicht in dieser
+Welle behoben — Rekalibrierung oder Chunk-Diät ist eine eigene Entscheidung,
+siehe `17-known-issues-and-planned-waves.md`.

@@ -9,6 +9,7 @@ import {
   filterOfferFollowUpDeals,
   filterWaitingManufacturerDeals,
   getActiveDeals,
+  normalizeReferenceIds,
 } from "./hotboardUtils";
 import type { Deal } from "../types";
 
@@ -103,5 +104,51 @@ describe("filterOfferFollowUpDeals", () => {
     expect(
       filterOfferFollowUpDeals(deals, new Set([1])).map((d) => d.id),
     ).toEqual([2]);
+  });
+});
+
+describe("normalizeReferenceIds (PERF-01A)", () => {
+  it("drops null and undefined so no empty bigint reaches the in.() filter", () => {
+    expect(normalizeReferenceIds([1, 1, null, undefined])).toEqual([1]);
+  });
+
+  it("drops empty strings and NaN", () => {
+    expect(normalizeReferenceIds(["", "  ", Number.NaN, 7])).toEqual([7]);
+  });
+
+  it("removes duplicates without losing any valid id", () => {
+    expect(normalizeReferenceIds([3, 1, 3, 2, 1])).toEqual([1, 2, 3]);
+  });
+
+  it("keeps mixed valid and invalid input intact for the valid part", () => {
+    expect(normalizeReferenceIds([5, null, 2, undefined, 5, ""])).toEqual([
+      2, 5,
+    ]);
+  });
+
+  it("returns an empty array for no ids", () => {
+    expect(normalizeReferenceIds([])).toEqual([]);
+    expect(normalizeReferenceIds([null, undefined])).toEqual([]);
+  });
+
+  it("normalizes equivalent id sets to the same representation", () => {
+    const a = normalizeReferenceIds([2, 13, 5]);
+    const b = normalizeReferenceIds([2, 5, 13]);
+    const c = normalizeReferenceIds([13, 5, 2, 2]);
+    expect(a).toEqual([2, 5, 13]);
+    expect(b).toEqual(a);
+    expect(c).toEqual(a);
+    expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+
+  it("sorts numerically, not lexicographically", () => {
+    expect(normalizeReferenceIds([10, 9, 100])).toEqual([9, 10, 100]);
+  });
+
+  it("orders string ids (uuids) deterministically", () => {
+    const x = normalizeReferenceIds(["b-2", "a-1", "b-2"]);
+    const y = normalizeReferenceIds(["a-1", "b-2"]);
+    expect(x).toEqual(["a-1", "b-2"]);
+    expect(y).toEqual(x);
   });
 });
