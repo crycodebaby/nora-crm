@@ -1021,18 +1021,65 @@ export const createDataProvider = ({
             last_name: data.last_name,
             avatar: data.avatar,
           };
-          const directoryIndex = db.sales_directory.findIndex(
-            (row) => row.id === data.id,
-          );
-          if (!data.disabled) {
-            if (directoryIndex >= 0) {
-              db.sales_directory[directoryIndex] = entry;
+          // The FakeRest store copies the seed arrays, so `db.*` mutations
+          // never reach what getList/getMany serve. Both read models are
+          // maintained through the store itself (W2; the directory sync was
+          // a silent no-op before).
+          const upsertProjection = async (
+            resource: "sales_directory" | "sales_identities",
+            row: Record<string, unknown> & { id: Identifier },
+          ) => {
+            const { data: existing } = await baseDataProvider.getList(
+              resource,
+              {
+                filter: { id: row.id },
+                pagination: { page: 1, perPage: 1 },
+                sort: { field: "id", order: "ASC" },
+              },
+            );
+            if (existing.length > 0) {
+              await baseDataProvider.update(resource, {
+                id: row.id,
+                data: row,
+                previousData: existing[0],
+              });
             } else {
-              db.sales_directory.push(entry);
+              await baseDataProvider.create(resource, { data: row });
             }
-          } else if (directoryIndex >= 0) {
-            db.sales_directory.splice(directoryIndex, 1);
+          };
+          const removeProjection = async (
+            resource: "sales_directory" | "sales_identities",
+            id: Identifier,
+          ) => {
+            const { data: existing } = await baseDataProvider.getList(
+              resource,
+              {
+                filter: { id },
+                pagination: { page: 1, perPage: 1 },
+                sort: { field: "id", order: "ASC" },
+              },
+            );
+            if (existing.length > 0) {
+              await baseDataProvider.delete(resource, {
+                id,
+                previousData: existing[0],
+              });
+            }
+          };
+
+          // sales_directory = ACTIVE employees only (assignment pickers)
+          if (!data.disabled) {
+            await upsertProjection("sales_directory", entry);
+          } else {
+            await removeProjection("sales_directory", data.id);
           }
+
+          // sales_identities keeps every employee, disabled included (W2):
+          // a deactivated employee must still resolve by name on old records.
+          await upsertProjection("sales_identities", {
+            ...entry,
+            disabled: data.disabled === true,
+          });
 
           // Since the current user is stored in localStorage in fakerest authProvider
           // we need to update it to keep information up to date in the UI
@@ -1111,9 +1158,27 @@ export const createDataProvider = ({
             }),
           ]);
 
-          db.sales_directory = db.sales_directory.filter(
-            (row) => row.id !== params.id,
-          );
+          // Demo-only reassignment path (no UI, no Supabase equivalent): the
+          // projections follow the deleted row through the store.
+          for (const resource of [
+            "sales_directory",
+            "sales_identities",
+          ] as const) {
+            const { data: existing } = await baseDataProvider.getList(
+              resource,
+              {
+                filter: { id: params.id },
+                pagination: { page: 1, perPage: 1 },
+                sort: { field: "id", order: "ASC" },
+              },
+            );
+            if (existing.length > 0) {
+              await baseDataProvider.delete(resource, {
+                id: params.id,
+                previousData: existing[0],
+              });
+            }
+          }
 
           return params;
         },

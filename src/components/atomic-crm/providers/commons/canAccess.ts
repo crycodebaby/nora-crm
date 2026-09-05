@@ -51,7 +51,7 @@ export const canAccess = <
     return false;
   }
 
-  if (resource === "sales_directory") {
+  if (resource === "sales_directory" || resource === "sales_identities") {
     return isReadAction(action);
   }
 

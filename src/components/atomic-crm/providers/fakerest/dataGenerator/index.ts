@@ -14,6 +14,7 @@ import type { Db } from "./types";
 export default (): Db => {
   const db = {} as Db;
   db.sales = generateSales(db);
+  // Mirrors public.sales_directory: ACTIVE employees only (assignment pickers).
   db.sales_directory = db.sales
     .filter((s) => !s.disabled)
     .map(({ id, first_name, last_name, avatar }) => ({
@@ -22,6 +23,17 @@ export default (): Db => {
       last_name,
       avatar,
     }));
+  // Mirrors public.sales_identities: every employee incl. disabled ones
+  // (historical owner/author names on existing records, W2).
+  db.sales_identities = db.sales.map(
+    ({ id, first_name, last_name, avatar, disabled }) => ({
+      id,
+      first_name,
+      last_name,
+      avatar,
+      disabled: disabled === true,
+    }),
+  );
   db.tags = generateTags(db);
   db.companies = generateCompanies(db);
   db.contacts = generateContacts(db);

@@ -12,6 +12,7 @@ import type {
   Contact,
   Sale,
   SalesDirectory,
+  SalesIdentity,
 } from "@/components/atomic-crm/types";
 import { CRM } from "@/components/atomic-crm/root/CRM";
 import { testI18nProvider } from "@/components/atomic-crm/providers/commons/i18nProvider";
@@ -51,6 +52,11 @@ export const TEST_SALES_DIRECTORY = [
   },
 ] satisfies SalesDirectory[];
 
+export const TEST_SALES_IDENTITIES = TEST_SALES_DIRECTORY.map((entry) => ({
+  ...entry,
+  disabled: false,
+})) satisfies SalesIdentity[];
+
 // Provide a minimal FakeRest database shape so tests can override only the records
 // that matter for each scenario.
 export const createCrmDb = (overrides: Partial<Db> = {}): Db =>
@@ -63,6 +69,7 @@ export const createCrmDb = (overrides: Partial<Db> = {}): Db =>
     deals: [],
     sales: [baseSale],
     sales_directory: TEST_SALES_DIRECTORY,
+    sales_identities: TEST_SALES_IDENTITIES,
     tags: [],
     tasks: [],
     ...overrides,

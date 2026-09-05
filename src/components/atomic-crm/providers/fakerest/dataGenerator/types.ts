@@ -6,6 +6,7 @@ import type {
   DealNote,
   Sale,
   SalesDirectory,
+  SalesIdentity,
   Tag,
   Task,
 } from "../../../types";
@@ -19,6 +20,7 @@ export interface Db {
   deal_notes: DealNote[];
   sales: Sale[];
   sales_directory: SalesDirectory[];
+  sales_identities: SalesIdentity[];
   tags: Tag[];
   tasks: Task[];
   configuration: Array<{ id: number; config: ConfigurationContextValue }>;

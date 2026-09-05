@@ -15,7 +15,11 @@ import { SortButton } from "@/components/admin/sort-button";
 import { CanAccess } from "ra-core";
 import { Card } from "@/components/ui/card";
 
-import type { Company, Contact, SalesDirectory, Tag } from "../types";
+import type { Company, Contact, SalesIdentity, Tag } from "../types";
+import {
+  SALES_IDENTITIES_RESOURCE,
+  formatSalesIdentityName,
+} from "../sales/salesIdentityReference";
 import {
   NoraBulkDeleteButton,
   NoraCreateButton,
@@ -154,10 +158,12 @@ const exporter: Exporter<Contact> = async (records, fetchRelatedRecords) => {
     "company_id",
     "companies",
   );
-  const sales = await fetchRelatedRecords<SalesDirectory>(
+  // Historical lookup (W2): the responsible employee may be disabled by now
+  // and must still be exported by name.
+  const sales = await fetchRelatedRecords<SalesIdentity>(
     records,
     "sales_id",
-    "sales_directory",
+    SALES_IDENTITIES_RESOURCE,
   );
   const tags = await fetchRelatedRecords<Tag>(records, "tags", "tags");
 
@@ -169,8 +175,8 @@ const exporter: Exporter<Contact> = async (records, fetchRelatedRecords) => {
           ? companies[contact.company_id].name
           : undefined,
       sales:
-        contact.sales_id != null
-          ? `${sales[contact.sales_id].first_name} ${sales[contact.sales_id].last_name}`
+        contact.sales_id != null && sales[contact.sales_id] != null
+          ? formatSalesIdentityName(sales[contact.sales_id])
           : undefined,
       tags: contact.tags.map((tagId) => tags[tagId].name).join(", "),
       email_work: contact.email_jsonb?.find((email) => email.type === "Work")

@@ -30,11 +30,25 @@ export type SalesFormData = {
   disabled: boolean;
 };
 
+/**
+ * public.sales_directory — ACTIVE employees only. Source for every "assign to"
+ * picker (new responsibility). Never use it to resolve who owns or wrote an
+ * existing record: disabled employees are absent by design.
+ */
 export type SalesDirectory = {
   first_name: string;
   last_name: string;
   avatar?: RAFile;
 } & Pick<RaRecord, "id">;
+
+/**
+ * public.sales_identities — every employee, disabled included (W2). Source
+ * for historical identity: owner/author names on existing deals, tasks,
+ * notes and activity. Never use it as a choice list for new assignments.
+ */
+export type SalesIdentity = SalesDirectory & {
+  disabled: boolean;
+};
 
 export type Sale = {
   first_name: string;
