@@ -36,8 +36,9 @@ begin
         raise exception 'anon must not EXECUTE nora_private.has_role';
     end if;
 
-    if has_function_privilege('anon', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
-        raise exception 'anon must not EXECUTE set_sales_role_by_admin';
+    -- W2: the legacy lifecycle RPC no longer exists at all
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'W2: legacy RPC set_sales_role_by_admin must be dropped';
     end if;
 
     if has_table_privilege('anon', 'public.companies', 'SELECT') then
@@ -85,13 +86,8 @@ begin
         raise exception 'authenticated must not EXECUTE apply_sales_role_change';
     end if;
 
-    -- W1: single executor — no browser role may execute either access RPC
-    if has_function_privilege('authenticated', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
-        raise exception 'W1: authenticated must not EXECUTE set_sales_role_by_admin';
-    end if;
-    if not has_function_privilege('service_role', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
-        raise exception 'W1: service_role must EXECUTE set_sales_role_by_admin (release window)';
-    end if;
+    -- W1: single executor — no browser role may execute the access RPC
+    -- (W2 dropped the legacy set_sales_role_by_admin; see check above)
     if has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE')
        or has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
         raise exception 'W1: only service_role may EXECUTE set_sales_access_by_executor';

@@ -55,14 +55,16 @@ begin
         raise exception 'disabled user must not have a role';
     end if;
 
-    -- disabled admin cannot use role RPC
+    -- disabled admin cannot use the access RPC (W2: legacy RPC dropped)
     perform set_config('request.jwt.claim.sub', v_disabled_admin::text, true);
     begin
-        perform public.set_sales_role_by_admin(
+        perform public.set_sales_access_by_executor(
+            v_disabled_admin,
             (select id from public.sales where user_id = v_viewer),
-            'office'
+            'office',
+            null
         );
-        raise exception 'disabled admin must not call set_sales_role_by_admin';
+        raise exception 'disabled admin must not call set_sales_access_by_executor';
     exception
         -- W1: no authenticated JWT may execute the RPC at all any more.
         when insufficient_privilege then
@@ -178,11 +180,13 @@ begin
     end;
 
     begin
-        perform public.set_sales_role_by_admin(
+        perform public.set_sales_access_by_executor(
+            v_office,
             (select id from public.sales where user_id = v_office),
-            'admin'
+            'admin',
+            null
         );
-        raise exception 'office must not call set_sales_role_by_admin';
+        raise exception 'office must not call set_sales_access_by_executor';
     exception
         when insufficient_privilege then
             null;
@@ -223,19 +227,13 @@ begin
     delete from public.contacts where id = v_contact_id;
     delete from public.companies where id = v_company_id;
 
-    -- W1: an admin JWT can no longer call either access RPC directly. The
+    -- W1: an admin JWT can no longer call the access RPC directly. The
     -- only path is the users Edge Function (service_role) — see
     -- lifecycle_single_executor_verification.sql for the executor matrix.
-    begin
-        perform public.set_sales_role_by_admin(
-            (select id from public.sales where user_id = v_viewer),
-            'office'
-        );
-        raise exception 'W1: admin JWT must not call set_sales_role_by_admin directly';
-    exception
-        when insufficient_privilege then
-            null;
-    end;
+    -- W2: the legacy RPC set_sales_role_by_admin no longer exists.
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'W2: legacy RPC set_sales_role_by_admin must be dropped';
+    end if;
     begin
         perform public.set_sales_access_by_executor(
             v_admin,

@@ -10,18 +10,19 @@
 --     -v ON_ERROR_STOP=1 -f - < supabase/tests/lifecycle_single_executor_verification.sql
 --
 -- What it proves:
---   1. privilege contract: no browser role can execute either access RPC;
---      service_role can; internals are postgres-only; the guard trigger exists
---   2. a Nora admin JWT (authenticated) is refused on both RPCs; anon too
+--   1. privilege contract: no browser role can execute the access RPC;
+--      service_role can; internals are postgres-only; the guard trigger exists;
+--      the legacy RPC set_sales_role_by_admin is gone (W2)
+--   2. a Nora admin JWT (authenticated) is refused on the executor; anon too
 --   3. the executor refuses a forged / non-admin / disabled actor
 --   4. role change, disable, re-enable through the executor work
 --   5. self guard: an admin cannot disable or demote themselves; re-applying
 --      unchanged values (re-sync) is allowed
---   6. last active admin cannot be disabled or demoted — through the executor,
---      the legacy RPC, the capability function, and a direct owner UPDATE
+--   6. last active admin cannot be disabled or demoted — through the
+--      capability function and a direct owner UPDATE
 --   7. two active admins may change each other
 --   8. no duplicate audit event on an idempotent re-sync
---   9. the legacy RPC still works for service_role (release window)
+--   9. the legacy RPC does not exist any more (W2 retired it)
 
 \set ON_ERROR_STOP on
 
@@ -32,14 +33,9 @@
 -- ---------------------------------------------------------------------------
 do $$
 begin
-    if has_function_privilege('authenticated', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
-        raise exception 'FAIL: authenticated may EXECUTE set_sales_role_by_admin';
-    end if;
-    if has_function_privilege('anon', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
-        raise exception 'FAIL: anon may EXECUTE set_sales_role_by_admin';
-    end if;
-    if not has_function_privilege('service_role', 'public.set_sales_role_by_admin(bigint, text, boolean)', 'EXECUTE') then
-        raise exception 'FAIL: service_role lost EXECUTE on set_sales_role_by_admin (release window)';
+    -- W2: the legacy RPC is dropped; the executor is the only access RPC.
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'FAIL: legacy RPC set_sales_role_by_admin must not exist (W2)';
     end if;
 
     if has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
@@ -127,7 +123,7 @@ begin
     perform nora_private.apply_sales_role_change(v_v, 'viewer', false);
 
     -- -----------------------------------------------------------------------
-    -- 2. Nora admin JWT (authenticated) is refused on both RPCs; anon too
+    -- 2. Nora admin JWT (authenticated) is refused on the executor; anon too
     -- -----------------------------------------------------------------------
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', v_admin_a::text, true);
@@ -136,12 +132,6 @@ begin
 
     set local role authenticated;
     begin
-        perform public.set_sales_role_by_admin(v_o, 'viewer');
-        raise exception 'FAIL: authenticated admin could call set_sales_role_by_admin directly';
-    exception
-        when insufficient_privilege then null;
-    end;
-    begin
         perform public.set_sales_access_by_executor(v_admin_a, v_o, 'viewer', null);
         raise exception 'FAIL: authenticated admin could call set_sales_access_by_executor directly';
     exception
@@ -149,12 +139,6 @@ begin
     end;
 
     set local role anon;
-    begin
-        perform public.set_sales_role_by_admin(v_o, 'viewer');
-        raise exception 'FAIL: anon could call set_sales_role_by_admin';
-    exception
-        when insufficient_privilege then null;
-    end;
     begin
         perform public.set_sales_access_by_executor(v_admin_a, v_o, 'viewer', null);
         raise exception 'FAIL: anon could call set_sales_access_by_executor';
@@ -166,7 +150,7 @@ begin
     if (select role from public.sales where id = v_o) <> 'office' then
         raise exception 'FAIL: a refused call must not change anything';
     end if;
-    raise notice 'OK  2. browser roles cannot reach either access RPC';
+    raise notice 'OK  2. browser roles cannot reach the access RPC';
 
     -- -----------------------------------------------------------------------
     -- 3. Executor with service_role claims: actor validation
@@ -317,24 +301,12 @@ begin
         raise exception 'FAIL: could not isolate a single active admin for the guard test';
     end if;
 
-    -- 7a. legacy RPC, service_role
-    set local role service_role;
-    begin
-        perform public.set_sales_role_by_admin(v_a, 'admin', true);
-        raise exception 'FAIL: legacy RPC disabled the last admin';
-    exception
-        when others then
-            get stacked diagnostics v_detail = pg_exception_detail;
-            if v_detail is distinct from 'NORA_LAST_ACTIVE_ADMIN_REQUIRED' then raise; end if;
-    end;
-    begin
-        perform public.set_sales_role_by_admin(v_a, 'viewer');
-        raise exception 'FAIL: legacy RPC demoted the last admin';
-    exception
-        when others then
-            get stacked diagnostics v_detail = pg_exception_detail;
-            if v_detail is distinct from 'NORA_LAST_ACTIVE_ADMIN_REQUIRED' then raise; end if;
-    end;
+    -- 7a. (W2) the legacy service_role RPC no longer exists; the executor's
+    --     own self guard already refuses A acting on A (section 5), so the
+    --     remaining direct paths are the capability function and owner UPDATE.
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'FAIL: legacy RPC must be gone';
+    end if;
 
     -- 7b. capability function directly (postgres)
     reset role;
@@ -391,15 +363,19 @@ begin
     raise notice 'OK  8. audit events present, none duplicated by re-sync';
 
     -- -----------------------------------------------------------------------
-    -- 9. Legacy RPC keeps working for service_role (release window)
+    -- 9. Legacy RPC retired (W2): the executor covers the release-window use
     -- -----------------------------------------------------------------------
     set local role service_role;
-    perform public.set_sales_role_by_admin(v_v, 'viewer', false);
+    perform public.set_sales_access_by_executor(v_admin_a, v_v, 'viewer', false);
     reset role;
-    if (select disabled from public.sales where id = v_v) is not false then
-        raise exception 'FAIL: legacy RPC no longer works for service_role';
+    if (select disabled from public.sales where id = v_v) is not false
+       or (select role from public.sales where id = v_v) <> 'viewer' then
+        raise exception 'FAIL: executor could not restore the viewer';
     end if;
-    raise notice 'OK  9. legacy RPC still usable by the deployed executor';
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'FAIL: legacy RPC set_sales_role_by_admin still exists';
+    end if;
+    raise notice 'OK  9. legacy RPC retired; executor covers every lifecycle write';
 
     raise exception 'ROLLBACK_W1_TEST' using errcode = 'P0001';
 exception

@@ -259,7 +259,7 @@ end;
 $$;
 
 -- v0.4b.1: is_admin() moved to nora_private.is_admin() — not exposed in public schema.
--- Public RPCs: set_sales_role_by_admin, start_checklist_run_from_template.
+-- Public RPCs: set_sales_access_by_executor (service_role only), start_checklist_run_from_template.
 
 CREATE OR REPLACE FUNCTION "public"."merge_contacts"("loser_id" bigint, "winner_id" bigint) RETURNS bigint
     LANGUAGE "plpgsql"
@@ -994,35 +994,9 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.set_sales_role_by_admin(
-    p_sale_id bigint,
-    p_role text,
-    p_disabled boolean DEFAULT NULL
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-BEGIN
-    IF p_role IS NULL OR p_role NOT IN ('admin', 'office', 'viewer') THEN
-        RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
-    END IF;
-
-    -- W1 (2026-09-04): service_role only. Deprecated; kept for the release
-    -- window of the users Edge Function. See set_sales_access_by_executor.
-    IF coalesce(nora_private.safe_auth_role(), '') <> 'service_role' THEN
-        RAISE EXCEPTION 'forbidden'
-            USING ERRCODE = '42501', DETAIL = 'NORA_PERMISSION_DENIED';
-    END IF;
-
-    IF NOT EXISTS (SELECT 1 FROM public.sales WHERE id = p_sale_id) THEN
-        RAISE EXCEPTION 'sales profile not found: %', p_sale_id USING ERRCODE = 'P0002';
-    END IF;
-
-    PERFORM nora_private.apply_sales_role_change(p_sale_id, p_role, p_disabled);
-END;
-$$;
+-- public.set_sales_role_by_admin (legacy lifecycle RPC) was dropped in User
+-- Lifecycle W2 (migration 20260905120000). The single executor is
+-- public.set_sales_access_by_executor below.
 
 -- ---------------------------------------------------------------------------
 -- Nora User Lifecycle W1 (2026-09-04): single executor + access invariants

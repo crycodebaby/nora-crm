@@ -1,4 +1,5 @@
--- Nora CRM: safe_auth_role + set_sales_role_by_admin service_role claims
+-- Nora CRM: safe_auth_role + set_sales_access_by_executor service_role claims
+-- (W2: the legacy set_sales_role_by_admin is dropped; the executor is the only RPC)
 -- Usage (local only):
 --   Get-Content supabase/tests/safe_auth_role_verification.sql -Raw | docker exec -i supabase_db_atomic-crm-demo psql -U postgres -d postgres
 -- Requires rbac_rls_setup.sql style fixtures OR existing sales rows for admin/viewer.
@@ -65,19 +66,22 @@ begin
         true
     );
     set local role service_role;
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'admin');
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'admin', null);
     if (select role from public.sales where id = v_viewer_sale_id) <> 'admin' then
-        raise exception 'service_role RPC must set viewer to admin via claims JSON';
+        raise exception 'service_role executor must set viewer to admin via claims JSON';
     end if;
     if (select administrator from public.sales where id = v_viewer_sale_id) is not true then
         raise exception 'administrator must sync to true for admin role';
     end if;
 
     -- restore viewer for further checks
-    perform public.set_sales_role_by_admin(v_viewer_sale_id, 'viewer');
+    perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'viewer', null);
 
-    -- 5) W1: a Nora admin JWT may NOT call the legacy RPC any more (single
-    --    executor). The executor path with the admin as verified actor works.
+    -- 5) W1/W2: a Nora admin JWT may NOT call the executor (single executor,
+    --    service_role only); the legacy RPC no longer exists.
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'W2: legacy RPC set_sales_role_by_admin must be dropped';
+    end if;
     set local role authenticated;
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', v_admin::text, true);
@@ -87,8 +91,8 @@ begin
         true
     );
     begin
-        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'office');
-        raise exception 'W1: admin JWT must not call set_sales_role_by_admin';
+        perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'office', null);
+        raise exception 'W1: admin JWT must not call set_sales_access_by_executor';
     exception
         when insufficient_privilege then
             null;
@@ -117,7 +121,7 @@ begin
         true
     );
     begin
-        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'admin');
+        perform public.set_sales_access_by_executor(v_viewer, v_viewer_sale_id, 'admin', null);
         raise exception 'viewer must not call role RPC';
     exception
         when insufficient_privilege then

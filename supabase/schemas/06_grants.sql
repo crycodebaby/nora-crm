@@ -53,12 +53,8 @@ grant all on function public.handle_update_user() to service_role;
 
 -- Nora User Lifecycle W1 (2026-09-04): employee access mutations have ONE
 -- privileged path (users Edge Function → service_role → executor RPC).
--- No browser role may execute either RPC; see migration 20260904220000.
-revoke all on function public.set_sales_role_by_admin(bigint, text, boolean) from public;
-revoke all on function public.set_sales_role_by_admin(bigint, text, boolean) from anon;
-revoke all on function public.set_sales_role_by_admin(bigint, text, boolean) from authenticated;
-grant execute on function public.set_sales_role_by_admin(bigint, text, boolean) to service_role;
-
+-- No browser role may execute the RPC; see migration 20260904220000.
+-- The legacy RPC set_sales_role_by_admin was dropped in W2 (20260905120000).
 revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from public;
 revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from anon;
 revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from authenticated;
@@ -111,6 +107,12 @@ grant all on table public.deal_notes to service_role;
 grant all on table public.sales to anon;
 grant all on table public.sales to authenticated;
 grant all on table public.sales to service_role;
+-- User Lifecycle W2 (2026-09-05): browser roles never delete employee rows
+-- (no DELETE policy exists either); service_role keeps DELETE for the future
+-- controlled hard-delete executor. Referenced employees are protected by the
+-- six NO ACTION foreign keys regardless of role.
+revoke delete on table public.sales from anon;
+revoke delete on table public.sales from authenticated;
 
 grant all on table public.tags to anon;
 grant all on table public.tags to authenticated;
@@ -141,9 +143,17 @@ grant all on table public.contacts_summary to anon;
 grant all on table public.contacts_summary to authenticated;
 grant all on table public.contacts_summary to service_role;
 
+-- User Lifecycle W2 (2026-09-05): both identity views are SELECT-only. They are
+-- security_invoker = false over one table (auto-updatable): any write
+-- privilege handed out by default ACLs at CREATE VIEW time would let a
+-- browser JWT write to public.sales as the view owner.
+revoke all on table public.sales_directory from public, anon, authenticated, service_role;
 grant select on table public.sales_directory to authenticated;
 grant select on table public.sales_directory to service_role;
-revoke all on table public.sales_directory from anon;
+
+revoke all on table public.sales_identities from public, anon, authenticated, service_role;
+grant select on table public.sales_identities to authenticated;
+grant select on table public.sales_identities to service_role;
 
 grant all on table public.init_state to anon;
 grant all on table public.init_state to authenticated;

@@ -164,3 +164,22 @@ where s.disabled = false
 
 comment on view public.sales_directory is
     'Active team directory; caller must be active (is_active_user). No role/email/user_id.';
+
+-- User Lifecycle W2 (2026-09-05): historical employee identity. sales_directory
+-- answers "who may I assign new work to?" (active only); sales_identities
+-- answers "who owned/wrote this existing record?" (disabled included).
+-- Same trust model, SELECT-only for authenticated (see 06_grants.sql).
+create or replace view public.sales_identities
+with (security_invoker = false)
+as
+select
+    s.id,
+    s.first_name,
+    s.last_name,
+    s.avatar,
+    s.disabled
+from public.sales s
+where nora_private.is_active_user();
+
+comment on view public.sales_identities is
+    'W2: historical employee identity (includes disabled rows) for owner/author display on existing records; caller must be active (is_active_user). No role/email/user_id. Use sales_directory for new assignments.';

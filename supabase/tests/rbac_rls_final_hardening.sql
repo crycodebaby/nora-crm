@@ -59,10 +59,13 @@ begin
     perform set_config('request.jwt.claim.sub', v_admin::text, true);
     select id into v_viewer_sale_id from public.sales where user_id = v_viewer;
 
-    -- An admin JWT is refused on the legacy RPC — direct browser access is closed.
+    -- W2: the legacy RPC is gone; an admin JWT cannot reach the executor either.
+    if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
+        raise exception 'W2: legacy RPC set_sales_role_by_admin must be dropped';
+    end if;
     begin
-        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'office');
-        raise exception 'W1: admin JWT must not call set_sales_role_by_admin';
+        perform public.set_sales_access_by_executor(v_admin, v_viewer_sale_id, 'office', null);
+        raise exception 'W1: admin JWT must not call set_sales_access_by_executor directly';
     exception
         when insufficient_privilege then
             null;
@@ -90,7 +93,7 @@ begin
 
     perform set_config('request.jwt.claim.sub', v_office::text, true);
     begin
-        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'admin');
+        perform public.set_sales_access_by_executor(v_office, v_viewer_sale_id, 'admin', null);
         raise exception 'office must not call role RPC';
     exception
         when insufficient_privilege then
@@ -103,7 +106,7 @@ begin
 
     perform set_config('request.jwt.claim.sub', v_viewer::text, true);
     begin
-        perform public.set_sales_role_by_admin(v_viewer_sale_id, 'admin');
+        perform public.set_sales_access_by_executor(v_viewer, v_viewer_sale_id, 'admin', null);
         raise exception 'viewer must not call role RPC';
     exception
         when insufficient_privilege then

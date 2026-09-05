@@ -175,8 +175,10 @@ alter table public.contacts
 alter table public.contact_notes
     add constraint "contactNotes_contact_id_fkey" foreign key (contact_id) references public.contacts(id) on update cascade on delete cascade;
 
+-- User Lifecycle W2 (2026-09-05): authorship survives employee deletion —
+-- NO ACTION (was ON DELETE CASCADE until migration 20260905120000).
 alter table public.contact_notes
-    add constraint "contactNotes_sales_id_fkey" foreign key (sales_id) references public.sales(id) on update cascade on delete cascade;
+    add constraint "contactNotes_sales_id_fkey" foreign key (sales_id) references public.sales(id) on update no action on delete no action;
 
 alter table public.deals
     add constraint deals_company_id_fkey foreign key (company_id) references public.companies(id) on update cascade on delete cascade;
@@ -189,6 +191,11 @@ alter table public.deal_notes
 
 alter table public.deal_notes
     add constraint "dealNotes_sales_id_fkey" foreign key (sales_id) references public.sales(id);
+
+-- User Lifecycle W2 (2026-09-05): a task owner must be an existing employee;
+-- the reference blocks employee deletion (NO ACTION). Column stays nullable.
+alter table public.tasks
+    add constraint tasks_sales_id_fkey foreign key (sales_id) references public.sales(id) on update no action on delete no action;
 
 alter table public.sales
     add constraint sales_user_id_fkey foreign key (user_id) references auth.users(id);
