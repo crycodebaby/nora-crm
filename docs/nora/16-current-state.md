@@ -245,6 +245,28 @@ Migrationen `20260905120000_nora_lifecycle_reference_integrity.sql` und
 Decision Log „2026-09-05 – User Lifecycle W2", Nachtrag Release).
 Details: Decision Log „2026-09-05 – User Lifecycle W2".
 
+27. **User Lifecycle W3 – Audit-Actor und stabile Mitarbeiter-Historie**
+(2026-09-05): Jede menschlich ausgelöste Lifecycle-Aktion nennt im Audit den
+echten Administrator (`actor_id`, `actor_sales_id`, Name, Rolle) und denselben
+stabilen Ziel-Mitarbeiter (`entity_id = nora_entity_uuid('sales', id)`) —
+vorher „System" mit `NULL`-Actor für alle 12 Production-Zeilen, und die drei
+Edge-Ereignisse mit zufälliger Entity. Mechanik: `resolve_audit_actor()`
+löst unter `service_role` den vom Executor transaktionslokal verankerten,
+verifizierten Actor aus `public.sales` auf (unverankert bleibt `System`);
+`set_sales_access_by_executor` bekommt `p_operation_id` (alte Signatur
+gelöscht, Edge v5 kompatibel); neue `service_role`-only RPC
+`record_employee_admin_event` für `user.invited` /
+`user.invitation_resent` / `user.password_setup_requested` (Ereignistyp,
+Actor, Ziel, Metadaten-Schlüssel validiert, Snapshots und Entity aus der DB).
+`users` Edge Function: Modul `audit.ts`, eine Operation-ID pro Request
+(Header oder geprägt) als `request_id` aller Audit-Zeilen des Requests,
+`audit_write_failed` statt grünem Ergebnis ohne Audit. Historie unverändert.
+Migration `20260905180000_nora_lifecycle_audit_actor.sql`, neue SQL-Suite
+`lifecycle_audit_actor_verification.sql` (8 Abschnitte), echter HTTP-Lauf
+(24 Beweise). **Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`**
+(nicht released: keine Production-Migration, kein Edge-Deploy, kein Push).
+Details: Decision Log „2026-09-05 – User Lifecycle W3".
+
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
 Vollständige Entscheidung: Decision Log "2026-08-25 – Customer & Contact Workflow Wave".
@@ -428,7 +450,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
 9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
 10. ~~Operation Status Contract v1~~ — **PRODUCTION VERIFIED seit 2026-08-29** (Phase 6E), siehe Abschnitt 4 Punkt 18, Decision Log „Operation Status Contract Wave" inkl. Nachtrag Phase 6C, 6D.1 und 6E. Die Notification-/Status-UI, die diesen Contract konsumiert, ist inzwischen als Phase 7B umgesetzt — siehe Abschnitt 4 Punkt 19. Sie ist seit 2026-08-30 **PRODUCTION VERIFIED** (Release-Commit `9db08c4b`), deckt aber bislang **nur Quick Capture** ab; die weiteren Intents bleiben Phase 7C.
-11. User-Lifecycle-Folgewellen nach W2 (RC): W3 Audit-Actor für service_role-Ereignisse, W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
+11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (RC, siehe Abschnitt 4 Punkt 27), W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 

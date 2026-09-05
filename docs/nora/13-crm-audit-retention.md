@@ -18,7 +18,7 @@ Er dient der **betrieblichen Nachvollziehbarkeit** im Team — nicht der Mitarbe
 | Aufgaben | `task.created`, `task.updated`, `task.completed`, `task.reopened`, `task.deleted` |
 | Kontaktnotizen | `contact_note.created`, `contact_note.updated`, `contact_note.deleted` |
 | Vorgangsnotizen | `deal_note.created`, `deal_note.updated`, `deal_note.deleted` |
-| Benutzer | `user.role_changed`, `user.disabled`, `user.enabled` |
+| Benutzer | `user.role_changed`, `user.disabled`, `user.enabled` (Trigger), `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (`record_employee_admin_event`, W3) |
 | Checklisten | bestehende `checklist.*`-Codes (unverändert) |
 | Google Kalender (v0.4c.1+) | `calendar.event_linked`, `calendar.event_unlinked` (Sync/Connect ab v0.4c.2) |
 
@@ -51,6 +51,7 @@ Office hat **kein** globales `SELECT` auf `audit_events` — nur die kontrollier
 ### Schreibweg
 
 - **Nur** DB-Trigger → `nora_private.write_audit_event` (Owner: `nora_audit_writer`)
+- Ausnahme seit User Lifecycle W3 (2026-09-05): die `service_role`-only RPC `public.record_employee_admin_event` schreibt genau drei Mitarbeiter-Ereignisse aus der `users` Edge Function (Ereignistyp, Actor, Ziel, Metadaten validiert; Entity und Snapshots aus der DB). `public.insert_audit_event` bleibt für die Kalender-Functions (Actor `System`).
 - `nora_audit_writer`: NOLOGIN, INSERT-only auf `audit_events`
 - Clients (`authenticated`) können **nicht** direkt INSERT/UPDATE/DELETE
 
@@ -62,6 +63,8 @@ Bei jedem Ereignis serverseitig:
 - `actor_sales_id`
 - `actor_name_snapshot`
 - `actor_role_snapshot`
+
+**Actor-Vertrauensgrenze (W3, 2026-09-05):** Browser-Sitzung → Actor aus dem JWT-`sub`. Privilegierter Server-Pfad (`users` Edge Function, `service_role`) → die Edge Function verifiziert das Caller-JWT und übergibt nur die User-ID; der Executor bzw. `record_employee_admin_event` prüft sie (existierender aktiver Admin) und verankert sie transaktionslokal (`nora.audit_actor_user_id`); `resolve_audit_actor()` löst Name/Rolle/`sales.id` selbst aus `public.sales` auf. Kein Aufrufer kann Snapshots liefern. Ein `service_role`-Write ohne Verankerung bleibt `System` (echte Automation). `entity_id` für Mitarbeiter ist immer `nora_entity_uuid('sales', sales.id)` — Actor (wer), Ziel (`entity_id`, welcher Mitarbeiter) und Operation (`request_id`, welche Ausführung) sind drei verschiedene Fakten. Zeilen vor W3 tragen `System`; sie bleiben unverändert.
 
 ### Änderungsformat (kompakt)
 
@@ -150,7 +153,7 @@ Welle v0.3l.1 schließt CRM-Audit für den Mitarbeiterbetrieb ab:
 | Thema | Stand |
 |---|---|
 | `event_hash` | Spalte vorbereitet — **keine** Befüllung in Triggern |
-| `request_id` | Spalte vorbereitet — **keine** Korrelation über HTTP-Requests |
+| `request_id` | seit Operation Correlation Wave befüllt (Header/GUC); seit W3 auch für alle `user.*`-Ereignisse der `users` Edge Function (eine Operation-ID pro Request) |
 | WORM-Export | Kein externer unveränderlicher Speicher — nur DB append-only |
 | Purge / Archivierung | Keine automatische Löschfrist |
 

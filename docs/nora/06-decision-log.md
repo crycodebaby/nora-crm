@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-05 – User Lifecycle W3: der echte Administrator steht im Audit, der Mitarbeiter hat eine stabile Audit-Identität | [Springen](#2026-09-05--user-lifecycle-w3-der-echte-administrator-steht-im-audit-der-mitarbeiter-hat-eine-stabile-audit-identität) |
 | 2026-09-05 – User Lifecycle W2: Referenzintegrität und historische Identität | [Springen](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) |
 | 2026-09-05 – User Lifecycle W1: ein privilegierter Executor, Selbst-/Letzter-Admin-Schutz, Zugangskonsistenz | [Springen](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) |
 | 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen | [Springen](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) |
@@ -102,6 +103,76 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-09-05 – User Lifecycle W3: der echte Administrator steht im Audit, der Mitarbeiter hat eine stabile Audit-Identität
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-05, nicht released).** Migration `20260905180000_nora_lifecycle_audit_actor.sql` (SHA-256 `d9d78500625a75fd735e0f47423bc483ee539e50cbe318b4493d1a2dae8f3982`), `users` Edge Function (neues Modul `users/audit.ts`), neue SQL-Suite `supabase/tests/lifecycle_audit_actor_verification.sql`. Branch `security/nora-lifecycle-w3-audit-actor` auf Basis `origin/main = 522f1602`. Kein UI-Umbau.
+
+### Kontext (lokal bewiesen, read-only gegen `nora-crm-prod` bestätigt)
+
+Production hält 12 `user.*`-Audit-Ereignisse (8 `user.role_changed`, 2 `user.invited`, 1 `user.disabled`, 1 `user.password_setup_requested`). **Alle 12** tragen `actor_name_snapshot = 'System'`, `actor_id = NULL`, `actor_sales_id = NULL`, `request_id = NULL` — obwohl jedes davon von einem verifizierten menschlichen Administrator über die `users` Edge Function ausgelöst wurde. Ursache: die Edge Function spricht mit der Datenbank als `service_role`; dieses JWT hat kein `sub`, `nora_private.safe_auth_uid()` ist NULL, `resolve_audit_actor()` antwortet „System". Die drei von der Edge Function selbst geschriebenen Ereignisse (`user.invited`, `user.invitation_resent`, `user.password_setup_requested`) nutzten zusätzlich `crypto.randomUUID()` als `entity_id` (2 `user.invited` → 2 verschiedene Entity-IDs; die Trigger-Ereignisse nutzen bereits `nora_entity_uuid('sales', id)`), trugen den Actor nur als vom Aufrufer gelieferte `metadata.actor_sale_id` und liefen über die generische `public.insert_audit_event`. Lokal reproduziert (Rollback-Probe: Executor als `service_role` → `user.disabled` mit Actor „System").
+
+### Vollständiges `user.*`-Inventar vor W3
+
+| Ereignis | Erzeugt von | Actor | `entity_id` | `request_id` | nur bei echter Änderung |
+|---|---|---|---|---|---|
+| `user.role_changed` | Trigger `audit_sales_privilege_change` (AFTER UPDATE OF role, disabled auf `sales`) | System | stabil (`nora_entity_uuid('sales', id)`) | NULL | ja (Trigger vergleicht old/new) |
+| `user.disabled` / `user.enabled` | derselbe Trigger | System | stabil | NULL | ja |
+| `user.invited` | Edge `inviteUser` → `insert_audit_event` | System | **zufällig** | NULL | nach Executor-Erfolg |
+| `user.invitation_resent` | Edge `resendEmployeeInvitation` → `insert_audit_event` | System | **zufällig** | NULL | nach GoTrue-Erfolg |
+| `user.password_setup_requested` | Edge `requestEmployeePasswordSetup` → `insert_audit_event` | System | **zufällig** | NULL | nach Provider-Erfolg |
+
+Nicht auditiert (unverändert, bewusst): `GET /users` (read-only), Profiländerungen über PATCH (Name, Avatar, E-Mail — E-Mail-Änderung ist W4), das Öffnen der UI.
+
+### Entscheidungen
+
+1. **Ein Actor-Bridge statt eines neuen Audit-Systems.** `nora_private.resolve_audit_actor()` löst den Actor in dieser Reihenfolge auf: (a) JWT-`sub` vorhanden → wie bisher (Browser-Sitzung); (b) kein `sub`, Claim `role = service_role` **und** die transaktionslokale GUC `nora.audit_actor_user_id` ist gesetzt → der dort verankerte Auth-User wird gegen `public.sales` aufgelöst (Name, Rolle, `sales.id` aus der Datenbank, nie vom Aufrufer); (c) sonst → `System`. Fall (b) bricht hart ab (`NORA_AUDIT_ACTOR_INVALID`), wenn die verankerte ID keinen Mitarbeiter bezeichnet: Eine menschliche Aktion wird nie still zu „System" degradiert, und ein Audit-Eintrag behauptet nie eine Person, die es nicht gibt — weil der Audit-Write in derselben Transaktion liegt, rollt die Zustandsänderung mit zurück (fail safely).
+
+2. **Verankern darf nur der privilegierte Executor.** `nora_private.pin_audit_context(actor, operation)` (postgres-intern, kein API-EXECUTE) setzt beide GUCs transaktionslokal. `public.set_sales_access_by_executor` verankert den bereits validierten Actor (existierender, aktiver Admin) und die Operation-ID vor `apply_sales_role_change` und löscht beides danach wieder. Die Signatur wächst um `p_operation_id uuid default null`; die alte 4-Parameter-Signatur ist gelöscht (keine PostgREST-Überladung). Die deployte Edge Function v5 ruft mit vier benannten Parametern auf und funktioniert weiter — **allein durch die Migration werden `user.role_changed`/`user.disabled`/`user.enabled` bereits korrekt attribuiert.**
+
+3. **Ein schmaler Writer für die Edge-Ereignisse, keine generische Schreibfähigkeit.** `public.record_employee_admin_event(p_actor_user_id, p_sale_id, p_event_type, p_operation_id, p_metadata)`: nur `service_role` (EXECUTE-Grant und Claim-Prüfung im Body), Owner `postgres`, `SECURITY DEFINER`, `search_path = ''`. Der Ereignistyp ist auf genau `user.invited`, `user.invitation_resent`, `user.password_setup_requested` beschränkt; der Actor muss ein existierender aktiver Administrator sein (dieselbe Regel wie im Executor, `NORA_PERMISSION_DENIED`); das Ziel muss existieren (`P0002`); `entity_id` ist immer `nora_entity_uuid('sales', p_sale_id)`; die Metadaten-Fakten (`sale_id`, `actor_sale_id`, `invitee_*` bzw. `employee_*`) werden **aus der Datenbank** abgeleitet; vom Aufrufer wird ausschließlich der Schlüssel `role` (validiert) akzeptiert, jeder andere Schlüssel wird abgewiesen (nicht still verworfen). Die Metadaten-Schlüssel bleiben zu den Vor-W3-Zeilen kompatibel (`actor_sale_id` bleibt, jetzt aber abgeleitet). `source` bleibt `user` (der Actor ist ein Benutzer), `retention_class = user_management`.
+
+4. **Actor ≠ Ziel ≠ Operation.** `actor_id`/`actor_sales_id`/Snapshots = wer gehandelt hat; `entity_id` = welcher Mitarbeiter betroffen ist (stabil über alle `user.*`-Ereignisse desselben Mitarbeiters, jetzt auch für die Edge-Ereignisse); `request_id` = welche Ausführung (Operation-ID). Ein Ziel-Mitarbeiter, dessen Rolle ein Admin ändert, erscheint nie als Actor.
+
+5. **Operation-Korrelation pro Request.** Die `users` Edge Function liest `x-nora-operation-id` (gültige UUID) und prägt sonst pro Request genau eine UUID. Diese ID geht als `p_operation_id` in beide RPCs; alle Audit-Zeilen eines Requests (z. B. `user.invited` + `user.role_changed` einer Einladung) teilen dieselbe `request_id`. Der Browser sendet den Header an die `users`-Function heute nicht (bestehender Zustand, `functions.invoke` ohne Header) — die serverseitig geprägte ID erfüllt den Contract „welche Ausführung?"; das Frontend kann den Header später ohne Vertragsänderung ergänzen.
+
+6. **Reihenfolge und Teilfehler.** Rollen-/Zugangsänderung: Audit-Zeile entsteht im Trigger **in derselben Datenbanktransaktion** wie die Änderung — kein Audit ohne Änderung, keine Änderung ohne Audit; die Auth-Bann-Synchronisation danach ist wie in W1 (`employee_access_sync_incomplete` bei Teilfehler; der bereits geschriebene Nora-Zustand ist ein echter Fakt, sein Audit ist korrekt). Einladung: `user.invited` erst nach versendeter Einladung, existierendem Profil und angewandter Rolle. Einladung erneut senden / Passwort einrichten lassen: Audit erst, nachdem GoTrue bzw. der Provider die Anfrage angenommen hat. Scheitert danach der Audit-Write selbst, antwortet die Edge Function `500 audit_write_failed` — die Aktion ist geschehen, aber Nora meldet ohne dauerhaften Geschäftsfakt kein Grün (kein falsches Erfolgs-Audit, kein falsches grünes Ergebnis). Ein Retry derselben Änderung bleibt idempotent ohne doppeltes Audit (Trigger nur bei Änderung); ein erneutes „erneut senden" ist eine erneute echte Admin-Aktion und wird erneut auditiert.
+
+7. **`System` bleibt gültig** — für echte Automation: Migrations-/Housekeeping-Writes ohne JWT, Webhook-/Provider-Ereignisse, jeder `service_role`-Write, der keinen Actor verankert (z. B. die Kalender-Functions über `insert_audit_event`). Nur „Mensch klickt Lifecycle-Aktion" darf nicht mehr `System` sein — und ist es nicht mehr.
+
+8. **Historie bleibt unverändert.** Die 12 bestehenden `user.*`-Zeilen bleiben, wie sie sind (append-only, kein Backfill, keine „Korrektur"): Sie sind wahre Aufzeichnungen der alten Implementierung. **Legacy-Limitation:** Bis zum Release-Zeitpunkt lässt sich aus den Audit-Zeilen selbst nicht ablesen, welcher Administrator gehandelt hat; nur `metadata.actor_sale_id` der drei Edge-Ereignisse nennt (vom Aufrufer geliefert) eine Actor-Zeile.
+
+### Fehlercontract (zusätzlich zu W1)
+
+| Fall | Datenbank (`DETAIL`) | Edge (`error`) | HTTP |
+|---|---|---|---|
+| verankerter Actor bezeichnet keinen Mitarbeiter | `NORA_AUDIT_ACTOR_INVALID` | (unerreichbar über die Edge Function — Executor validiert vorher) | — |
+| Audit-Write nach erfolgreicher Aktion gescheitert | — | `audit_write_failed` | 500 |
+| ungültiger Ereignistyp / nicht erlaubter Metadaten-Schlüssel | SQLSTATE `22023` | `audit_write_failed` | 500 |
+
+### Metadaten-Hygiene
+
+Nie in `metadata`: JWT, Access-/Refresh-Token, Service-Role-Secret, SMTP-Zugang, Invite-Token, OTP, Reset-Token, Provider-Payload, Stacktrace, Auth-Admin-Antwort. Die Edge Function reicht nur `actorUserId`, `salesId`, `eventType`, `operationId` und optional `role` weiter (`users/audit.ts`), die Datenbank weist alles andere ab. Weiterhin enthalten (retentions-sensibel, bewusst nicht entfernt, weil bestehende Zeilen/Abfragen darauf aufbauen): `invitee_email` / `employee_email` — personenbezogene Daten im Audit; eine Aufbewahrungs-/Anonymisierungsregel bleibt eine offene Entscheidung (`13-crm-audit-retention.md`), W3 erfindet keine.
+
+### Was W3 nicht tut
+
+Keine E-Mail-Änderung (W4), kein Offboarding/Hard Delete, keine Session-Revokation (W5), keine Attachment-Härtung, keine Default-Privilegien-Bereinigung, kein Audit-Backfill, keine Anonymisierung, keine Retention-Policy, kein Event-Bus/Event-Sourcing, kein UI-Umbau (`formatAuditActor` zeigt bereits `actor_name_snapshot`; die Audit-Seite rendert die korrekten Namen ohne Änderung). `public.insert_audit_event` bleibt für `service_role` ausführbar (Aufrufer: Google-Kalender-Functions) — die `users`-Function nutzt sie nicht mehr; die verbleibende generische `service_role`-Schreibfähigkeit ist vorbestehend und dokumentiert (`17-known-issues-and-planned-waves.md`).
+
+### Verifikation (lokal, Postgres 15.8 / Docker)
+
+- Migration forward auf die `origin/main`-Datenbank, danach `npx supabase db reset --local` (Replay von null, 52 Migrationen).
+- Neue SQL-Suite `lifecycle_audit_actor_verification.sql` (8 Abschnitte, selbst rollback-end): Privilegien-Contract; anon/viewer/office/admin-JWT können weder Executor noch Record-RPC ausführen (und schreiben keine Zeile); Executor-Ereignisse (Rolle/Deaktivieren/Aktivieren) tragen Actor A bzw. B mit `actor_id`, `actor_sales_id`, Name, Rolle und die stabile Ziel-Entity; die drei Edge-Ereignisse ebenso, mit abgeleiteten Metadaten; 6 Ereignisse desselben Mitarbeiters → 1 `entity_id`; gefälschter/unbekannter/office/viewer/deaktivierter Actor → `NORA_PERMISSION_DENIED`; unverankertes `service_role` → `System`; verankerte Nicht-Existenz → `NORA_AUDIT_ACTOR_INVALID`; JWT-`sub` schlägt Verankerung; `anon` ignoriert Verankerung; kein Duplikat bei Re-Sync; `request_id` = Operation-ID bzw. NULL; unbekannte Metadaten-Schlüssel, fremde/trigger-eigene Ereignistypen, ungültige Rolle, Nicht-Objekt abgewiesen; GUCs nach jedem RPC leer.
+- W1- und W2-Suiten angepasst (5-Parameter-Signatur) und grün; `rbac_rls_production_check` prüft die neue Signatur. Kanonische Sequenz vollständig grün (siehe `17-known-issues-and-planned-waves.md`, Abschnitt W3).
+- Function-Suite 15 Dateien / 294 Tests (neu `users/audit.test.ts`: Header/Minting der Operation-ID, exakte Übergabe an die RPC, Metadaten-Allowlist, `audit_write_failed`, inhaltsfreie Logs, Body-Felder `actor_user_id`/`actor_id`/`user_id`/`p_actor_user_id` werden ignoriert; `lifecycle.test.ts` +3: Operation-ID-Weitergabe, `null` ohne ID, Actor nur aus dem verifizierten Kontext). App-Suite 102 Dateien / 906 Tests (1 bekannter Skip), `typecheck`, ESLint 0 Fehler, Prettier auf geänderten Dateien, `build`.
+- **Echter HTTP-Lauf** gegen die lokal servierte `users` Edge Function (Kong → Edge Runtime → PostgREST/GoTrue, echte GoTrue-JWTs, 24 Beweise): Viewer-PATCH und Viewer-Action 403 ohne Audit-Zeile; Admin A deaktiviert Ziel mit `x-nora-operation-id` **und** gefälschten Body-Feldern `actor_user_id`/`actor_id`/`p_actor_user_id` = Admin B → `user.disabled` mit Actor A (nicht B), stabile Entity, `request_id` = Header; Re-Sync 200 ohne Duplikat; Admin B aktiviert + ändert Rolle → beide Zeilen Actor B, geprägte Operation-ID identisch für beide; Passwort einrichten → Actor A, korreliert; Einladung erneut senden (echter unbestätigter GoTrue-User) → Actor B; Neu-Einladung → `user.invited` + `user.role_changed` mit Actor A und derselben `request_id`; ein Mitarbeiter → eine `entity_id`; Selbst-Deaktivierung 403; Admin-JWT auf beiden RPCs via PostgREST → `42501 permission denied`; Anzahl `System`-Zeilen unverändert.
+
+### Release-Reihenfolge (für den Release-Agenten, nicht ausgeführt)
+
+1. Read-only-Preflight gegen `nora-crm-prod`: `list_migrations`-Kopf `20260905150000`, `users` Edge v5, 12 `user.*`-Zeilen mit Actor `System`, `to_regprocedure('public.set_sales_access_by_executor(uuid, bigint, text, boolean)')` vorhanden.
+2. Migration `20260905180000_nora_lifecycle_audit_actor.sql` anwenden (einmal; Ledger-Version = Dateizeitstempel, sonst Halt und PO-Freigabe wie in W1/W2). Ab jetzt: Trigger-Ereignisse korrekt attribuiert (Edge v5 kompatibel); die drei Edge-Ereignisse von v5 laufen weiter über `insert_audit_event` (System, zufällige Entity) bis Schritt 3.
+3. `users` Edge Function v6 aus den byteexakten LF-Blobs des RC deployen (CLI-Rezept aus W1). Ab jetzt: `record_employee_admin_event`, Operation-Korrelation, `audit_write_failed`.
+4. Frontend unverändert (kein Vercel-Deploy nötig; `main` erhält den RC per Fast-Forward). Live-Smoke mit PO-Session: eine unkritische Aktion (z. B. „Passwort einrichten lassen" für ein Testkonto oder Rolle eines Testkontos hin und zurück), danach read-only: neue Zeile mit `actor_name_snapshot` = PO, `actor_id` = PO-User, `entity_id = nora_entity_uuid('sales', id)`, `request_id` gesetzt.
+5. Nachprüfen: `rbac_rls_production_check`-Bedingungen read-only, alte 12 Zeilen unverändert (Anzahl, Inhalt), `audit_events`-Gesamtzahl = 276 + neue Zeilen.
 
 ## 2026-09-05 – User Lifecycle W2: Referenzintegrität und historische Identität
 

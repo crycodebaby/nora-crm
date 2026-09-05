@@ -396,7 +396,7 @@ Zuständigen mit diesem Code abgelehnt werden (fachlich korrekt).
 
 **Bewusst offen nach W2:** Offboarding-Command und Hard-Delete-Executor mit
 Abhängigkeits-Preview (die Preview zählt genau die sechs FK-Referenzen;
-Test-Datenpurge nie über CASCADE); Audit-Actor `System` (W3);
+Test-Datenpurge nie über CASCADE); ~~Audit-Actor `System` (W3)~~ — W3 RC, siehe Abschnitt „User Lifecycle W3“;
 Session-Revokation (W5); SQL-Suiten in CI (W9); `rbac_rls_first_admin_parallel`
 weiterhin nur manuell (bekannter Runner-Bug); FakeRest ohne Datenbank-Guards;
 kein „ehemalig"-Badge in der UI (bewusst: Name bleibt Name).
@@ -404,6 +404,68 @@ kein „ehemalig"-Badge in der UI (bewusst: Name bleibt Name).
 **Release-Reihenfolge:** Decision Log „2026-09-05 – User Lifecycle W2",
 Abschnitt „Release-Reihenfolge" — Datenbank zuerst (ein neues Frontend gegen
 die alte Datenbank zeigt „??" statt Namen), kein Edge-Deploy nötig.
+
+## User Lifecycle W3 — Audit-Actor & stabile Mitarbeiter-Historie
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-05; Branch
+`security/nora-lifecycle-w3-audit-actor`, Basis `origin/main = 522f1602`;
+nicht released)**
+
+Bewiesen (read-only gegen `nora-crm-prod`, lokal reproduziert): alle 12
+`user.*`-Audit-Zeilen in Production tragen Actor `System` mit `actor_id`,
+`actor_sales_id`, `request_id` = NULL, obwohl jede von einem verifizierten
+Administrator über die `users` Edge Function ausgelöst wurde (service_role-JWT
+ohne `sub`). Die drei Edge-Ereignisse (`user.invited`,
+`user.invitation_resent`, `user.password_setup_requested`) hatten zufällige
+`entity_id`s — derselbe Mitarbeiter hatte keine gemeinsame Audit-Identität.
+
+**W3 (Migration `20260905180000_nora_lifecycle_audit_actor.sql`):**
+Actor-Bridge in `resolve_audit_actor()` (transaktionslokale GUC
+`nora.audit_actor_user_id`, nur unter `service_role`, nur vom Executor
+verankert, Snapshots aus `public.sales`), Executor mit `p_operation_id`,
+neue `service_role`-only RPC `record_employee_admin_event` (Ereignistyp-,
+Actor-, Ziel- und Metadaten-Validierung, stabile Entity). Edge: `users/audit.ts`,
+Operation-ID pro Request, `audit_write_failed`. Details und
+Release-Reihenfolge: Decision Log „2026-09-05 – User Lifecycle W3".
+
+**Legacy-Limitation (bewusst, unveränderlich):** die 12 bestehenden
+`user.*`-Zeilen bleiben „System"; sie sind wahre Aufzeichnungen der alten
+Implementierung und werden nicht nachträglich korrigiert (append-only). Nur
+künftige Zeilen sind attribuiert.
+
+**Kanonische Sequenz (lokal, nach `db reset` von null, 24 Läufe):**
+`production_check` → W1 → W2 → **W3** → `setup` → `matrix` →
+`final_hardening` → `safe_auth_role` → W1 → W2 → **W3** → `checklists_audit`
+→ `crm_audit` → `customer_contact_workflow` → `error_contract` →
+`error_observatory` → `operation_correlation` →
+`operation_status_disposition` → `task_customer_context` →
+`google_calendar` → `audit_immutability` → `core_indexes` → `teardown` →
+`production_check` — alle grün.
+
+**Bewusst offen nach W3:**
+
+- `public.insert_audit_event` bleibt für `service_role` ausführbar
+  (Aufrufer: Google-Kalender-Edge-Functions, `calendarAudit.ts`). Das ist
+  eine vorbestehende generische Schreibfähigkeit für den Server-Schlüssel mit
+  Actor `System`; die `users`-Function nutzt sie nicht mehr. Kandidat für
+  eine spätere Härtung (eigene schmale Writer je Function), nicht W3.
+- Der Browser sendet `x-nora-operation-id` an die `users`-Function heute
+  nicht (`functions.invoke` ohne Header); die Edge Function prägt deshalb pro
+  Request eine ID. Frontend-Weitergabe wäre eine additive Verbesserung.
+- `invitee_email` / `employee_email` bleiben in `metadata` (personenbezogen,
+  retentions-sensibel; keine Retention-Regel erfunden).
+- `user.invited` ist nicht in derselben Transaktion wie die Rolle (Einladung
+  läuft über GoTrue + Executor + Record-RPC). Scheitert der Audit-Write nach
+  erfolgreicher Einladung, antwortet Nora `audit_write_failed` (kein Grün);
+  ein Retry der Einladung meldet `already_exists`. Bewusst so — kein
+  verteiltes Commit.
+- Profiländerungen über PATCH (Name, Avatar) erzeugen weiterhin kein
+  `user.*`-Ereignis; E-Mail-Änderung ist W4.
+- Release-Fenster: nach der Migration und vor Edge v6 schreibt Edge v5 die
+  drei Edge-Ereignisse weiterhin über `insert_audit_event` (System, zufällige
+  Entity). Edge-Deploy unmittelbar nach der Migration.
+- W5 Session-Revokation, Offboarding/Hard-Delete-Executor, W9 SQL-Suiten in
+  CI: unverändert offen.
 
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
