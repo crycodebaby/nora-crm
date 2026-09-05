@@ -1064,6 +1064,8 @@ export const frenchCrmMessages = {
         "Cette personne a déjà une fiche client particulier.",
       idempotency_conflict:
         "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
+      employee_not_assignable:
+        "Cet employé est désactivé et ne peut pas être nouvellement assigné.",
     },
     pwa: {
       available_title: "Nouvelle version de Nora disponible",

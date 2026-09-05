@@ -342,7 +342,7 @@ SQL-Suiten laufen weiterhin nicht in CI (W9); Nebenbefund aus dem Release: die 4
 
 ## User Lifecycle W2 — Referenzintegrität & historische Identität
 
-**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-05), nicht Production Verified**
+**Status: `RC VERIFIED — HARDENED AND READY FOR CONTROLLED RELEASE` (2026-09-05), nicht Production Verified**
 
 Lokal bewiesen und read-only gegen `nora-crm-prod` bestätigt (Katalog identisch):
 `contact_notes.sales_id → sales.id` war `ON DELETE CASCADE` (Mitarbeiter löschen
@@ -381,6 +381,18 @@ offen.
 wirkungslose Array-Mutation (FakeRest kopiert Seed-Arrays) — ein in der Demo
 deaktivierter Mitarbeiter blieb im Picker. Beide Projektionen laufen jetzt
 über den Store.
+
+**Hardening vor dem RC-Freeze (zweite Migration
+`20260905150000_nora_lifecycle_active_assignment.sql`):** aktive Zuweisung
+ist unterhalb der UI autoritativ — `guard_active_assignment_trigger` auf
+`companies`/`contacts`/`deals`/`tasks` verweigert `INSERT`/`UPDATE OF
+sales_id` auf einen deaktivierten Mitarbeiter
+(`NORA_EMPLOYEE_NOT_ASSIGNABLE`), lässt unverwandte Updates und Wegwechseln
+zu und fehlt bewusst auf `contact_notes`/`deal_notes`. Das
+Bearbeiten-Formular zeigt einen deaktivierten Zuständigen sichtbar, aber
+nicht wählbar (`SalesAssignmentInput`). Bekannte Kante: `merge_contacts`
+kann bei Gewinner ohne Zuständigen und Verlierer mit deaktiviertem
+Zuständigen mit diesem Code abgelehnt werden (fachlich korrekt).
 
 **Bewusst offen nach W2:** Offboarding-Command und Hard-Delete-Executor mit
 Abhängigkeits-Preview (die Preview zählt genau die sechs FK-Referenzen;

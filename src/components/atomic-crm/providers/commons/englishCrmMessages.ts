@@ -1045,6 +1045,8 @@ export const englishCrmMessages = {
         "This person already has a private customer record.",
       idempotency_conflict:
         "This submission was already started with different data. Please reload the page and try again.",
+      employee_not_assignable:
+        "This employee is deactivated and cannot be newly assigned.",
     },
     pwa: {
       available_title: "New Nora version available",

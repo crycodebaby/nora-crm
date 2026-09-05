@@ -1059,6 +1059,8 @@ export const germanCrmMessages = {
         "Für diese Person existiert bereits eine Privatkundenakte.",
       idempotency_conflict:
         "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
+      employee_not_assignable:
+        "Dieser Mitarbeiter ist deaktiviert und kann nicht neu zugewiesen werden.",
     },
     pwa: {
       // Presentation Contract V2: ein Titel, hoechstens eine ruhige Zeile,

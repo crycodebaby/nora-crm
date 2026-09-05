@@ -3,6 +3,7 @@ import {
   type CreateParams,
   type DataProvider,
   type Identifier,
+  type RaRecord,
   type ResourceCallbacks,
   type UpdateParams,
 } from "ra-core";
@@ -141,6 +142,65 @@ const runWithFakeRestIdempotency = async <T>(
   const result = await run();
   fakeRestIdempotencyStore.set(mapKey, { fingerprint, result });
   return { result, disposition: "executed" };
+};
+
+/**
+ * FakeRest mirror of nora_private.guard_active_assignment() (User Lifecycle
+ * W2 hardening, 2026-09-05): a disabled employee may stay referenced by an
+ * existing record but may not be newly assigned as the responsible employee.
+ * Applies to companies/contacts/deals/tasks on create, and on update only
+ * when sales_id actually changes. Historical authorship (contact_notes,
+ * deal_notes) is deliberately not guarded.
+ */
+const assertEmployeeAssignable = async (
+  dataProvider: DataProvider,
+  nextSalesId: Identifier | null | undefined,
+  previousSalesId?: Identifier | null,
+) => {
+  if (nextSalesId == null) return;
+  if (
+    previousSalesId !== undefined &&
+    String(previousSalesId) === String(nextSalesId)
+  ) {
+    return;
+  }
+  const { data: candidates } = await dataProvider.getList<Sale>("sales", {
+    filter: { id: nextSalesId },
+    pagination: { page: 1, perPage: 1 },
+    sort: { field: "id", order: "ASC" },
+  });
+  if (candidates[0]?.disabled) {
+    throwNoraError(
+      "Dieser Mitarbeiter ist deaktiviert und kann nicht neu zugewiesen werden",
+      NORA_ERROR_CODES.EMPLOYEE_NOT_ASSIGNABLE,
+    );
+  }
+};
+
+const guardAssignmentOnCreate = async <
+  T extends RaRecord & { sales_id?: Identifier | null },
+>(
+  params: CreateParams<T>,
+  dataProvider: DataProvider,
+) => {
+  await assertEmployeeAssignable(dataProvider, params.data.sales_id);
+  return params;
+};
+
+const guardAssignmentOnUpdate = async <
+  T extends RaRecord & { sales_id?: Identifier | null },
+>(
+  params: UpdateParams<T>,
+  dataProvider: DataProvider,
+) => {
+  if ("sales_id" in params.data) {
+    await assertEmployeeAssignable(
+      dataProvider,
+      params.data.sales_id,
+      params.previousData?.sales_id ?? null,
+    );
+  }
+  return params;
 };
 
 /**
@@ -1186,6 +1246,7 @@ export const createDataProvider = ({
       {
         resource: "contacts",
         beforeCreate: async (createParams, dataProvider) => {
+          await guardAssignmentOnCreate(createParams, dataProvider);
           const params = {
             ...createParams,
             data: {
@@ -1209,6 +1270,7 @@ export const createDataProvider = ({
           return result;
         },
         beforeUpdate: async (params, dataProvider) => {
+          await guardAssignmentOnUpdate(params, dataProvider);
           // Individual Name Invariant, rename-path — mirrors
           // nora_private.sync_individual_company_name(): renaming this
           // contact's first_name/last_name to blank is rejected if it
@@ -1303,6 +1365,7 @@ export const createDataProvider = ({
       {
         resource: "tasks",
         beforeCreate: async (params, dataProvider) => {
+          await guardAssignmentOnCreate(params, dataProvider);
           const derived = await deriveTaskCompanyContext(
             params.data,
             dataProvider,
@@ -1329,6 +1392,7 @@ export const createDataProvider = ({
           return result;
         },
         beforeUpdate: async (params, dataProvider) => {
+          await guardAssignmentOnUpdate(params, dataProvider);
           const { data, previousData } = params;
           if (previousData.done_date !== data.done_date) {
             taskUpdateType = data.done_date
@@ -1413,7 +1477,8 @@ export const createDataProvider = ({
       } satisfies ResourceCallbacks<Task>,
       {
         resource: "companies",
-        beforeCreate: async (params) => {
+        beforeCreate: async (params, dataProvider) => {
+          await guardAssignmentOnCreate(params, dataProvider);
           const createParams = await processCompanyLogo(params);
 
           return {
@@ -1427,7 +1492,8 @@ export const createDataProvider = ({
             },
           };
         },
-        beforeUpdate: async (params) => {
+        beforeUpdate: async (params, dataProvider) => {
+          await guardAssignmentOnUpdate(params, dataProvider);
           return await processCompanyLogo(params);
         },
         afterUpdate: async (result, dataProvider) => {
@@ -1449,7 +1515,8 @@ export const createDataProvider = ({
       } satisfies ResourceCallbacks<Company>,
       {
         resource: "deals",
-        beforeCreate: async (params) => {
+        beforeCreate: async (params, dataProvider) => {
+          await guardAssignmentOnCreate(params, dataProvider);
           const created_at = new Date().toISOString();
           return {
             ...params,
@@ -1470,7 +1537,8 @@ export const createDataProvider = ({
 
           return result;
         },
-        beforeUpdate: async (params) => {
+        beforeUpdate: async (params, dataProvider) => {
+          await guardAssignmentOnUpdate(params, dataProvider);
           return {
             ...params,
             data: {

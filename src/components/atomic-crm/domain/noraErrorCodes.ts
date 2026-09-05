@@ -25,6 +25,8 @@ export const NORA_ERROR_CODES = {
   PRIVATE_CUSTOMER_ALREADY_EXISTS: "NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS",
   PERMISSION_DENIED: "NORA_PERMISSION_DENIED",
   IDEMPOTENCY_CONFLICT: "NORA_IDEMPOTENCY_CONFLICT",
+  /** User Lifecycle W2: a disabled employee cannot be newly assigned as responsible. */
+  EMPLOYEE_NOT_ASSIGNABLE: "NORA_EMPLOYEE_NOT_ASSIGNABLE",
 } as const;
 
 export type NoraErrorCode =
@@ -76,6 +78,10 @@ export const NORA_ERROR_DEFINITIONS: Record<
   [NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT]: {
     category: "conflict",
     messageKey: "crm.errors.idempotency_conflict",
+  },
+  [NORA_ERROR_CODES.EMPLOYEE_NOT_ASSIGNABLE]: {
+    category: "domain",
+    messageKey: "crm.errors.employee_not_assignable",
   },
 };
 

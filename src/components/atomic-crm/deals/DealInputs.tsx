@@ -18,13 +18,10 @@ import { contactOptionText } from "../misc/ContactOption";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 
-import type { Deal, Sale } from "../types";
+import type { Deal } from "../types";
 
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
-import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
-
-const saleOptionRenderer = (choice: Sale) =>
-  `${choice.first_name} ${choice.last_name}`;
+import { SalesAssignmentInput } from "../sales/SalesAssignmentInput";
 
 export const DealInputs = () => {
   const translate = useTranslate();
@@ -104,13 +101,7 @@ export const DealInputs = () => {
           validate={required()}
         />
 
-        <ReferenceInput source="sales_id" {...SALES_DIRECTORY_REFERENCE_PROPS}>
-          <SelectInput
-            helperText={false}
-            optionText={saleOptionRenderer}
-            emptyText="—"
-          />
-        </ReferenceInput>
+        <SalesAssignmentInput emptyText="—" />
       </div>
     </div>
   );

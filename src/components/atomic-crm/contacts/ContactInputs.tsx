@@ -25,7 +25,6 @@ import { BooleanInput } from "@/components/admin/boolean-input";
 import { ReferenceInput } from "@/components/admin/reference-input";
 import { TextInput } from "@/components/admin/text-input";
 import { RadioButtonGroupInput } from "@/components/admin/radio-button-group-input";
-import { SelectInput } from "@/components/admin/select-input";
 import { ArrayInput } from "@/components/admin/array-input";
 import { SimpleFormIterator } from "@/components/admin/simple-form-iterator";
 
@@ -37,10 +36,10 @@ import {
   DEFAULT_LINK_TYPE,
 } from "../misc/linksModel";
 import { StatusSelector } from "../notes";
-import type { Sale, Contact } from "../types";
+import type { Contact } from "../types";
 import { Avatar } from "./Avatar";
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
-import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
+import { SalesAssignmentInput } from "../sales/SalesAssignmentInput";
 import { contactGender, translateContactGenderLabel } from "./contactModel.ts";
 
 export const ContactInputs = ({
@@ -413,19 +412,10 @@ const ContactMiscInputs = ({ showHeading = true }) => {
       ) : null}
       <TextInput source="background" multiline helperText={false} />
       <BooleanInput source="has_newsletter" helperText={false} />
-      <ReferenceInput source="sales_id" {...SALES_DIRECTORY_REFERENCE_PROPS}>
-        <SelectInput
-          helperText={false}
-          optionText={saleOptionRenderer}
-          validate={required()}
-        />
-      </ReferenceInput>
+      <SalesAssignmentInput validate={required()} />
     </div>
   );
 };
-
-const saleOptionRenderer = (choice: Sale) =>
-  `${choice.first_name} ${choice.last_name}`;
 
 export const ContactStatusSelector = () => {
   const record = useRecordContext<Contact>();

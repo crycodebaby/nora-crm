@@ -4,6 +4,7 @@ import { createCrmDb } from "@/test/StoryWrapper";
 import { DEFAULT_USER } from "./authProvider";
 import { createDataProvider } from "./dataProvider";
 import generateData from "./dataGenerator";
+import { NORA_ERROR_CODES } from "../../domain/noraErrorCodes";
 import type { Sale } from "../../types";
 
 /**
@@ -108,5 +109,94 @@ describe("FakeRest sales_identities (W2)", () => {
       ids: [erika.id],
     });
     expect(identitiesAfter.data[0]).toMatchObject({ disabled: false });
+  });
+
+  it("refuses to newly assign a disabled employee but keeps existing ownership editable (W2 hardening)", async () => {
+    const db = createCrmDb();
+    const disabledErika = { ...erika, disabled: true };
+    db.sales = [...db.sales, disabledErika];
+    db.companies = [
+      {
+        id: 500,
+        name: "Bestand GmbH",
+        sales_id: erika.id,
+        customer_number: "K-500",
+      } as any,
+    ];
+    const dataProvider = createDataProvider({ db, silent: true, latency: 0 });
+    const expectNotAssignable = async (run: () => Promise<unknown>) => {
+      await expect(run()).rejects.toMatchObject({
+        details: NORA_ERROR_CODES.EMPLOYEE_NOT_ASSIGNABLE,
+      });
+    };
+
+    // INSERT with a disabled employee → denied, with an active one → allowed
+    await expectNotAssignable(() =>
+      dataProvider.create("deals", {
+        data: {
+          name: "Neu",
+          company_id: 500,
+          stage: "opportunity",
+          sales_id: erika.id,
+        },
+      }),
+    );
+    const { data: deal } = await dataProvider.create("deals", {
+      data: {
+        name: "Neu",
+        company_id: 500,
+        stage: "opportunity",
+        sales_id: DEFAULT_USER.id,
+      },
+    });
+    for (const resource of ["companies", "contacts", "tasks"] as const) {
+      await expectNotAssignable(() =>
+        dataProvider.create(resource, {
+          data: {
+            name: "x",
+            first_name: "x",
+            last_name: "y",
+            company_id: 500,
+            text: "x",
+            sales_id: erika.id,
+          },
+        }),
+      );
+    }
+
+    // UPDATE active → disabled denied
+    await expectNotAssignable(() =>
+      dataProvider.update("deals", {
+        id: deal.id,
+        data: { sales_id: erika.id },
+        previousData: deal,
+      }),
+    );
+
+    // unrelated update of a record still owned by the disabled employee stays allowed
+    const { data: company } = await dataProvider.getOne("companies", {
+      id: 500,
+    });
+    expect(company.sales_id).toBe(erika.id);
+    const { data: updated } = await dataProvider.update("companies", {
+      id: 500,
+      data: { ...company, description: "Beschreibung nachgetragen" },
+      previousData: company,
+    });
+    expect(updated.sales_id).toBe(erika.id);
+
+    // disabled → active allowed
+    const { data: moved } = await dataProvider.update("companies", {
+      id: 500,
+      data: { ...updated, sales_id: DEFAULT_USER.id },
+      previousData: updated,
+    });
+    expect(moved.sales_id).toBe(DEFAULT_USER.id);
+
+    // historical authorship is not guarded: a note by the disabled employee
+    const { data: note } = await dataProvider.create("contact_notes", {
+      data: { contact_id: 1, text: "alte Notiz", sales_id: erika.id },
+    });
+    expect(note.sales_id).toBe(erika.id);
   });
 });

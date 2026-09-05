@@ -229,9 +229,17 @@ deaktivierte Mitarbeiter behalten ihren echten Namen auf alten Datensätzen.
 Legacy-RPC `set_sales_role_by_admin` entfernt (kein Aufrufer mehr; `users`
 Edge Function v5 nutzt den Executor). Nebenfix: FakeRest pflegt die
 Projektionen jetzt über den Store (vorher wirkungslose Array-Mutation).
-Migration `20260905120000_nora_lifecycle_reference_integrity.sql`, neue
-SQL-Suite `lifecycle_reference_integrity_verification.sql` (10 Abschnitte).
-**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`** (Branch
+**Hardening (gleicher RC):** aktive Zuweisung ist autoritativ — Trigger
+`guard_active_assignment_trigger` auf `companies`/`contacts`/`deals`/`tasks`
+verweigert `INSERT`/`UPDATE OF sales_id` auf einen deaktivierten Mitarbeiter
+(`NORA_EMPLOYEE_NOT_ASSIGNABLE`, neuer `NoraErrorCode`), unverwandte Updates
+und Wegwechseln bleiben erlaubt, Notiztabellen (Urheberschaft) sind bewusst
+nicht betroffen; `SalesAssignmentInput` zeigt einen deaktivierten Zuständigen
+im Bearbeiten-Formular sichtbar, aber nicht wählbar.
+Migrationen `20260905120000_nora_lifecycle_reference_integrity.sql` und
+`20260905150000_nora_lifecycle_active_assignment.sql`, neue SQL-Suite
+`lifecycle_reference_integrity_verification.sql` (11 Abschnitte).
+**Status: `RC VERIFIED — HARDENED AND READY FOR CONTROLLED RELEASE`** (Branch
 `security/nora-lifecycle-w2-reference-integrity`, nicht Production Verified).
 Details: Decision Log „2026-09-05 – User Lifecycle W2".
 

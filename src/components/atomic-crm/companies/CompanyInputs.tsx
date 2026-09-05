@@ -2,7 +2,6 @@ import { required, useRecordContext, useTranslate } from "ra-core";
 import { useEffect, useState } from "react";
 import { useFormState, useWatch } from "react-hook-form";
 import { Link } from "react-router-dom";
-import { ReferenceInput } from "@/components/admin/reference-input";
 import { TextInput } from "@/components/admin/text-input";
 import { SelectInput } from "@/components/admin/select-input";
 import { RadioButtonGroupInput } from "@/components/admin/radio-button-group-input";
@@ -19,11 +18,11 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import ImageEditorField from "../misc/ImageEditorField";
 import { useConfigurationContext } from "../root/ConfigurationContext";
-import type { Company, Sale } from "../types";
+import type { Company } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { getTranslatedCompanySizeLabel } from "./getTranslatedCompanySizeLabel";
 import { sizes } from "./sizes";
-import { SALES_DIRECTORY_REFERENCE_PROPS } from "../sales/salesDirectoryReference";
+import { SalesAssignmentInput } from "../sales/SalesAssignmentInput";
 import {
   getContactMethodTypeChoices,
   DEFAULT_COMPANY_PHONE_TYPE,
@@ -426,16 +425,7 @@ const CompanyAdditionalInformationInputs = () => {
         })}
       </h6>
       <TextInput source="description" multiline helperText={false} />
-      <ReferenceInput source="sales_id" {...SALES_DIRECTORY_REFERENCE_PROPS}>
-        <SelectInput
-          helperText={false}
-          optionText={saleOptionRenderer}
-          emptyText="—"
-        />
-      </ReferenceInput>
+      <SalesAssignmentInput emptyText="—" />
     </div>
   );
 };
-
-const saleOptionRenderer = (choice: Sale) =>
-  `${choice.first_name} ${choice.last_name}`;
