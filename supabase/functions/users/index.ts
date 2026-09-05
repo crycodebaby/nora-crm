@@ -23,6 +23,12 @@ import {
   type LifecycleDeps,
   type LifecycleSaleRow,
 } from "./lifecycle.ts";
+import {
+  AuditWriteFailure,
+  recordEmployeeAdminEvent,
+  resolveRequestOperationId,
+  type EmployeeAuditDeps,
+} from "./audit.ts";
 
 function resolveInviteRedirectTo(): string {
   const siteUrl =
@@ -40,28 +46,42 @@ function resolveInviteRole(
   return administrator ? "admin" : "viewer";
 }
 
-async function writeUserInviteAudit(args: {
-  actorSaleId: number;
-  inviteeEmail: string;
-  inviteeSaleId: number;
-  role: NoraRole;
-}) {
-  try {
-    await supabaseAdmin.rpc("insert_audit_event", {
-      p_event_type: "user.invited",
-      p_entity_type: "sales",
-      p_entity_id: crypto.randomUUID(),
-      p_metadata: {
-        actor_sale_id: args.actorSaleId,
-        invitee_sale_id: args.inviteeSaleId,
-        invitee_email: args.inviteeEmail,
-        role: args.role,
-      },
+/* ------------------------------------------------------------------------ */
+/* W3 — trusted audit path for the Edge-originated employee events           */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Real adapter behind the audit port. The RPC is service_role-only in the
+ * database and derives every snapshot itself; only the verified actor id,
+ * the target, the event type, the operation id and the allowlisted `role`
+ * key ever cross this boundary.
+ */
+const employeeAuditDeps: EmployeeAuditDeps = {
+  recordEmployeeAdminEvent: async (input) => {
+    const { error } = await supabaseAdmin.rpc("record_employee_admin_event", {
+      p_actor_user_id: input.actorUserId,
+      p_sale_id: input.salesId,
+      p_event_type: input.eventType,
+      p_operation_id: input.operationId,
+      p_metadata: input.metadata,
     });
-  } catch {
-    console.error("user.invite.audit_failed");
-  }
+    if (error) throw error;
+  },
+  log: (entry) => console.error(JSON.stringify(entry)),
+};
+
+function auditFailureResponse(failure: AuditWriteFailure): Response {
+  const { status, message, error } = failure.failure;
+  return createErrorResponse(status, message, { error });
 }
+
+/** Everything the handlers need to know about the verified caller. */
+type RequestContext = {
+  /** From the verified JWT — never from the request body. */
+  actorUserId: string;
+  /** One correlation id per request, shared by all audit rows it produces. */
+  operationId: string;
+};
 
 /* ------------------------------------------------------------------------ */
 /* W1 — the single privileged executor for role / disabled                   */
@@ -97,7 +117,13 @@ async function loadAuthFacts(
  * and Auth Admin is only ever called with the service key from here.
  */
 const lifecycleDeps: LifecycleDeps = {
-  applyAccessChange: async ({ actorUserId, salesId, role, disabled }) => {
+  applyAccessChange: async ({
+    actorUserId,
+    salesId,
+    role,
+    disabled,
+    operationId,
+  }) => {
     const { data, error } = await supabaseAdmin.rpc(
       "set_sales_access_by_executor",
       {
@@ -105,6 +131,7 @@ const lifecycleDeps: LifecycleDeps = {
         p_sale_id: salesId,
         p_role: role,
         p_disabled: disabled,
+        p_operation_id: operationId,
       },
     );
     if (error) throw error;
@@ -196,8 +223,12 @@ async function resolveUserIdByEmail(email: string) {
 async function inviteUser(
   req: Request,
   currentUserSale: any,
-  actorUserId: string,
+  ctx: RequestContext,
 ) {
+  const { actorUserId, operationId } = ctx;
+  // Only the fields below are read from the body. Anything else — in
+  // particular any actor_* / user_id field a caller might add — is ignored:
+  // the actor is the verified JWT subject, full stop.
   const { email, first_name, last_name, disabled, administrator, role } =
     await req.json();
 
@@ -299,6 +330,7 @@ async function inviteUser(
   try {
     result = await executeAccessChange(lifecycleDeps, {
       actorUserId,
+      operationId,
       target: saleRow as LifecycleSaleRow,
       role: resolvedRole,
       ...(typeof disabled === "boolean" ? { disabled } : {}),
@@ -311,12 +343,20 @@ async function inviteUser(
     });
   }
 
-  await writeUserInviteAudit({
-    actorSaleId: currentUserSale.id,
-    inviteeEmail: email,
-    inviteeSaleId: result.sale.id,
-    role: resolvedRole,
-  });
+  // user.invited is written only now: the invitation is out, the profile
+  // exists and the role is applied. The database names the actor itself.
+  try {
+    await recordEmployeeAdminEvent(employeeAuditDeps, {
+      actorUserId,
+      salesId: result.sale.id,
+      eventType: "user.invited",
+      operationId,
+      metadata: { role: resolvedRole },
+    });
+  } catch (e) {
+    if (e instanceof AuditWriteFailure) return auditFailureResponse(e);
+    throw e;
+  }
 
   try {
     const sale = await reloadSale(result.sale.id);
@@ -337,8 +377,9 @@ async function inviteUser(
 async function patchUser(
   req: Request,
   currentUserSale: any,
-  actorUserId: string,
+  ctx: RequestContext,
 ) {
+  const { actorUserId, operationId } = ctx;
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -481,6 +522,7 @@ async function patchUser(
     try {
       const result = await executeAccessChange(lifecycleDeps, {
         actorUserId,
+        operationId,
         target: {
           id: sale.id,
           user_id: sale.user_id,
@@ -566,28 +608,6 @@ function accessJson(payload: {
   });
 }
 
-async function writeEmployeeAccessAudit(args: {
-  eventType: "user.invitation_resent" | "user.password_setup_requested";
-  actorSaleId: number;
-  employeeSaleId: number;
-  employeeEmail: string;
-}) {
-  try {
-    await supabaseAdmin.rpc("insert_audit_event", {
-      p_event_type: args.eventType,
-      p_entity_type: "sales",
-      p_entity_id: crypto.randomUUID(),
-      p_metadata: {
-        actor_sale_id: args.actorSaleId,
-        employee_sale_id: args.employeeSaleId,
-        employee_email: args.employeeEmail,
-      },
-    });
-  } catch {
-    console.error(args.eventType + ".audit_failed");
-  }
-}
-
 type AccessSaleRow = {
   id: number;
   email: string;
@@ -670,6 +690,7 @@ async function getEmployeeAccessStatus(req: Request, currentUserSale: any) {
 async function resendEmployeeInvitation(
   currentUserSale: any,
   salesId: number,
+  ctx: RequestContext,
 ): Promise<Response> {
   if (!isAdminSale(currentUserSale)) {
     return createErrorResponse(403, "Not Authorized", {
@@ -724,12 +745,19 @@ async function resendEmployeeInvitation(
     });
   }
 
-  await writeEmployeeAccessAudit({
-    eventType: "user.invitation_resent",
-    actorSaleId: currentUserSale.id,
-    employeeSaleId: sale.id,
-    employeeEmail: sale.email,
-  });
+  // Audit only after GoTrue accepted the resend. A failed audit write is
+  // reported as audit_write_failed, never as a green resend.
+  try {
+    await recordEmployeeAdminEvent(employeeAuditDeps, {
+      actorUserId: ctx.actorUserId,
+      salesId: sale.id,
+      eventType: "user.invitation_resent",
+      operationId: ctx.operationId,
+    });
+  } catch (e) {
+    if (e instanceof AuditWriteFailure) return auditFailureResponse(e);
+    throw e;
+  }
 
   // The invitation is already out. Re-reading Auth here is a convenience, not
   // a source of truth: loadAuthFacts() answers null on a transient read error,
@@ -753,6 +781,7 @@ async function resendEmployeeInvitation(
 async function requestEmployeePasswordSetup(
   currentUserSale: any,
   salesId: number,
+  ctx: RequestContext,
 ): Promise<Response> {
   if (!isAdminSale(currentUserSale)) {
     return createErrorResponse(403, "Not Authorized", {
@@ -794,12 +823,18 @@ async function requestEmployeePasswordSetup(
     });
   }
 
-  await writeEmployeeAccessAudit({
-    eventType: "user.password_setup_requested",
-    actorSaleId: currentUserSale.id,
-    employeeSaleId: sale.id,
-    employeeEmail: sale.email,
-  });
+  // Audit only after the provider accepted the reset request.
+  try {
+    await recordEmployeeAdminEvent(employeeAuditDeps, {
+      actorUserId: ctx.actorUserId,
+      salesId: sale.id,
+      eventType: "user.password_setup_requested",
+      operationId: ctx.operationId,
+    });
+  } catch (e) {
+    if (e instanceof AuditWriteFailure) return auditFailureResponse(e);
+    throw e;
+  }
 
   return accessJson({ data: current });
 }
@@ -811,7 +846,7 @@ async function requestEmployeePasswordSetup(
 async function postUsers(
   req: Request,
   currentUserSale: any,
-  actorUserId: string,
+  ctx: RequestContext,
 ) {
   let body: Record<string, unknown>;
   try {
@@ -832,11 +867,11 @@ async function postUsers(
 
   if (command) {
     return command.kind === "resend_invitation"
-      ? resendEmployeeInvitation(currentUserSale, command.salesId)
-      : requestEmployeePasswordSetup(currentUserSale, command.salesId);
+      ? resendEmployeeInvitation(currentUserSale, command.salesId, ctx)
+      : requestEmployeePasswordSetup(currentUserSale, command.salesId, ctx);
   }
 
-  return inviteUser(req, currentUserSale, actorUserId);
+  return inviteUser(req, currentUserSale, ctx);
 }
 
 Deno.serve(async (req: Request) =>
@@ -852,18 +887,24 @@ Deno.serve(async (req: Request) =>
             error: "unauthorized",
           });
         }
-        const actorUserId = user.id;
+        // W3: one correlation id per request (header or minted here); every
+        // audit row this request produces carries it as request_id.
+        const ctx: RequestContext = {
+          actorUserId: user.id,
+          operationId: resolveRequestOperationId(req),
+        };
 
         if (req.method === "GET") {
+          // Read-only: no business audit.
           return getEmployeeAccessStatus(req, currentUserSale);
         }
 
         if (req.method === "POST") {
-          return postUsers(req, currentUserSale, actorUserId);
+          return postUsers(req, currentUserSale, ctx);
         }
 
         if (req.method === "PATCH") {
-          return patchUser(req, currentUserSale, actorUserId);
+          return patchUser(req, currentUserSale, ctx);
         }
 
         return createErrorResponse(405, "Method Not Allowed", {

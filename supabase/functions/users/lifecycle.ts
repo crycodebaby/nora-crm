@@ -24,6 +24,13 @@
  * request is safe: step 1 re-applies identical values (no audit duplicate —
  * the audit trigger fires on change only) and step 2 converges the Auth side.
  *
+ * Audit (W3): the user.role_changed / user.disabled / user.enabled events are
+ * written by the database trigger inside step 1's transaction. The executor
+ * RPC receives the verified actor id and the request's operation id and pins
+ * both for the trigger, so the row names the real administrator and carries
+ * the request correlation. A failed step 1 therefore never leaves an audit
+ * row, and a successful step 1 never lacks one.
+ *
  * There is no distributed transaction here on purpose: GoTrue and PostgREST
  * do not share one, and pretending otherwise would only hide the partial
  * state this contract makes visible instead.
@@ -76,6 +83,8 @@ export type LifecycleDeps = {
     salesId: number;
     role: NoraRole | null;
     disabled: boolean | null;
+    /** Request correlation for the audit rows (request_id); null = none. */
+    operationId: string | null;
   }): Promise<LifecycleSaleRow>;
   /** Bans (true) or unbans (false) the Auth identity; rejects on failure. */
   setAuthBan(userId: string, banned: boolean): Promise<void>;
@@ -88,6 +97,8 @@ export type LifecycleDeps = {
 export type AccessChangeRequest = {
   /** The caller's user id, resolved from the verified JWT — never from the body. */
   actorUserId: string;
+  /** Request correlation id forwarded to the audit rows; undefined = none. */
+  operationId?: string | null;
   target: LifecycleSaleRow;
   /** undefined = keep current value. */
   role?: NoraRole;
@@ -200,6 +211,7 @@ export async function executeAccessChange(
       salesId: request.target.id,
       role: wantsRole ? request.role! : null,
       disabled: wantsDisabled ? request.disabled! : null,
+      operationId: request.operationId ?? null,
     });
   } catch (error) {
     const failure = mapAccessRpcError(

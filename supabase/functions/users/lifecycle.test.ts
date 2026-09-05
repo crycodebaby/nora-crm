@@ -378,3 +378,51 @@ describe("executeAccessChange — partial failure and retry", () => {
     expect(f.banned).toBe(false);
   });
 });
+
+describe("executeAccessChange — audit correlation (W3)", () => {
+  const OP_ID = "d0000000-0000-4000-8000-000000000001";
+
+  it("forwards the request operation id to the executor RPC", async () => {
+    const f = fakeDeps();
+    await executeAccessChange(f.deps, {
+      actorUserId: ADMIN_A,
+      operationId: OP_ID,
+      target: row(),
+      role: "admin",
+    });
+    expect(f.deps.applyAccessChange).toHaveBeenCalledWith({
+      actorUserId: ADMIN_A,
+      salesId: 7,
+      role: "admin",
+      disabled: null,
+      operationId: OP_ID,
+    });
+  });
+
+  it("passes null when no operation id is known — never invents one here", async () => {
+    const f = fakeDeps();
+    await executeAccessChange(f.deps, {
+      actorUserId: ADMIN_A,
+      target: row(),
+      disabled: true,
+    });
+    expect(f.deps.applyAccessChange).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: null }),
+    );
+  });
+
+  it("the actor sent to the database is always the verified caller, never a body value", async () => {
+    const f = fakeDeps();
+    await executeAccessChange(f.deps, {
+      actorUserId: ADMIN_A,
+      target: row(),
+      role: "office",
+      // a body-shaped extra is not part of the contract and cannot reach the RPC
+      ...({ actor_user_id: "ffffffff-0000-4000-8000-000000000000" } as object),
+    } as never);
+    const sent = (f.deps.applyAccessChange as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(sent.actorUserId).toBe(ADMIN_A);
+    expect(JSON.stringify(sent)).not.toContain("ffffffff");
+  });
+});
