@@ -142,6 +142,17 @@ Vollständige Spezifikation: `docs/nora/11-google-calendar-rbac.md`
 
 Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administrator` ist nur Kompatibilitätsspiegel (`role = admin` ↔ `true`). Teamlisten nutzen **`sales_directory`** (v0.4b.2).
 
+**Mitarbeiter-Lebenszyklus (User Lifecycle W1/W2, 2026-09-05):**
+
+| Fachlich | Technisch | Hinweis |
+|---|---|---|
+| Zugang deaktivieren / Rolle ändern | `users` Edge Function → `set_sales_access_by_executor` | einziger Schreibpfad; Selbstschutz, mindestens ein aktiver Admin |
+| „Wem darf ich neue Arbeit zuweisen?" | `sales_directory` (nur aktive) | Picker in Kunden-, Kontakt-, Vorgangsformular |
+| „Wer war zuständig / wer hat das geschrieben?" | `sales_identities` (alle, inkl. `disabled`) | Namen auf bestehenden Notizen, Vorgängen, Akten, im Aktivitätslog und Export |
+| Mitarbeiter löschen | nur unreferenzierte Zeilen, nur privilegierter Pfad (künftiger Executor) | sechs `NO ACTION`-FKs blockieren jede referenzierte Identität; Browser-Rollen nie |
+
+Ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**. Domänenregel: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — deaktivierte Mitarbeiter behalten ihren echten Namen auf allem Bestehenden und verschwinden nur aus Auswahllisten für Neues.
+
 ## Änderungshistorie / Audit (Welle v0.3l)
 
 | Fachlich | Technisch | Hinweis |

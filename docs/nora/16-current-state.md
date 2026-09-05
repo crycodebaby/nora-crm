@@ -194,7 +194,7 @@ Reaktivieren, Einladung als deaktiviert) läuft ausschließlich über
 `Admin-UI → users Edge Function → public.set_sales_access_by_executor
 (service_role, verifizierter Actor) → nora_private.apply_sales_role_change`.
 Die Legacy-RPC `set_sales_role_by_admin` ist für `authenticated`/`anon` nicht
-mehr ausführbar (nur noch service_role, Release-Fenster, Entfernung W2).
+mehr ausführbar (nur noch service_role; in W2 entfernt, siehe Punkt 26).
 Serverseitig neu: Selbstschutz (ein Admin kann sich nicht selbst deaktivieren
 oder demotieren, `403 self_access_change_forbidden`), Datenbank-Invariante
 „mindestens ein aktiver Administrator" (`guard_last_active_admin_trigger`,
@@ -213,6 +213,27 @@ Benutzerverwaltung grün. Der eine inkonsistente Datensatz wurde über
 Audit-Ereignis, `accessConsistency = consistent`). Details: Decision Log
 „2026-09-05 – User Lifecycle W1", Nachtrag Release; offene Punkte in
 `17-known-issues-and-planned-waves.md`.
+
+26. **User Lifecycle W2 – Referenzintegrität und historische Identität**
+(2026-09-05): Geschäftsdaten überleben den Mitarbeiter-Lebenszyklus.
+`contact_notes.sales_id` von `ON DELETE CASCADE` auf `NO ACTION`,
+`tasks.sales_id` bekommt einen Foreign Key (`NO ACTION`, nullable bleibt),
+Browser-Rollen verlieren `DELETE` auf `sales`, beide Identity-Views sind
+`SELECT`-only. Lösch-Modell: referenzierter Mitarbeiter → DELETE auf jedem
+Pfad verweigert (sechs FK-Barrieren); unreferenzierter Mitarbeiter → nur für
+`postgres`/`service_role` löschbar (Pfad des künftigen kontrollierten
+Hard-Delete-Executors, nicht gebaut). Zwei Read-Models: `sales_directory`
+(aktiv, Zuweisungs-Picker) und neu `sales_identities` (alle Zeilen inkl.
+`disabled`, historische Namen in Notizen/Akten/Aktivitätslog/Export);
+deaktivierte Mitarbeiter behalten ihren echten Namen auf alten Datensätzen.
+Legacy-RPC `set_sales_role_by_admin` entfernt (kein Aufrufer mehr; `users`
+Edge Function v5 nutzt den Executor). Nebenfix: FakeRest pflegt die
+Projektionen jetzt über den Store (vorher wirkungslose Array-Mutation).
+Migration `20260905120000_nora_lifecycle_reference_integrity.sql`, neue
+SQL-Suite `lifecycle_reference_integrity_verification.sql` (10 Abschnitte).
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`** (Branch
+`security/nora-lifecycle-w2-reference-integrity`, nicht Production Verified).
+Details: Decision Log „2026-09-05 – User Lifecycle W2".
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
@@ -397,6 +418,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
 9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
 10. ~~Operation Status Contract v1~~ — **PRODUCTION VERIFIED seit 2026-08-29** (Phase 6E), siehe Abschnitt 4 Punkt 18, Decision Log „Operation Status Contract Wave" inkl. Nachtrag Phase 6C, 6D.1 und 6E. Die Notification-/Status-UI, die diesen Contract konsumiert, ist inzwischen als Phase 7B umgesetzt — siehe Abschnitt 4 Punkt 19. Sie ist seit 2026-08-30 **PRODUCTION VERIFIED** (Release-Commit `9db08c4b`), deckt aber bislang **nur Quick Capture** ab; die weiteren Intents bleiben Phase 7C.
+11. User-Lifecycle-Folgewellen nach W2 (RC): W3 Audit-Actor für service_role-Ereignisse, W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 
@@ -422,6 +444,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 | Google-Kalender-Implementierung (read-only) | `14-google-calendar-readonly-implementation.md` |
 | **Dieser Überblick** | `16-current-state.md` |
 | **Mitarbeiter-Onboarding & Zugang (Einladung → Passwort → Profil → Abschluss, Admin-Zugangsstatus)** | `02-design-system.md` „Mitarbeiter-Onboarding & Zugang (Welle V1B)" (Gestaltung) + `06-decision-log.md` „2026-09-04 – Employee Onboarding & Access V1A" (Contract) und „… V1B" (Präsentation) + `login/employeeOnboardingFlow.ts` (Zustandsmaschine) |
+| **Mitarbeiter-Lebenszyklus (Executor, Selbst-/Letzter-Admin-Schutz, Referenzintegrität, `sales_directory` vs. `sales_identities`, Lösch-Modell, Archivierungsprinzip)** | `06-decision-log.md` „User Lifecycle W1" + „User Lifecycle W2" (Begründung) + `03-data-model-guardrails.md` „Mitarbeiter-Referenzintegrität" / Falle 39 + `07-agent-change-checklist.md` W1/W2-Bullets |
 | **Offene Bugs, geplante Waves im Detail** | `17-known-issues-and-planned-waves.md` |
 | **Error Contract (`NoraErrorCode`, `DETAIL`-Konvention, machine-code-first `normalizeCrmError`)** | `06-decision-log.md` „2026-08-28 – Error Contract Wave" + `domain/noraErrorCodes.ts` + `07-agent-change-checklist.md` |
 | **Operation Status Contract (`execution`/`errorCode`/`result` am `OperationRecord`, `_meta.disposition`)** | `06-decision-log.md` „2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)" + `operations/operationModel.ts` + `operations/operationManager.ts` |

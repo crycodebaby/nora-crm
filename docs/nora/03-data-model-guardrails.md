@@ -337,7 +337,7 @@ Details in `11-google-calendar-rbac.md`:
 
 - **`sales.role`** ist die führende Rollenquelle (`admin` | `office` | `viewer`)
 - **Interne Helper** in Schema `nora_private` — nicht in PostgREST-Schemas (`config.toml`: nur `public`)
-- **Öffentliche RPCs** in `public`: `start_checklist_run_from_template` (authenticated); `set_sales_access_by_executor` und die deprecated `set_sales_role_by_admin` sind seit User Lifecycle W1 (2026-09-05) **nur service_role** — der Browser erreicht Rollen-/Zugangsänderungen ausschließlich über die `users` Edge Function
+- **Öffentliche RPCs** in `public`: `start_checklist_run_from_template` (authenticated); `set_sales_access_by_executor` ist seit User Lifecycle W1 (2026-09-05) **nur service_role** (die deprecated `set_sales_role_by_admin` wurde in W2 gelöscht) — der Browser erreicht Rollen-/Zugangsänderungen ausschließlich über die `users` Edge Function
 - **`nora_private.safe_auth_uid()`** nur intern — `auth.uid()` wirft bei malformed JWT-sub; RLS-Helper nutzen safe reader
 - **Capability-Rolle `nora_role_manager`** (NOLOGIN, NOBYPASSRLS) — einziger Owner von `apply_sales_role_change`; kein GUC-Token-Modell (v0.4b.2)
 - **Testrolle `nora_rls_test`** nur lokal via `rbac_rls_setup.sql` — **nie** in Produktionsmigrationen
@@ -375,11 +375,23 @@ Ebenso wurde geprüft: ein gesetzter `search_path = public` (statt `''`) bei `SE
 | Ressource | Wer liest | Felder |
 |-----------|-----------|--------|
 | `public.sales_directory` | alle aktiven Rollen | `id`, `first_name`, `last_name`, `avatar` — Teamlisten, Betreuer-Auswahl |
+| `public.sales_identities` (W2) | alle aktiven Rollen | `id`, `first_name`, `last_name`, `avatar`, `disabled` — **alle** Mitarbeiter inkl. deaktivierter; nur für historische Namen (Notizen, Akten, Aktivitätslog, Export), nie als Auswahlliste |
 | `public.sales` | Admin: alle Zeilen; sonst nur eigene Zeile | vollständiges Profil inkl. `role`, `email`, `disabled` nur für Admin-Verwaltung / eigenes Profil |
+
+Beide Views sind `security_invoker = false` über genau eine Tabelle und damit auto-updatable — deshalb seit W2 explizit `SELECT`-only (`revoke all` + `grant select`), unabhängig von Default-Privilegien. `DELETE` auf `public.sales` ist für `anon`/`authenticated` entzogen (zusätzlich zur fehlenden DELETE-Policy).
 
 Direkte Data-API-Updates auf `role`, `disabled`, `administrator`, `user_id`, `email` bleiben blockiert (Trigger). Rollen-/Zugangsänderung nur über die `users` Edge Function → `set_sales_access_by_executor` (service_role, verifizierter Actor, Selbstschutz) → `nora_private.apply_sales_role_change` (Owner `nora_role_manager`). Zusätzliche Invariante seit W1: `guard_last_active_admin_trigger` lässt nie null Zeilen mit `role = 'admin' AND disabled = false` zurück (`NORA_LAST_ACTIVE_ADMIN_REQUIRED`).
 
 Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` — exakt ein Admin unter Parallelität.
+
+### Mitarbeiter-Referenzintegrität und historische Identität (User Lifecycle W2, 2026-09-05)
+
+- **Aktive Zuweisung ≠ historische Identität.** `sales_directory` beantwortet „Wem darf ich neue Arbeit zuweisen?" (nur `disabled = false`); `sales_identities` beantwortet „Wer war für diesen bestehenden Datensatz zuständig / wer hat das geschrieben?" (alle Zeilen). Picker → Directory, Anzeige bestehender Daten → Identities (`useGetSalesName`, Export).
+- **Alle sechs Referenzen auf `sales.id` sind `NO ACTION`-FKs:** `companies`, `contacts`, `deals`, `deal_notes`, `contact_notes`, `tasks` (`sales_id`). Nie `CASCADE`, nie `SET NULL` — Urheberschaft und Zuständigkeit sind Geschäftsgeschichte.
+- **Lösch-Modell:** referenzierter Mitarbeiter → `DELETE` wird von der Datenbank auf jedem Pfad verweigert (23503); unreferenzierter Mitarbeiter → nur `postgres`/`service_role` (künftiger kontrollierter Hard-Delete-Executor). Browser-Rollen haben kein `DELETE`-Privileg auf `sales` und keine DELETE-Policy. Kein Trigger-Guard nötig, kein versteckter Bypass.
+- **Was ein späterer Executor prüfen muss:** Zählung der sechs FK-Referenzen = 0 (Preview „Kann sicher gelöscht werden?"); Snapshots in `audit_events`/`email_delivery_events` bleiben; `sales.user_id → auth.users` ist `NO ACTION` in Gegenrichtung (Auth-Identität separat behandeln). Test-Datenpurge nie über `CASCADE`.
+- **Archivierungsprinzip:** INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT. Gilt perspektivisch für Kontakte, Kunden, Vorgänge — in W2 nur für Mitarbeiter umgesetzt, kein generisches Framework.
+- **Neue Referenz auf `sales.id`?** Immer als `NO ACTION`-FK anlegen, in `lifecycle_reference_integrity_verification.sql` Abschnitt 1 (Anzahl 6 → n) und Abschnitt 5 (Blockade je Tabelle) ergänzen, und im Decision Log W2 die Referenztabelle erweitern.
 
 ## Checklisten- und Audit-Guardrails (Welle 7b)
 
@@ -675,6 +687,28 @@ sich nie auf. Vorgegebene IDs müssen daher entweder garantiert gültig und lowe
 (so wie createOperationId() sie liefert) oder die anmeldende Schicht muss sich an die
 tatsächlich vergebene Kontext-ID binden statt an die gewünschte.
 ```
+
+### Falle 39: Mitarbeiternamen aus `sales_directory` auflösen oder eine Referenz auf `sales.id` mit `CASCADE`/`SET NULL` anlegen (User Lifecycle W2)
+
+Falsch:
+
+```text
+useGetManyAggregate("sales_directory", …) für den Autor einer alten Notiz
+  → deaktivierter Mitarbeiter: leerer Name / Export-Crash
+contact_notes.sales_id references sales(id) on delete cascade
+  → Mitarbeiter löschen löscht Geschäftshistorie
+tasks.sales_id ohne FK → Waisen, Fantasie-IDs
+```
+
+Richtig:
+
+```text
+Anzeige bestehender Daten: sales_identities (alle Zeilen, disabled-Flag)
+Auswahl für Neues:        sales_directory (nur aktive)
+Jede Referenz auf sales.id: FK NO ACTION; Name bleibt Name, kein „Unbekannt"
+```
+
+Details und Lösch-Modell: Abschnitt „Mitarbeiter-Referenzintegrität und historische Identität (User Lifecycle W2)" oben, Decision Log „2026-09-05 – User Lifecycle W2".
 
 ## Migrationsregel
 

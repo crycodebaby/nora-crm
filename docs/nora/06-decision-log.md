@@ -8,6 +8,7 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 
 | Entscheidung | Anker |
 |---|---|
+| 2026-09-05 – User Lifecycle W2: Referenzintegrität und historische Identität | [Springen](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) |
 | 2026-09-05 – User Lifecycle W1: ein privilegierter Executor, Selbst-/Letzter-Admin-Schutz, Zugangskonsistenz | [Springen](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) |
 | 2026-09-04 – Security Hardening Wave 0: TRUNCATE auf `audit_events` entzogen | [Springen](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) |
 | 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht | [Springen](#2026-09-04--employee-access-v1c-b-zustellstatus-wird-gezeigt-die-mailart-nicht) |
@@ -101,6 +102,94 @@ Diese Datei ist inzwischen sehr groß. Nicht komplett lesen, wenn nur eine besti
 | 2026-08-15 – Kernindizes und Bundle-Budget | [Springen](#2026-08-15-kernindizes-und-bundle-budget) |
 
 ---
+
+## 2026-09-05 – User Lifecycle W2: Referenzintegrität und historische Identität
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE`, nicht Production Verified.** Migration `20260905120000_nora_lifecycle_reference_integrity.sql` (SHA-256 `7d22e9b17313f72e7de8e8116a4b2de9396113e0b2297f650788e30a70975668`), neue SQL-Suite `supabase/tests/lifecycle_reference_integrity_verification.sql`, Read-Model-Trennung im Frontend, Legacy-RPC entfernt. Branch `security/nora-lifecycle-w2-reference-integrity` auf Basis `origin/main = 2988829a`.
+
+### Kontext (lokal bewiesen, read-only gegen `nora-crm-prod` bestätigt)
+
+Geschäftsdaten müssen den Lebenszyklus eines Mitarbeiters überleben. Vier Hypothesen aus der Reconnaissance wurden gegen den aktuellen Stand geprüft — Katalog lokal (Postgres 15.8) und Production (17.6) waren identisch:
+
+- **F1 bestätigt.** `contact_notes.sales_id → sales.id` war `ON DELETE CASCADE` (Constraint `contactNotes_sales_id_fkey` aus der Init-Migration 2024). Rollback-Probe: `DELETE FROM sales` löscht die Kontaktnotiz des Mitarbeiters still mit.
+- **F2 bestätigt.** `tasks.sales_id` hatte keinen Foreign Key. Rollback-Probe: nach dem Löschen des Mitarbeiters zeigt die Aufgabe auf eine nicht existierende `sales_id`; ein `INSERT` mit `sales_id = 999999999` wird angenommen. Production: 10 Aufgaben, 0 Waisen.
+- **F3 bestätigt.** `useGetSalesName` (Notizen, Vorgangsakte, Kunden-/Kontaktakte, Aktivitätslog) und der Kontakt-Export lasen ausschließlich `public.sales_directory`, die `disabled = false` filtert. Rollback-Probe als aktiver Viewer: Notiz und Vorgang sichtbar, Autor-Lookup 0 Zeilen → leerer Name in der UI; der Export hätte mit `TypeError` abgebrochen.
+- **F4 bestätigt.** `public.set_sales_role_by_admin` hat keinen Aufrufer mehr: kein Frontend-Code, `users` Edge Function v5 (deployt 2026-09-05) ruft nur `set_sales_access_by_executor`, kein Trigger, keine Function, keine Migration hängt davon ab. Einzige Referenzen: die SQL-Suiten, die sie als Negativ-Fall prüften.
+- **Nebenbefund (lokal, nicht Production).** Default-Privilegien in `public` vergeben bei `CREATE VIEW` lokal `ALL` an `authenticated`. `sales_directory` ist eine `security_invoker = false`-View über genau eine Tabelle und damit auto-updatable: ein **Viewer-JWT konnte lokal per `UPDATE`/`DELETE` auf `sales_directory` die `sales`-Zeile eines Kollegen umbenennen und löschen** (Rollback-Probe, Owner `postgres` mit BYPASSRLS). Production trägt für `authenticated` nur `SELECT` (plus wirkungslose TRUNCATE/REFERENCES/TRIGGER/MAINTAIN-Bits) — dort nicht ausnutzbar. W2 pinnt für beide Identity-Views explizit `SELECT`-only, damit lokale Resets, Tests und Production denselben Endzustand haben.
+
+### Produktregel (eingefroren)
+
+**Ein echter Mitarbeiter mit Geschäftshistorie wird offboarded, nicht hart gelöscht.** Ein zukünftiges Hard-Delete ist für Fake-, Versehens- und nie genutzte Testkonten gedacht — Konten **ohne geschützte Geschäftsreferenzen**. W2 bevorzugt deshalb das Bewahren von Referenzen über automatisches Nullen. Unterschieden wird klar zwischen **unsicherem Direkt-DELETE** (ab W2 unmöglich) und **kontrolliertem Hard-Delete** (später, über einen expliziten privilegierten Executor; W2 baut diesen nicht).
+
+### Referenzgraph `sales.id` und Entscheidungen
+
+| Referenz | Klasse | Vorher | W2 | Blockiert Löschen? |
+|---|---|---|---|---|
+| `companies.sales_id` (Betreuer) | B – aktuelle Zuständigkeit | NO ACTION | unverändert | ja |
+| `contacts.sales_id` (Betreuer) | B | NO ACTION | unverändert | ja |
+| `deals.sales_id` („Zuständig") | B, bei abgeschlossenen Vorgängen A | NO ACTION | unverändert | ja |
+| `tasks.sales_id` (Aufgabenbesitzer) | B | **kein FK** | **FK NO ACTION** (`tasks_sales_id_fkey`), Spalte bleibt nullable | ja |
+| `contact_notes.sales_id` (Autor) | A – historische Urheberschaft | **CASCADE** | **NO ACTION** (gleicher Constraint-Name) | ja |
+| `deal_notes.sales_id` (Autor) | A | NO ACTION | unverändert | ja |
+| `audit_events.actor_sales_id` (+ `actor_name_snapshot`) | C – technischer Snapshot | kein FK, bewusst | unverändert | nein (append-only, Name gesnapshottet) |
+| `email_delivery_events.employee_sale_id` (+ `recipient_email_snapshot`) | C – Snapshot | kein FK, bewusst („muss lesbar bleiben, wenn die sales-Zeile weg ist") | unverändert | nein |
+| `created_by`/`started_by`/`checked_by`/`connected_by`/`actor_id`/… (uuid) | C – Auth-Identität, nicht `sales.id` | kein FK auf `sales` | unverändert | nein (betrifft `auth.users`, nicht das Löschen der `sales`-Zeile) |
+| `sales.user_id → auth.users` | – | NO ACTION (Gegenrichtung) | unverändert | Auth-Identität ist nicht löschbar, solange die `sales`-Zeile existiert |
+
+**Kein SET NULL, nirgends.** `contact_notes` bekommt `NO ACTION`, weil die `sales`-Zeile der einzige dauerhafte Identitätsanker ist; ein Snapshot nur zur Rechtfertigung von `SET NULL` wäre ohne Produktbedarf eingeführte Doppelhaltung. `ON UPDATE` ist irrelevant, da `sales.id` per Trigger unveränderlich ist.
+
+### Lösch-Sicherheitsmodell
+
+1. **Datenbankbarriere = sechs `NO ACTION`-Foreign-Keys.** Jede Referenz blockiert für sich (Suite Abschnitt 5). Kein zusätzlicher Trigger-Guard: alle Referenzen auf `sales.id` sind jetzt FKs, die verbleibenden Verweise sind bewusste Snapshots ohne Löschsperre.
+2. **Browser-Rollen können nie löschen.** Es gab keine DELETE-Policy auf `sales`; W2 entzieht `anon`/`authenticated` zusätzlich das Tabellenprivileg `DELETE` (Defense in Depth, unabhängig von künftigen Policy-Änderungen) und macht beide Identity-Views `SELECT`-only.
+3. **Referenzierter Mitarbeiter → DELETE verweigert (23503) auf jedem Pfad**, auch `postgres` und `service_role`.
+4. **Unreferenzierter Mitarbeiter → technisch weiter löschbar** für `postgres`/`service_role` (Suite Abschnitt 8). Genau das ist der Pfad des künftigen kontrollierten Executors. Es gibt keinen versteckten Bypass für normale Clients.
+5. **Was ein künftiger Executor vor dem Löschen prüfen oder bereinigen muss:** alle sechs FK-Referenzen müssen 0 sein (die Preview-Funktion beantwortet „Kann dieser Mitarbeiter sicher gelöscht werden?" mit genau dieser Zählung); Snapshots (`audit_events`, `email_delivery_events`) bleiben unverändert stehen; die Auth-Identität ist danach separat zu behandeln (`sales.user_id → auth.users` ist NO ACTION). Applikation sagt „nicht wählbar" **und** Datenbank sagt „referenzierte Identität nicht löschbar" — beides unabhängig voneinander.
+
+### Zwei Fragen, zwei Read-Models
+
+| Frage | Read-Model | Projektion | Verwendung |
+|---|---|---|---|
+| „Wem darf ich neue Arbeit zuweisen?" | `public.sales_directory` (unverändert: nur `disabled = false`) | `id, first_name, last_name, avatar` | `SALES_DIRECTORY_REFERENCE_PROPS` in Kunden-, Kontakt- und Vorgangsformular |
+| „Wer war/ist für diesen bestehenden Datensatz zuständig, wer hat diese Notiz geschrieben?" | **`public.sales_identities`** (neu: alle Zeilen) | `id, first_name, last_name, avatar, disabled` | `useGetSalesName` (Notizen, Vorgangs-/Kunden-/Kontaktakte, Aktivitätslog), Kontakt-Export |
+
+Security-Bewertung `sales_identities` (Pflicht laut `03-data-model-guardrails.md`): identisches Vertrauensmodell wie `sales_directory` — `security_invoker = false`, Owner `postgres`, WHERE `nora_private.is_active_user()` (deaktivierte Aufrufer sehen nichts), kein `role`/`email`/`user_id`/`administrator`, `SELECT` nur für `authenticated`/`service_role`, `anon` nichts, keine Schreibprivilegien. Neu exponiert wird gegenüber `sales_directory` nur das Boolean `disabled` — dieselbe Information, die das Fehlen in der Directory bereits implizierte. Keine Duplikation des Mitarbeiterdatensatzes; eine View-Definition, kein Framework.
+
+### Historische Identität deaktivierter Mitarbeiter
+
+Alter Vorgang, alte Aufgabe, alte Notiz zeigen weiterhin den echten Namen. Keine Umbenennung in „Unbekannt", „Gelöscht" oder „Ehemalige Mitarbeiter:in", solange die Zeile existiert und der Name bekannt ist. Der Zuweisungs-Picker bietet die Person nicht mehr an. UI unverändert — nur die Datenquelle des Lookups wechselt.
+
+### Archivierungsprinzip (Nora-Domänenregel, in W2 nur für Mitarbeiter umgesetzt)
+
+**INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT.** Ein inaktiver Datensatz verschwindet aus Auswahllisten für Neues, bleibt aber Identitätsanker für alles Bestehende. Dieses Prinzip gilt später ebenso für Kontakte, Kunden und Vorgänge (`ArchiveCustomer` etc.) — W2 baut dafür kein generisches Archiv-Framework, sondern hält die Regel fest.
+
+### Legacy-RPC
+
+`public.set_sales_role_by_admin(bigint, text, boolean)` wird per `DROP FUNCTION` entfernt (Grants fallen mit). Beweis der Obsoleszenz: siehe F4. Die fünf SQL-Suiten, die sie referenzierten (`rbac_rls_production_check`, `rbac_rls_matrix`, `rbac_rls_final_hardening`, `safe_auth_role_verification`, `lifecycle_single_executor_verification`), prüfen jetzt ihre Abwesenheit und nutzen den Executor für die Positivfälle. W1 bleibt unverändert: Executor-Privilegienmatrix, Selbstschutz, Letzter-Admin-Guard, Audit-Verhalten (Suite W1 grün ohne die RPC, Suite W2 Abschnitt 9).
+
+### Nebenfix FakeRest
+
+Der Demo-Provider pflegte `sales_directory` durch Mutation des Seed-Arrays — FakeRest kopiert die Arrays beim Start, die Änderung erreichte den Store nie (ein in der Demo deaktivierter Mitarbeiter blieb im Picker). Beide Projektionen (`sales_directory`, `sales_identities`) werden jetzt über den Store selbst gepflegt und getestet (`salesIdentities.test.ts`).
+
+### Was W2 nicht tut
+
+Kein Offboarding-Command, kein `hardDeleteEmployee`/`purgeTestEmployee`, keine Abhängigkeits-Preview-UI, keine E-Mail-Änderung, keine Session-Revokation, keine Audit-Actor-Korrektur, keine Attachment-Bucket-Härtung, keine allgemeine Default-Privilegien-Bereinigung (nur die beiden Identity-Views und `sales.DELETE`), keine Snapshot-Anonymisierung, kein generisches Archiv-Framework, keine UI-Umgestaltung (kein „ehemalig"-Badge).
+
+### Verifikation (lokal, Postgres 15.8 / Docker)
+
+- Migration zweimal nacheinander auf die W1-Datenbank angewendet (forward, idempotent: zweiter Lauf nur `NOTICE … does not exist, skipping`), danach voller `npx supabase db reset --local` (Replay von null, Ledger-Kopf `20260905120000`, sechs FKs auf `sales` mit `confdeltype = 'a'`, Legacy-RPC abwesend).
+- Neue SQL-Suite `lifecycle_reference_integrity_verification.sql` (10 Abschnitte, selbst rollback-end) grün auf leerer Datenbank **und** mit `rbac_rls_setup`-Fixtures: Vertrag, Notiz-Autor nicht löschbar (Notiz byteidentisch), Aufgabenbesitzer nicht löschbar, ungültige `tasks.sales_id` abgewiesen (INSERT/UPDATE), jede der sechs Referenzen blockiert einzeln, `authenticated`-Admin kann weder Tabelle noch Views schreiben/löschen, deaktivierter Mitarbeiter löst per `sales_identities` auf und fehlt in `sales_directory` (deaktivierter Aufrufer sieht nichts), unreferenzierter Mitarbeiter für `service_role` löschbar (Auth-Identität unberührt), W1-Executor/Selbstschutz/Letzter-Admin intakt, Historie unverändert.
+- Kanonische Sequenz vollständig grün (22 Läufe): `production_check` → W1 → W2 → `setup` → `matrix` → `final_hardening` → `safe_auth_role` → W1 → W2 → `checklists_audit` → `crm_audit` → `customer_contact_workflow` → `error_contract` → `error_observatory` → `operation_correlation` → `operation_status_disposition` → `task_customer_context` → `google_calendar` → `audit_immutability` → `core_indexes` → `teardown` → `production_check`. `rbac_rls_first_admin_parallel` weiterhin nur manuell (bekannter Runner-Bug, unverändert).
+- App-Suite 101 Dateien / 903 Tests (1 bekannter Skip; neu: `useGetSalesName.test.tsx`, `salesIdentityContract.test.ts`, `fakerest/salesIdentities.test.ts`), Function-Suite 14 Dateien / 282 Tests (unverändert), `typecheck`, ESLint 0 Fehler (10 vorbestehende Warnungen), Prettier, Production-Build. Bundle-Budget: vorbestehend Entry 1060 kB > 1050 kB, durch W2 unverändert — nicht erhöht.
+- Read-only Preflight gegen `nora-crm-prod` (17.6): FK-Definitionen identisch zu lokal, `tasks` 10 Zeilen / 0 Waisen / 0 `NULL`, `contact_notes` 13, `deal_notes` 2, `sales` 5 (1 deaktiviert), Legacy-RPC vorhanden, `sales_directory`-ACL `SELECT`-only für `authenticated`.
+
+### Release-Reihenfolge (für den Release-Agenten, nicht ausgeführt)
+
+1. Read-only Preflight gegen `nora-crm-prod`: `tasks`-Waisen = 0, genau ein FK `contactNotes_sales_id_fkey` mit `confdeltype = 'c'`, `set_sales_role_by_admin` vorhanden, `users` Edge Function Version ≥ 5 (ruft die Legacy-RPC nicht mehr), `list_migrations`-Kopf `20260904220000`.
+2. Migration `20260905120000` gegen `nora-crm-prod` (Ledger-Version danach gegen den Dateinamen prüfen — bekannter `apply_migration`-Drift). Danach read-only: sechs FKs `confdeltype = 'a'`, Legacy-RPC weg, `sales_identities` vorhanden und `SELECT`-only, `sales.DELETE` für Browser-Rollen entzogen, Policy-Zahl unverändert, W1-Matrix unverändert.
+3. Kein Edge-Deploy nötig (v5 ist bereits live und ohne Legacy-RPC).
+4. Frontend (Push auf `main` → Vercel): altes Frontend gegen neue DB ist verträglich (`sales_directory` unverändert; alte Bundles zeigen weiterhin leere Namen für deaktivierte Mitarbeiter, kein Fehler). Neues Frontend gegen alte DB wäre **nicht** verträglich (`sales_identities` fehlt → Namen „??") — deshalb DB zuerst.
+5. Live-Smoke: Notiz/Vorgang eines deaktivierten Mitarbeiters zeigt den Namen; Picker „Zuständig" bietet ihn nicht an; Kontakt-Export läuft; Benutzerverwaltung (W1) unverändert.
 
 ## 2026-09-05 – User Lifecycle W1: ein privilegierter Executor, Selbst-/Letzter-Admin-Schutz, Zugangskonsistenz
 

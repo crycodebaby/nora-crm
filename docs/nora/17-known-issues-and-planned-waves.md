@@ -109,6 +109,8 @@ Die Schnellerfassung erzeugt Kunden weiterhin ohne `customer_kind`-Auswahl (Date
 
 **Status: PLANNED FOLLOW-UP, kein Zeitdruck**
 
+Domänenregel dafür ist seit User Lifecycle W2 (2026-09-05) festgehalten: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — ein inaktiver Datensatz verschwindet aus Auswahllisten für Neues, bleibt aber Identitätsanker für Bestehendes (umgesetzt in W2 nur für Mitarbeiter: `sales_directory` vs. `sales_identities`; kein generisches Archiv-Framework).
+
 Langfristige Zielrichtung: normales „Kunde löschen" durch einen fachlichen Lifecycle (`ArchiveCustomer`/`RestoreCustomer`, unveränderliche Kundennummer, historische Referenzintegrität) ersetzen. In der Self Contact Wave wurde dafür **nur** die notwendige Self-Contact-Delete-Invariante abgesichert (Löschen des repräsentierenden Kontakts einer Privatkundenakte ist blockiert) — kein vollständiger Archive-Lifecycle gebaut, bewusst außerhalb des Scopes.
 
 ---
@@ -334,9 +336,62 @@ Datei-Zeitstempel `20260904220000` korrigiert (Decision Log, Nachtrag Release).
 **Bewusst offen nach W1:** service_role-Audit-Ereignisse bleiben `System`
 (W3); keine Session-Revokation beim Deaktivieren (Bann stoppt Refresh, ein
 laufendes Access-Token läuft regulär aus; RLS verweigert sofort) — W5; die
-Legacy-RPC wird in W2 entfernt; FakeRest kennt die neuen Guards nicht
+Legacy-RPC ist in W2 entfernt (RC, siehe Abschnitt „User Lifecycle W2"); FakeRest kennt die neuen Guards nicht
 (Demo-Modus hat keine Autorisierung auf Datenebene, bestehende Lücke); die
 SQL-Suiten laufen weiterhin nicht in CI (W9); Nebenbefund aus dem Release: die 401-Antworten aus `_shared/authentication.ts` tragen noch den Fehlertext der JOSE-Bibliothek (technisches Vokabular, keine Daten) — Follow-up.
+
+## User Lifecycle W2 — Referenzintegrität & historische Identität
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-05), nicht Production Verified**
+
+Lokal bewiesen und read-only gegen `nora-crm-prod` bestätigt (Katalog identisch):
+`contact_notes.sales_id → sales.id` war `ON DELETE CASCADE` (Mitarbeiter löschen
+= Kontaktnotizen still löschen), `tasks.sales_id` hatte keinen Foreign Key
+(Waisen und Fantasie-IDs möglich), und der einzige Namens-Lookup
+(`sales_directory`, `disabled = false`) ließ deaktivierte Mitarbeiter auf alten
+Notizen, Vorgängen und im Kontakt-Export namenlos werden. Production hält
+aktuell 10 Aufgaben (0 Waisen), 13 Kontaktnotizen, 1 deaktivierten
+Mitarbeiter.
+
+**W2 (Migration `20260905120000_nora_lifecycle_reference_integrity.sql`):**
+sechs `NO ACTION`-FKs auf `sales.id` (neu: `tasks_sales_id_fkey`; geändert:
+`contactNotes_sales_id_fkey`), kein `SET NULL`, `DELETE` auf `sales` für
+`anon`/`authenticated` entzogen, `sales_directory` und die neue
+`sales_identities` `SELECT`-only, Legacy-RPC `set_sales_role_by_admin`
+gelöscht. Frontend: `useGetSalesName` und der Kontakt-Export lesen
+`sales_identities`; die Picker bleiben auf `sales_directory`.
+
+**Lösch-Modell:** referenzierter Mitarbeiter → DELETE verweigert (23503) auf
+jedem Pfad; unreferenzierter Mitarbeiter → nur `postgres`/`service_role`
+(künftiger kontrollierter Executor). Kein versteckter Bypass. Welche
+Referenzen blockieren: `companies`, `contacts`, `deals`, `deal_notes`,
+`contact_notes`, `tasks` (jeweils `sales_id`). Nicht blockierend, bewusst:
+`audit_events.actor_sales_id` (Name gesnapshottet) und
+`email_delivery_events.employee_sale_id` (Adresse gesnapshottet).
+
+**Nebenbefund, nur lokal:** Default-Privilegien in `public` gaben lokal
+`authenticated` Schreibrechte auf `sales_directory`; die View ist
+auto-updatable mit Owner `postgres` — ein Viewer-JWT konnte lokal
+`sales`-Zeilen über die View umbenennen und löschen (Rollback-Probe).
+Production trägt nur `SELECT`. W2 pinnt den Endzustand explizit; die
+allgemeine Default-Privilegien-Bereinigung (siehe Abschnitt oben) bleibt
+offen.
+
+**Nebenfix FakeRest:** die Demo-Synchronisation von `sales_directory` war eine
+wirkungslose Array-Mutation (FakeRest kopiert Seed-Arrays) — ein in der Demo
+deaktivierter Mitarbeiter blieb im Picker. Beide Projektionen laufen jetzt
+über den Store.
+
+**Bewusst offen nach W2:** Offboarding-Command und Hard-Delete-Executor mit
+Abhängigkeits-Preview (die Preview zählt genau die sechs FK-Referenzen;
+Test-Datenpurge nie über CASCADE); Audit-Actor `System` (W3);
+Session-Revokation (W5); SQL-Suiten in CI (W9); `rbac_rls_first_admin_parallel`
+weiterhin nur manuell (bekannter Runner-Bug); FakeRest ohne Datenbank-Guards;
+kein „ehemalig"-Badge in der UI (bewusst: Name bleibt Name).
+
+**Release-Reihenfolge:** Decision Log „2026-09-05 – User Lifecycle W2",
+Abschnitt „Release-Reihenfolge" — Datenbank zuerst (ein neues Frontend gegen
+die alte Datenbank zeigt „??" statt Namen), kein Edge-Deploy nötig.
 
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
