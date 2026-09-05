@@ -29,6 +29,11 @@
 --   9. W1 regression: executor matrix, self guard, last-admin guard
 --  10. history is untouched after all of the above (notes/deals/tasks compare
 --      equal to their snapshots)
+--  11. active assignment is authoritative (hardening): INSERT / UPDATE OF
+--      sales_id to a disabled employee is refused on companies, contacts,
+--      deals, tasks (DETAIL NORA_EMPLOYEE_NOT_ASSIGNABLE); unrelated updates
+--      of a disabled-owned record and moving away stay allowed; historical
+--      authorship (contact_notes, deal_notes) is not guarded
 
 \set ON_ERROR_STOP on
 
@@ -504,6 +509,151 @@ begin
     end if;
     raise notice 'OK 10. business history unchanged';
 
+    -- -----------------------------------------------------------------------
+    -- 11. Active assignment is authoritative (W2 hardening)
+    -- -----------------------------------------------------------------------
+    -- Erika is active again here (section 9 re-enabled her). Disable her via
+    -- the executor, then prove the assignment rule on every current-
+    -- responsibility table, and that historical authorship is untouched.
+    set local role service_role;
+    v_json := public.set_sales_access_by_executor(v_admin_uid, v_emp, null, true);
+    reset role;
+    if (select disabled from public.sales where id = v_emp) is not true then
+        raise exception 'FAIL: could not disable Erika for section 11';
+    end if;
+
+    -- 11a. INSERT with active employee allowed, with disabled employee denied
+    insert into public.deals (name, company_id, stage, sales_id) values ('Neu aktiv', v_company, 'opportunity', v_admin) returning id into v_tmp;
+    begin
+        insert into public.deals (name, company_id, stage, sales_id) values ('Neu deaktiviert', v_company, 'opportunity', v_emp);
+        raise exception 'FAIL: deal inserted with a disabled employee';
+    exception
+        when others then
+            get stacked diagnostics v_detail = pg_exception_detail;
+            if v_detail is distinct from 'NORA_EMPLOYEE_NOT_ASSIGNABLE' then raise; end if;
+    end;
+    foreach v_tbl in array array['companies', 'contacts', 'tasks']
+    loop
+        begin
+            case v_tbl
+                when 'companies' then insert into public.companies (name, sales_id) values ('Neu deaktiviert', v_emp);
+                when 'contacts' then insert into public.contacts (first_name, last_name, company_id, sales_id) values ('Neu', 'Deaktiviert', v_company, v_emp);
+                when 'tasks' then insert into public.tasks (contact_id, company_id, type, text, sales_id) values (v_contact, v_company, 'Call', 'Neu deaktiviert', v_emp);
+            end case;
+            raise exception 'FAIL: % row inserted with a disabled employee', v_tbl;
+        exception
+            when others then
+                get stacked diagnostics v_detail = pg_exception_detail;
+                if v_detail is distinct from 'NORA_EMPLOYEE_NOT_ASSIGNABLE' then raise; end if;
+        end;
+    end loop;
+
+    -- 11b. UPDATE sales_id active -> disabled denied, on every table
+    begin
+        update public.deals set sales_id = v_emp where id = v_tmp;
+        raise exception 'FAIL: deal re-assigned to a disabled employee';
+    exception
+        when others then
+            get stacked diagnostics v_detail = pg_exception_detail;
+            if v_detail is distinct from 'NORA_EMPLOYEE_NOT_ASSIGNABLE' then raise; end if;
+    end;
+    update public.companies set sales_id = v_admin where id = v_company;
+    update public.contacts set sales_id = v_admin where id = v_contact;
+    update public.tasks set sales_id = v_admin where id = v_task;
+    foreach v_tbl in array array['companies', 'contacts', 'tasks']
+    loop
+        begin
+            case v_tbl
+                when 'companies' then update public.companies set sales_id = v_emp where id = v_company;
+                when 'contacts' then update public.contacts set sales_id = v_emp where id = v_contact;
+                when 'tasks' then update public.tasks set sales_id = v_emp where id = v_task;
+            end case;
+            raise exception 'FAIL: % re-assigned to a disabled employee', v_tbl;
+        exception
+            when others then
+                get stacked diagnostics v_detail = pg_exception_detail;
+                if v_detail is distinct from 'NORA_EMPLOYEE_NOT_ASSIGNABLE' then raise; end if;
+        end;
+    end loop;
+
+    -- 11c. Unrelated update of a record still owned by the disabled employee
+    --      stays allowed (Erika still owns v_deal from the seed)
+    if (select sales_id from public.deals where id = v_deal) <> v_emp then
+        raise exception 'FAIL: test precondition — Erika must still own the seed deal';
+    end if;
+    update public.deals set description = 'Beschreibung nachgetragen' where id = v_deal;
+    if (select description from public.deals where id = v_deal) <> 'Beschreibung nachgetragen'
+       or (select sales_id from public.deals where id = v_deal) <> v_emp then
+        raise exception 'FAIL: unrelated update on a disabled-owned deal was refused or altered ownership';
+    end if;
+    -- an explicit re-write of the unchanged sales_id is not a re-assignment
+    update public.deals set sales_id = v_emp, description = 'Nochmal' where id = v_deal;
+    -- restore the deal snapshot-relevant fields for section 10 semantics
+    update public.deals set description = null where id = v_deal;
+
+    -- 11d. UPDATE sales_id disabled -> active allowed
+    update public.deals set sales_id = v_admin where id = v_deal;
+    if (select sales_id from public.deals where id = v_deal) <> v_admin then
+        raise exception 'FAIL: moving away from a disabled employee must be allowed';
+    end if;
+    update public.deals set sales_id = v_emp where id = v_deal; -- expect refusal
+    raise exception 'FAIL: moving back to the disabled employee must be refused';
+exception
+    when others then
+        if sqlerrm like '%moving back to the disabled employee%' then
+            raise;
+        end if;
+        get stacked diagnostics v_detail = pg_exception_detail;
+        if sqlerrm not like '%ROLLBACK_W2_TEST%' and v_detail is distinct from 'NORA_EMPLOYEE_NOT_ASSIGNABLE' then
+            raise;
+        end if;
+        if v_detail = 'NORA_EMPLOYEE_NOT_ASSIGNABLE' then
+            raise notice 'OK 11. active assignment authoritative (insert/update denied for disabled, unrelated and away-moves allowed)';
+        end if;
+end;
+$$;
+
+-- 11e. Historical authorship is never guarded: a contact note may keep (and
+--      even be re-attributed to) a disabled author — the guard is not on
+--      contact_notes / deal_notes at all. Separate rolled-back block.
+do $$
+declare
+    v_anchor_uid uuid := gen_random_uuid();
+    v_uid uuid := gen_random_uuid();
+    v_anchor bigint;
+    v_emp bigint;
+    v_company bigint;
+    v_contact bigint;
+    v_note bigint;
+begin
+    -- On an empty database the first sign-up becomes the administrator
+    -- (handle_new_user). Seed an admin anchor first so the author can be a
+    -- plain office user and be disabled without touching the last-admin guard.
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-0000-0000-000000000000', v_anchor_uid, 'authenticated', 'authenticated', 'w2-anchor@nora.test', 'x', now(), '{"provider":"email"}', '{"first_name":"W2","last_name":"Anchor"}', now(), now());
+    select id into v_anchor from public.sales where user_id = v_anchor_uid;
+    perform nora_private.apply_sales_role_change(v_anchor, 'admin', false);
+
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values ('00000000-0000-0000-0000-000000000000', v_uid, 'authenticated', 'authenticated', 'w2-author@nora.test', 'x', now(), '{"provider":"email"}', '{"first_name":"Alte","last_name":"Autorin"}', now(), now());
+    select id into v_emp from public.sales where user_id = v_uid;
+    perform nora_private.apply_sales_role_change(v_emp, 'office', false);
+    insert into public.companies (name) values ('W2 Referenz Autor') returning id into v_company;
+    insert into public.contacts (first_name, last_name, company_id) values ('Max', 'Autor', v_company) returning id into v_contact;
+    insert into public.contact_notes (contact_id, text, sales_id) values (v_contact, 'alte Notiz', v_emp) returning id into v_note;
+    perform nora_private.apply_sales_role_change(v_emp, 'office', true);
+    update public.contact_notes set text = 'alte Notiz, korrigiert' where id = v_note;
+    if (select sales_id from public.contact_notes where id = v_note) <> v_emp then
+        raise exception 'FAIL: note lost its disabled author';
+    end if;
+    if exists (
+        select 1 from pg_trigger
+        where tgrelid in ('public.contact_notes'::regclass, 'public.deal_notes'::regclass)
+          and tgname = 'guard_active_assignment_trigger'
+    ) then
+        raise exception 'FAIL: assignment guard must not exist on historical authorship tables';
+    end if;
+    raise notice 'OK 11e. historical authorship by a disabled employee stays valid';
     raise exception 'ROLLBACK_W2_TEST' using errcode = 'P0001';
 exception
     when others then

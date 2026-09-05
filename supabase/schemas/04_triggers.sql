@@ -183,6 +183,25 @@ create or replace trigger audit_sales_privilege_change_trigger
     after update of role, disabled on public.sales
     for each row execute function public.audit_sales_privilege_change();
 
+-- Nora User Lifecycle W2 (2026-09-05): disabled employees are not newly
+-- assignable as the responsible employee (history stays referenced).
+-- Not on contact_notes / deal_notes (historical authorship).
+create or replace trigger guard_active_assignment_trigger
+    before insert or update of sales_id on public.companies
+    for each row execute function nora_private.guard_active_assignment();
+
+create or replace trigger guard_active_assignment_trigger
+    before insert or update of sales_id on public.contacts
+    for each row execute function nora_private.guard_active_assignment();
+
+create or replace trigger guard_active_assignment_trigger
+    before insert or update of sales_id on public.deals
+    for each row execute function nora_private.guard_active_assignment();
+
+create or replace trigger guard_active_assignment_trigger
+    before insert or update of sales_id on public.tasks
+    for each row execute function nora_private.guard_active_assignment();
+
 -- Nora User Lifecycle W1 (2026-09-04): never leave zero active administrators
 create or replace trigger guard_last_active_admin_trigger
     before update of role, disabled on public.sales

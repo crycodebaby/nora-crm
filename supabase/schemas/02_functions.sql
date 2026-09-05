@@ -994,6 +994,41 @@ BEGIN
 END;
 $$;
 
+-- User Lifecycle W2 hardening (2026-09-05): a disabled employee may stay
+-- referenced by existing records but may not be newly assigned as the
+-- responsible employee (companies/contacts/deals/tasks). See migration
+-- 20260905150000_nora_lifecycle_active_assignment.sql.
+CREATE OR REPLACE FUNCTION nora_private.guard_active_assignment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_disabled boolean;
+BEGIN
+    IF new.sales_id IS NULL THEN
+        RETURN new;
+    END IF;
+    IF tg_op = 'UPDATE' AND new.sales_id IS NOT DISTINCT FROM old.sales_id THEN
+        RETURN new;
+    END IF;
+
+    SELECT s.disabled INTO v_disabled
+    FROM public.sales s
+    WHERE s.id = new.sales_id;
+
+    IF v_disabled THEN
+        RAISE EXCEPTION 'Dieser Mitarbeiter ist deaktiviert und kann nicht neu zugewiesen werden'
+            USING ERRCODE = '23514', DETAIL = 'NORA_EMPLOYEE_NOT_ASSIGNABLE';
+    END IF;
+
+    RETURN new;
+END;
+$$;
+
+ALTER FUNCTION nora_private.guard_active_assignment() OWNER TO postgres;
+
 -- public.set_sales_role_by_admin (legacy lifecycle RPC) was dropped in User
 -- Lifecycle W2 (migration 20260905120000). The single executor is
 -- public.set_sales_access_by_executor below.
