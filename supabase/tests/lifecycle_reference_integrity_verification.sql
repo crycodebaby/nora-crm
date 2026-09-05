@@ -151,12 +151,12 @@ begin
     if to_regprocedure('public.set_sales_role_by_admin(bigint, text, boolean)') is not null then
         raise exception 'FAIL: legacy RPC set_sales_role_by_admin still exists';
     end if;
-    if to_regprocedure('public.set_sales_access_by_executor(uuid, bigint, text, boolean)') is null then
+    if to_regprocedure('public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)') is null then
         raise exception 'FAIL: W1 executor missing';
     end if;
-    if has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE')
-       or has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE')
-       or not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+    if has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE')
+       or has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE')
+       or not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE') then
         raise exception 'FAIL: W1 executor privilege matrix changed';
     end if;
     if not exists (

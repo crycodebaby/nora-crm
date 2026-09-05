@@ -55,10 +55,10 @@ grant all on function public.handle_update_user() to service_role;
 -- privileged path (users Edge Function → service_role → executor RPC).
 -- No browser role may execute the RPC; see migration 20260904220000.
 -- The legacy RPC set_sales_role_by_admin was dropped in W2 (20260905120000).
-revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from public;
-revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from anon;
-revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) from authenticated;
-grant execute on function public.set_sales_access_by_executor(uuid, bigint, text, boolean) to service_role;
+revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid) from public;
+revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid) from anon;
+revoke all on function public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid) from authenticated;
+grant execute on function public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid) to service_role;
 
 revoke all on function nora_private.active_admin_count(bigint) from public;
 revoke all on function nora_private.active_admin_count(bigint) from anon;
@@ -298,8 +298,25 @@ grant execute on function nora_private.write_audit_event(
     jsonb, jsonb, text, text, text, text
 ) to postgres;
 
+revoke all on function nora_private.resolve_audit_actor() from public;
+revoke all on function nora_private.resolve_audit_actor() from anon;
+revoke all on function nora_private.resolve_audit_actor() from authenticated;
+revoke all on function nora_private.resolve_audit_actor() from service_role;
 grant execute on function nora_private.resolve_audit_actor() to postgres;
 grant execute on function nora_private.resolve_audit_actor() to nora_audit_writer;
+
+-- Nora User Lifecycle W3 (2026-09-05): audit context pin is postgres-internal;
+-- record_employee_admin_event is service_role-only (see migration 20260905180000).
+revoke all on function nora_private.pin_audit_context(uuid, uuid) from public;
+revoke all on function nora_private.pin_audit_context(uuid, uuid) from anon;
+revoke all on function nora_private.pin_audit_context(uuid, uuid) from authenticated;
+revoke all on function nora_private.pin_audit_context(uuid, uuid) from service_role;
+grant execute on function nora_private.pin_audit_context(uuid, uuid) to postgres;
+
+revoke all on function public.record_employee_admin_event(uuid, bigint, text, uuid, jsonb) from public;
+revoke all on function public.record_employee_admin_event(uuid, bigint, text, uuid, jsonb) from anon;
+revoke all on function public.record_employee_admin_event(uuid, bigint, text, uuid, jsonb) from authenticated;
+grant execute on function public.record_employee_admin_event(uuid, bigint, text, uuid, jsonb) to service_role;
 
 revoke all on function nora_private.current_operation_id() from public;
 revoke all on function nora_private.current_operation_id() from anon;

@@ -88,11 +88,11 @@ begin
 
     -- W1: single executor — no browser role may execute the access RPC
     -- (W2 dropped the legacy set_sales_role_by_admin; see check above)
-    if has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE')
-       or has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+    if has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE')
+       or has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE') then
         raise exception 'W1: only service_role may EXECUTE set_sales_access_by_executor';
     end if;
-    if not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+    if not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE') then
         raise exception 'W1: service_role must EXECUTE set_sales_access_by_executor';
     end if;
     if not exists (

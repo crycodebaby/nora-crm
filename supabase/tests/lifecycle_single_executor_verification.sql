@@ -38,13 +38,13 @@ begin
         raise exception 'FAIL: legacy RPC set_sales_role_by_admin must not exist (W2)';
     end if;
 
-    if has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+    if has_function_privilege('authenticated', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE') then
         raise exception 'FAIL: authenticated may EXECUTE set_sales_access_by_executor';
     end if;
-    if has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+    if has_function_privilege('anon', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE') then
         raise exception 'FAIL: anon may EXECUTE set_sales_access_by_executor';
     end if;
-    if not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)', 'EXECUTE') then
+    if not has_function_privilege('service_role', 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)', 'EXECUTE') then
         raise exception 'FAIL: service_role must EXECUTE set_sales_access_by_executor';
     end if;
 
@@ -70,7 +70,7 @@ begin
         select 1
         from pg_proc p
         join pg_roles r on r.oid = p.proowner
-        where p.oid = 'public.set_sales_access_by_executor(uuid, bigint, text, boolean)'::regprocedure
+        where p.oid = 'public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid)'::regprocedure
           and p.prosecdef
           and r.rolname = 'postgres'
           and p.proconfig::text like '%search_path=%'
@@ -358,8 +358,8 @@ begin
     if v_count <> v_before then
         raise exception 'FAIL: idempotent re-sync wrote a duplicate audit event';
     end if;
-    -- Actor attribution of service_role-driven events is "System" today —
-    -- documented, addressed by the audit-actor wave (W3), not by W1.
+    -- Actor attribution of these events is proven by W3
+    -- (lifecycle_audit_actor_verification.sql).
     raise notice 'OK  8. audit events present, none duplicated by re-sync';
 
     -- -----------------------------------------------------------------------

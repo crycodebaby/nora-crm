@@ -1087,114 +1087,305 @@ $$;
 
 ALTER FUNCTION nora_private.guard_last_active_admin() OWNER TO postgres;
 
-CREATE OR REPLACE FUNCTION public.set_sales_access_by_executor(
+-- Nora User Lifecycle W3 (2026-09-05): the executor pins the verified actor and the
+-- operation id for the audit trigger (migration 20260905180000).
+create or replace function nora_private.pin_audit_context(
+    p_actor_user_id uuid,
+    p_operation_id uuid
+)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+begin
+    perform set_config('nora.audit_actor_user_id', coalesce(p_actor_user_id::text, ''), true);
+    perform set_config('nora.operation_id', coalesce(lower(p_operation_id::text), ''), true);
+end;
+$$;
+
+alter function nora_private.pin_audit_context(uuid, uuid) owner to postgres;
+
+create or replace function public.set_sales_access_by_executor(
     p_actor_user_id uuid,
     p_sale_id bigint,
-    p_role text DEFAULT NULL,
-    p_disabled boolean DEFAULT NULL
+    p_role text default null,
+    p_disabled boolean default null,
+    p_operation_id uuid default null
 )
-RETURNS jsonb
-LANGUAGE plpgsql
-VOLATILE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
     v_actor public.sales%rowtype;
     v_target public.sales%rowtype;
     v_next_role text;
     v_next_disabled boolean;
-BEGIN
-    IF coalesce(nora_private.safe_auth_role(), '') <> 'service_role' THEN
-        RAISE EXCEPTION 'forbidden'
-            USING ERRCODE = '42501', DETAIL = 'NORA_PERMISSION_DENIED';
-    END IF;
+begin
+    -- Trust boundary: only the privileged server executor may call this.
+    if coalesce(nora_private.safe_auth_role(), '') <> 'service_role' then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
 
-    IF p_actor_user_id IS NULL THEN
-        RAISE EXCEPTION 'actor required' USING ERRCODE = '22023';
-    END IF;
-    IF p_role IS NOT NULL AND p_role NOT IN ('admin', 'office', 'viewer') THEN
-        RAISE EXCEPTION 'invalid role: %', p_role USING ERRCODE = '22023';
-    END IF;
-    IF p_role IS NULL AND p_disabled IS NULL THEN
-        RAISE EXCEPTION 'nothing to change' USING ERRCODE = '22023';
-    END IF;
+    if p_actor_user_id is null then
+        raise exception 'actor required' using errcode = '22023';
+    end if;
+    if p_role is not null and p_role not in ('admin', 'office', 'viewer') then
+        raise exception 'invalid role: %', p_role using errcode = '22023';
+    end if;
+    if p_role is null and p_disabled is null then
+        raise exception 'nothing to change' using errcode = '22023';
+    end if;
 
-    SELECT * INTO v_actor FROM public.sales WHERE user_id = p_actor_user_id;
-    IF NOT FOUND OR v_actor.role <> 'admin' OR v_actor.disabled THEN
-        RAISE EXCEPTION 'forbidden'
-            USING ERRCODE = '42501', DETAIL = 'NORA_PERMISSION_DENIED';
-    END IF;
+    -- The actor parameter never creates privilege: it must name an existing,
+    -- active administrator or the call is refused before any write.
+    select * into v_actor from public.sales where user_id = p_actor_user_id;
+    if not found or v_actor.role <> 'admin' or v_actor.disabled then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
 
-    SELECT * INTO v_target FROM public.sales WHERE id = p_sale_id FOR UPDATE;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'sales profile not found: %', p_sale_id
-            USING ERRCODE = 'P0002';
-    END IF;
+    select * into v_target from public.sales where id = p_sale_id for update;
+    if not found then
+        raise exception 'sales profile not found: %', p_sale_id
+            using errcode = 'P0002';
+    end if;
 
     v_next_role := coalesce(p_role, v_target.role);
     v_next_disabled := coalesce(p_disabled, v_target.disabled);
 
-    IF v_target.user_id = p_actor_user_id
-       AND (
-           v_next_role IS DISTINCT FROM v_target.role
-           OR v_next_disabled IS DISTINCT FROM v_target.disabled
+    -- Self guard: an administrator must not demote or disable themselves
+    -- through the normal lifecycle path. Re-applying the current values is
+    -- not a change and stays allowed (idempotent re-sync).
+    if v_target.user_id = p_actor_user_id
+       and (
+           v_next_role is distinct from v_target.role
+           or v_next_disabled is distinct from v_target.disabled
        )
-    THEN
-        RAISE EXCEPTION 'administrators cannot change their own role or access'
-            USING ERRCODE = '42501', DETAIL = 'NORA_SELF_ACCESS_CHANGE_FORBIDDEN';
-    END IF;
+    then
+        raise exception 'administrators cannot change their own role or access'
+            using errcode = '42501', detail = 'NORA_SELF_ACCESS_CHANGE_FORBIDDEN';
+    end if;
 
-    PERFORM nora_private.apply_sales_role_change(p_sale_id, v_next_role, v_next_disabled);
+    -- W3: the audit trigger on public.sales fires inside apply_sales_role_change
+    -- (same transaction). Pin the verified actor and the operation id for it,
+    -- then clear both again so nothing outlives this call.
+    perform nora_private.pin_audit_context(p_actor_user_id, p_operation_id);
+    perform nora_private.apply_sales_role_change(p_sale_id, v_next_role, v_next_disabled);
+    perform nora_private.pin_audit_context(null, null);
 
-    SELECT * INTO v_target FROM public.sales WHERE id = p_sale_id;
+    select * into v_target from public.sales where id = p_sale_id;
 
-    RETURN jsonb_build_object(
+    return jsonb_build_object(
         'id', v_target.id,
         'user_id', v_target.user_id,
         'role', v_target.role,
         'disabled', v_target.disabled
     );
-END;
+end;
 $$;
 
-ALTER FUNCTION public.set_sales_access_by_executor(uuid, bigint, text, boolean) OWNER TO postgres;
+alter function public.set_sales_access_by_executor(uuid, bigint, text, boolean, uuid) owner to postgres;
+
+create or replace function public.record_employee_admin_event(
+    p_actor_user_id uuid,
+    p_sale_id bigint,
+    p_event_type text,
+    p_operation_id uuid default null,
+    p_metadata jsonb default null
+)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+    v_actor public.sales%rowtype;
+    v_target public.sales%rowtype;
+    v_meta jsonb;
+    v_role text;
+    v_key text;
+    v_id uuid;
+begin
+    -- Trust boundary: only the privileged server executor may call this.
+    if coalesce(nora_private.safe_auth_role(), '') <> 'service_role' then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+
+    if p_actor_user_id is null then
+        raise exception 'actor required' using errcode = '22023';
+    end if;
+    if p_sale_id is null then
+        raise exception 'target required' using errcode = '22023';
+    end if;
+    if p_event_type is null or p_event_type not in (
+        'user.invited',
+        'user.invitation_resent',
+        'user.password_setup_requested'
+    ) then
+        raise exception 'unsupported employee event type: %', coalesce(p_event_type, '<null>')
+            using errcode = '22023';
+    end if;
+
+    -- Same actor rule as the lifecycle executor: an existing, active admin.
+    select * into v_actor from public.sales where user_id = p_actor_user_id;
+    if not found or v_actor.role <> 'admin' or v_actor.disabled then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+
+    select * into v_target from public.sales where id = p_sale_id;
+    if not found then
+        raise exception 'sales profile not found: %', p_sale_id
+            using errcode = 'P0002';
+    end if;
+
+    -- Allowlisted caller metadata: only "role" (for user.invited).
+    if p_metadata is not null then
+        if jsonb_typeof(p_metadata) <> 'object' then
+            raise exception 'metadata must be an object' using errcode = '22023';
+        end if;
+        for v_key in select jsonb_object_keys(p_metadata) loop
+            if v_key <> 'role' then
+                raise exception 'metadata key not allowed: %', v_key using errcode = '22023';
+            end if;
+        end loop;
+        v_role := p_metadata ->> 'role';
+        if v_role is not null and v_role not in ('admin', 'office', 'viewer') then
+            raise exception 'invalid role: %', v_role using errcode = '22023';
+        end if;
+    end if;
+
+    v_meta := jsonb_build_object(
+        'sale_id', v_target.id,
+        'actor_sale_id', v_actor.id
+    );
+
+    if p_event_type = 'user.invited' then
+        v_meta := v_meta || jsonb_build_object(
+            'invitee_sale_id', v_target.id,
+            'invitee_email', v_target.email,
+            'role', coalesce(v_role, v_target.role)
+        );
+    else
+        v_meta := v_meta || jsonb_build_object(
+            'employee_sale_id', v_target.id,
+            'employee_email', v_target.email
+        );
+    end if;
+
+    perform nora_private.pin_audit_context(p_actor_user_id, p_operation_id);
+    v_id := nora_private.write_audit_event(
+        p_event_type := p_event_type,
+        p_entity_type := 'sales',
+        p_entity_id := public.nora_entity_uuid('sales', v_target.id),
+        p_metadata := v_meta,
+        p_retention_class := 'user_management',
+        p_source := 'user'
+    );
+    perform nora_private.pin_audit_context(null, null);
+
+    return v_id;
+end;
+$$;
+
+alter function public.record_employee_admin_event(uuid, bigint, text, uuid, jsonb) owner to postgres;
 
 -- Nora CRM v0.3l: CRM audit writer, diff builders, entity triggers, read RPCs
 -- Role nora_audit_writer is created in migration 20260715120000_nora_crm_audit.sql
 
-CREATE OR REPLACE FUNCTION nora_private.resolve_audit_actor()
-RETURNS TABLE (
+-- W3: actor bridge for the privileged server path (migration 20260905180000).
+create or replace function nora_private.resolve_audit_actor()
+returns table (
     actor_auth_id uuid,
     actor_sales_id bigint,
     actor_name text,
     actor_role text
 )
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
     v_uid uuid;
     v_sale public.sales%rowtype;
-BEGIN
+    v_pinned text;
+    v_pinned_uid uuid;
+begin
     v_uid := nora_private.safe_auth_uid();
-    IF v_uid IS NULL THEN
-        RETURN QUERY SELECT null::uuid, null::bigint, 'System'::text, null::text;
-        RETURN;
-    END IF;
-    SELECT * INTO v_sale FROM public.sales s
-    WHERE s.user_id = v_uid AND s.disabled = false LIMIT 1;
-    IF NOT FOUND THEN
-        RETURN QUERY SELECT v_uid, null::bigint, 'Unbekannter Benutzer'::text, null::text;
-        RETURN;
-    END IF;
-    RETURN QUERY SELECT v_uid, v_sale.id, trim(v_sale.first_name || ' ' || v_sale.last_name), v_sale.role;
-END;
+
+    if v_uid is null then
+        -- W3: privileged server path with a verified human actor pinned by
+        -- the executor. Only honoured under the service_role claim.
+        if coalesce(nora_private.safe_auth_role(), '') = 'service_role' then
+            begin
+                v_pinned := nullif(btrim(current_setting('nora.audit_actor_user_id', true)), '');
+            exception
+                when others then
+                    v_pinned := null;
+            end;
+
+            if v_pinned is not null then
+                begin
+                    v_pinned_uid := v_pinned::uuid;
+                exception
+                    when others then
+                        raise exception 'audit actor context is not a uuid'
+                            using errcode = '22023', detail = 'NORA_AUDIT_ACTOR_INVALID';
+                end;
+
+                select * into v_sale
+                from public.sales s
+                where s.user_id = v_pinned_uid
+                limit 1;
+
+                if not found then
+                    raise exception 'audit actor does not resolve to an employee'
+                        using errcode = '42501', detail = 'NORA_AUDIT_ACTOR_INVALID';
+                end if;
+
+                return query select
+                    v_pinned_uid,
+                    v_sale.id,
+                    trim(v_sale.first_name || ' ' || v_sale.last_name),
+                    v_sale.role;
+                return;
+            end if;
+        end if;
+
+        -- Genuine automation (no verified human): System stays valid.
+        return query select null::uuid, null::bigint, 'System'::text, null::text;
+        return;
+    end if;
+
+    select * into v_sale
+    from public.sales s
+    where s.user_id = v_uid
+      and s.disabled = false
+    limit 1;
+
+    if not found then
+        return query select v_uid, null::bigint, 'Unbekannter Benutzer'::text, null::text;
+        return;
+    end if;
+
+    return query select
+        v_uid,
+        v_sale.id,
+        trim(v_sale.first_name || ' ' || v_sale.last_name),
+        v_sale.role;
+end;
 $$;
 
-ALTER FUNCTION nora_private.resolve_audit_actor() OWNER TO postgres;
+alter function nora_private.resolve_audit_actor() owner to postgres;
 
 CREATE OR REPLACE FUNCTION nora_private.audit_json_field(p_old jsonb, p_new jsonb, p_key text)
 RETURNS jsonb
