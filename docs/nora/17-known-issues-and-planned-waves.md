@@ -342,7 +342,7 @@ SQL-Suiten laufen weiterhin nicht in CI (W9); Nebenbefund aus dem Release: die 4
 
 ## User Lifecycle W2 — Referenzintegrität & historische Identität
 
-**Status: `RC VERIFIED — HARDENED AND READY FOR CONTROLLED RELEASE` (2026-09-05), nicht Production Verified**
+**Status: `PRODUCTION VERIFIED` (2026-09-05; `main = f12c908e`, beide Migrationen live, Live-Smoke durch den Product Owner — Details im Decision Log „User Lifecycle W2", Nachtrag Release)**
 
 Lokal bewiesen und read-only gegen `nora-crm-prod` bestätigt (Katalog identisch):
 `contact_notes.sales_id → sales.id` war `ON DELETE CASCADE` (Mitarbeiter löschen

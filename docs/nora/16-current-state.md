@@ -239,8 +239,10 @@ im Bearbeiten-Formular sichtbar, aber nicht wählbar.
 Migrationen `20260905120000_nora_lifecycle_reference_integrity.sql` und
 `20260905150000_nora_lifecycle_active_assignment.sql`, neue SQL-Suite
 `lifecycle_reference_integrity_verification.sql` (11 Abschnitte).
-**Status: `RC VERIFIED — HARDENED AND READY FOR CONTROLLED RELEASE`** (Branch
-`security/nora-lifecycle-w2-reference-integrity`, nicht Production Verified).
+**Status: `PRODUCTION VERIFIED`** (2026-09-05: beide Migrationen live auf
+`nora-crm-prod`, `main = f12c908e`, Vercel READY auf diesem SHA, Alias
+`nora.ergart.de`, Live-Smoke durch den Product Owner ohne Regression; siehe
+Decision Log „2026-09-05 – User Lifecycle W2", Nachtrag Release).
 Details: Decision Log „2026-09-05 – User Lifecycle W2".
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
