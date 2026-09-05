@@ -396,7 +396,7 @@ Zuständigen mit diesem Code abgelehnt werden (fachlich korrekt).
 
 **Bewusst offen nach W2:** Offboarding-Command und Hard-Delete-Executor mit
 Abhängigkeits-Preview (die Preview zählt genau die sechs FK-Referenzen;
-Test-Datenpurge nie über CASCADE); ~~Audit-Actor `System` (W3)~~ — W3 RC, siehe Abschnitt „User Lifecycle W3“;
+Test-Datenpurge nie über CASCADE); ~~Audit-Actor `System` (W3)~~ — W3 released (2026-09-06), siehe Abschnitt „User Lifecycle W3“;
 Session-Revokation (W5); SQL-Suiten in CI (W9); `rbac_rls_first_admin_parallel`
 weiterhin nur manuell (bekannter Runner-Bug); FakeRest ohne Datenbank-Guards;
 kein „ehemalig"-Badge in der UI (bewusst: Name bleibt Name).
@@ -407,9 +407,10 @@ die alte Datenbank zeigt „??" statt Namen), kein Edge-Deploy nötig.
 
 ## User Lifecycle W3 — Audit-Actor & stabile Mitarbeiter-Historie
 
-**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-05; Branch
-`security/nora-lifecycle-w3-audit-actor`, Basis `origin/main = 522f1602`;
-nicht released)**
+**Status: `PRODUCTION VERIFIED` (2026-09-06; RC `929948da` = `main`,
+Migration `20260905180000` live auf `nora-crm-prod`, `users` Edge v6; Live-Beweis
+und Ledger-Korrektur im Decision Log „2026-09-05 – User Lifecycle W3",
+Nachtrag Release)**
 
 Bewiesen (read-only gegen `nora-crm-prod`, lokal reproduziert): alle 12
 `user.*`-Audit-Zeilen in Production tragen Actor `System` mit `actor_id`,
@@ -461,9 +462,16 @@ künftige Zeilen sind attribuiert.
   verteiltes Commit.
 - Profiländerungen über PATCH (Name, Avatar) erzeugen weiterhin kein
   `user.*`-Ereignis; E-Mail-Änderung ist W4.
-- Release-Fenster: nach der Migration und vor Edge v6 schreibt Edge v5 die
-  drei Edge-Ereignisse weiterhin über `insert_audit_event` (System, zufällige
-  Entity). Edge-Deploy unmittelbar nach der Migration.
+- ~~Release-Fenster zwischen Migration und Edge v6~~ — geschlossen
+  (2026-09-06): Edge v6 wurde unmittelbar nach der Migration deployt; in dem
+  Fenster fand kein Edge-Ereignis statt (`audit_events` 276 → 280, alle vier
+  neuen Zeilen sind attribuierte Trigger-Ereignisse des Live-Beweises).
+- Live-Beweis-Befund: der Product Owner berichtete zwei Rollenwechsel
+  (office→viewer→office), Production zeigt vier (zusätzlich office→admin→office
+  aus derselben Sitzung, Sekunden später). Alle vier sind korrekt attribuiert,
+  der Endzustand ist `office`/deaktiviert. Kein Defekt — aber die Benutzer-UI
+  bestätigt einen Rollenwechsel nicht als eigenständigen, sichtbaren Vorgang;
+  Kandidat für eine UX-Nachbesserung (LOW).
 - W5 Session-Revokation, Offboarding/Hard-Delete-Executor, W9 SQL-Suiten in
   CI: unverändert offen.
 
