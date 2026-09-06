@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-06 (User Lifecycle W5 RC VERIFIED — nicht released; W4 PRODUCTION VERIFIED; davor 2026-08-29 nach Security Advisor Baseline Closure + Error Contract Wave Production Release + Idempotency Wave Production Release + Operation Status Contract v1 Production Release).
+Stand: 2026-09-06 (User Lifecycle W5 PRODUCTION VERIFIED — `main` = 3baf5b02, Migration 20260906180000 live, users Edge v8; W4 PRODUCTION VERIFIED; davor 2026-08-29 nach Security Advisor Baseline Closure + Error Contract Wave Production Release + Idempotency Wave Production Release + Operation Status Contract v1 Production Release).
 
 Dieses Dokument ist eine **schnelle Orientierung**, kein Ersatz für die referenzierten Dokumente. Es verlinkt, statt Inhalte zu duplizieren.
 
@@ -336,12 +336,17 @@ während/nach dem Offboarding, auch bei null) mit gefilterten Listen-Links,
 Katalog `employee.offboard`. Migration
 `20260906180000_nora_lifecycle_offboarding.sql`, neue SQL-Suite
 `lifecycle_offboarding_verification.sql` (12 Abschnitte),
-`users/offboarding.ts` (+15 Tests). **Status: `RC VERIFIED — READY FOR
-CONTROLLED RELEASE` (2026-09-06)** — nicht gepusht, keine Production-Migration,
-kein Edge-Deploy; Session-, Executor- und echter HTTP-Beweis lokal, kanonische
-SQL-Sequenz 28/28 grün, Function-Suite 17/343, App-Suite 108/948. Release-
-Reihenfolge und Live-Beweis am Testkonto `sales.id = 4`: Decision Log
-„2026-09-06 – User Lifecycle W5". W6 (Hard Delete) nicht begonnen.
+`users/offboarding.ts` (+15 Tests). **Status: `PRODUCTION VERIFIED`
+(2026-09-06)** — RC `3baf5b02` unabhängig zertifiziert (Gate PASS), `main` =
+`3baf5b02`, Migration live (Ledger-Kopf `20260906180000`), `users` Edge v8
+byteidentisch, Vercel READY, Live-Beweis am Testkonto `sales.id = 4`
+(Endzustand deaktiviert/gebannt, eigener `user.offboarded`); kanonische
+SQL-Sequenz 28/28, Function-Suite 17/343, App-Suite 108/955, echter
+GoTrue-Beweis 63/63. Fail-open der Session-Bindung bei fehlendem Leserecht
+ist eine dokumentierte, nicht angreiferseitig erreichbare Einschränkung
+(W6-Empfehlung: fail-closed). Details und Zwischenfall des Live-Beweises:
+Decision Log „2026-09-06 – User Lifecycle W5", Nachtrag Release. W6 (Hard
+Delete) nicht begonnen.
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
@@ -526,7 +531,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
 9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
 10. ~~Operation Status Contract v1~~ — **PRODUCTION VERIFIED seit 2026-08-29** (Phase 6E), siehe Abschnitt 4 Punkt 18, Decision Log „Operation Status Contract Wave" inkl. Nachtrag Phase 6C, 6D.1 und 6E. Die Notification-/Status-UI, die diesen Contract konsumiert, ist inzwischen als Phase 7B umgesetzt — siehe Abschnitt 4 Punkt 19. Sie ist seit 2026-08-30 **PRODUCTION VERIFIED** (Release-Commit `9db08c4b`), deckt aber bislang **nur Quick Capture** ab; die weiteren Intents bleiben Phase 7C.
-11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 27), ~~W4 E-Mail-Änderung~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 28), ~~W5 Session-Revokation / Offboarding / Abhängigkeits-Preview~~ (RC VERIFIED 2026-09-06, nicht released, siehe Abschnitt 4 Punkt 29), W6 Hard-Delete-Executor (die Datenbankbarriere aus W2 steht; die Preview zählt jetzt die sechs Referenzen), W9 SQL-Suiten in CI.
+11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 27), ~~W4 E-Mail-Änderung~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 28), ~~W5 Session-Revokation / Offboarding / Abhängigkeits-Preview~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 29), W6 Hard-Delete-Executor (die Datenbankbarriere aus W2 steht; die Preview zählt jetzt die sechs Referenzen), W9 SQL-Suiten in CI.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 

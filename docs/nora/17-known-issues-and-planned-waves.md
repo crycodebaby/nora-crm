@@ -576,10 +576,10 @@ Bearbeiten-Formular zeigt die Anmeldeadresse read-only. Details: Decision Log
 
 ## User Lifecycle W5 — kontrolliertes Offboarding, Session-Revokation, Abhängigkeits-Preview
 
-**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-06; Branch
-`security/nora-lifecycle-w5-offboarding`, Basis `origin/main = c96dbe98`; nicht
-gepusht, keine Production-Migration, kein Edge-Deploy — Release-Reihenfolge im
-Decision Log „2026-09-06 – User Lifecycle W5")**
+**Status: `PRODUCTION VERIFIED` (2026-09-06; RC `3baf5b02` = `main`, Migration
+`20260906180000` live, `users` Edge v8, Vercel READY; Live-Beweis am Testkonto
+`sales.id = 4`, Endzustand deaktiviert/gebannt — Nachtrag Release im Decision
+Log „2026-09-06 – User Lifecycle W5")**
 
 Bewiesen (lokal gegen GoTrue 2.196/PostgREST, read-only gegen `nora-crm-prod`
 bestätigt): Deaktivieren (W1) ließ die Sitzungen eines Mitarbeiters in
@@ -611,9 +611,23 @@ Mitarbeiterakte (jeder Zugangszustand, auch bei null) mit Follow-up-Links.
   bewusst so dokumentiert.
 - **Session-Bindung ist Fail-open bei fehlendem Leserecht auf
   `auth.sessions`** (WARNING im Log, Vor-W5-Verhalten). In Production ist das
-  Privileg vorhanden (read-only bewiesen); der Release-Preflight prüft es
-  erneut. Fehlt es je, ist die Bindung still inaktiv — beobachten
-  (`pg_stat`/Logs auf „session binding inactive").
+  Privileg vorhanden (direkt **und** über `pg_read_all_data`; im Release
+  bestätigt). Der Zweig ist von keinem Aufrufer auslösbar; der degradierte
+  Zustand ist das Vor-W5-Verhalten (Deaktivierte bleiben über `sales.disabled`
+  verweigert). Fehlt das Privileg je, ist die Bindung still inaktiv —
+  beobachten (Logs auf „session binding inactive"). **W6-Empfehlung:**
+  fail-closed (Claim vorhanden + Sitzung nicht prüfbar → DENY) plus
+  Privileg-Monitor.
+- **Helfer prüft nur die Existenz der Sitzung, nicht den Besitzer**
+  (`auth.sessions.id = session_id`, kein `user_id = sub`-Abgleich), und ein
+  malformed `session_id`-Claim fällt auf den No-Claim-Pfad zurück. Beides ist
+  über ein signiertes GoTrue-Token nicht erreichbar (Claims sind signiert),
+  aber als Defense-in-Depth-Härtung für W6 vorgemerkt.
+- **Dialog „Zugang beenden" nennt das Ziel nur über Anmeldeadresse und
+  Status.** Im Live-Beweis traf der Product Owner damit einmal einen echten
+  Administrator statt des Testkontos (sofort per W1-Checkbox reaktiviert,
+  Sitzungen bleiben gelöscht → Neuanmeldung). Kein Codefehler; UX-Härtung
+  vorgemerkt: Name im Dialogkopf, zusätzliche Bestätigung bei Admin-Zielen.
 - **Bann-Ausfall nach erfolgreichem DB-Schritt** meldet
   `employee_access_sync_incomplete` (`offboarded: true`); Zugang ist bereits
   aus (RLS + Sitzungen), nur eine neue Passwort-Anmeldung würde GoTrue noch
@@ -638,6 +652,11 @@ Mitarbeiterakte (jeder Zugangszustand, auch bei null) mit Follow-up-Links.
   der 401-Antworten, SQL-Suiten in CI (W9), `record_operation_error`-camelCase-
   Nebenbefund, Retention/Anonymisierung (`employee_email` kommt in
   `user.offboarded` hinzu).
+- **Produktionsstand nach dem Release:** 3 `user.offboarded`-Zeilen (1×
+  `sales 2` Zwischenfall, 2× Testkonto `sales 4`), Testkonto-Anmeldeadresse
+  jetzt eine unechte Adresse außerhalb der Firmendomain (vom Product Owner
+  über „E-Mail ändern" gesetzt), `sales 2` aktiv ohne Sitzungen bis zur
+  nächsten Anmeldung.
 
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
