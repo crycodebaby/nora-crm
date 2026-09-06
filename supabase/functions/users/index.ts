@@ -43,6 +43,15 @@ import {
   type OffboardingDeps,
   type OffboardRpcResult,
 } from "./offboarding.ts";
+import {
+  AccountDeletionFailure,
+  executeAccountDeletion,
+  isAuthUserNotFound,
+  toDeletionPreview,
+  type AccountDeletionDeps,
+  type DeletionEvidence,
+  type DeletionTicket,
+} from "./accountDeletion.ts";
 
 function resolveInviteRedirectTo(): string {
   const siteUrl =
@@ -293,6 +302,88 @@ function offboardingErrorResponse(failure: OffboardingFailure): Response {
     ...(offboarded !== undefined ? { offboarded } : {}),
     ...(accessConsistency ? { accessConsistency } : {}),
   });
+}
+
+/* ------------------------------------------------------------------------ */
+/* W6-B — "Benutzerkonto endgültig löschen": controlled hard delete          */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Real adapters behind the account-deletion ports. The four RPCs are
+ * service_role-only in the database; the GoTrue Admin hard delete is the only
+ * way the identity disappears, and GoTrue's DELETE is what fires the database
+ * guard that removes public.sales and writes the audit row in the same
+ * transaction. No raw DELETE on any table is issued from here.
+ */
+const accountDeletionDeps: AccountDeletionDeps = {
+  readEvidence: async (salesId) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "get_employee_deletion_evidence",
+      { p_sale_id: salesId },
+    );
+    if (error) throw error;
+    return data as DeletionEvidence;
+  },
+  prepare: async ({
+    actorUserId,
+    salesId,
+    confirmationName,
+    adminTargetConfirmed,
+    operationId,
+  }) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "prepare_employee_account_deletion",
+      {
+        p_actor_user_id: actorUserId,
+        p_sale_id: salesId,
+        p_confirmation_name: confirmationName,
+        p_admin_target_confirmed: adminTargetConfirmed,
+        p_operation_id: operationId,
+      },
+    );
+    if (error) throw error;
+    return data as DeletionTicket;
+  },
+  cancel: async (ticketId) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "cancel_employee_account_deletion",
+      { p_ticket_id: ticketId },
+    );
+    if (error) throw error;
+    return data === true;
+  },
+  deleteAuthUser: async (userId) => {
+    // Hard delete (should_soft_delete = false): a soft-deleted Auth user would
+    // keep the row, keep the FK to sales satisfied and change nothing in Nora.
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId, false);
+    if (error) throw error;
+  },
+  authUserExists: async (userId) => {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (error) return isAuthUserNotFound(error) ? false : null;
+    return Boolean(data?.user);
+  },
+  log: (entry) => console.error(JSON.stringify(entry)),
+};
+
+function accountDeletionErrorResponse(
+  failure: AccountDeletionFailure,
+): Response {
+  const { status, message, error, reasons } = failure.failure;
+  return createErrorResponse(status, message, {
+    error,
+    ...(reasons ? { reasons } : {}),
+  });
+}
+
+/** Eligibility counts only; null when the preview cannot be read (the record then carries none). */
+async function loadDeletionPreview(salesId: number) {
+  const { data, error } = await supabaseAdmin.rpc(
+    "get_employee_deletion_preview",
+    { p_sale_id: salesId },
+  );
+  if (error || !data) return null;
+  return toDeletionPreview(data as Record<string, unknown>);
 }
 
 /** Counts only; null when the preview cannot be read (the record then carries none). */
@@ -784,11 +875,16 @@ async function getEmployeeAccessStatus(req: Request, currentUserSale: any) {
       // W5: the single-employee read carries the dependency preview so the
       // administrator sees what still depends on this person before acting.
       const dependencies = await loadDependencyPreview(sale.id);
+      // W6-B: the single-employee read also carries the deletion eligibility
+      // (counts and reasons only) so the record can show why an account can
+      // or cannot be deleted. The server decides again at delete time.
+      const deletion = await loadDeletionPreview(sale.id);
       return accessJson({
         data: [
           {
             ...buildEmployeeAccessRecord(sale, facts),
             ...(dependencies ? { dependencies } : {}),
+            ...(deletion ? { deletion } : {}),
           },
         ],
       });
@@ -1120,6 +1216,73 @@ async function offboardEmployee(
 }
 
 /**
+ * "Benutzerkonto endgültig löschen" (W6-B) — irreversible removal of an
+ * account that never became business history.
+ *
+ * Admin only. The executor (accountDeletion.ts) reads the evidence, runs the
+ * database prepare (actor, self guard, typed confirmation against the current
+ * name, admin-target confirmation, full eligibility, two-minute ticket), then
+ * the GoTrue Admin hard delete whose database guard removes public.sales and
+ * writes user.account_deleted in the same transaction, then verifies by
+ * evidence. A retry after a lost response answers `already_deleted`; a sale
+ * that never had a committed deletion is `not_found`. Nothing is mailed.
+ */
+async function deleteEmployeeAccount(
+  currentUserSale: any,
+  command: {
+    salesId: number;
+    confirmationName: string;
+    adminTargetConfirmed: boolean;
+  },
+  ctx: RequestContext,
+): Promise<Response> {
+  if (!isAdminSale(currentUserSale)) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "access_action_forbidden",
+    });
+  }
+
+  // Edge-level self guard (repeated in the database): nobody deletes their
+  // own account through this path.
+  if (currentUserSale.id === command.salesId) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "self_delete_forbidden",
+    });
+  }
+
+  let result;
+  try {
+    result = await executeAccountDeletion(accountDeletionDeps, {
+      actorUserId: ctx.actorUserId,
+      operationId: ctx.operationId,
+      salesId: command.salesId,
+      confirmationName: command.confirmationName,
+      adminTargetConfirmed: command.adminTargetConfirmed,
+    });
+  } catch (e) {
+    if (e instanceof AccountDeletionFailure) {
+      return accountDeletionErrorResponse(e);
+    }
+    console.error("user.account_deletion.failed");
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
+    });
+  }
+
+  return new Response(
+    JSON.stringify({
+      data: {
+        employeeId: result.salesId,
+        deleted: true,
+        ...(result.role ? { role: result.role } : {}),
+      },
+      disposition: result.disposition,
+    }),
+    { headers: { "Content-Type": "application/json", ...corsHeaders } },
+  );
+}
+
+/**
  * POST dispatch: a body carrying "action" is an access command; a body without
  * one stays the legacy "create a new employee and invite them" payload.
  */
@@ -1159,6 +1322,8 @@ async function postUsers(
         return changeEmployeeLoginEmail(currentUserSale, command, ctx);
       case "offboard":
         return offboardEmployee(currentUserSale, command.salesId, ctx);
+      case "delete_account":
+        return deleteEmployeeAccount(currentUserSale, command, ctx);
     }
   }
 

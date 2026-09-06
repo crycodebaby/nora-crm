@@ -2,12 +2,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useDataProvider,
   useNotify,
+  useRecordContext,
+  useRedirect,
   useRefresh,
   type Identifier,
 } from "ra-core";
 import { Button } from "@/components/ui/button";
 
 import type { CrmDataProvider } from "../providers/types";
+import type { Sale } from "../types";
 import {
   requestEmployeePasswordSetup,
   resendEmployeeInvitation,
@@ -20,6 +23,7 @@ import {
   EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL,
   EMPLOYEE_ACCESS_STATE_DESCRIPTION,
   EMPLOYEE_IDENTITY_INCONSISTENT_NOTICE,
+  employeeFullName,
   isAccessResyncApplicable,
   isAdminActionAllowed,
   isEmailChangeApplicable,
@@ -30,6 +34,7 @@ import {
 import { ChangeEmployeeEmailDialog } from "./ChangeEmployeeEmailDialog";
 import { OffboardEmployeeDialog } from "./OffboardEmployeeDialog";
 import { EmployeeDependencySummary } from "./EmployeeDependencySummary";
+import { EmployeeAccountDeletionSection } from "./EmployeeAccountDeletionSection";
 import { EmployeeAccessStatus } from "./EmployeeAccessStatus";
 import { EmployeeMailDeliveryStatus } from "./EmployeeMailDeliveryStatus";
 import {
@@ -92,6 +97,12 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
   const notify = useNotify();
   const queryClient = useQueryClient();
   const refresh = useRefresh();
+  const redirect = useRedirect();
+  // W6-B: the destructive dialog names the target by its current full name
+  // (title + typed confirmation). The employee record around this panel
+  // carries it; without a record no destructive control is offered.
+  const saleRecord = useRecordContext<Sale>();
+  const employeeName = saleRecord ? employeeFullName(saleRecord) : undefined;
   const { data, isPending, isError } = useEmployeeAccessStatus(salesId);
 
   const record: EmployeeAccessRecord | undefined = data?.[0];
@@ -326,6 +337,22 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
       <EmployeeDependencySummary
         salesId={salesId}
         dependencies={record.dependencies}
+      />
+
+      {/* W6-B: the exceptional, irreversible action — visually separate from
+          every routine access control above and always last. After a
+          verified deletion the record no longer exists: leave it cleanly. */}
+      <EmployeeAccountDeletionSection
+        salesId={salesId}
+        record={record}
+        employeeName={employeeName || undefined}
+        onDeleted={() => {
+          void queryClient.invalidateQueries({
+            queryKey: EMPLOYEE_ACCESS_QUERY_KEY,
+          });
+          redirect("/sales");
+        }}
+        onRefused={invalidateAndRefresh}
       />
     </section>
   );

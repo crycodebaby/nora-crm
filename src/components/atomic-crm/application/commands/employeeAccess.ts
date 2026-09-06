@@ -16,11 +16,14 @@ import type { Identifier } from "ra-core";
 
 import type { CrmDataProvider } from "../../providers/types";
 import {
+  isAccountDeletionOffered,
   isAdminActionAllowed,
   isEmailChangeApplicable,
   isOffboardingApplicable,
   type EmployeeAccessRecord,
   type EmployeeAccessState,
+  type EmployeeAccountDeletionResult,
+  type EmployeeDeletionPreview,
   type EmployeeEmailChangeResult,
   type EmployeeOffboardingResult,
   type IdentityConsistency,
@@ -184,6 +187,57 @@ export const offboardEmployee = async (
       try {
         return await dataProvider.offboardEmployee({
           salesId: input.salesId,
+          operationId: context.operationId,
+        });
+      } catch (error) {
+        throw normalizeAccessError(error);
+      }
+    },
+  );
+};
+
+/**
+ * "Benutzerkonto endgültig löschen" (User Lifecycle W6-B) — irreversibly
+ * removes an employee account that never became business history, through
+ * the single privileged server path (database guards + ticket → login
+ * provider hard delete → database guard removes the Nora identity and writes
+ * the audit row in the same transaction → verification by evidence). The
+ * Operation Manager owns the operation id (request_id of the audit row) and
+ * records a technical failure in the Error Observatory; business refusals
+ * stay typed codes. The pre-checks here (state, server eligibility, typed
+ * name) only avoid a pointless round trip — the server decides again.
+ */
+export const deleteEmployeeAccount = async (
+  dataProvider: CrmDataProvider,
+  input: {
+    salesId: Identifier;
+    confirmationName: string;
+    adminTargetConfirmed: boolean;
+    currentState?: EmployeeAccessState;
+    deletion?: EmployeeDeletionPreview;
+  },
+  manager: OperationManager = getDefaultOperationManager(),
+): Promise<EmployeeAccountDeletionResult> => {
+  if (
+    input.currentState &&
+    input.deletion &&
+    !isAccountDeletionOffered({
+      accessState: input.currentState,
+      deletion: input.deletion,
+    })
+  ) {
+    throw new EmployeeAccessActionNotApplicableError(input.currentState);
+  }
+
+  return manager.execute(
+    OPERATION_CATALOG["employee.delete_account"],
+    { resourceId: input.salesId },
+    async (context) => {
+      try {
+        return await dataProvider.deleteEmployeeAccount({
+          salesId: input.salesId,
+          confirmationName: input.confirmationName,
+          adminTargetConfirmed: input.adminTargetConfirmed,
           operationId: context.operationId,
         });
       } catch (error) {

@@ -79,6 +79,8 @@ import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 
 import type {
   EmployeeAccessRecord,
+  EmployeeAccountDeletionResult,
+  EmployeeDeletionPreview,
   EmployeeEmailChangeResult,
   EmployeeOffboardingResult,
   EmployeeDependencyPreview,
@@ -845,6 +847,25 @@ export const createDataProvider = ({
         sessionsRevoked: 0,
         dependencies,
       };
+    },
+
+    /**
+     * "Benutzerkonto endgültig löschen" (W6-B) — deliberately NOT available in
+     * demo mode. The real path is a database-guarded, login-provider-driven
+     * transaction with server-side eligibility; FakeRest has no Auth store,
+     * no audit guard and no data-level authorization, so a demo "deletion"
+     * would pretend a security model that does not exist here (documented
+     * demo gap, 17-known-issues). The record says `supported: false` and the
+     * command refuses with a typed code; the UI shows the explanation and no
+     * destructive control.
+     */
+    deleteEmployeeAccount: async (_input: {
+      salesId: Identifier;
+      confirmationName: string;
+      adminTargetConfirmed: boolean;
+      operationId?: string;
+    }): Promise<EmployeeAccountDeletionResult> => {
+      throw new Error("demo_unsupported");
     },
 
     /**
@@ -1689,6 +1710,33 @@ export const createDataProvider = ({
   return dataProvider;
 };
 
+/** W6-B: demo has no real deletion path — the record says so explicitly. */
+const DEMO_DELETION_UNSUPPORTED: EmployeeDeletionPreview = {
+  supported: false,
+  eligible: false,
+  reasons: [],
+  role: "viewer",
+  businessHistory: {
+    companies: 0,
+    contacts: 0,
+    deals: 0,
+    tasks: 0,
+    contactNotes: 0,
+    dealNotes: 0,
+  },
+  provenance: {
+    checklistTemplates: 0,
+    savedTextSnippets: 0,
+    googleCalendarConnections: 0,
+    auditEventsAsActor: 0,
+  },
+  technical: {
+    auditEventsAsTarget: 0,
+    emailDeliveryEventsAttributable: 0,
+    emailDeliveryEventsForeign: 0,
+  },
+};
+
 /** Demo-only projection of a sales row onto the Employee Access Contract. */
 function toDemoAccessRecord(sale: Sale): EmployeeAccessRecord {
   return {
@@ -1702,6 +1750,11 @@ function toDemoAccessRecord(sale: Sale): EmployeeAccessRecord {
     identityConsistency: "consistent",
     invitedAt: null,
     activatedAt: null,
+    deletion: {
+      ...DEMO_DELETION_UNSUPPORTED,
+      role:
+        sale.role === "admin" || sale.role === "office" ? sale.role : "viewer",
+    },
   };
 }
 

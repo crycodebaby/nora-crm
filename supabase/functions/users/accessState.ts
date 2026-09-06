@@ -247,6 +247,18 @@ export type EmployeeAccessCommand =
       /** W5: "Zugang beenden" — access off, sessions revoked, history kept. */
       kind: "offboard";
       salesId: number;
+    }
+  | {
+      /**
+       * W6-B: "Benutzerkonto endgültig löschen" — irreversible removal of the
+       * Nora and Auth identity of an account without business history.
+       */
+      kind: "delete_account";
+      salesId: number;
+      /** Exactly as typed (surrounding whitespace trimmed); the database compares. */
+      confirmationName: string;
+      /** Extra checkbox for administrator targets; the database requires it too. */
+      adminTargetConfirmed: boolean;
     };
 
 export function parseEmployeeAccessCommand(
@@ -259,7 +271,8 @@ export function parseEmployeeAccessCommand(
     action !== "resend_invitation" &&
     action !== "request_password_setup" &&
     action !== "change_email" &&
-    action !== "offboard"
+    action !== "offboard" &&
+    action !== "delete_account"
   ) {
     return { error: "unknown_action" };
   }
@@ -267,6 +280,20 @@ export function parseEmployeeAccessCommand(
   const salesId = Number(body.sales_id);
   if (!Number.isFinite(salesId) || salesId <= 0) {
     return { error: "invalid_payload" };
+  }
+
+  if (action === "delete_account") {
+    const raw = body.confirmation_name;
+    const confirmationName = typeof raw === "string" ? raw.trim() : "";
+    if (!confirmationName) {
+      return { error: "invalid_payload" };
+    }
+    return {
+      kind: "delete_account",
+      salesId,
+      confirmationName,
+      adminTargetConfirmed: body.admin_target_confirmed === true,
+    };
   }
 
   if (action === "change_email") {

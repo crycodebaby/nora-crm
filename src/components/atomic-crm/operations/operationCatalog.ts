@@ -31,7 +31,8 @@ export type CatalogOperationType =
   | "quickCapture.createCase"
   | "quickCapture.createTask"
   | "employee.change_login_email"
-  | "employee.offboard";
+  | "employee.offboard"
+  | "employee.delete_account";
 
 export const OPERATION_CATALOG: {
   readonly [K in CatalogOperationType]: OperationCatalogEntry & {
@@ -114,6 +115,13 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Nora-Zugang wird beendet …",
     successMessage: "Nora-Zugang wurde beendet.",
     errorMessage: "Nora-Zugang konnte nicht beendet werden.",
+  },
+  "employee.delete_account": {
+    operationType: "employee.delete_account",
+    resourceType: "sales",
+    pendingMessage: "Benutzerkonto wird endgültig gelöscht …",
+    successMessage: "Benutzerkonto wurde endgültig gelöscht.",
+    errorMessage: "Benutzerkonto konnte nicht gelöscht werden.",
   },
 } as const;
 

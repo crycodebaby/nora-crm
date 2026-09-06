@@ -31,6 +31,7 @@ import type { ConfigurationContextValue } from "../../root/ConfigurationContext"
 import { performGlobalSearch } from "../../misc/globalSearch";
 import type {
   EmployeeAccessRecord,
+  EmployeeAccountDeletionResult,
   EmployeeEmailChangeResult,
   EmployeeOffboardingResult,
 } from "../../sales/employeeAccessContract";
@@ -403,6 +404,49 @@ const getDataProviderWithCustomMethods = () => {
         sessionsRevoked:
           typeof data.sessionsRevoked === "number" ? data.sessionsRevoked : 0,
         dependencies: data.data.dependencies ?? EMPTY_DEPENDENCY_PREVIEW,
+      };
+    },
+
+    /**
+     * "Benutzerkonto endgültig löschen" (W6-B). The only way the browser
+     * removes an employee account: the users Edge Function runs the deletion
+     * executor (database guards + ticket → login-provider hard delete whose
+     * database guard removes the Nora identity and writes the audit row in
+     * one transaction → verification). The typed name travels to the server,
+     * which compares it against the current identity itself. The operation
+     * id travels as the request header so the audit row carries it.
+     */
+    async deleteEmployeeAccount(input: {
+      salesId: Identifier;
+      confirmationName: string;
+      adminTargetConfirmed: boolean;
+      operationId?: string;
+    }): Promise<EmployeeAccountDeletionResult> {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: { employeeId: number; deleted: boolean };
+        disposition?: "executed" | "already_deleted";
+      }>("users", {
+        method: "POST",
+        body: {
+          action: "delete_account",
+          sales_id: input.salesId,
+          confirmation_name: input.confirmationName,
+          admin_target_confirmed: input.adminTargetConfirmed === true,
+        },
+        ...(input.operationId
+          ? { headers: { [NORA_OPERATION_ID_HEADER]: input.operationId } }
+          : {}),
+      });
+
+      if (error || !data?.data?.deleted) {
+        throw new Error(await readEmployeeAccessErrorCode(error));
+      }
+      return {
+        employeeId: data.data.employeeId,
+        disposition:
+          data.disposition === "already_deleted"
+            ? "already_deleted"
+            : "executed",
       };
     },
 
