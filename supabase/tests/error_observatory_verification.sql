@@ -93,6 +93,10 @@ begin
     perform pg_temp.nora_eo_seed_user(v_admin, 'eo-admin@nora.test', 'admin');
     perform pg_temp.nora_eo_seed_user(v_office, 'eo-office@nora.test', 'office');
     perform pg_temp.nora_eo_seed_user(v_office2, 'eo-office2@nora.test', 'office');
+    -- W6-A: browser fixtures carry a live session (fixture session id = user id)
+    insert into auth.sessions (id, user_id, created_at, updated_at, aal)
+    select u, u, now(), now(), 'aal1' from unnest(array[v_admin, v_office, v_office2]) u
+    on conflict (id) do nothing;
 
     -- -----------------------------------------------------------------------
     -- EXECUTE grants: PUBLIC/anon must not execute SECURITY DEFINER RPCs
@@ -144,7 +148,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_office::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_office::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_office::text, 'role', 'authenticated', 'session_id', v_office::text)::text,
         true
     );
     set local role authenticated;
@@ -235,7 +239,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_office::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_office::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_office::text, 'role', 'authenticated', 'session_id', v_office::text)::text,
         true
     );
     set local role authenticated;
@@ -313,7 +317,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_office::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_office::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_office::text, 'role', 'authenticated', 'session_id', v_office::text)::text,
         true
     );
     set local role authenticated;
@@ -383,7 +387,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_office2::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_office2::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_office2::text, 'role', 'authenticated', 'session_id', v_office2::text)::text,
         true
     );
     set local role authenticated;
@@ -409,7 +413,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_admin::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_admin::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_admin::text, 'role', 'authenticated', 'session_id', v_admin::text)::text,
         true
     );
     set local role authenticated;
@@ -457,7 +461,7 @@ begin
     perform set_config('request.jwt.claim.sub', v_office::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_office::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_office::text, 'role', 'authenticated', 'session_id', v_office::text)::text,
         true
     );
     set local role authenticated;

@@ -157,6 +157,15 @@ begin
     if not exists (select 1 from pg_roles where rolname = 'nora_calendar_linker') then
         raise exception 'nora_calendar_linker role missing';
     end if;
+
+    -- W6-A: session binding is fail-closed and evaluable (privilege + probe)
+    if (nora_private.session_binding_health() ->> 'healthy')::boolean is not true then
+        raise exception 'W6-A: session_binding_health must be healthy: %', nora_private.session_binding_health();
+    end if;
+    if has_function_privilege('authenticated', 'nora_private.jwt_session_is_live()', 'EXECUTE')
+       or has_function_privilege('service_role', 'nora_private.session_binding_health()', 'EXECUTE') then
+        raise exception 'W6-A: session helpers must stay postgres-internal';
+    end if;
 end;
 $$;
 

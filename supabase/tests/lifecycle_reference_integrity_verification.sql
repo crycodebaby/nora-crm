@@ -211,6 +211,9 @@ begin
     select id into v_admin from public.sales where user_id = v_admin_uid;
     select id into v_emp   from public.sales where user_id = v_emp_uid;
     select id into v_view  from public.sales where user_id = v_view_uid;
+    -- W6-A: browser fixtures carry a live session (fixture session id = user id); rolled back
+    insert into auth.sessions (id, user_id, created_at, updated_at, aal)
+    select u, u, now(), now(), 'aal1' from unnest(array[v_admin_uid, v_emp_uid, v_view_uid]) u;
     perform nora_private.apply_sales_role_change(v_admin, 'admin', false);
     perform nora_private.apply_sales_role_change(v_emp, 'office', false);
     perform nora_private.apply_sales_role_change(v_view, 'viewer', false);
@@ -342,7 +345,7 @@ begin
     -- -----------------------------------------------------------------------
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', v_admin_uid::text, true);
-    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_admin_uid::text)::text, true);
+    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_admin_uid::text, 'session_id', v_admin_uid::text)::text, true);
     set local role authenticated;
     begin
         delete from public.sales where id = v_view;
@@ -394,7 +397,7 @@ begin
     -- as an active viewer (the weakest active role)
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', v_view_uid::text, true);
-    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_view_uid::text)::text, true);
+    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_view_uid::text, 'session_id', v_view_uid::text)::text, true);
     set local role authenticated;
 
     if (select count(*) from public.contact_notes where id = v_note) <> 1
@@ -424,7 +427,7 @@ begin
 
     -- a disabled caller sees nothing through either view
     perform set_config('request.jwt.claim.sub', v_emp_uid::text, true);
-    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_emp_uid::text)::text, true);
+    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_emp_uid::text, 'session_id', v_emp_uid::text)::text, true);
     set local role authenticated;
     if (select count(*) from public.sales_identities) <> 0 or (select count(*) from public.sales_directory) <> 0 then
         raise exception 'FAIL: disabled caller can read employee identities';

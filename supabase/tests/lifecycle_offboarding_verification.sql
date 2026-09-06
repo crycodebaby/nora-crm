@@ -209,8 +209,25 @@ begin
     end if;
     perform set_config('request.jwt.claim.session_id', '', true);
     if not nora_private.is_active_user() then
-        raise exception 'FAIL: JWT without session claim must behave as before';
+        raise exception 'FAIL: fixture without any transported JWT must keep the compatibility path';
     end if;
+    -- W6-A: another user's live session, a malformed claim and a transported
+    -- JWT without session claim are all denied (full matrix in
+    -- lifecycle_session_authorization_verification.sql)
+    perform set_config('request.jwt.claim.session_id', v_session_a::text, true);
+    if nora_private.is_active_user() or nora_private.current_role() is not null then
+        raise exception 'FAIL: W6-A another user''s session must be denied';
+    end if;
+    perform set_config('request.jwt.claim.session_id', 'not-a-uuid', true);
+    if nora_private.is_active_user() then
+        raise exception 'FAIL: W6-A malformed session claim must be denied';
+    end if;
+    perform set_config('request.jwt.claim.session_id', '', true);
+    perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_emp::text)::text, true);
+    if nora_private.is_active_user() then
+        raise exception 'FAIL: W6-A transported JWT without session claim must be denied';
+    end if;
+    perform set_config('request.jwt.claims', '', true);
     -- the same through an RLS-guarded read (companies select policy)
     perform set_config('request.jwt.claim.session_id', v_session1::text, true);
     set local role authenticated;

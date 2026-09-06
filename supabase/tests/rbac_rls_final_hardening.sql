@@ -14,7 +14,10 @@ declare
     v_office_sale_id bigint;
     v_row_count int;
     v_cols text;
+    v_viewer_session uuid := gen_random_uuid();
 begin
+    -- W6-A: the claims-JSON viewer (section E) carries a live session; rolled back with the block
+    insert into auth.sessions (id, user_id, created_at, updated_at, aal) values (v_viewer_session, v_viewer, now(), now(), 'aal1');
     set local role nora_rls_test;
 
     -- A. nora_role_manager capability
@@ -205,7 +208,8 @@ begin
         'request.jwt.claims',
         jsonb_build_object(
             'sub', v_viewer::text,
-            'role', 'authenticated'
+            'role', 'authenticated',
+            'session_id', v_viewer_session::text
         )::text,
         true
     );

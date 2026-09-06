@@ -204,6 +204,9 @@ begin
         (gen_random_uuid(), v_active,  'recovery_token',     'hash-recovery-old', 'w4-active@nora.test', now(), now());
 
     select count(*) into v_audit_before from public.audit_events where event_type = 'user.email_changed';
+    -- W6-A: browser fixtures carry a live session (fixture session id = user id); rolled back
+    insert into auth.sessions (id, user_id, created_at, updated_at, aal)
+    select u, u, now(), now(), 'aal1' from unnest(array[v_admin_a, v_office, v_viewer]) u;
 
     -- -----------------------------------------------------------------------
     -- 2. Browser JWTs cannot call the RPCs and cannot write sales.email
@@ -219,7 +222,8 @@ begin
         perform set_config('request.jwt.claim.role', r.jwt_role, true);
         perform set_config('request.jwt.claim.sub', coalesce(r.uid::text, ''), true);
         perform set_config('request.jwt.claims',
-            json_build_object('role', r.jwt_role, 'sub', r.uid)::text, true);
+            case when r.uid is null then json_build_object('role', r.jwt_role)::text
+                 else json_build_object('role', r.jwt_role, 'sub', r.uid, 'session_id', r.uid)::text end, true);
         execute format('set local role %I', r.jwt_role);
 
         begin

@@ -649,16 +649,19 @@ begin
     if v_admin is null then
         raise exception 'admin sales user required for get_audit_storage_stats check';
     end if;
+    -- W6-A: the admin fixture needs a live session (fixture session id = user id)
+    insert into auth.sessions (id, user_id, created_at, updated_at, aal) values (v_admin, v_admin, now(), now(), 'aal1') on conflict (id) do nothing;
     perform set_config('request.jwt.claim.sub', v_admin::text, true);
     perform set_config(
         'request.jwt.claims',
-        jsonb_build_object('sub', v_admin::text, 'role', 'authenticated')::text,
+        jsonb_build_object('sub', v_admin::text, 'role', 'authenticated', 'session_id', v_admin::text)::text,
         true
     );
     set local role authenticated;
 
     v_stats := public.get_audit_storage_stats();
     reset role;
+    delete from auth.sessions where id = v_admin;
 
     if not (
         v_stats ? 'event_count'
