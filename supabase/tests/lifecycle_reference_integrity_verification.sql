@@ -15,7 +15,11 @@
 --      no DELETE policy exists, sales_identities exists with the expected
 --      projection/grants, the legacy RPC is gone, W1 objects are untouched
 --   2. an employee with a contact note cannot be deleted (postgres and
---      service_role); the note survives byte-for-byte
+--      service_role); the note survives byte-for-byte. Since W6-B the direct
+--      DELETE is refused by nora_private.guard_sales_delete
+--      (NORA_SALES_DELETE_NOT_AUTHORIZED) before the FK is even checked; the
+--      six NO ACTION FKs remain the final barrier behind it (proven with the
+--      guard capability satisfied in lifecycle_account_deletion_verification.sql)
 --   3. an employee with a task cannot be deleted; the task keeps a valid owner
 --   4. a task cannot point at a nonexistent employee (insert and update)
 --   5. every reference blocks on its own: companies, contacts, deals,
@@ -24,8 +28,9 @@
 --   7. a disabled employee still resolves by name on existing records
 --      (sales_identities) and is absent from the assignment source
 --      (sales_directory); a disabled caller sees nothing
---   8. an employee with zero references stays deletable for postgres and
---      service_role (the future controlled hard-delete executor)
+--   8. an employee with zero references is NOT deletable by a direct DELETE
+--      either (W6-B: only the controlled account-deletion path — ticket +
+--      GoTrue Admin hard delete + auth.users guard — may remove a sales row)
 --   9. W1 regression: executor matrix, self guard, last-admin guard
 --  10. history is untouched after all of the above (notes/deals/tasks compare
 --      equal to their snapshots)
@@ -238,6 +243,9 @@ begin
         raise exception 'FAIL: postgres deleted a referenced employee';
     exception
         when foreign_key_violation then null;
+        when insufficient_privilege then
+            get stacked diagnostics v_detail = pg_exception_detail;
+            if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
     end;
 
     perform set_config('request.jwt.claim.sub', '', true);
@@ -249,6 +257,9 @@ begin
         raise exception 'FAIL: service_role deleted a referenced employee';
     exception
         when foreign_key_violation then null;
+        when insufficient_privilege then
+            get stacked diagnostics v_detail = pg_exception_detail;
+            if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
     end;
     reset role;
 
@@ -274,6 +285,9 @@ begin
         raise exception 'FAIL: employee referenced only by a task was deleted';
     exception
         when foreign_key_violation then null;
+        when insufficient_privilege then
+            get stacked diagnostics v_detail = pg_exception_detail;
+            if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
     end;
     if (select sales_id from public.tasks where id = v_task) <> v_emp
        or not exists (select 1 from public.sales where id = v_emp) then
@@ -336,6 +350,9 @@ begin
             raise exception 'FAIL: employee referenced only by % was deleted', v_tbl;
         exception
             when foreign_key_violation then null;
+            when insufficient_privilege then
+                get stacked diagnostics v_detail = pg_exception_detail;
+                if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
         end;
     end loop;
     raise notice 'OK  5. each of companies/contacts/deals/deal_notes/contact_notes/tasks blocks deletion';
@@ -436,8 +453,13 @@ begin
     raise notice 'OK  7. disabled employee keeps historical identity, leaves the assignment directory';
 
     -- -----------------------------------------------------------------------
-    -- 8. Zero-reference employee stays deletable for the privileged executor path
+    -- 8. Zero-reference employee: no direct DELETE either (W6-B guard)
     -- -----------------------------------------------------------------------
+    -- Until W6-B this section proved that postgres / service_role could still
+    -- delete an unreferenced row (the seam for a future executor). W6-B closed
+    -- that seam: only the controlled account-deletion path (ticket + GoTrue
+    -- Admin hard delete + nora_private.guard_auth_user_delete) may remove a
+    -- sales row. The direct DELETE must now be refused for service_role too.
     v_tmp_uid := gen_random_uuid();
     insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values ('00000000-0000-0000-0000-000000000000', v_tmp_uid, 'authenticated', 'authenticated', 'w2-unreferenced@nora.test', 'x', now(), '{"provider":"email"}', '{"first_name":"Test","last_name":"Konto"}', now(), now());
@@ -446,17 +468,19 @@ begin
     perform set_config('request.jwt.claim.role', 'service_role', true);
     perform set_config('request.jwt.claims', json_build_object('role', 'service_role')::text, true);
     set local role service_role;
-    delete from public.sales where id = v_tmp;
-    get diagnostics v_rows = row_count;
+    begin
+        delete from public.sales where id = v_tmp;
+        raise exception 'FAIL: W6-B guard must refuse a direct sales DELETE for service_role';
+    exception
+        when insufficient_privilege then
+            get stacked diagnostics v_detail = pg_exception_detail;
+            if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
+    end;
     reset role;
-    if v_rows <> 1 or exists (select 1 from public.sales where id = v_tmp) then
-        raise exception 'FAIL: unreferenced employee must stay deletable for service_role';
+    if not exists (select 1 from public.sales where id = v_tmp) or not exists (select 1 from auth.users where id = v_tmp_uid) then
+        raise exception 'FAIL: refused direct delete must leave sales row and auth identity untouched';
     end if;
-    -- auth identity remains (sales.user_id -> auth.users is NO ACTION the other way round)
-    if not exists (select 1 from auth.users where id = v_tmp_uid) then
-        raise exception 'FAIL: auth identity must not be touched by a sales delete';
-    end if;
-    raise notice 'OK  8. zero-reference employee deletable by the privileged path only';
+    raise notice 'OK  8. zero-reference employee: direct DELETE refused (W6-B), only the controlled path may remove it';
 
     -- -----------------------------------------------------------------------
     -- 9. W1 regression through the executor

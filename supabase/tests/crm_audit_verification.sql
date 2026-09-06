@@ -314,7 +314,14 @@ begin
     where event_type = 'user.enabled' and (metadata ->> 'sale_id')::bigint = v_sale_id;
     if v_count <> 1 then raise exception 'user.enabled expected 1, got %', v_count; end if;
 
-    delete from public.sales where id = v_sale_id;
+    -- W6-B: a sales row is never removed by a direct DELETE (guard_sales_delete);
+    -- the fixture disappears with the rollback of this block instead.
+    raise exception 'ROLLBACK_CRM_AUDIT_USER' using errcode = 'P0001';
+exception
+    when others then
+        if sqlerrm not like '%ROLLBACK_CRM_AUDIT_USER%' then
+            raise;
+        end if;
 end;
 $$;
 

@@ -194,8 +194,11 @@ begin
     perform nora_private.apply_sales_role_change(v_inv, 'viewer', false);
     perform nora_private.apply_sales_role_change(v_dis, 'office', true);
 
-    -- an Auth identity that is NOT a Nora employee (unreferenced sales row removed as postgres)
-    delete from public.sales where id = v_ghost_sale;
+    -- An Auth identity that is NOT an *administrator*: since W6-B a sales row
+    -- cannot be removed by a direct DELETE (guard_sales_delete), so the
+    -- "ghost" keeps its auto-created viewer row; as an actor it is refused
+    -- exactly like before (not an active admin -> NORA_PERMISSION_DENIED).
+    perform nora_private.apply_sales_role_change(v_ghost_sale, 'viewer', false);
 
     -- outstanding invitation / password links for the invited and the active employee
     insert into auth.one_time_tokens (id, user_id, token_type, token_hash, relates_to, created_at, updated_at)
@@ -659,8 +662,9 @@ begin
         raise exception 'FAIL: name sync must still work and leave email alone';
     end if;
     begin
-        insert into public.sales (first_name, last_name, email, administrator, role, user_id)
-        values ('Dup', 'Licate', 'ANNA.NEU@nora.test', false, 'viewer', v_ghost);
+        -- the identity manager path is the only writer of sales.email; the
+        -- unique index must refuse an address already held by another employee
+        perform nora_private.apply_sales_email_change(v_ghost_sale, 'ANNA.NEU@nora.test'::extensions.citext);
         raise exception 'FAIL: unique login email must block a second employee (case-insensitive)';
     exception
         when unique_violation then null;

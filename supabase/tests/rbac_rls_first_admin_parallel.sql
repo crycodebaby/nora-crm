@@ -12,9 +12,6 @@ declare
     v_admin_count int;
     v_viewer_count int;
 begin
-    delete from public.sales where user_id in (v_uid1, v_uid2);
-    delete from auth.users where id in (v_uid1, v_uid2);
-
     if exists (select 1 from public.sales limit 1) then
         raise exception 'sales must be empty for first-admin parallel test';
     end if;
@@ -41,9 +38,10 @@ begin
         raise exception 'second resolve_first_signup_role must return viewer';
     end if;
 
-    -- Clean for trigger-based dual signup test
-    delete from public.sales where user_id in (v_uid1, v_uid2);
-    delete from auth.users where id in (v_uid1, v_uid2);
+    -- W6-B: fixture rows are no longer removable by a direct DELETE
+    -- (guard_sales_delete / guard_auth_user_delete). The first identity stays
+    -- (it is re-inserted below with ON CONFLICT DO NOTHING) and the whole block
+    -- rolls back at the end.
 
     insert into auth.users (
         instance_id, id, aud, role, email, encrypted_password,
@@ -83,10 +81,7 @@ begin
         raise exception 'administrator mirror must match role after parallel signup';
     end if;
 
-    -- cleanup test users for subsequent rbac_rls_setup
-    delete from public.sales where user_id in (v_uid1, v_uid2);
-    delete from auth.users where id in (v_uid1, v_uid2);
-
+    -- cleanup happens through the rollback below (W6-B forbids direct deletes)
     raise exception 'ROLLBACK_FIRST_ADMIN' using errcode = 'P0001';
 exception
     when others then
