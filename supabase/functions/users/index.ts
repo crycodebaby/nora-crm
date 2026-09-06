@@ -36,6 +36,13 @@ import {
   type EmailChangeSaleRow,
   type EmailChangeTicket,
 } from "./emailChange.ts";
+import {
+  executeOffboarding,
+  OffboardingFailure,
+  toDependencyPreview,
+  type OffboardingDeps,
+  type OffboardRpcResult,
+} from "./offboarding.ts";
 
 function resolveInviteRedirectTo(): string {
   const siteUrl =
@@ -248,6 +255,54 @@ function emailChangeErrorResponse(failure: EmailChangeFailure): Response {
     ...(emailChanged !== undefined ? { emailChanged } : {}),
     ...(identityConsistency ? { identityConsistency } : {}),
   });
+}
+
+/* ------------------------------------------------------------------------ */
+/* W5 — "Zugang beenden": offboarding executor and dependency preview        */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Real adapters behind the offboarding ports. offboard_employee_by_executor
+ * and get_employee_dependency_preview are service_role-only in the database;
+ * the ban goes through the same Auth Admin call as the W1 disable.
+ */
+const offboardingDeps: OffboardingDeps = {
+  offboard: async ({ actorUserId, salesId, operationId }) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "offboard_employee_by_executor",
+      {
+        p_actor_user_id: actorUserId,
+        p_sale_id: salesId,
+        p_operation_id: operationId,
+      },
+    );
+    if (error) throw error;
+    return data as OffboardRpcResult;
+  },
+  setAuthBan: lifecycleDeps.setAuthBan,
+  readSale: lifecycleDeps.readSale,
+  readAuthFacts: loadAuthFacts,
+  log: (entry) => console.error(JSON.stringify(entry)),
+};
+
+function offboardingErrorResponse(failure: OffboardingFailure): Response {
+  const { status, message, error, offboarded, accessConsistency } =
+    failure.failure;
+  return createErrorResponse(status, message, {
+    error,
+    ...(offboarded !== undefined ? { offboarded } : {}),
+    ...(accessConsistency ? { accessConsistency } : {}),
+  });
+}
+
+/** Counts only; null when the preview cannot be read (the record then carries none). */
+async function loadDependencyPreview(salesId: number) {
+  const { data, error } = await supabaseAdmin.rpc(
+    "get_employee_dependency_preview",
+    { p_sale_id: salesId },
+  );
+  if (error || !data) return null;
+  return toDependencyPreview(data as Record<string, unknown>);
 }
 
 async function reloadSale(salesId: number) {
@@ -726,7 +781,17 @@ async function getEmployeeAccessStatus(req: Request, currentUserSale: any) {
       }
 
       const facts = await loadAuthFacts(sale.user_id);
-      return accessJson({ data: [buildEmployeeAccessRecord(sale, facts)] });
+      // W5: the single-employee read carries the dependency preview so the
+      // administrator sees what still depends on this person before acting.
+      const dependencies = await loadDependencyPreview(sale.id);
+      return accessJson({
+        data: [
+          {
+            ...buildEmployeeAccessRecord(sale, facts),
+            ...(dependencies ? { dependencies } : {}),
+          },
+        ],
+      });
     }
 
     const { data: sales, error } = await supabaseAdmin
@@ -983,6 +1048,78 @@ async function changeEmployeeLoginEmail(
 }
 
 /**
+ * "Zugang beenden" (W5) — ends an employee's operational access now.
+ *
+ * Admin only. The executor (offboarding.ts) runs the database function
+ * (guards, access off, sessions revoked, dependency snapshot, user.offboarded
+ * — one transaction), then the Auth ban, then the verification. Open
+ * assignments never block it; they are returned as counts for follow-up.
+ * Nothing is mailed. A retry is a typed replay without a second audit row.
+ */
+async function offboardEmployee(
+  currentUserSale: any,
+  salesId: number,
+  ctx: RequestContext,
+): Promise<Response> {
+  if (!isAdminSale(currentUserSale)) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "access_action_forbidden",
+    });
+  }
+
+  const target = await lifecycleDeps.readSale(salesId);
+  if (!target) {
+    return createErrorResponse(404, "Not Found", { error: "not_found" });
+  }
+
+  let result;
+  try {
+    result = await executeOffboarding(offboardingDeps, {
+      actorUserId: ctx.actorUserId,
+      operationId: ctx.operationId,
+      target,
+    });
+  } catch (e) {
+    if (e instanceof OffboardingFailure) return offboardingErrorResponse(e);
+    console.error("user.offboard.failed");
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
+    });
+  }
+
+  let sale: AccessSaleRow | null = null;
+  try {
+    sale = await loadAccessSale(result.sale.id);
+  } catch {
+    sale = null;
+  }
+  const facts = await loadAuthFacts(result.sale.user_id);
+  const record = sale
+    ? buildEmployeeAccessRecord(sale, facts)
+    : {
+        employeeId: result.sale.id,
+        email: "",
+        accessState: "disabled" as const,
+        disabled: true,
+        noraDisabled: true,
+        accessConsistency: result.accessConsistency,
+        identityConsistency: "unknown" as const,
+        invitedAt: null,
+        activatedAt: null,
+      };
+
+  return new Response(
+    JSON.stringify({
+      data: { ...record, dependencies: result.dependencies },
+      disposition: result.disposition,
+      sessionsRevoked: result.sessionsRevoked,
+      accessConsistency: result.accessConsistency,
+    }),
+    { headers: { "Content-Type": "application/json", ...corsHeaders } },
+  );
+}
+
+/**
  * POST dispatch: a body carrying "action" is an access command; a body without
  * one stays the legacy "create a new employee and invite them" payload.
  */
@@ -1020,6 +1157,8 @@ async function postUsers(
         );
       case "change_email":
         return changeEmployeeLoginEmail(currentUserSale, command, ctx);
+      case "offboard":
+        return offboardEmployee(currentUserSale, command.salesId, ctx);
     }
   }
 

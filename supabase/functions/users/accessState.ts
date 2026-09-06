@@ -64,6 +64,20 @@ export type AccessConsistency = "consistent" | "inconsistent" | "unknown";
  */
 export type IdentityConsistency = "consistent" | "inconsistent" | "unknown";
 
+/**
+ * W5: what still depends operationally on an employee. Current
+ * responsibility (the four assignment tables) is separated from historical
+ * authorship (notes), which never needs reassignment. Counts only.
+ */
+export type EmployeeDependencyPreview = {
+  companies: number;
+  contacts: number;
+  openDeals: number;
+  openTasks: number;
+  contactNotes: number;
+  dealNotes: number;
+};
+
 /** The complete public response shape — no provider metadata, no tokens. */
 export type EmployeeAccessRecord = {
   employeeId: number;
@@ -80,6 +94,8 @@ export type EmployeeAccessRecord = {
   invitedAt: string | null;
   /** Email confirmation timestamp — the moment the invitation was actually used. */
   activatedAt: string | null;
+  /** W5: present on single-employee reads and offboarding results only. */
+  dependencies?: EmployeeDependencyPreview;
 };
 
 /**
@@ -226,6 +242,11 @@ export type EmployeeAccessCommand =
       salesId: number;
       /** Trimmed, otherwise as typed; the database normalises and validates. */
       newEmail: string;
+    }
+  | {
+      /** W5: "Zugang beenden" — access off, sessions revoked, history kept. */
+      kind: "offboard";
+      salesId: number;
     };
 
 export function parseEmployeeAccessCommand(
@@ -237,7 +258,8 @@ export function parseEmployeeAccessCommand(
   if (
     action !== "resend_invitation" &&
     action !== "request_password_setup" &&
-    action !== "change_email"
+    action !== "change_email" &&
+    action !== "offboard"
   ) {
     return { error: "unknown_action" };
   }

@@ -359,3 +359,32 @@ describe("parseEmployeeAccessCommand", () => {
     }
   });
 });
+
+describe("parseEmployeeAccessCommand — offboard (W5)", () => {
+  it("parses the offboard command with a valid target", () => {
+    expect(
+      parseEmployeeAccessCommand({ action: "offboard", sales_id: 7 }),
+    ).toEqual({ kind: "offboard", salesId: 7 });
+  });
+
+  it("ignores any actor or state fields a caller adds to the body", () => {
+    expect(
+      parseEmployeeAccessCommand({
+        action: "offboard",
+        sales_id: "7",
+        actor_user_id: "forged",
+        disabled: false,
+        role: "admin",
+      }),
+    ).toEqual({ kind: "offboard", salesId: 7 });
+  });
+
+  it("refuses an offboard command without a usable target", () => {
+    expect(parseEmployeeAccessCommand({ action: "offboard" })).toEqual({
+      error: "invalid_payload",
+    });
+    expect(
+      parseEmployeeAccessCommand({ action: "offboard", sales_id: 0 }),
+    ).toEqual({ error: "invalid_payload" });
+  });
+});
