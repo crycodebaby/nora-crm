@@ -242,16 +242,17 @@ begin
 end;
 $$;
 
-CREATE OR REPLACE FUNCTION "public"."handle_update_user"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
+create or replace function public.handle_update_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 begin
   update public.sales
   set
     first_name = coalesce(new.raw_user_meta_data ->> 'first_name', new.raw_user_meta_data -> 'custom_claims' ->> 'first_name', 'Pending'),
-    last_name = coalesce(new.raw_user_meta_data ->> 'last_name', new.raw_user_meta_data -> 'custom_claims' ->> 'last_name', 'Pending'),
-    email = new.email
+    last_name = coalesce(new.raw_user_meta_data ->> 'last_name', new.raw_user_meta_data -> 'custom_claims' ->> 'last_name', 'Pending')
   where user_id = new.id;
 
   return new;
@@ -912,55 +913,76 @@ $$;
 
 ALTER FUNCTION nora_private.apply_sales_role_change(bigint, text, boolean) OWNER TO nora_role_manager;
 
-CREATE OR REPLACE FUNCTION public.prevent_sales_privilege_escalation()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-    IF current_user = 'nora_role_manager' THEN
-        IF tg_op = 'UPDATE' THEN
-            IF new.id IS DISTINCT FROM old.id THEN
-                RAISE EXCEPTION 'sales.id is immutable';
-            END IF;
-            IF new.user_id IS DISTINCT FROM old.user_id THEN
-                RAISE EXCEPTION 'sales.user_id is immutable';
-            END IF;
-            IF new.email IS DISTINCT FROM old.email THEN
-                RAISE EXCEPTION 'sales.email is immutable for role manager';
-            END IF;
-            IF new.first_name IS DISTINCT FROM old.first_name
-                OR new.last_name IS DISTINCT FROM old.last_name
-                OR new.avatar IS DISTINCT FROM old.avatar THEN
-                RAISE EXCEPTION 'role manager may only change role and disabled';
-            END IF;
-        END IF;
-        RETURN NEW;
-    END IF;
+create or replace function public.prevent_sales_privilege_escalation()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+    if current_user = 'nora_role_manager' then
+        if tg_op = 'UPDATE' then
+            if new.id is distinct from old.id then
+                raise exception 'sales.id is immutable';
+            end if;
+            if new.user_id is distinct from old.user_id then
+                raise exception 'sales.user_id is immutable';
+            end if;
+            if new.email is distinct from old.email then
+                raise exception 'sales.email is immutable for role manager';
+            end if;
+            if new.first_name is distinct from old.first_name
+                or new.last_name is distinct from old.last_name
+                or new.avatar is distinct from old.avatar then
+                raise exception 'role manager may only change role and disabled';
+            end if;
+        end if;
+        return new;
+    end if;
 
-    IF tg_op = 'UPDATE' THEN
-        IF new.id IS DISTINCT FROM old.id THEN
-            RAISE EXCEPTION 'sales.id is immutable';
-        END IF;
-        IF new.user_id IS DISTINCT FROM old.user_id THEN
-            RAISE EXCEPTION 'sales.user_id is immutable';
-        END IF;
-        IF new.email IS DISTINCT FROM old.email THEN
-            RAISE EXCEPTION 'sales.email is immutable for direct updates';
-        END IF;
-        IF new.role IS DISTINCT FROM old.role THEN
-            RAISE EXCEPTION 'sales.role is immutable for direct updates';
-        END IF;
-        IF new.administrator IS DISTINCT FROM old.administrator THEN
-            RAISE EXCEPTION 'sales.administrator is immutable for direct updates';
-        END IF;
-        IF new.disabled IS DISTINCT FROM old.disabled THEN
-            RAISE EXCEPTION 'sales.disabled is immutable for direct updates';
-        END IF;
-    END IF;
+    -- W4: the identity manager may change the login email and nothing else.
+    if current_user = 'nora_identity_manager' then
+        if tg_op = 'UPDATE' then
+            if new.id is distinct from old.id then
+                raise exception 'sales.id is immutable';
+            end if;
+            if new.user_id is distinct from old.user_id then
+                raise exception 'sales.user_id is immutable';
+            end if;
+            if new.role is distinct from old.role
+                or new.administrator is distinct from old.administrator
+                or new.disabled is distinct from old.disabled
+                or new.first_name is distinct from old.first_name
+                or new.last_name is distinct from old.last_name
+                or new.avatar is distinct from old.avatar then
+                raise exception 'identity manager may only change email';
+            end if;
+        end if;
+        return new;
+    end if;
 
-    RETURN NEW;
-END;
+    if tg_op = 'UPDATE' then
+        if new.id is distinct from old.id then
+            raise exception 'sales.id is immutable';
+        end if;
+        if new.user_id is distinct from old.user_id then
+            raise exception 'sales.user_id is immutable';
+        end if;
+        if new.email is distinct from old.email then
+            raise exception 'sales.email is immutable for direct updates';
+        end if;
+        if new.role is distinct from old.role then
+            raise exception 'sales.role is immutable for direct updates';
+        end if;
+        if new.administrator is distinct from old.administrator then
+            raise exception 'sales.administrator is immutable for direct updates';
+        end if;
+        if new.disabled is distinct from old.disabled then
+            raise exception 'sales.disabled is immutable for direct updates';
+        end if;
+    end if;
+
+    return new;
+end;
 $$;
 
 -- Nora CRM: JWT role reader (legacy GUC + request.jwt.claims JSON)
@@ -1323,9 +1345,11 @@ begin
     v_uid := nora_private.safe_auth_uid();
 
     if v_uid is null then
-        -- W3: privileged server path with a verified human actor pinned by
-        -- the executor. Only honoured under the service_role claim.
-        if coalesce(nora_private.safe_auth_role(), '') = 'service_role' then
+        -- W3: privileged server path (service_role) with a verified human actor
+        -- pinned by the executor. W4: also a JWT-less database session
+        -- (GoTrue applying a ticketed email change).
+        -- W4: also a JWT-less database session (GoTrue applying a ticketed email change).
+        if coalesce(nora_private.safe_auth_role(), '') in ('service_role', '') then
             begin
                 v_pinned := nullif(btrim(current_setting('nora.audit_actor_user_id', true)), '');
             exception
@@ -3543,3 +3567,315 @@ revoke all on function public.set_primary_contact(bigint) from public;
 revoke all on function public.set_primary_contact(bigint) from anon;
 grant execute on function public.set_primary_contact(bigint) to authenticated;
 grant execute on function public.set_primary_contact(bigint) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Nora User Lifecycle W4 (2026-09-06): controlled login-email change
+-- (migration 20260906120000_nora_lifecycle_email_change.sql)
+-- ---------------------------------------------------------------------------
+
+create or replace function nora_private.normalize_login_email(p_email text)
+returns extensions.citext
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+    v text;
+begin
+    v := lower(btrim(coalesce(p_email, '')));
+    if v = '' or char_length(v) > 255
+       or v !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+    then
+        raise exception 'invalid login email'
+            using errcode = '22023', detail = 'NORA_EMAIL_INVALID';
+    end if;
+    return v::extensions.citext;
+end;
+$$;
+
+alter function nora_private.normalize_login_email(text) owner to postgres;
+
+revoke all on function nora_private.normalize_login_email(text) from public;
+revoke all on function nora_private.normalize_login_email(text) from anon;
+revoke all on function nora_private.normalize_login_email(text) from authenticated;
+revoke all on function nora_private.normalize_login_email(text) from service_role;
+grant execute on function nora_private.normalize_login_email(text) to postgres;
+
+comment on function nora_private.normalize_login_email(text) is
+    'W4: canonical login email = lower(btrim(x)), 1..255 chars, one @, a dot in the domain. Raises NORA_EMAIL_INVALID. Mirrors what GoTrue stores.';
+
+create or replace function nora_private.apply_sales_email_change(
+    p_sale_id bigint,
+    p_email extensions.citext
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+    update public.sales
+    set email = p_email
+    where id = p_sale_id;
+
+    if not found then
+        raise exception 'sales profile not found: %', p_sale_id using errcode = 'P0002';
+    end if;
+end;
+$$;
+
+alter function nora_private.apply_sales_email_change(bigint, extensions.citext) owner to nora_identity_manager;
+
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from public;
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from anon;
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from authenticated;
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from service_role;
+grant execute on function nora_private.apply_sales_email_change(bigint, extensions.citext) to postgres;
+
+comment on function nora_private.apply_sales_email_change(bigint, extensions.citext) is
+    'W4 internal: updates sales.email as nora_identity_manager. Called only by guard_auth_email_change inside GoTrue''s transaction. Not callable via Data API.';
+
+create or replace function public.prepare_sales_email_change(
+    p_actor_user_id uuid,
+    p_sale_id bigint,
+    p_new_email text,
+    p_operation_id uuid default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+    v_actor public.sales%rowtype;
+    v_target public.sales%rowtype;
+    v_auth_email text;
+    v_auth_confirmed boolean;
+    v_auth_banned boolean;
+    v_new extensions.citext;
+    v_ticket_id uuid;
+begin
+    -- Trust boundary: only the privileged server executor may call this.
+    if coalesce(nora_private.safe_auth_role(), '') <> 'service_role' then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+
+    if p_actor_user_id is null then
+        raise exception 'actor required' using errcode = '22023';
+    end if;
+    if p_sale_id is null then
+        raise exception 'target required' using errcode = '22023';
+    end if;
+
+    -- The actor parameter never creates privilege: an existing, active admin.
+    select * into v_actor from public.sales where user_id = p_actor_user_id;
+    if not found or v_actor.role <> 'admin' or v_actor.disabled then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+
+    v_new := nora_private.normalize_login_email(p_new_email);
+
+    select * into v_target from public.sales where id = p_sale_id for update;
+    if not found then
+        raise exception 'sales profile not found: %', p_sale_id
+            using errcode = 'P0002';
+    end if;
+
+    -- Self guard: an administrator does not change their own login identity
+    -- through the lifecycle path (a typo would lock out the only admin).
+    if v_target.user_id = p_actor_user_id then
+        raise exception 'administrators cannot change their own login email'
+            using errcode = '42501', detail = 'NORA_SELF_EMAIL_CHANGE_FORBIDDEN';
+    end if;
+
+    -- Identity must be resolvable and consistent before it is moved.
+    select u.email,
+           (u.email_confirmed_at is not null),
+           (u.banned_until is not null and u.banned_until > now())
+      into v_auth_email, v_auth_confirmed, v_auth_banned
+      from auth.users u
+     where u.id = v_target.user_id;
+    if not found then
+        raise exception 'auth identity missing for sales %', p_sale_id
+            using errcode = 'P0002', detail = 'NORA_EMPLOYEE_AUTH_NOT_FOUND';
+    end if;
+    if lower(btrim(coalesce(v_auth_email, ''))) <> lower(btrim(v_target.email::text)) then
+        raise exception 'auth email and sales email differ for sales %', p_sale_id
+            using errcode = '23514', detail = 'NORA_EMPLOYEE_IDENTITY_INCONSISTENT';
+    end if;
+
+    if v_target.email = v_new then
+        raise exception 'login email unchanged'
+            using errcode = '22023', detail = 'NORA_EMAIL_UNCHANGED';
+    end if;
+
+    -- Uniqueness across both identity stores (provider-equivalent normalisation).
+    if exists (select 1 from public.sales s where s.email = v_new and s.id <> v_target.id)
+       or exists (select 1 from auth.users u where lower(u.email) = v_new::text and u.id <> v_target.user_id)
+    then
+        raise exception 'login email already in use'
+            using errcode = '23505', detail = 'NORA_EMAIL_ALREADY_IN_USE';
+    end if;
+
+    -- Housekeeping, then exactly one live ticket for this employee.
+    delete from nora_private.sales_email_change_tickets where expires_at <= now();
+    delete from nora_private.sales_email_change_tickets where sale_id = v_target.id;
+
+    insert into nora_private.sales_email_change_tickets
+        (sale_id, user_id, old_email, new_email, actor_user_id, operation_id, expires_at)
+    values
+        (v_target.id, v_target.user_id, v_target.email, v_new, p_actor_user_id, p_operation_id, now() + interval '2 minutes')
+    returning id into v_ticket_id;
+
+    return jsonb_build_object(
+        'ticket_id', v_ticket_id,
+        'sale_id', v_target.id,
+        'user_id', v_target.user_id,
+        'old_email', v_target.email::text,
+        'new_email', v_new::text,
+        'role', v_target.role,
+        'disabled', v_target.disabled,
+        'auth_confirmed', v_auth_confirmed,
+        'auth_banned', v_auth_banned
+    );
+end;
+$$;
+
+alter function public.prepare_sales_email_change(uuid, bigint, text, uuid) owner to postgres;
+
+comment on function public.prepare_sales_email_change(uuid, bigint, text, uuid) is
+    'W4 lifecycle executor step 1: service_role only. p_actor_user_id must be an active admin (verified by the users Edge Function from the caller JWT). Validates and normalises the address, refuses self changes (NORA_SELF_EMAIL_CHANGE_FORBIDDEN), unchanged (NORA_EMAIL_UNCHANGED), used (NORA_EMAIL_ALREADY_IN_USE), invalid (NORA_EMAIL_INVALID) addresses and inconsistent identities (NORA_EMPLOYEE_AUTH_NOT_FOUND / NORA_EMPLOYEE_IDENTITY_INCONSISTENT), then writes the ticket guard_auth_email_change consumes. Changes nothing about the employee itself.';
+
+revoke all on function public.prepare_sales_email_change(uuid, bigint, text, uuid) from public;
+revoke all on function public.prepare_sales_email_change(uuid, bigint, text, uuid) from anon;
+revoke all on function public.prepare_sales_email_change(uuid, bigint, text, uuid) from authenticated;
+grant execute on function public.prepare_sales_email_change(uuid, bigint, text, uuid) to service_role;
+
+create or replace function public.cancel_sales_email_change(p_ticket_id uuid)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+    v_deleted integer;
+begin
+    if coalesce(nora_private.safe_auth_role(), '') <> 'service_role' then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+    if p_ticket_id is null then
+        raise exception 'ticket required' using errcode = '22023';
+    end if;
+
+    delete from nora_private.sales_email_change_tickets where id = p_ticket_id;
+    get diagnostics v_deleted = row_count;
+    return v_deleted > 0;
+end;
+$$;
+
+alter function public.cancel_sales_email_change(uuid) owner to postgres;
+
+comment on function public.cancel_sales_email_change(uuid) is
+    'W4 lifecycle executor: service_role only. Removes an unconsumed email-change ticket after the provider refused or failed. Returns false when the ticket no longer exists (consumed or expired).';
+
+revoke all on function public.cancel_sales_email_change(uuid) from public;
+revoke all on function public.cancel_sales_email_change(uuid) from anon;
+revoke all on function public.cancel_sales_email_change(uuid) from authenticated;
+grant execute on function public.cancel_sales_email_change(uuid) to service_role;
+
+create or replace function nora_private.guard_auth_email_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_ticket nora_private.sales_email_change_tickets%rowtype;
+    v_sale public.sales%rowtype;
+    v_actor public.sales%rowtype;
+begin
+    if old.email is not distinct from new.email then
+        return new;
+    end if;
+
+    select * into v_ticket
+      from nora_private.sales_email_change_tickets t
+     where t.user_id = new.id
+       and t.expires_at > now()
+       and t.new_email = new.email::extensions.citext
+     for update;
+
+    if not found then
+        raise exception 'login email changes are only possible through the Nora lifecycle executor'
+            using errcode = '42501', detail = 'NORA_EMAIL_CHANGE_NOT_AUTHORIZED';
+    end if;
+
+    select * into v_sale from public.sales where id = v_ticket.sale_id for update;
+    if not found or v_sale.user_id <> new.id then
+        raise exception 'email change ticket does not match the employee'
+            using errcode = '23514', detail = 'NORA_EMPLOYEE_IDENTITY_INCONSISTENT';
+    end if;
+    if v_sale.email <> v_ticket.old_email
+       or lower(btrim(coalesce(old.email, ''))) <> lower(btrim(v_ticket.old_email::text)) then
+        raise exception 'identity moved since the ticket was written'
+            using errcode = '23514', detail = 'NORA_EMPLOYEE_IDENTITY_INCONSISTENT';
+    end if;
+
+    -- The actor is re-checked at apply time: still an existing, active admin.
+    select * into v_actor from public.sales where user_id = v_ticket.actor_user_id;
+    if not found or v_actor.role <> 'admin' or v_actor.disabled then
+        raise exception 'email change actor is no longer an active administrator'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+
+    -- (a) Nora identity follows the Auth identity — same transaction.
+    perform nora_private.apply_sales_email_change(v_sale.id, new.email::extensions.citext);
+
+    -- (b) Links mailed to the old address stop working: GoTrue keeps every
+    --     outstanding invitation / password-setup token in one_time_tokens.
+    delete from auth.one_time_tokens where user_id = new.id;
+
+    -- (c) The ticket is single-use.
+    delete from nora_private.sales_email_change_tickets where id = v_ticket.id;
+
+    -- (d) Durable business record, attributed to the verified administrator,
+    --     correlated with the request, only when (a)-(c) commit with it.
+    perform nora_private.pin_audit_context(v_ticket.actor_user_id, v_ticket.operation_id);
+    perform nora_private.write_audit_event(
+        p_event_type := 'user.email_changed',
+        p_entity_type := 'sales',
+        p_entity_id := public.nora_entity_uuid('sales', v_sale.id),
+        p_changes := jsonb_build_object(
+            'email',
+            jsonb_build_object('old', v_ticket.old_email::text, 'new', new.email)
+        ),
+        p_metadata := jsonb_build_object(
+            'sale_id', v_sale.id,
+            'employee_sale_id', v_sale.id,
+            'actor_sale_id', v_actor.id,
+            'disabled', v_sale.disabled,
+            'role', v_sale.role
+        ),
+        p_retention_class := 'user_management',
+        p_source := 'user'
+    );
+    perform nora_private.pin_audit_context(null, null);
+
+    return new;
+end;
+$$;
+
+alter function nora_private.guard_auth_email_change() owner to postgres;
+
+comment on function nora_private.guard_auth_email_change() is
+    'W4: BEFORE UPDATE OF email ON auth.users. Refuses any email change without a live ticket for this user and address (NORA_EMAIL_CHANGE_NOT_AUTHORIZED). With a ticket: writes sales.email (as nora_identity_manager), deletes the user''s auth.one_time_tokens (old invitation / password links), consumes the ticket and writes user.email_changed with the pinned admin actor — all in GoTrue''s transaction. Access state (sales.disabled, banned_until, role) is never touched.';
+
+revoke all on function nora_private.guard_auth_email_change() from public;
+revoke all on function nora_private.guard_auth_email_change() from anon;
+revoke all on function nora_private.guard_auth_email_change() from authenticated;
+revoke all on function nora_private.guard_auth_email_change() from service_role;

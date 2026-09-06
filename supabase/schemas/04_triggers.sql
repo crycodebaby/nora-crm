@@ -79,6 +79,15 @@ create or replace trigger on_auth_user_updated
     after update on auth.users
     for each row execute function public.handle_update_user();
 
+-- Nora User Lifecycle W4 (2026-09-06): login email changes only with a ticket;
+-- with one, sales.email, one-time tokens and the audit row move in the same
+-- transaction (see nora_private.guard_auth_email_change).
+create or replace trigger guard_auth_email_change_trigger
+    before update of email on auth.users
+    for each row
+    when (old.email is distinct from new.email)
+    execute function nora_private.guard_auth_email_change();
+
 -- Nora CRM: business numbers
 create or replace trigger assign_customer_number_trigger
     before insert on public.companies

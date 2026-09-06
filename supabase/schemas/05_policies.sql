@@ -61,6 +61,9 @@ create policy "Sales select own or admin" on public.sales for select to authenti
 create policy "Sales select role manager" on public.sales for select using (current_user = 'nora_role_manager');
 create policy "Sales update by role manager" on public.sales for update using (current_user = 'nora_role_manager') with check (current_user = 'nora_role_manager');
 create policy "Sales update own profile" on public.sales for update to authenticated using (nora_private.is_active_user() and user_id = auth.uid()) with check (nora_private.is_active_user() and user_id = auth.uid());
+-- Nora User Lifecycle W4 (2026-09-06): capability owner for sales.email (apply_sales_email_change)
+create policy "Sales select identity manager" on public.sales for select using (current_user = 'nora_identity_manager');
+create policy "Sales update by identity manager" on public.sales for update using (current_user = 'nora_identity_manager') with check (current_user = 'nora_identity_manager');
 
 -- Tags
 create policy "Tags select active" on public.tags for select to authenticated using (nora_private.is_active_user());

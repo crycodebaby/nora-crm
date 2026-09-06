@@ -121,6 +121,8 @@ create table public.sales (
 );
 
 create unique index uq__sales__user_id on public.sales using btree (user_id);
+-- Nora User Lifecycle W4 (2026-09-06): one login email = one employee (citext, case-insensitive)
+create unique index uq__sales__email on public.sales using btree (email);
 
 alter table public.sales
     add constraint sales_role_check check (role in ('admin', 'office', 'viewer'));
@@ -712,3 +714,32 @@ create index contact_notes_sales_id_idx
 create index deal_notes_sales_id_idx
     on public.deal_notes (sales_id)
     where sales_id is not null;
+
+-- Nora User Lifecycle W4 (2026-09-06): short-lived intent records for controlled
+-- login-email changes. Written only by prepare_sales_email_change (service_role
+-- RPC), consumed by guard_auth_email_change inside GoTrue's UPDATE. Not API-exposed.
+create table if not exists nora_private.sales_email_change_tickets (
+    id uuid primary key default gen_random_uuid(),
+    -- No foreign key on purpose (W2 rule: every FK on sales.id is NO ACTION and
+    -- counted by the reference-integrity suite; a ticket is a two-minute intent,
+    -- validated against the live sales row when it is consumed).
+    sale_id bigint not null unique,
+    user_id uuid not null,
+    old_email extensions.citext not null,
+    new_email extensions.citext not null,
+    actor_user_id uuid not null,
+    operation_id uuid,
+    created_at timestamptz not null default now(),
+    expires_at timestamptz not null,
+    constraint sales_email_change_tickets_distinct_check check (old_email <> new_email)
+);
+
+alter table nora_private.sales_email_change_tickets enable row level security;
+
+revoke all on table nora_private.sales_email_change_tickets from public;
+revoke all on table nora_private.sales_email_change_tickets from anon;
+revoke all on table nora_private.sales_email_change_tickets from authenticated;
+revoke all on table nora_private.sales_email_change_tickets from service_role;
+
+comment on table nora_private.sales_email_change_tickets is
+    'W4: short-lived intent records for controlled login-email changes. Written only by prepare_sales_email_change (service_role RPC, verified admin actor), consumed by guard_auth_email_change inside GoTrue''s UPDATE. Not API-exposed.';

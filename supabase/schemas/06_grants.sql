@@ -480,3 +480,45 @@ revoke all on function public.report_operation_error(uuid, text) from public;
 revoke all on function public.report_operation_error(uuid, text) from anon;
 grant execute on function public.report_operation_error(uuid, text) to authenticated;
 grant execute on function public.report_operation_error(uuid, text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Nora User Lifecycle W4 (2026-09-06): login-email change
+-- (role nora_identity_manager is created in the migration, like nora_role_manager)
+-- ---------------------------------------------------------------------------
+grant usage on schema public to nora_identity_manager;
+grant usage on schema nora_private to nora_identity_manager;
+grant create on schema nora_private to nora_identity_manager;
+grant select on table public.sales to nora_identity_manager;
+grant update (email) on table public.sales to nora_identity_manager;
+
+revoke all on table nora_private.sales_email_change_tickets from public;
+revoke all on table nora_private.sales_email_change_tickets from anon;
+revoke all on table nora_private.sales_email_change_tickets from authenticated;
+revoke all on table nora_private.sales_email_change_tickets from service_role;
+
+revoke all on function nora_private.normalize_login_email(text) from public;
+revoke all on function nora_private.normalize_login_email(text) from anon;
+revoke all on function nora_private.normalize_login_email(text) from authenticated;
+revoke all on function nora_private.normalize_login_email(text) from service_role;
+grant execute on function nora_private.normalize_login_email(text) to postgres;
+
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from public;
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from anon;
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from authenticated;
+revoke all on function nora_private.apply_sales_email_change(bigint, extensions.citext) from service_role;
+grant execute on function nora_private.apply_sales_email_change(bigint, extensions.citext) to postgres;
+
+revoke all on function public.prepare_sales_email_change(uuid, bigint, text, uuid) from public;
+revoke all on function public.prepare_sales_email_change(uuid, bigint, text, uuid) from anon;
+revoke all on function public.prepare_sales_email_change(uuid, bigint, text, uuid) from authenticated;
+grant execute on function public.prepare_sales_email_change(uuid, bigint, text, uuid) to service_role;
+
+revoke all on function public.cancel_sales_email_change(uuid) from public;
+revoke all on function public.cancel_sales_email_change(uuid) from anon;
+revoke all on function public.cancel_sales_email_change(uuid) from authenticated;
+grant execute on function public.cancel_sales_email_change(uuid) to service_role;
+
+revoke all on function nora_private.guard_auth_email_change() from public;
+revoke all on function nora_private.guard_auth_email_change() from anon;
+revoke all on function nora_private.guard_auth_email_change() from authenticated;
+revoke all on function nora_private.guard_auth_email_change() from service_role;
