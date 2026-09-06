@@ -288,6 +288,13 @@ export function isOffboardingApplicable(
   return record.accessState === "invited" || record.accessState === "active";
 }
 
+/** Title of the durable section on the employee record (W5). */
+export const EMPLOYEE_OPEN_RESPONSIBILITIES_TITLE = "Offene Zuständigkeiten";
+
+/** Zero state of that section — the section stays, so it is clear Nora checked. */
+export const EMPLOYEE_NO_OPEN_RESPONSIBILITIES =
+  "Keine offenen Zuständigkeiten.";
+
 /** What still needs a new owner — current responsibility only, never notes. */
 export function countOpenResponsibilities(
   deps: EmployeeDependencyPreview,

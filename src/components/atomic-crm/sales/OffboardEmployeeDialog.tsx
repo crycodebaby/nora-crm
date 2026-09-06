@@ -5,7 +5,8 @@
  * calls only the OffboardEmployee Application Command; no provider or Auth
  * orchestration lives here. Before confirmation the dialog says, in product
  * words, what happens (access ends now, history stays) and what still depends
- * on this person (counts from the server). Open assignments never block the
+ * on this person (the same server counts as the durable "Offene
+ * Zuständigkeiten" section of the record, here as a decision-time warning). Open assignments never block the
  * action — security beats administrative tidiness — they are named so they
  * can be reassigned next. Success is reported only after the server verified
  * the access state.
@@ -36,10 +37,10 @@ import {
   EMPTY_DEPENDENCY_PREVIEW,
   mapEmployeeAccessError,
   type EmployeeAccessRecord,
-  type EmployeeDependencyPreview,
   type EmployeeOffboardingResult,
 } from "./employeeAccessContract";
 import { EmployeeAccessStatus } from "./EmployeeAccessStatus";
+import { EmployeeDependencyCounts } from "./EmployeeDependencySummary";
 
 type OffboardEmployeeDialogProps = {
   salesId: Identifier;
@@ -47,38 +48,6 @@ type OffboardEmployeeDialogProps = {
   /** Called after the server answered (green or not) so the caller can refresh. */
   onChanged?: (result?: EmployeeOffboardingResult) => void;
 };
-
-/** One line per count, current responsibility first, notes as history. */
-export function DependencyPreviewList({
-  dependencies,
-}: {
-  dependencies: EmployeeDependencyPreview;
-}) {
-  const rows: Array<[string, number]> = [
-    ["Kunden", dependencies.companies],
-    ["Kontakte", dependencies.contacts],
-    ["Vorgänge", dependencies.openDeals],
-    ["Offene Aufgaben", dependencies.openTasks],
-  ];
-  const notes = dependencies.contactNotes + dependencies.dealNotes;
-  return (
-    <dl
-      className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm"
-      data-testid="employee-offboarding-dependencies"
-    >
-      {rows.map(([label, count]) => (
-        <div key={label} className="contents">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd className="font-medium tabular-nums">{count}</dd>
-        </div>
-      ))}
-      <div className="contents">
-        <dt className="text-muted-foreground">Notizen (bleiben erhalten)</dt>
-        <dd className="font-medium tabular-nums">{notes}</dd>
-      </div>
-    </dl>
-  );
-}
 
 export function OffboardEmployeeDialog({
   salesId,
@@ -174,7 +143,11 @@ export function OffboardEmployeeDialog({
               </p>
               {hasPreview ? (
                 <>
-                  <DependencyPreviewList dependencies={dependencies} />
+                  <EmployeeDependencyCounts
+                    dependencies={dependencies}
+                    showHistory
+                    data-testid="employee-offboarding-dependencies"
+                  />
                   <p
                     className="text-sm text-muted-foreground"
                     data-testid="employee-offboarding-followup"

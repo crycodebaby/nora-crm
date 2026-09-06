@@ -330,8 +330,10 @@ WARNING nur bei fehlendem Leserecht). Reaktivierung (W1) unverändert, alte
 Sitzungen kommen nicht zurück, neue Anmeldung erforderlich. Preview
 `public.get_employee_dependency_preview` (Kunden, Kontakte, offene Vorgänge,
 offene Aufgaben; Notizen getrennt) in `GET /users?sales_id=` und in der
-Antwort. UI: `OffboardEmployeeDialog`, Block „Noch zugewiesen" mit
-gefilterten Listen-Links, Katalog `employee.offboard`. Migration
+Antwort. UI: `OffboardEmployeeDialog`, dauerhafter Block „Offene
+Zuständigkeiten" in der Mitarbeiterakte (`EmployeeDependencySummary`, vor/
+während/nach dem Offboarding, auch bei null) mit gefilterten Listen-Links,
+Katalog `employee.offboard`. Migration
 `20260906180000_nora_lifecycle_offboarding.sql`, neue SQL-Suite
 `lifecycle_offboarding_verification.sql` (12 Abschnitte),
 `users/offboarding.ts` (+15 Tests). **Status: `RC VERIFIED — READY FOR

@@ -598,7 +598,8 @@ Preview, `user.offboarded`), `public.get_employee_dependency_preview`,
 `nora_private.is_active_user()`/`current_role()` über
 `nora_private.jwt_session_is_live()`. Edge: Aktion `offboard`, Modul
 `users/offboarding.ts`, `GET /users?sales_id=` mit `dependencies`. UI: „Zugang
-beenden" mit Preview und Follow-up-Links.
+beenden" mit Preview sowie dauerhafter Block „Offene Zuständigkeiten" in der
+Mitarbeiterakte (jeder Zugangszustand, auch bei null) mit Follow-up-Links.
 
 **Bekannte Kanten / bewusst offen nach W5:**
 
