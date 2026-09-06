@@ -91,6 +91,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | Security | Security Hardening Wave 0 (`audit_events` TRUNCATE) | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Lifecycle | User Lifecycle W1, W2, W3, W4, W5 | `PRODUCTION VERIFIED` (2026-09-05/06) | `2026-09` |
 | Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | `PRODUCTION VERIFIED` (2026-09-06; nur Datenbank, Migration `20260906210000`, keine sichtbare Änderung) | `2026-09` |
+| Lifecycle | User Lifecycle W6-B (kontrollierter Hard Delete „Benutzerkonto endgültig löschen") | **`RC VERIFIED — nicht released`** (2026-09-07; Migration `20260906230000`, `users`-Edge-Änderung, Frontend — **nichts davon ist in Production**) | `2026-09` |
 
 **Was heute gilt (Kurzfassungen der Subsysteme):**
 
@@ -99,7 +100,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 - **Fehler/Operationen:** `NoraErrorCode` über `DETAIL`, Operation Manager mit `execution`/`errorCode`/`result`, Idempotency-Records — `06-decision-log.md` 2026-08-28/29, `domain/noraErrorCodes.ts`, `operations/*`.
 - **Feedback:** eine Statuskarte pro Intent, über Dialogen, click-through; nur Quick Capture migriert, sonner für alle anderen Flows — `notifications/*`, `02-design-system.md`.
 - **PWA:** Prompt-Modus (wartender Worker), Browser-Fakten als Wahrheit, Zustände `available · applying · slow · reloadRequired · failed`, Bestätigung nach dem Reload — `06-decision-log.md` „PWA-Update-Lifecycle", `02-design-system.md`, `pwa/*`.
-- **Mitarbeiter-Lifecycle:** abgeleiteter Zugangsstatus, ein Executor je Aktion, historische Identität, Audit-Actor, kontrollierte E-Mail-Änderung, Offboarding mit Session-Revokation und Preview — `19-user-lifecycle-architecture.md`.
+- **Mitarbeiter-Lifecycle:** abgeleiteter Zugangsstatus, ein Executor je Aktion, historische Identität, Audit-Actor, kontrollierte E-Mail-Änderung, Offboarding mit Session-Revokation und Preview — `19-user-lifecycle-architecture.md`. Kontrollierter Hard Delete (W6-B) liegt als RC vor und ist **nicht** live; bis zum Release existiert in Production kein Löschpfad für Mitarbeiterkonten.
 - **E-Mail-Zustellung:** Brevo-Webhook, Best-Effort-Korrelation, Zustellzeile im Panel, kein Tracking — `18-email-delivery-observability.md`.
 
 ## 6. Welche Dokumente muss ich für welches Thema lesen?
@@ -122,7 +123,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | Audit-Ereignisse, Actor-Modell, Retention | `13-crm-audit-retention.md` |
 | Offene Bugs, Restrisiken, geplante Wellen | `17-known-issues-and-planned-waves.md` |
 | E-Mail-Zustellbeobachtung (Brevo, Vertrag, Operator-Konfiguration) | `18-email-delivery-observability.md` |
-| **Mitarbeiter-/Benutzer-Lifecycle (Zustände, Executoren, Audit, Session-Bindung, Offboarding, Roadmap W1–W10)** | `19-user-lifecycle-architecture.md` |
+| **Mitarbeiter-/Benutzer-Lifecycle (Zustände, Executoren, Audit, Session-Bindung, Offboarding, Hard Delete W6-B (RC), Roadmap W1–W10)** | `19-user-lifecycle-architecture.md` |
 | Produkt-Changelog, `/changelog`-Vertrag | `20-product-changelog.md` |
 | Historische Release-Evidenz, alte Decision-Log-Originale | `releases/README.md` → `releases/2026-06.md` … `releases/2026-09.md` |
 | Error Contract | `06-decision-log.md` „Error Contract Wave" + `domain/noraErrorCodes.ts` + `07-…` |

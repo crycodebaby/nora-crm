@@ -147,7 +147,7 @@ Vollständige Spezifikation: `docs/nora/11-google-calendar-rbac.md`
 
 Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administrator` ist nur Kompatibilitätsspiegel (`role = admin` ↔ `true`). Teamlisten nutzen **`sales_directory`** (v0.4b.2).
 
-**Mitarbeiter-Lebenszyklus (Employee Access V1A–V1C, User Lifecycle W1–W6-A; Stand 2026-09-06).** Vollständige Architektur: `19-user-lifecycle-architecture.md`.
+**Mitarbeiter-Lebenszyklus (Employee Access V1A–V1C, User Lifecycle W1–W6-A live; W6-B als RC; Stand 2026-09-07).** Vollständige Architektur: `19-user-lifecycle-architecture.md`.
 
 | Fachlich | Technisch | Hinweis |
 |---|---|---|
@@ -160,7 +160,7 @@ Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administr
 | „Wem darf ich neue Arbeit zuweisen?" | `sales_directory` (nur aktive) + Trigger `guard_active_assignment` | Picker `SalesAssignmentInput`; Neuzuweisung an Deaktivierte wird serverseitig abgelehnt |
 | „Wer war zuständig / wer hat das geschrieben?" | `sales_identities` (alle, inkl. `disabled`) | Namen auf bestehenden Notizen, Vorgängen, Akten, im Aktivitätslog und Export |
 | Wer hat das entschieden? | `audit_events` `user.*` mit echtem Admin-Actor, stabiler Mitarbeiter-Entity, Operation-ID | `13-crm-audit-retention.md` |
-| Mitarbeiter löschen | kein unterstützter Pfad; nur unreferenzierte Zeilen wären für einen künftigen kontrollierten Executor (W6) löschbar | sechs `NO ACTION`-FKs blockieren jede referenzierte Identität; Browser-Rollen nie |
+| Benutzerkonto endgültig löschen (W6-B, RC — nicht released) | `users` Edge `delete_account` → Ticket → GoTrue Admin Hard Delete → `auth.users`-Guard löscht `sales` + schreibt `user.account_deleted` in einer Transaktion | Ausnahmeoperation nur für Fake-, Versehens-, Dubletten- und nie genutzte Konten **ohne** jede Geschäftshistorie (all-time) und ohne Provenienz; Ziel muss deaktiviert + gebannt sein; Name tippen, bei Admin-Ziel Extra-Bestätigung; Protokolleinträge bleiben (keine DSGVO-Löschung). In Production bis zum Release: kein Löschpfad |
 
 Ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**. Domänenregel: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — deaktivierte Mitarbeiter behalten ihren echten Namen auf allem Bestehenden und verschwinden nur aus Auswahllisten für Neues. Identität (Anmeldeadresse), Zugang (aktiv/deaktiviert) und Rolle sind drei getrennte Fakten. Der Datenzugriff eines Mitarbeiters ist an eine lebende Auth-Sitzung gebunden.
 
