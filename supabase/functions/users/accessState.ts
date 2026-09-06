@@ -33,6 +33,8 @@ export type EmployeeAuthFacts = {
   email_confirmed_at?: string | null;
   confirmed_at?: string | null;
   invited_at?: string | null;
+  /** W4: the Auth login email, compared against sales.email (never returned raw). */
+  email?: string | null;
 };
 
 export type EmployeeSaleFacts = {
@@ -54,6 +56,14 @@ export type EmployeeSaleFacts = {
  */
 export type AccessConsistency = "consistent" | "inconsistent" | "unknown";
 
+/**
+ * W4: whether the login identity (auth.users.email) and Nora's employee
+ * profile (sales.email) name the same address. "inconsistent" is a state the
+ * email-change command refuses to build on; it is surfaced, never repaired
+ * silently.
+ */
+export type IdentityConsistency = "consistent" | "inconsistent" | "unknown";
+
 /** The complete public response shape — no provider metadata, no tokens. */
 export type EmployeeAccessRecord = {
   employeeId: number;
@@ -64,6 +74,8 @@ export type EmployeeAccessRecord = {
   /** Nora's own access flag (sales.disabled) on its own — the value a re-sync re-applies. */
   noraDisabled: boolean;
   accessConsistency: AccessConsistency;
+  /** W4: sales.email vs. the Auth login email (provider-equivalent normalisation). */
+  identityConsistency: IdentityConsistency;
   /** auth.users.invited_at — present only for employees created via invitation. */
   invitedAt: string | null;
   /** Email confirmation timestamp — the moment the invitation was actually used. */
@@ -83,6 +95,26 @@ export function hasActiveBan(
   const until = Date.parse(bannedUntil);
   if (Number.isNaN(until)) return false;
   return until > now.getTime();
+}
+
+/**
+ * W4 normalisation contract, identical to nora_private.normalize_login_email
+ * and to what GoTrue stores: trimmed and lower-cased. Format validation is
+ * the database's job; this only makes two addresses comparable.
+ */
+export function normalizeLoginEmail(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+export function deriveIdentityConsistency(
+  sale: { email: string },
+  auth: EmployeeAuthFacts | null | undefined,
+): IdentityConsistency {
+  if (!auth || auth.email === undefined) return "unknown";
+  if (!auth.email) return "inconsistent";
+  return normalizeLoginEmail(auth.email) === normalizeLoginEmail(sale.email)
+    ? "consistent"
+    : "inconsistent";
 }
 
 /** True once the invitation link (or Einmalcode) has actually been used. */
@@ -144,6 +176,7 @@ export function buildEmployeeAccessRecord(
       sale.disabled === true || hasActiveBan(auth?.banned_until ?? null, now),
     noraDisabled: sale.disabled === true,
     accessConsistency: deriveAccessConsistency(sale, auth, now),
+    identityConsistency: deriveIdentityConsistency(sale, auth),
     invitedAt: auth?.invited_at ?? null,
     activatedAt: auth?.email_confirmed_at ?? auth?.confirmed_at ?? null,
   };
@@ -182,10 +215,18 @@ export function isAdminActionAllowed(
  * field is the legacy "create + invite a new employee" payload and is left
  * untouched — this wave adds commands, it does not reshape the existing one.
  */
-export type EmployeeAccessCommand = {
-  kind: "resend_invitation" | "request_password_setup";
-  salesId: number;
-};
+export type EmployeeAccessCommand =
+  | {
+      kind: "resend_invitation" | "request_password_setup";
+      salesId: number;
+    }
+  | {
+      /** W4: "E-Mail-Adresse ändern" — the only way to move a login email. */
+      kind: "change_email";
+      salesId: number;
+      /** Trimmed, otherwise as typed; the database normalises and validates. */
+      newEmail: string;
+    };
 
 export function parseEmployeeAccessCommand(
   body: Record<string, unknown>,
@@ -193,13 +234,26 @@ export function parseEmployeeAccessCommand(
   const action = body.action;
   if (action === undefined || action === null) return null;
 
-  if (action !== "resend_invitation" && action !== "request_password_setup") {
+  if (
+    action !== "resend_invitation" &&
+    action !== "request_password_setup" &&
+    action !== "change_email"
+  ) {
     return { error: "unknown_action" };
   }
 
   const salesId = Number(body.sales_id);
   if (!Number.isFinite(salesId) || salesId <= 0) {
     return { error: "invalid_payload" };
+  }
+
+  if (action === "change_email") {
+    const raw = body.new_email;
+    const newEmail = typeof raw === "string" ? raw.trim() : "";
+    if (!newEmail) {
+      return { error: "invalid_payload" };
+    }
+    return { kind: "change_email", salesId, newEmail };
   }
 
   return { kind: action, salesId };

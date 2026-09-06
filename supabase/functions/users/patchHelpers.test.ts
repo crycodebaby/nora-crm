@@ -58,6 +58,17 @@ describe("users patchHelpers", () => {
     expect(needsAuthAdminUpdate(plan)).toBe(true);
   });
 
+  it("W4: refuses any PATCH that carries the login email", () => {
+    // Even combined with a legitimate name change: the whole request is
+    // refused so "name saved, email failed" cannot happen.
+    expect(
+      buildPatchPlan({ sales_id: 1, first_name: "Neu", email: "x@y.de" }),
+    ).toEqual({ error: "email_change_requires_command" });
+    expect(buildPatchPlan({ sales_id: 1, email: "" })).toEqual({
+      error: "email_change_requires_command",
+    });
+  });
+
   it("rejects missing disabled when only empty strings sent", () => {
     expect(
       buildPatchPlan({ sales_id: 1, first_name: "   ", last_name: "  " }),
@@ -80,7 +91,6 @@ describe("disabled changes must always reach Supabase Auth", () => {
 
     expect(plan.wantsDisabled).toBe(true);
     expect(plan.wantsName).toBe(false);
-    expect(plan.wantsEmail).toBe(false);
     expect(needsAuthAdminUpdate(plan)).toBe(true);
   });
 

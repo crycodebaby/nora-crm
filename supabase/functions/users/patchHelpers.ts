@@ -34,13 +34,11 @@ export type PatchPlan = {
   wantsRole: boolean;
   wantsDisabled: boolean;
   wantsName: boolean;
-  wantsEmail: boolean;
   wantsAvatar: boolean;
   role: NoraRole | null;
   disabled: boolean | null;
   firstName: string | null;
   lastName: string | null;
-  email: string | null;
   avatar: unknown;
 };
 
@@ -57,6 +55,12 @@ export function buildPatchPlan(
   const wantsFirst = Object.prototype.hasOwnProperty.call(body, "first_name");
   const wantsLast = Object.prototype.hasOwnProperty.call(body, "last_name");
   const wantsEmail = Object.prototype.hasOwnProperty.call(body, "email");
+  // W4: the login email is identity state, not a profile field. A PATCH that
+  // carries it is refused as a whole so "name saved, email failed" cannot
+  // happen; the dedicated change_email command is the only path.
+  if (wantsEmail) {
+    return { error: "email_change_requires_command" };
+  }
   const wantsAvatar = Object.prototype.hasOwnProperty.call(body, "avatar");
   const wantsAdministrator = Object.prototype.hasOwnProperty.call(
     body,
@@ -90,20 +94,9 @@ export function buildPatchPlan(
     wantsLast && typeof body.last_name === "string"
       ? body.last_name.trim() || null
       : null;
-  const email =
-    wantsEmail && typeof body.email === "string"
-      ? body.email.trim() || null
-      : null;
-
   const wantsName = Boolean(firstName || lastName);
 
-  if (
-    !wantsRole &&
-    !wantsDisabled &&
-    !wantsName &&
-    !wantsEmail &&
-    !wantsAvatar
-  ) {
+  if (!wantsRole && !wantsDisabled && !wantsName && !wantsAvatar) {
     return { error: "invalid_payload" };
   }
 
@@ -112,13 +105,11 @@ export function buildPatchPlan(
     wantsRole,
     wantsDisabled,
     wantsName,
-    wantsEmail: Boolean(wantsEmail && email),
     wantsAvatar: Boolean(wantsAvatar && body.avatar),
     role,
     disabled,
     firstName,
     lastName,
-    email,
     avatar: body.avatar,
   };
 }
@@ -161,5 +152,5 @@ export function mapPostgresError(error: { code?: string; message?: string }): {
 
 /** Role-only patches must not call Auth Admin updateUserById. */
 export function needsAuthAdminUpdate(plan: PatchPlan): boolean {
-  return plan.wantsEmail || plan.wantsName || plan.wantsDisabled;
+  return plan.wantsName || plan.wantsDisabled;
 }

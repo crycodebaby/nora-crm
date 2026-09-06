@@ -29,6 +29,13 @@ import {
   resolveRequestOperationId,
   type EmployeeAuditDeps,
 } from "./audit.ts";
+import {
+  EmailChangeFailure,
+  executeEmailChange,
+  type EmailChangeDeps,
+  type EmailChangeSaleRow,
+  type EmailChangeTicket,
+} from "./emailChange.ts";
 
 function resolveInviteRedirectTo(): string {
   const siteUrl =
@@ -99,6 +106,8 @@ function toAuthFacts(user: unknown): EmployeeAuthFacts | null {
       (u.email_confirmed_at as string | null | undefined) ?? null,
     confirmed_at: (u.confirmed_at as string | null | undefined) ?? null,
     invited_at: (u.invited_at as string | null | undefined) ?? null,
+    // W4: only ever compared against sales.email; never returned raw.
+    email: (u.email as string | null | undefined) ?? null,
   };
 }
 
@@ -164,6 +173,80 @@ function lifecycleErrorResponse(failure: LifecycleFailure): Response {
   return createErrorResponse(status, message, {
     error,
     ...(accessConsistency ? { accessConsistency } : {}),
+  });
+}
+
+/* ------------------------------------------------------------------------ */
+/* W4 — the single privileged path for the login email                       */
+/* ------------------------------------------------------------------------ */
+
+const EMAIL_CHANGE_SELECT =
+  "id, user_id, email, first_name, last_name, role, disabled";
+
+/**
+ * Real adapters behind the email-change executor ports. prepare / cancel are
+ * service_role-only in the database; the Auth Admin call is the only way the
+ * new address reaches GoTrue, and GoTrue's UPDATE is what fires the database
+ * guard that moves sales.email in the same transaction.
+ */
+const emailChangeDeps: EmailChangeDeps = {
+  prepare: async ({ actorUserId, salesId, newEmail, operationId }) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "prepare_sales_email_change",
+      {
+        p_actor_user_id: actorUserId,
+        p_sale_id: salesId,
+        p_new_email: newEmail,
+        p_operation_id: operationId,
+      },
+    );
+    if (error) throw error;
+    return data as EmailChangeTicket;
+  },
+  cancel: async (ticketId) => {
+    const { data, error } = await supabaseAdmin.rpc(
+      "cancel_sales_email_change",
+      { p_ticket_id: ticketId },
+    );
+    if (error) throw error;
+    return data === true;
+  },
+  updateAuthEmail: async (userId, email) => {
+    const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
+      userId,
+      { email },
+    );
+    if (error || !data?.user) {
+      throw error ?? new Error("auth_update_failed");
+    }
+  },
+  readSale: async (salesId) => {
+    const { data, error } = await supabaseAdmin
+      .from("sales")
+      .select(EMAIL_CHANGE_SELECT)
+      .eq("id", salesId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as EmailChangeSaleRow;
+  },
+  readAuthFacts: loadAuthFacts,
+  sendInvitation: async ({ email, firstName, lastName }) => {
+    const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      data: { first_name: firstName, last_name: lastName },
+      redirectTo: resolveInviteRedirectTo(),
+    });
+    if (error) throw error;
+  },
+  log: (entry) => console.error(JSON.stringify(entry)),
+};
+
+function emailChangeErrorResponse(failure: EmailChangeFailure): Response {
+  const { status, message, error, emailChanged, identityConsistency } =
+    failure.failure;
+  return createErrorResponse(status, message, {
+    error,
+    ...(emailChanged !== undefined ? { emailChanged } : {}),
+    ...(identityConsistency ? { identityConsistency } : {}),
   });
 }
 
@@ -434,31 +517,22 @@ async function patchUser(
 
   // Profile fields (self or admin). Never the ban: the Auth ban is owned by
   // the access change below, so it can only move together with sales.disabled.
-  if (plan.wantsName || plan.wantsEmail) {
+  // Never the email either (W4): buildPatchPlan refuses a body that carries
+  // it; the login email moves only through the change_email command.
+  if (plan.wantsName) {
     const nextFirstName =
       plan.firstName !== null ? plan.firstName : sale.first_name;
     const nextLastName =
       plan.lastName !== null ? plan.lastName : sale.last_name;
 
-    const authUpdate: {
-      email?: string;
-      user_metadata?: { first_name: string; last_name: string };
-    } = {};
-
-    if (plan.wantsName) {
-      authUpdate.user_metadata = {
-        first_name: nextFirstName,
-        last_name: nextLastName,
-      };
-    }
-
-    if (plan.wantsEmail && plan.email && plan.email !== sale.email) {
-      authUpdate.email = plan.email;
-    }
-
-    if (Object.keys(authUpdate).length > 0) {
+    {
       const { data, error: userError } =
-        await supabaseAdmin.auth.admin.updateUserById(sale.user_id, authUpdate);
+        await supabaseAdmin.auth.admin.updateUserById(sale.user_id, {
+          user_metadata: {
+            first_name: nextFirstName,
+            last_name: nextLastName,
+          },
+        });
 
       if (!data?.user || userError) {
         console.error(
@@ -474,7 +548,7 @@ async function patchUser(
       }
     }
 
-    if (plan.wantsName) {
+    {
       const { error: saleUpdateError } = await supabaseAdmin
         .from("sales")
         .update({
@@ -840,6 +914,75 @@ async function requestEmployeePasswordSetup(
 }
 
 /**
+ * "E-Mail-Adresse ändern" (W4) — moves an employee's login identity.
+ *
+ * Admin only. The executor (emailChange.ts) runs the database guards, the
+ * Auth Admin update and the verification; the database trigger writes
+ * user.email_changed inside GoTrue's transaction, so no audit row exists
+ * without the change and no change exists without its audit row. Only the
+ * optional fresh invitation for a not-yet-activated employee is audited here,
+ * after the provider accepted it — exactly like "Einladung erneut senden".
+ */
+async function changeEmployeeLoginEmail(
+  currentUserSale: any,
+  command: { salesId: number; newEmail: string },
+  ctx: RequestContext,
+): Promise<Response> {
+  if (!isAdminSale(currentUserSale)) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "access_action_forbidden",
+    });
+  }
+
+  // Edge-level self guard (repeated in the database): the caller never moves
+  // their own login identity through this path.
+  if (currentUserSale.id === command.salesId) {
+    return createErrorResponse(403, "Not Authorized", {
+      error: "self_email_change_forbidden",
+    });
+  }
+
+  let result;
+  try {
+    result = await executeEmailChange(emailChangeDeps, {
+      actorUserId: ctx.actorUserId,
+      operationId: ctx.operationId,
+      salesId: command.salesId,
+      newEmail: command.newEmail,
+    });
+  } catch (e) {
+    if (e instanceof EmailChangeFailure) return emailChangeErrorResponse(e);
+    console.error("user.email_change.failed");
+    return createErrorResponse(500, "Internal Server Error", {
+      error: "internal_error",
+    });
+  }
+
+  if (result.invitationSent) {
+    try {
+      await recordEmployeeAdminEvent(employeeAuditDeps, {
+        actorUserId: ctx.actorUserId,
+        salesId: result.sale.id,
+        eventType: "user.invitation_resent",
+        operationId: ctx.operationId,
+      });
+    } catch (e) {
+      if (e instanceof AuditWriteFailure) return auditFailureResponse(e);
+      throw e;
+    }
+  }
+
+  return new Response(
+    JSON.stringify({
+      data: buildEmployeeAccessRecord(result.sale, result.authFacts),
+      previousEmail: result.previousEmail,
+      invitationSent: result.invitationSent,
+    }),
+    { headers: { "Content-Type": "application/json", ...corsHeaders } },
+  );
+}
+
+/**
  * POST dispatch: a body carrying "action" is an access command; a body without
  * one stays the legacy "create a new employee and invite them" payload.
  */
@@ -866,9 +1009,18 @@ async function postUsers(
   }
 
   if (command) {
-    return command.kind === "resend_invitation"
-      ? resendEmployeeInvitation(currentUserSale, command.salesId, ctx)
-      : requestEmployeePasswordSetup(currentUserSale, command.salesId, ctx);
+    switch (command.kind) {
+      case "resend_invitation":
+        return resendEmployeeInvitation(currentUserSale, command.salesId, ctx);
+      case "request_password_setup":
+        return requestEmployeePasswordSetup(
+          currentUserSale,
+          command.salesId,
+          ctx,
+        );
+      case "change_email":
+        return changeEmployeeLoginEmail(currentUserSale, command, ctx);
+    }
   }
 
   return inviteUser(req, currentUserSale, ctx);

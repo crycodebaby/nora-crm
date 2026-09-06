@@ -160,6 +160,7 @@ describe("buildEmployeeAccessRecord", () => {
       disabled: false,
       noraDisabled: false,
       accessConsistency: "consistent",
+      identityConsistency: "unknown",
       invitedAt: "2026-09-01T08:00:00.000Z",
       activatedAt: "2026-09-02T09:00:00.000Z",
     });
@@ -170,6 +171,7 @@ describe("buildEmployeeAccessRecord", () => {
       "disabled",
       "email",
       "employeeId",
+      "identityConsistency",
       "invitedAt",
       "noraDisabled",
     ]);
@@ -312,6 +314,32 @@ describe("parseEmployeeAccessCommand", () => {
         sales_id: "7",
       }),
     ).toEqual({ kind: "request_password_setup", salesId: 7 });
+  });
+
+  it("parses the W4 change_email command and trims the address", () => {
+    expect(
+      parseEmployeeAccessCommand({
+        action: "change_email",
+        sales_id: 7,
+        new_email: "  Neu.Adresse@Ergart.de ",
+      }),
+    ).toEqual({
+      kind: "change_email",
+      salesId: 7,
+      newEmail: "Neu.Adresse@Ergart.de",
+    });
+  });
+
+  it("refuses change_email without a usable address", () => {
+    for (const newEmail of [undefined, null, "", "   ", 42]) {
+      expect(
+        parseEmployeeAccessCommand({
+          action: "change_email",
+          sales_id: 7,
+          new_email: newEmail,
+        }),
+      ).toEqual({ error: "invalid_payload" });
+    }
   });
 
   it("rejects an unknown action instead of falling back to invite", () => {
