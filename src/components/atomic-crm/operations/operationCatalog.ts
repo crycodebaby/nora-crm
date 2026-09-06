@@ -29,7 +29,8 @@ export type CatalogOperationType =
   | "contact.setPrimary"
   | "contact.convertToCustomer"
   | "quickCapture.createCase"
-  | "quickCapture.createTask";
+  | "quickCapture.createTask"
+  | "employee.change_login_email";
 
 export const OPERATION_CATALOG: {
   readonly [K in CatalogOperationType]: OperationCatalogEntry & {
@@ -98,6 +99,13 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Aufgabe wird angelegt …",
     successMessage: "Aufgabe wurde angelegt.",
     errorMessage: "Aufgabe konnte nicht angelegt werden.",
+  },
+  "employee.change_login_email": {
+    operationType: "employee.change_login_email",
+    resourceType: "sales",
+    pendingMessage: "Anmeldeadresse wird geändert …",
+    successMessage: "Anmeldeadresse wurde geändert.",
+    errorMessage: "Anmeldeadresse konnte nicht geändert werden.",
   },
 } as const;
 

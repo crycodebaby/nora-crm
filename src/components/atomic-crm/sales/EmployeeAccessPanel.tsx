@@ -1,5 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useDataProvider, useNotify, type Identifier } from "ra-core";
+import {
+  useDataProvider,
+  useNotify,
+  useRefresh,
+  type Identifier,
+} from "ra-core";
 import { Button } from "@/components/ui/button";
 
 import type { CrmDataProvider } from "../providers/types";
@@ -14,11 +19,14 @@ import {
   EMPLOYEE_ACCESS_CONSISTENCY_NOTICE,
   EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL,
   EMPLOYEE_ACCESS_STATE_DESCRIPTION,
+  EMPLOYEE_IDENTITY_INCONSISTENT_NOTICE,
   isAccessResyncApplicable,
   isAdminActionAllowed,
+  isEmailChangeApplicable,
   mapEmployeeAccessError,
   type EmployeeAccessRecord,
 } from "./employeeAccessContract";
+import { ChangeEmployeeEmailDialog } from "./ChangeEmployeeEmailDialog";
 import { EmployeeAccessStatus } from "./EmployeeAccessStatus";
 import { EmployeeMailDeliveryStatus } from "./EmployeeMailDeliveryStatus";
 import {
@@ -74,6 +82,7 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
   const dataProvider = useDataProvider<CrmDataProvider>();
   const notify = useNotify();
   const queryClient = useQueryClient();
+  const refresh = useRefresh();
   const { data, isPending, isError } = useEmployeeAccessStatus(salesId);
 
   const record: EmployeeAccessRecord | undefined = data?.[0];
@@ -145,6 +154,8 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
     "request_password_setup",
   );
   const needsResync = isAccessResyncApplicable(record);
+  const canChangeEmail = isEmailChangeApplicable(record);
+  const identityInconsistent = record.identityConsistency === "inconsistent";
 
   return (
     <section className="space-y-4" data-testid="employee-access-panel">
@@ -163,12 +174,42 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
         </p>
 
         <dl className="grid gap-1 text-sm">
-          <div className="flex flex-wrap gap-x-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
             <dt className="text-muted-foreground">Anmeldeadresse</dt>
-            <dd className="font-medium text-foreground break-all">
+            <dd
+              className="font-medium text-foreground break-all"
+              data-testid="employee-login-email"
+            >
               {record.email}
             </dd>
+            {/* W4: the one write path for the login email. Offered for every
+                resolvable, consistent identity — the server decides again. */}
+            {canChangeEmail ? (
+              <dd>
+                <ChangeEmployeeEmailDialog
+                  salesId={salesId}
+                  record={record}
+                  onChanged={() => {
+                    void queryClient.invalidateQueries({
+                      queryKey: EMPLOYEE_ACCESS_QUERY_KEY,
+                    });
+                    refresh();
+                  }}
+                />
+              </dd>
+            ) : null}
           </div>
+          {identityInconsistent ? (
+            <div>
+              <dd
+                className="text-muted-foreground"
+                role="status"
+                data-testid="employee-identity-consistency"
+              >
+                {EMPLOYEE_IDENTITY_INCONSISTENT_NOTICE}
+              </dd>
+            </div>
+          ) : null}
           {dateLine ? (
             <div>
               <dd className="text-muted-foreground">{dateLine}</dd>

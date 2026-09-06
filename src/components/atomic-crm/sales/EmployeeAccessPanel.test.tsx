@@ -14,6 +14,7 @@ const record = (
   disabled: false,
   noraDisabled: false,
   accessConsistency: "consistent",
+  identityConsistency: "consistent",
   invitedAt: "2026-09-01T08:00:00.000Z",
   activatedAt: null,
   ...over,
@@ -349,5 +350,54 @@ describe("EmployeeAccessPanel delivery status", () => {
     for (const forbidden of ["geöffnet", "gelesen", "geklickt", "klick"]) {
       expect(text).not.toContain(forbidden);
     }
+  });
+});
+
+describe("EmployeeAccessPanel login email (W4)", () => {
+  const noTrigger = (screen: { container: HTMLElement }) =>
+    screen.container.querySelector(
+      '[data-testid="employee-email-change-trigger"]',
+    ) === null;
+
+  it("shows the login address with the change action for a consistent identity", async () => {
+    const screen = await renderPanel("active");
+    await expect
+      .element(screen.getByTestId("employee-login-email"))
+      .toHaveTextContent("test.access@ergart.de");
+    await expect
+      .element(screen.getByTestId("employee-email-change-trigger"))
+      .toBeInTheDocument();
+  });
+
+  it("offers the change for a disabled employee too", async () => {
+    const screen = await renderPanelRecord({
+      accessState: "disabled",
+      disabled: true,
+      noraDisabled: true,
+    });
+    await expect
+      .element(screen.getByTestId("employee-email-change-trigger"))
+      .toBeInTheDocument();
+  });
+
+  it("offers nothing and names the mismatch when login and profile disagree", async () => {
+    const screen = await renderPanelRecord({
+      accessState: "active",
+      identityConsistency: "inconsistent",
+    });
+    await expect
+      .element(screen.getByTestId("employee-identity-consistency"))
+      .toHaveTextContent(
+        "Die Anmeldeadresse stimmt nicht mit dem Benutzerprofil überein.",
+      );
+    await expect.poll(() => noTrigger(screen)).toBe(true);
+  });
+
+  it("offers no email change for an unresolvable identity", async () => {
+    const screen = await renderPanel("unknown");
+    await expect
+      .element(screen.getByTestId("employee-access-state"))
+      .toHaveTextContent("Zugang unklar");
+    await expect.poll(() => noTrigger(screen)).toBe(true);
   });
 });

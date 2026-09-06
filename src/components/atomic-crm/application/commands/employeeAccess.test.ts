@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  changeEmployeeLoginEmail,
   EmployeeAccessActionNotApplicableError,
   getEmployeeAccessStatus,
   requestEmployeePasswordSetup,
   resendEmployeeInvitation,
   resyncEmployeeAccess,
 } from "./employeeAccess";
+import { createOperationManager } from "../../operations/operationManager";
 import type { CrmDataProvider } from "../../providers/types";
 import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
 
@@ -19,6 +21,7 @@ const record = (
   disabled: false,
   noraDisabled: false,
   accessConsistency: "consistent",
+  identityConsistency: "consistent",
   invitedAt: "2026-09-01T08:00:00.000Z",
   activatedAt: null,
   ...over,
@@ -144,6 +147,7 @@ describe("requestEmployeePasswordSetup", () => {
       "disabled",
       "email",
       "employeeId",
+      "identityConsistency",
       "invitedAt",
       "noraDisabled",
     ]);
@@ -163,5 +167,75 @@ describe("resyncEmployeeAccess (W1)", () => {
     const [, patch] = (dp.salesUpdate as ReturnType<typeof vi.fn>).mock
       .calls[0] as [unknown, Record<string, unknown>];
     expect(Object.keys(patch)).toEqual(["disabled"]);
+  });
+});
+
+describe("changeEmployeeLoginEmail (W4)", () => {
+  it("runs through the Operation Manager and hands the operation id to the provider", async () => {
+    const manager = createOperationManager({ recordError: null });
+    const change = vi.fn(async (_input: { operationId?: string }) => ({
+      record: record({ accessState: "active", email: "neu@ergart.de" }),
+      previousEmail: "viktoriia.p@ergart.de",
+      invitationSent: false,
+    }));
+    const dp = provider({ changeEmployeeLoginEmail: change } as never);
+
+    const result = await changeEmployeeLoginEmail(
+      dp,
+      { salesId: 7, newEmail: "neu@ergart.de", currentState: "active" },
+      manager,
+    );
+
+    expect(result.record.email).toBe("neu@ergart.de");
+    const call = change.mock.calls[0]?.[0];
+    expect(call).toMatchObject({ salesId: 7, newEmail: "neu@ergart.de" });
+    expect(call?.operationId).toMatch(/^[0-9a-f-]{36}$/);
+    const op = manager.getOperations()[0];
+    expect(op?.operationType).toBe("employee.change_login_email");
+    expect(op?.status).toBe("success");
+  });
+
+  it("refuses an unresolvable identity without a round trip", async () => {
+    const change = vi.fn();
+    const dp = provider({ changeEmployeeLoginEmail: change } as never);
+    await expect(
+      changeEmployeeLoginEmail(dp, {
+        salesId: 7,
+        newEmail: "neu@ergart.de",
+        currentState: "unknown",
+      }),
+    ).rejects.toBeInstanceOf(EmployeeAccessActionNotApplicableError);
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("refuses an inconsistent identity without a round trip", async () => {
+    const change = vi.fn();
+    const dp = provider({ changeEmployeeLoginEmail: change } as never);
+    await expect(
+      changeEmployeeLoginEmail(dp, {
+        salesId: 7,
+        newEmail: "neu@ergart.de",
+        currentState: "active",
+        identityConsistency: "inconsistent",
+      }),
+    ).rejects.toBeInstanceOf(EmployeeAccessActionNotApplicableError);
+    expect(change).not.toHaveBeenCalled();
+  });
+
+  it("keeps the typed server code and marks the operation as failed", async () => {
+    const manager = createOperationManager({ recordError: null });
+    const dp = provider({
+      changeEmployeeLoginEmail: vi.fn(async () => {
+        throw new Error("email_already_in_use");
+      }),
+    } as never);
+    await expect(
+      changeEmployeeLoginEmail(
+        dp,
+        { salesId: 7, newEmail: "x@ergart.de", currentState: "active" },
+        manager,
+      ),
+    ).rejects.toThrow("email_already_in_use");
+    expect(manager.getOperations()[0]?.status).toBe("error");
   });
 });

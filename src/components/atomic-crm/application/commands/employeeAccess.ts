@@ -17,9 +17,17 @@ import type { Identifier } from "ra-core";
 import type { CrmDataProvider } from "../../providers/types";
 import {
   isAdminActionAllowed,
+  isEmailChangeApplicable,
   type EmployeeAccessRecord,
   type EmployeeAccessState,
+  type EmployeeEmailChangeResult,
+  type IdentityConsistency,
 } from "../../sales/employeeAccessContract";
+import { OPERATION_CATALOG } from "../../operations/operationCatalog";
+import {
+  getDefaultOperationManager,
+  type OperationManager,
+} from "../../operations/operationManager";
 
 /**
  * Thrown when the requested action no longer matches the employee's actual
@@ -99,6 +107,52 @@ export const resyncEmployeeAccess = async (
   input: { salesId: Identifier; disabled: boolean },
 ) => {
   return dataProvider.salesUpdate(input.salesId, { disabled: input.disabled });
+};
+
+/**
+ * "E-Mail-Adresse ändern" (User Lifecycle W4) — moves the employee's login
+ * identity through the single privileged server path. The Operation Manager
+ * owns the operation id (it becomes the request_id of the audit rows) and
+ * records a technical failure in the Error Observatory; the business errors
+ * stay typed codes for the UI. The server re-checks everything: the
+ * pre-check here only avoids a pointless round trip for an unresolvable or
+ * inconsistent identity.
+ */
+export const changeEmployeeLoginEmail = async (
+  dataProvider: CrmDataProvider,
+  input: {
+    salesId: Identifier;
+    newEmail: string;
+    currentState?: EmployeeAccessState;
+    identityConsistency?: IdentityConsistency;
+  },
+  manager: OperationManager = getDefaultOperationManager(),
+): Promise<EmployeeEmailChangeResult> => {
+  if (
+    input.currentState &&
+    !isEmailChangeApplicable({
+      accessState: input.currentState,
+      identityConsistency: input.identityConsistency ?? "unknown",
+    })
+  ) {
+    throw new EmployeeAccessActionNotApplicableError(input.currentState);
+  }
+
+  return manager.execute(
+    OPERATION_CATALOG["employee.change_login_email"],
+    { resourceId: input.salesId },
+    async (context) => {
+      try {
+        return await dataProvider.changeEmployeeLoginEmail({
+          salesId: input.salesId,
+          newEmail: input.newEmail,
+          operationId: context.operationId,
+        });
+      } catch (error) {
+        throw normalizeAccessError(error);
+      }
+    },
+  );
 };
 
 function normalizeAccessError(error: unknown): unknown {

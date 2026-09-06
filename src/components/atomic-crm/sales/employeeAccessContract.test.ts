@@ -8,9 +8,13 @@ import {
   EMPLOYEE_ACCESS_STATES,
   EMPLOYEE_ACCESS_STATE_DESCRIPTION,
   EMPLOYEE_ACCESS_STATE_LABEL,
+  describeEmployeeEmailChangeSuccess,
+  EMPLOYEE_EMAIL_CHANGE_CONSEQUENCE,
   isAccessResyncApplicable,
   isAdminActionAllowed,
+  isEmailChangeApplicable,
   isEmployeeAccessState,
+  isSameLoginEmail,
   mapEmployeeAccessError,
   type EmployeeAccessRecord,
 } from "./employeeAccessContract";
@@ -24,6 +28,7 @@ const w1Record = (
   disabled: true,
   noraDisabled: true,
   accessConsistency: "inconsistent",
+  identityConsistency: "consistent",
   invitedAt: null,
   activatedAt: null,
   ...over,
@@ -133,5 +138,130 @@ describe("employee access contract (client mirror)", () => {
     expect(mapEmployeeAccessError(new Error("PGRST301 jwt expired"))).toBe(
       "Die Aktion konnte nicht ausgeführt werden. Bitte versuchen Sie es erneut.",
     );
+  });
+});
+
+describe("login email change contract (W4)", () => {
+  it("offers the change for active, invited and disabled — never for unknown or inconsistent", () => {
+    for (const accessState of ["active", "invited", "disabled"] as const) {
+      expect(
+        isEmailChangeApplicable({
+          accessState,
+          identityConsistency: "consistent",
+        }),
+      ).toBe(true);
+      expect(
+        isEmailChangeApplicable({
+          accessState,
+          identityConsistency: "unknown",
+        }),
+      ).toBe(true);
+      expect(
+        isEmailChangeApplicable({
+          accessState,
+          identityConsistency: "inconsistent",
+        }),
+      ).toBe(false);
+    }
+    expect(
+      isEmailChangeApplicable({
+        accessState: "unknown",
+        identityConsistency: "consistent",
+      }),
+    ).toBe(false);
+  });
+
+  it("names a consequence for every offered state and none for unknown", () => {
+    expect(EMPLOYEE_EMAIL_CHANGE_CONSEQUENCE.active).toContain("künftig");
+    expect(EMPLOYEE_EMAIL_CHANGE_CONSEQUENCE.invited).toContain(
+      "neue Einladung",
+    );
+    expect(EMPLOYEE_EMAIL_CHANGE_CONSEQUENCE.disabled).toBe(
+      "Der Nora-Zugang bleibt deaktiviert. Es wird keine Einladung versendet.",
+    );
+    expect(EMPLOYEE_EMAIL_CHANGE_CONSEQUENCE.unknown).toBeUndefined();
+  });
+
+  it("compares addresses like the provider does", () => {
+    expect(isSameLoginEmail("  A.B@Ergart.DE ", "a.b@ergart.de")).toBe(true);
+    expect(isSameLoginEmail("a.b@ergart.de", "a.c@ergart.de")).toBe(false);
+  });
+
+  it("success copy follows the resulting state and never claims an unsent invitation", () => {
+    const base = w1Record({
+      accessState: "active",
+      disabled: false,
+      noraDisabled: false,
+      accessConsistency: "consistent",
+      email: "neu@ergart.de",
+    });
+    const previousEmail = "alt@ergart.de";
+    expect(
+      describeEmployeeEmailChangeSuccess({
+        record: base,
+        previousEmail,
+        invitationSent: false,
+      }),
+    ).toBe(
+      "Anmeldeadresse geändert auf neu@ergart.de. Die neue Adresse wird künftig für den Nora-Zugang verwendet.",
+    );
+    expect(
+      describeEmployeeEmailChangeSuccess({
+        record: {
+          ...base,
+          accessState: "disabled",
+          disabled: true,
+          noraDisabled: true,
+        },
+        previousEmail,
+        invitationSent: false,
+      }),
+    ).toBe(
+      "Anmeldeadresse geändert auf neu@ergart.de. Der Nora-Zugang bleibt deaktiviert.",
+    );
+    expect(
+      describeEmployeeEmailChangeSuccess({
+        record: { ...base, accessState: "invited" },
+        previousEmail,
+        invitationSent: true,
+      }),
+    ).toBe(
+      "Anmeldeadresse geändert. Eine neue Einladung wurde an neu@ergart.de gesendet.",
+    );
+    expect(
+      describeEmployeeEmailChangeSuccess({
+        record: { ...base, accessState: "invited" },
+        previousEmail,
+        invitationSent: false,
+      }),
+    ).toBe("Anmeldeadresse geändert auf neu@ergart.de.");
+  });
+
+  it("maps every W4 server code to calm German copy without technical vocabulary", () => {
+    const codes = [
+      "invalid_email",
+      "email_unchanged",
+      "email_already_in_use",
+      "self_email_change_forbidden",
+      "employee_auth_not_found",
+      "employee_identity_inconsistent",
+      "email_change_provider_failed",
+      "email_change_sync_failed",
+      "email_change_invitation_failed",
+      "email_change_requires_command",
+      "audit_write_failed",
+    ];
+    const generic = mapEmployeeAccessError(new Error("something_else"));
+    for (const code of codes) {
+      const text = mapEmployeeAccessError(new Error(code));
+      expect(text).not.toBe(generic);
+      expect(text).not.toMatch(/jwt|gotrue|rpc|service_role|token|sql/i);
+    }
+    expect(
+      mapEmployeeAccessError(new Error("email_change_provider_failed")),
+    ).toContain("Es wurde nichts verändert");
+    expect(
+      mapEmployeeAccessError(new Error("email_change_invitation_failed")),
+    ).toContain("Einladung erneut senden");
   });
 });

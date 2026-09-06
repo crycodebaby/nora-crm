@@ -25,6 +25,13 @@ export type EmployeeAccessState = (typeof EMPLOYEE_ACCESS_STATES)[number];
 /** Mirrors AccessConsistency on the server. */
 export type AccessConsistency = "consistent" | "inconsistent" | "unknown";
 
+/**
+ * W4 (User Lifecycle): whether the login identity and the employee profile
+ * name the same address. Mirrors IdentityConsistency on the server. Not a
+ * fifth access state — a second small fact the panel must never hide.
+ */
+export type IdentityConsistency = "consistent" | "inconsistent" | "unknown";
+
 export type EmployeeAccessAction =
   | "resend_invitation"
   | "request_password_setup"
@@ -41,8 +48,18 @@ export type EmployeeAccessRecord = {
   /** Nora's own flag on its own — the value a re-sync re-applies. */
   noraDisabled: boolean;
   accessConsistency: AccessConsistency;
+  /** W4: login email vs. employee profile email. */
+  identityConsistency: IdentityConsistency;
   invitedAt: string | null;
   activatedAt: string | null;
+};
+
+/** What the server returns after a verified login-email change (W4). */
+export type EmployeeEmailChangeResult = {
+  record: EmployeeAccessRecord;
+  previousEmail: string;
+  /** A fresh invitation went to the new address (invited employees only). */
+  invitationSent: boolean;
 };
 
 export function isEmployeeAccessState(
@@ -147,6 +164,72 @@ export function isAdminActionAllowed(
   return allowedAdminActions(state).includes(action);
 }
 
+/* ---------------------------------------------------------------------- */
+/* W4 — "E-Mail-Adresse ändern"                                             */
+/* ---------------------------------------------------------------------- */
+
+export const EMPLOYEE_EMAIL_CHANGE_ACTION_LABEL = "E-Mail-Adresse ändern";
+
+/**
+ * What the change does for the employee's current state, in product words.
+ * Wording follows the behaviour proven against the real login provider:
+ * links already mailed to the old address stop working; an invited employee
+ * gets a fresh invitation; a disabled employee gets nothing and stays out.
+ */
+export const EMPLOYEE_EMAIL_CHANGE_CONSEQUENCE: Partial<
+  Record<EmployeeAccessState, string>
+> = {
+  active:
+    "Die neue Adresse wird künftig für den Nora-Zugang verwendet. Bereits versendete Links zum Einrichten des Passworts werden ungültig.",
+  invited:
+    "Die bisherige Einladung wird ungültig. Eine neue Einladung wird an die neue Adresse gesendet.",
+  disabled:
+    "Der Nora-Zugang bleibt deaktiviert. Es wird keine Einladung versendet.",
+};
+
+export const EMPLOYEE_EMAIL_CHANGE_UNCHANGED_HINT =
+  "Die neue Adresse entspricht der aktuellen Anmeldeadresse.";
+
+export const EMPLOYEE_IDENTITY_INCONSISTENT_NOTICE =
+  "Die Anmeldeadresse stimmt nicht mit dem Benutzerprofil überein. Die E-Mail-Adresse kann hier nicht geändert werden. Bitte an die technische Betreuung wenden.";
+
+/** Provider-equivalent comparison: trimmed, case-insensitive. */
+export function isSameLoginEmail(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * The change is offered for every resolvable state — active, invited and
+ * disabled alike (a disabled employee's address may need correcting) — but
+ * never for an unresolvable identity or one whose two stores disagree; the
+ * server refuses those anyway.
+ */
+export function isEmailChangeApplicable(
+  record: Pick<EmployeeAccessRecord, "accessState" | "identityConsistency">,
+): boolean {
+  return (
+    record.accessState !== "unknown" &&
+    record.identityConsistency !== "inconsistent"
+  );
+}
+
+/** Success copy — spoken only after the server verified both stores. */
+export function describeEmployeeEmailChangeSuccess(
+  result: EmployeeEmailChangeResult,
+): string {
+  const next = result.record.email;
+  switch (result.record.accessState) {
+    case "disabled":
+      return `Anmeldeadresse geändert auf ${next}. Der Nora-Zugang bleibt deaktiviert.`;
+    case "invited":
+      return result.invitationSent
+        ? `Anmeldeadresse geändert. Eine neue Einladung wurde an ${next} gesendet.`
+        : `Anmeldeadresse geändert auf ${next}.`;
+    default:
+      return `Anmeldeadresse geändert auf ${next}. Die neue Adresse wird künftig für den Nora-Zugang verwendet.`;
+  }
+}
+
 /** Calm German copy for the failure modes the access commands can return. */
 export function mapEmployeeAccessError(error: unknown): string {
   const message =
@@ -171,6 +254,28 @@ export function mapEmployeeAccessError(error: unknown): string {
       return "Die Einladung konnte nicht gesendet werden. Bitte versuchen Sie es erneut.";
     case "password_setup_mail_failed":
       return "Die E-Mail zum Einrichten des Passworts konnte nicht gesendet werden. Bitte versuchen Sie es erneut.";
+    // W4 — login email
+    case "invalid_email":
+      return "Bitte eine gültige E-Mail-Adresse eingeben.";
+    case "email_unchanged":
+      return "Die neue Adresse entspricht bereits der aktuellen Anmeldeadresse.";
+    case "email_already_in_use":
+      return "Diese E-Mail-Adresse gehört bereits zu einem anderen Benutzer.";
+    case "self_email_change_forbidden":
+      return "Die eigene Anmeldeadresse können Sie hier nicht ändern. Bitte einen anderen Administrator darum bitten.";
+    case "employee_auth_not_found":
+    case "employee_identity_inconsistent":
+      return "Der Nora-Zugang dieses Benutzers lässt sich nicht eindeutig zuordnen. Bitte an die technische Betreuung wenden.";
+    case "email_change_provider_failed":
+      return "Die Anmeldeadresse konnte nicht geändert werden. Es wurde nichts verändert. Bitte versuchen Sie es erneut.";
+    case "email_change_sync_failed":
+      return "Die Änderung konnte nicht vollständig bestätigt werden. Bitte laden Sie die Seite neu und prüfen Sie die Anmeldeadresse.";
+    case "email_change_invitation_failed":
+      return "Die Anmeldeadresse wurde geändert, aber die neue Einladung konnte nicht gesendet werden. Bitte „Einladung erneut senden“ verwenden.";
+    case "email_change_requires_command":
+      return "Die E-Mail-Adresse wird über „E-Mail-Adresse ändern“ im Bereich Nora-Zugang geändert.";
+    case "audit_write_failed":
+      return "Die Aktion wurde ausgeführt, konnte aber nicht protokolliert werden. Bitte an die technische Betreuung wenden.";
     default:
       return "Die Aktion konnte nicht ausgeführt werden. Bitte versuchen Sie es erneut.";
   }

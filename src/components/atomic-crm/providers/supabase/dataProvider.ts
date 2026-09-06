@@ -29,14 +29,20 @@ import type {
 } from "../../audit/auditTypes";
 import type { ConfigurationContextValue } from "../../root/ConfigurationContext";
 import { performGlobalSearch } from "../../misc/globalSearch";
-import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
+import type {
+  EmployeeAccessRecord,
+  EmployeeEmailChangeResult,
+} from "../../sales/employeeAccessContract";
 import type {
   EmployeeMailDeliveryOutcome,
   EmployeeMailDeliveryStatus,
   EmployeeMailKind,
 } from "../../sales/emailDeliveryContract";
 import { withCrmErrorHandler } from "../../misc/withCrmErrorHandler";
-import { createOperationContext } from "../../operations/operationContext";
+import {
+  createOperationContext,
+  NORA_OPERATION_ID_HEADER,
+} from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
 import {
   executeCreateCustomerWithContact,
@@ -324,6 +330,43 @@ const getDataProviderWithCustomMethods = () => {
       salesId: Identifier,
     ): Promise<EmployeeAccessRecord> {
       return invokeEmployeeAccessCommand("request_password_setup", salesId);
+    },
+
+    /**
+     * "E-Mail-Adresse ändern" (W4). The only way the browser moves a login
+     * email: the users Edge Function runs the executor (database guards →
+     * Auth → verification). The operation id travels as the request header
+     * so the audit rows of this request carry it as request_id.
+     */
+    async changeEmployeeLoginEmail(input: {
+      salesId: Identifier;
+      newEmail: string;
+      operationId?: string;
+    }): Promise<EmployeeEmailChangeResult> {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: EmployeeAccessRecord;
+        previousEmail?: string;
+        invitationSent?: boolean;
+      }>("users", {
+        method: "POST",
+        body: {
+          action: "change_email",
+          sales_id: input.salesId,
+          new_email: input.newEmail,
+        },
+        ...(input.operationId
+          ? { headers: { [NORA_OPERATION_ID_HEADER]: input.operationId } }
+          : {}),
+      });
+
+      if (error || !data?.data) {
+        throw new Error(await readEmployeeAccessErrorCode(error));
+      }
+      return {
+        record: data.data,
+        previousEmail: data.previousEmail ?? "",
+        invitationSent: data.invitationSent === true,
+      };
     },
 
     /**

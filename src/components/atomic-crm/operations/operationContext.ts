@@ -49,7 +49,10 @@ export type OperationType =
   | "task.update"
   | "task.archive"
   | "contacts.import"
-  | "contacts.export";
+  | "contacts.export"
+  // User Lifecycle W4. Lower-case on purpose: record_operation_error only
+  // accepts ^[a-z][a-z0-9_.]*$ as operation_type.
+  | "employee.change_login_email";
 
 export type OperationContext = {
   /** Full UUID – technical correlation key. */

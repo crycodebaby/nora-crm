@@ -77,7 +77,10 @@ import {
 } from "./internal/taskContextCheck";
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 
-import type { EmployeeAccessRecord } from "../../sales/employeeAccessContract";
+import type {
+  EmployeeAccessRecord,
+  EmployeeEmailChangeResult,
+} from "../../sales/employeeAccessContract";
 import type { EmployeeMailDeliveryStatus } from "../../sales/emailDeliveryContract";
 /**
  * FakeRest mirror of nora_private.idempotency_check/idempotency_persist
@@ -725,6 +728,56 @@ export const createDataProvider = ({
         id: salesId,
       });
       return toDemoAccessRecord(data);
+    },
+
+    /**
+     * "E-Mail-Adresse ändern" (W4) — FakeRest parity. The demo has one
+     * identity store, so the change is the same guards (unchanged, invalid,
+     * already used — case-insensitive) followed by one update. No mail.
+     */
+    changeEmployeeLoginEmail: async (input: {
+      salesId: Identifier;
+      newEmail: string;
+      operationId?: string;
+    }): Promise<EmployeeEmailChangeResult> => {
+      const { data: sale } = await dataProvider.getOne<Sale>("sales", {
+        id: input.salesId,
+      });
+      if (!sale) throw new Error("not_found");
+      const next = input.newEmail.trim().toLowerCase();
+      if (!next || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
+        throw new Error("invalid_email");
+      }
+      const current = String(sale.email ?? "")
+        .trim()
+        .toLowerCase();
+      if (next === current) throw new Error("email_unchanged");
+      const { data: all } = await dataProvider.getList<Sale>("sales", {
+        filter: {},
+        pagination: { page: 1, perPage: 1000 },
+        sort: { field: "id", order: "ASC" },
+      });
+      if (
+        all.some(
+          (other) =>
+            String(other.id) !== String(sale.id) &&
+            String(other.email ?? "")
+              .trim()
+              .toLowerCase() === next,
+        )
+      ) {
+        throw new Error("email_already_in_use");
+      }
+      const { data: updated } = await dataProvider.update<Sale>("sales", {
+        id: input.salesId,
+        data: { email: next },
+        previousData: sale,
+      });
+      return {
+        record: toDemoAccessRecord(updated),
+        previousEmail: sale.email,
+        invitationSent: false,
+      };
     },
 
     /**
@@ -1579,6 +1632,7 @@ function toDemoAccessRecord(sale: Sale): EmployeeAccessRecord {
     // Demo has one source of truth, so the two facts can never disagree.
     noraDisabled: Boolean(sale.disabled),
     accessConsistency: "consistent",
+    identityConsistency: "consistent",
     invitedAt: null,
     activatedAt: null,
   };

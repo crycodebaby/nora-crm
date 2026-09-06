@@ -71,16 +71,16 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
         );
       }
 
-      // Send only changed fields — pure role edits must not rewrite names/email.
-      const patch: Partial<Omit<SalesFormData, "password">> = {};
+      // Send only changed fields — pure role edits must not rewrite names.
+      // The login email is never part of this PATCH (W4): it moves only
+      // through "E-Mail-Adresse ändern" in the Nora-Zugang panel, and the
+      // server refuses a PATCH that carries it.
+      const patch: Partial<Omit<SalesFormData, "password" | "email">> = {};
       if (data.first_name !== record.first_name) {
         patch.first_name = data.first_name;
       }
       if (data.last_name !== record.last_name) {
         patch.last_name = data.last_name;
-      }
-      if (data.email !== record.email) {
-        patch.email = data.email;
       }
       if (data.role !== record.role) {
         patch.role = data.role;
