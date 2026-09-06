@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-06 (User Lifecycle W4 RC; davor 2026-08-29 nach Security Advisor Baseline Closure + Error Contract Wave Production Release + Idempotency Wave Production Release + Operation Status Contract v1 Production Release).
+Stand: 2026-09-06 (User Lifecycle W4 PRODUCTION VERIFIED; davor 2026-08-29 nach Security Advisor Baseline Closure + Error Contract Wave Production Release + Idempotency Wave Production Release + Operation Status Contract v1 Production Release).
 
 Dieses Dokument ist eine **schnelle Orientierung**, kein Ersatz für die referenzierten Dokumente. Es verlinkt, statt Inhalte zu duplizieren.
 
@@ -299,9 +299,15 @@ Selbständerung blockiert; PATCH mit `email` wird als Ganzes abgewiesen
 Migration `20260906120000_nora_lifecycle_email_change.sql`, neue SQL-Suite
 `lifecycle_email_change_verification.sql` (11 Abschnitte), `users/emailChange.ts`
 (+26 Tests), `sales/ChangeEmployeeEmailDialog.tsx`, Operation-Katalog
-`employee.change_login_email`. **Status: `RC VERIFIED — READY FOR CONTROLLED
-RELEASE` (2026-09-06)** — nicht released; Release-Reihenfolge im Decision Log
-„2026-09-06 – User Lifecycle W4". Details und offene Punkte:
+`employee.change_login_email`. **Status: `PRODUCTION VERIFIED` (2026-09-06)**
+— Migration `20260906120000` live (Ledger korrigiert), `users` Edge v7, RC
+`693a84c9` + Hotfix `64ac11c1` (No-op-„Speichern" im Bearbeiten-Formular,
+Test-Typisierung) auf `origin/main`, Vercel auf `nora.ergart.de`; Live-Beweis
+des Product Owners am deaktivierten Testkonto `sales.id = 4`: fünf
+`user.email_changed`-Zeilen mit echtem Admin-Actor, stabiler Entity-ID und
+eigener Request-ID, `disabled`/Bann unverändert, alte Einladungs-Tokens
+gelöscht, keine Mail, Adresse am Ende wiederhergestellt — Decision Log
+„2026-09-06 – User Lifecycle W4", Nachtrag Release. Offene Punkte:
 `17-known-issues-and-planned-waves.md` Abschnitt „User Lifecycle W4".
 
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
@@ -487,7 +493,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
 9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
 10. ~~Operation Status Contract v1~~ — **PRODUCTION VERIFIED seit 2026-08-29** (Phase 6E), siehe Abschnitt 4 Punkt 18, Decision Log „Operation Status Contract Wave" inkl. Nachtrag Phase 6C, 6D.1 und 6E. Die Notification-/Status-UI, die diesen Contract konsumiert, ist inzwischen als Phase 7B umgesetzt — siehe Abschnitt 4 Punkt 19. Sie ist seit 2026-08-30 **PRODUCTION VERIFIED** (Release-Commit `9db08c4b`), deckt aber bislang **nur Quick Capture** ab; die weiteren Intents bleiben Phase 7C.
-11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 27), W4 E-Mail-Änderung (RC VERIFIED 2026-09-06, nicht released, siehe Abschnitt 4 Punkt 28), W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
+11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 27), ~~W4 E-Mail-Änderung~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 28), W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 

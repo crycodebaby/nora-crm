@@ -478,9 +478,10 @@ künftige Zeilen sind attribuiert.
 
 ## User Lifecycle W4 — kontrollierte Änderung der Anmeldeadresse
 
-**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-06; Branch
-`security/nora-lifecycle-w4-email-change`, Basis `origin/main = 5c6744cb`;
-keine Production-Migration, kein Edge-Deploy, kein Push).**
+**Status: `PRODUCTION VERIFIED` (2026-09-06; RC `693a84c9` + Hotfix
+`64ac11c1` auf `origin/main`, Migration `20260906120000` live, `users` Edge v7,
+Live-Beweis am deaktivierten Testkonto `sales.id = 4` — Decision Log
+„2026-09-06 – User Lifecycle W4", Nachtrag Release).**
 
 Bewiesen (lokal, echter Stack; read-only gegen `nora-crm-prod`): Jede
 Auth-E-Mail-Änderung scheiterte an `prevent_sales_privilege_escalation`
@@ -514,7 +515,25 @@ Bearbeiten-Formular zeigt die Anmeldeadresse read-only. Details: Decision Log
 → `audit_immutability` → `core_indexes` → `teardown` → `production_check` —
 26 Läufe, alle grün (53 Migrationen; GUCs und Ticket-Tabelle danach leer).
 
+**Beim Release behoben (Hotfix `64ac11c1`):**
+
+- **No-op-„Speichern" im Bearbeiten-Formular** zeigte „Die Benutzerrolle
+  konnte nicht geändert werden.": ohne geändertes Feld ging ein leerer PATCH
+  (`{sales_id}`) an die Edge Function, die ihn als `invalid_payload` abwies;
+  `SalesEdit` mappte diesen Code auf den Rollen-Fehlertext. Vorbestehend,
+  durch W4 sichtbar (die E-Mail reist nicht mehr im Formular mit). Jetzt löst
+  ein leerer Patch lokal auf (kein Request), `sales/salesEditPatch.ts` + Test.
+- **`npm run typecheck` des RC** scheiterte an drei Typfehlern nur in
+  `ChangeEmployeeEmailDialog.test.tsx` (parameterloses `vi.fn`,
+  `mock.calls[0]?.[0]`); `npm run build` (Root-`tsconfig`, ohne Tests) und die
+  Suite waren grün. Behoben; Lehre für Release-Agenten: `typecheck` gehört
+  ausdrücklich zu den RC-Gates und ist nicht durch `build` abgedeckt.
+
 **Bewusst offen nach W4 / Nebenbefunde:**
+
+- **`invalid_payload` → Rollen-Fehlertext** in `SalesEdit` bleibt als Mapping
+  bestehen (nur noch bei echten ungültigen Payloads erreichbar); ein neutraler
+  Text wäre sauberer (LOW, UX).
 
 - **GoTrue verbirgt die Guard-Verweigerung.** Die Admin API antwortet bei
   einer vom Guard abgelehnten Änderung mit generischem
