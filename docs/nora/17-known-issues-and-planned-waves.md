@@ -1,1181 +1,164 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Übersicht: `16-current-state.md`. Dieses Dokument enthält die Details zu offenen Bugs, Live-Feedback und geplanten Domain-Waves. Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-06. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
-Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `BUG, Ursache vermutet` · `RESOLVED / VERIFIED` (behoben, mit Test und Live-Prüfung abgesichert) · `VERIFIED NOT REPRODUCIBLE / ALREADY RESOLVED` (Meldung im aktuellen Code/Live nicht reproduzierbar, keine Änderung nötig) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP`.
-
----
-
-## UX-/Domain-Probleme
-
-### 1. Kunden-Autocomplete: „neuen Kunden anlegen" nicht eindeutig als Aktion erkennbar
-
-**Status: RESOLVED / VERIFIED (2026-08-25)**
-
-Betroffen war: `/kontakte/create`, Kunden-Autocomplete-Feld (`AutocompleteCompanyInput.tsx`), über die gemeinsame Basiskomponente `src/components/admin/autocomplete-input.tsx`.
-
-**Ursache:** Die Create-Option wurde im selben `CommandGroup` wie die normalen Sucheergebnisse gerendert, mit demselben (nur leeren) Check-Icon-Platzhalter — visuell nicht von echten Treffern unterscheidbar.
-
-**Fix:**
-
-- `autocomplete-input.tsx`: Die Create-Option wird jetzt in einer eigenen `CommandGroup`, getrennt durch `CommandSeparator`, mit einem `Plus`-Icon statt des (leeren) Such-Checks gerendert. Betrifft generisch jede Autocomplete-Instanz mit `create`/`onCreate` (aktuell nur die Kunden-Suche), keine neue Parallelkomponente.
-- Message-Kataloge (`germanCrmMessages.ts`, `englishCrmMessages.ts`, `frenchCrmMessages.ts`): `resources.companies.autocomplete.create_item` zeigt jetzt den Suchtext in einer eindeutigen Aktionsformulierung, z. B. Deutsch: „Neuen Kunden „%{item}" anlegen".
-- Tastaturbedienung/Accessibility unverändert (cmdk behandelt mehrere `CommandGroup`s weiterhin als eine durchlaufende Liste; `role="option"` bleibt erhalten).
-
-**Verifiziert:**
-
-- Neuer Test `src/components/atomic-crm/companies/AutocompleteCompanyInput.test.tsx` (2 Tests: Create-Option sichtbar mit erwartetem Label; Auswahl der Create-Option legt den Kunden tatsächlich an und setzt `company_id`).
-- Live im Browser auf `/#/kontakte/create`: Eingabe „Traum und Horror UG" zeigt unten in der Liste, abgesetzt durch Trennlinie: „+ Neuen Kunden „Traum und Horror UG" anlegen".
+Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
 ---
 
-### 2. LinkedIn-Feld auf `/kontakte/create`
+## A. Sicherheit und Privilegien
 
-**Status: VERIFIED NOT REPRODUCIBLE / ALREADY RESOLVED (2026-08-25)**
+### A.1 Default-Privilegien im Schema `public` vergeben TRUNCATE an API-Rollen
 
-Live-Feedback 2026-08-25: Trotz des neuen generischen Links-Modells sei auf `/kontakte/create` weiterhin ein sichtbares Feld „LinkedIn-Adresse" vorhanden.
+**Status: `OPEN / PLANNED FOLLOW-UP`** (festgestellt 2026-09-04, gegen `nora-crm-prod` verifiziert; Folgebefund aus Security Hardening Wave 0)
 
-**Code-Prüfung (2026-08-25, nach dem Feedback):** `ContactInputs.tsx` — die einzige Formularkomponente, die von `ContactCreate.tsx`, `ContactCreateSheet.tsx` und `ContactEditSheet.tsx` verwendet wird — enthält **kein** `TextInput source="linkedin_url"` mehr, nur noch `ArrayInput source="links_jsonb"`. Verbleibende `linkedin_url`-Referenzen im Code sind ausschließlich:
+Die Default-Tabellen-Privilegien von `public` (Grantor `postgres`) vergeben an `anon`, `authenticated` und `service_role` bei jedem `CREATE TABLE` automatisch `Dxtm` (`TRUNCATE`, `REFERENCES`, `TRIGGER`, `MAINTAIN`) — noch vor jedem expliziten Grant. Eine Migration, die nur additiv `grant select` schreibt, lässt dieses Erbe stehen; so entstand der `audit_events`-Befund. `TRUNCATE` umgeht RLS vollständig und feuert keine Row-Trigger.
 
-- `CompanyAside.tsx`, `ContactPersonalInfo.tsx` — Lese-Fallback für Altdatensätze, deren Migrations-Backfill aus irgendeinem Grund leer blieb, kein Eingabefeld
-- `useContactImport.tsx` — CSV-Spaltenname beim Import, kein UI-Formularfeld
-- Message-Kataloge — verwaiste `linkedin_url`-Labels für die deprecated DB-Spalte, nicht zwingend im UI gerendert
-
-**Live-Verifikation (2026-08-25, `npm run dev:demo`, `/#/kontakte/create`):** Seite enthält an keiner Stelle den Text „LinkedIn" (per Skript geprüft). Feld war zu diesem Zeitpunkt bereits nicht mehr vorhanden — vermutlich alter Deploy-Stand oder Browser-/Service-Worker-Cache beim ursprünglichen Melder. **Keine Code-Änderung vorgenommen.**
-
----
-
-### 3. Kunden-Show: Tabs „Änderungsverlauf"/„Kontakte" springen zurück
-
-**Status: RESOLVED / VERIFIED (2026-08-25)**
-
-Live beobachtet 2026-08-25 auf `nora.ergart.de/#/kunden/27/show`: Klick auf Tab „Kontakte" oder „Änderungsverlauf" navigiert kurz, zeigt aber weiterhin den Inhalt des Tabs „Aktivität"; der aktive Tab-Zustand kehrt sichtbar dorthin zurück.
-
-**Root Cause (verifiziert, nicht mehr nur vermutet):** `CompanyShow` wird über `useNoraResourceAliasRoutes` (`routing/NoraResourceAliasRoutes.tsx`) ausschließlich unter der deutschen Alias-Route `kunden/*` → `:id/show/*` gemountet. Dieselbe Routenliste registriert daneben `companies/*` → `<LegacyPathRedirect from="companies">`, das jede `/companies/...`-URL sofort per `<Navigate replace>` auf `/kunden/...` zurückschreibt.
-
-`CompanyShowContent` (`CompanyShow.tsx`) navigierte bei Tab-Wechsel jedoch explizit auf den **englischen, internen** Pfad (`navigate(`/companies/${id}/show/${value}`)`) und ermittelte den aktiven Tab über `useMatch("/companies/:id/show/:tab")`. Der `LegacyPathRedirect`, der für exakt dieselbe Zielroute registriert ist, schrieb die URL sofort auf `/kunden/...` zurück — danach matchte `useMatch("/companies/...")` nicht mehr, `currentTab` fiel auf `"activity"` zurück, obwohl die URL korrekt den Ziel-Tab enthielt. Der Effekt war nur bei Nicht-Standard-Tabs sichtbar, weil der Default-Tab ohnehin `"activity"` ist.
-
-**Fix (`CompanyShow.tsx`):** Navigation und Tab-Erkennung verwenden jetzt ausschließlich den kanonischen deutschen Pfad — `useMatch("/kunden/:id/show/:tab")` und `navigate()` über `noraCreatePath({ resource: "companies", type: "show", id })`. Der `LegacyPathRedirect`-Mechanismus wird für diese interne Navigation nicht mehr durchlaufen; kein Redirect-Suppression-Hack, kein Timing/Delay.
-
-**Weitere Show-Komponenten geprüft:** `ContactShow.tsx` hat keinen `useMatch`-basierten Tab-Mechanismus (kein Bug). `DealShow.tsx` ist dialogbasiert ohne URL-Tab-Routing (kein Bug). Kein weiterer Fix nötig.
-
-**Verifiziert:**
-
-- Neuer Regressionstest `src/components/atomic-crm/companies/CompanyShow.test.tsx` (2 Tests: Kontakte-Tab und Änderungsverlauf-Tab bleiben nach Klick aktiv, geprüft gegen den echten React-Router-Baum via `StoryWrapper`). Test schlägt nachweislich fehl gegen den alten Code (verifiziert per `git stash`) und ist grün gegen den Fix.
-- Live im Browser (`npm run dev:demo`, `/#/kunden/1/show`, Kunde „Familie Krüger"): Klick auf „1 Kontakt" → URL wird stabil `#/kunden/1/show/contacts`, Tab bleibt aktiv, kein Rücksprung. Klick auf „Änderungsverlauf" → `#/kunden/1/show/history`, ebenfalls stabil.
-
----
-
-### 3a. Kundenanlage — Findings aus der Customer Create Speed & Clarity Wave (2026-09-01)
-
-**Umgesetzt (RC, siehe Decision Log „2026-09-01 – Customer Create Speed & Clarity"):** Land auf `/kunden/create` ausgeblendet und als `"Deutschland"` gesetzt, Bundesland-Default `"NRW"`, „Weitere Angaben" eingeklappt, PLZ | Ort in einer Zeile. Folgende Punkte wurden dabei beobachtet, aber bewusst **nicht** in dieser Wave behoben:
-
-1. **Produktions-Datenhygiene `companies.country` (LOW, Daten, kein Code):** Bestand enthält `"Deutschland "` (4×, Leerzeichen am Ende), `"DE"` (1×) neben `"Deutschland"` (1×) und `NULL` (10×). Neue Kunden erhalten ab jetzt konsistent `"Deutschland"`; ein einmaliges, vom Product Owner freigegebenes Read-Then-Update der 5 abweichenden Bestandswerte wäre sinnvoll (kein Migration-Bedarf, kein Constraint-Wunsch — Freitext bleibt Freitext).
-2. **Demo-Seed `state_abbr = "NW"` vs. Produktion/PO `"NRW"` (LOW, Demo-Daten):** `noraDemoSeed.ts` nutzt das ISO-3166-2-Kürzel „NW", alle gepflegten Produktionswerte und der neue Default sagen „NRW". Für Demo-Konsistenz auf „NRW" angleichen (nur Demo-Daten, `05-demo-data-guidelines.md`).
-3. **Ansprechpartner-Unterabschnitt auf `/kunden/create` (MEDIUM, UX, Contact-Wave):** Bei „Neuer Ansprechpartner" trägt die E-Mail-Liste das Label „Persönliche Angaben" (`resources.contacts.field_categories.personal_info`), Telefon- und Link-Listen sind gar nicht beschriftet — drei unbeschriftete ⊕-Buttons untereinander. Gehört in eine Contact-Wave (`CustomerContactCaptureInputs.tsx`), analog zu den beschreibenden Add-Buttons der Kontakterstellung („Weitere Telefonnummer hinzufügen").
-4. **Privatperson: Namensfelder stehen ganz unten (MEDIUM, UX):** Für `customer_kind = individual` ist Vor-/Nachname das wichtigste Feld (Kundenname wird daraus abgeleitet), steht aber unter Kontakt/Adresse. Ein Slot in `CompanyInputs` (Person direkt unter der Kundenart) wäre der saubere Fix — strukturelle Änderung, daher hier nur empfohlen.
-5. **Leerer rechter Rand auf `/kunden/create` (LOW, Layout):** `lg:mr-72` reserviert Platz für ein Aside, das es im Create-Flow nicht gibt. Beim Entfernen würde das Formular sehr breit; besser eine bewusste `max-w`-Entscheidung im Rahmen einer Formular-Breiten-Regel im Design System.
-6. **E-Mail/Telefon erfordern erst einen ⊕-Klick (LOW, UX, geteiltes Muster):** Auf Create startet jede Liste leer; ein vorbelegter leerer Eintrag (wie in `ContactEdit`) spart einen Klick, betrifft aber das geteilte `ArrayInput`-Muster von Kunden und Kontakten — nicht isoliert für Kunden ändern.
-
-## Geplante Domain-Waves
-
-### 4. Aufgabenmodell vereinheitlichen (Kunde + Ansprechpartner)
-
-**Status: RESOLVED / VERIFIED (2026-08-25, Unified Tasks Wave) — PRODUCTION VERIFIED seit 2026-08-28**
-
-**Problem war** (Live-Beispiel 2026-08-25): Kunde „Traum und Horror UG" hat Ansprechpartner „Freddie Krüger". Aufgaben zu Freddie erschienen auf der Kontaktakte, aber es gab keine entsprechende kundenbezogene Aufgabenliste auf der Kundenakte — `tasks` hing ausschließlich an `contact_id` (siehe `03-data-model-guardrails.md`, Falle 7 — dort ebenfalls aktualisiert).
-
-**Umgesetzt:** `tasks.company_id` (nullable, historisch stabiler Kundenkontext, serverseitig via Trigger `nora_private.enforce_task_company_context()` abgeleitet/validiert), `tasks.contact_id` jetzt ebenfalls nullable, CHECK-Constraint für „mindestens eines von beiden". „Aufgaben"-Tab auf `/kunden/:id/show`. Vollständige Entscheidung inkl. historischer Semantik: Decision Log „2026-08-25 – Unified Tasks Wave". Migration lokal gegen echtes Postgres verifiziert (`supabase/tests/task_customer_context_verification.sql`), Browser-Szenarien live durchgespielt — siehe dort für Details. Seit dem kontrollierten Release am 2026-08-28 auf `nora-crm-prod` angewendet und read-only nachverifiziert (siehe `16-current-state.md` Abschnitt 6).
-
----
-
-### 5. Schnellerfassung auf atomare Customer/Contact-Operation umstellen
-
-**Status: RESOLVED / VERIFIED (2026-08-26, Self Contact Wave) — PRODUCTION VERIFIED seit 2026-08-28**
-
-Die Schnellerfassung (`QuickCaptureDialog.tsx`) ruft jetzt den Application Command `createQuickCaptureCase` (`application/commands/createQuickCaptureCase.ts`) auf, der Kunde+Kontakt+Vorgang über die neue RPC `create_quick_capture_case` in einer Transaktion schreibt — kein Teilzustand mehr zwischen diesen dreien. `submitQuickCapture.ts` wurde entfernt. Aufgabe bleibt bewusst ein separater Best-Effort-Schritt danach (bestehende `taskFailed`-Notice-Semantik unverändert). Vollständige Entscheidung: Decision Log „2026-08-26 – Self Contact Wave".
-
----
-
-### 6. Privatperson/Firma-Unterscheidung in Quick Capture
-
-**Status: PLANNED FOLLOW-UP**
-
-Die Schnellerfassung erzeugt Kunden weiterhin ohne `customer_kind`-Auswahl (Datenbank-Default `business`). Eine „Diese Person ist selbst Ansprechpartner"-Option analog zu `/kunden/create` bzw. dem neuen Kontakt→Kundenakte-Flow ist für Quick Capture **nicht** umgesetzt — bewusst nicht Teil der Self Contact Wave (siehe Decision Log). Bei Bedarf als eigene Folge-Welle zu spezifizieren.
-
----
-
-### 7. Customer-Archive-/Soft-Delete-Lifecycle
-
-**Status: PLANNED FOLLOW-UP, kein Zeitdruck**
-
-Domänenregel dafür ist seit User Lifecycle W2 (2026-09-05) festgehalten: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — ein inaktiver Datensatz verschwindet aus Auswahllisten für Neues, bleibt aber Identitätsanker für Bestehendes (umgesetzt in W2 nur für Mitarbeiter: `sales_directory` vs. `sales_identities`; kein generisches Archiv-Framework).
-
-Langfristige Zielrichtung: normales „Kunde löschen" durch einen fachlichen Lifecycle (`ArchiveCustomer`/`RestoreCustomer`, unveränderliche Kundennummer, historische Referenzintegrität) ersetzen. In der Self Contact Wave wurde dafür **nur** die notwendige Self-Contact-Delete-Invariante abgesichert (Löschen des repräsentierenden Kontakts einer Privatkundenakte ist blockiert) — kein vollständiger Archive-Lifecycle gebaut, bewusst außerhalb des Scopes.
-
----
-
-### 8. Legacy-Spalten-Cleanup
-
-**Status: PLANNED FOLLOW-UP, kein Zeitdruck**
-
-`companies.linkedin_url`, `companies.website`, `companies.context_links`, `companies.phone_number`, `contacts.linkedin_url` sind seit der Customer & Contact Workflow Wave UI-seitig nur noch Lese-Fallback (Bestandsdaten per Migration in `links_jsonb`/`email_jsonb`/`phone_jsonb` kopiert). Entfernen erst nach ausreichender Übergangszeit und Bestätigung, dass keine externen Integrationen (CSV-Import, alte API-Clients) mehr auf die alten Spalten schreiben.
-
----
-
-### 9a. Error Contract Wave — PRODUCTION VERIFIED
-
-**Status: RESOLVED / VERIFIED (2026-08-28) — PRODUCTION VERIFIED seit 2026-08-28**
-
-Maschinenlesbarer Nora Error Code (`DETAIL = NORA_<CODE>`) für fünf real nachgewiesene Business-Fälle: `NORA_CONTACT_NOT_IN_CUSTOMER_CONTEXT`, `NORA_INDIVIDUAL_NAME_REQUIRED`, `NORA_SELF_CONTACT_DELETE_BLOCKED`, `NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS`, `NORA_PERMISSION_DENIED`. Behebt die zuvor dokumentierte Individual-Name-Invariant-Erkennungslücke (fiel bisher auf `unknown`/`crm.errors.load_failed`). Additive Migration `20260828140000_error_contract_wave.sql`, `normalizeCrmError()` ist jetzt machine-code-first mit Legacy-Regex-Fallback. Vollständige Herleitung: Decision Log „2026-08-28 – Error Contract Wave".
-
-**Bewusst nicht in dieser Welle behoben, dokumentierter Follow-up:** FakeRest hat weiterhin keine `can_write()`-Entsprechung — Autorisierung wird im Demo-Modus ausschließlich UI-seitig (`canAccess`) durchgesetzt, nie auf Datenebene. `NORA_PERMISSION_DENIED` ist dadurch in FakeRest strukturell nicht end-to-end testbar (nur gegen echtes Supabase). Eine vollständige FakeRest-Autorisierungs-Parität wäre eine eigene, größere Welle (kleines RBAC-Modell im Demo-Provider) — bewusst nicht in dieser Welle aufgebaut, um den Scope klein zu halten.
-
-**Kontrollierter Production Release (2026-08-28):** Migration `20260828140000_error_contract_wave.sql` (SHA-256 `969768dac028914dd0f4fda3b9953927e5b5104d2cb6231f31387c2f12d30bfa`) gegen `nora-crm-prod` angewendet, Migration-Bookkeeping-Drift (dritte Wiederholung desselben Musters — Anwendungszeitstempel statt Repo-Zeitstempel) erkannt und korrigiert, alle sechs betroffenen Functions read-only vollständig verifiziert (Signatur, Security-Mode, `search_path`, Grants, alle fünf Codes). Commit `dbc41a742f82bdbb0fe734df7d0be33db6a5e35e` nach `origin/main` gepusht, Vercel-Production-Deployment (`dpl_92Y6n2e16R8ZfT1DcUXLrw98Cynh`) verifiziert (READY, korrekter Commit, Alias `nora.ergart.de`). Live-Smoke-Test erfolgreich (Hotboard/Kunden/Kontakte/Vorgänge, Tab-Routing — keine Fehler, keine Testdaten angelegt). Details: Decision Log „2026-08-28 – Error Contract Wave" Nachtrag „Kontrollierter Production Release — PRODUCTION VERIFIED".
-
----
-
-### 9. Pre-Production Hardening Patch — vollständig nachgeprüft und auf Production released
-
-**Status: PRODUCTION VERIFIED — 2026-08-28**
-
-Die Pre-Production-Hardening-Session (siehe Decision Log) hat verifizierte Bugs behoben (FakeRest-Effective-Contact-Parität, Falsy-ID-Audit, Error Contract für Quick Capture, Individual Name Invariant). Docker wurde in derselben Session gestartet und die volle kanonische RBAC-Testreihenfolge (`07-agent-change-checklist.md`) gegen einen frischen `npx supabase db reset --local` durchlaufen — **alle Tests grün**, inkl. der neuen Domain-Contract-Matrix (Abschnitt 7) und des Individual-Name-Invariant-Negativtests (Abschnitt 4c-ii) in `customer_contact_workflow_verification.sql`, sowie eines neuen empirischen Atomic-Rollback-Tests (Abschnitt 6f). Concurrency wurde bewertet (kein neuer Doppel-Datensatz-Bug; ein bekannter/dokumentierter Idempotency-Gap bleibt bewusst offen für eine spätere Welle).
-
-Eine anschließende Final-Release-Candidate-Verification fand und behob drei weitere Punkte vor dem Release: einen hardcodierten englischen Navigationspfad in `CompanyShow.tsx`, eine Lücke in `normalizeCrmError`s Fehlermuster (FakeRests deutscher Text für die effective-contact-context-Ablehnung wurde nicht erkannt), und — der wichtigste fachliche Fund — die Individual Name Invariant war am CREATE-Pfad von `create_customer_with_contact_core` gar nicht durchgesetzt (nur beim späteren Rename), sodass eine Privatkundenakte mit einem namenlosen Self Contact und einem davon unabhängigen `companies.name` entstehen konnte. Alle drei behoben, mit Regressionstests abgesichert (Decision Log „2026-08-27 – Pre-Production Hardening Patch", Nachtrag „Individual Name Invariant am CREATE-Pfad geschlossen").
-
-**Production-Data-Preflight (read-only, mehrfach wiederholt, zuletzt unmittelbar vor und nach dem Release am 2026-08-28):** 14 Kunden, 0 `individual` → kein Self-Contact-Backfill-Kollisionsrisiko; keine Dubletten/verwaisten FKs/CHECK-Verletzungen gefunden; 2 vorbestehende (nicht durch diesen Patch verursachte) Security-Advisor-Findings zu `SECURITY DEFINER`-Views notiert, unverändert, nicht behoben (außerhalb des Scopes). **Keine Migration-Blocker.**
-
-**Kontrollierter Production Release (2026-08-28):** Migration `20260826120000_self_contact_and_quick_capture_case.sql` (SHA-256 `b747b94d6132b37f41ed82367bcd898db52b07e85dbf2f14c83e8fcdd285c2e7`) gegen `nora-crm-prod` angewendet, Migration-Bookkeeping-Drift (Anwendungszeitstempel statt Repo-Zeitstempel — derselbe Drift-Typ wie am 2026-08-25) erkannt und korrigiert, Schema/Funktionen/Trigger/Grants/View read-only vollständig verifiziert. Commit `0c93912137d610f570b5c5fd449573d25160fe86` nach `origin/main` gepusht, Vercel-Production-Deployment (`dpl_5UL3NL8J2bTwGCAJrobUNZRQ99NB`) verifiziert (READY, korrekter Commit). Live-Smoke-Test gegen `nora.ergart.de` in echter Session erfolgreich (Hotboard/Kunden/Kontakte/Vorgänge, Tab-Routing, Quick Capture, Self-Contact-UI, Firma/Privatperson-Labels — keine Fehler, keine Testdaten angelegt). Details: Decision Log „2026-08-27 – Pre-Production Hardening Patch" und Session-Verlauf.
-
-Release vollständig abgeschlossen — keine offenen Nachprüfungspunkte mehr aus dieser Wave.
-
-## Security Advisor Findings — assessed 2026-08-28
-
-Beide vorbestehenden Supabase Security Advisor ERROR-level Findings (`SECURITY DEFINER`-Views) wurden in einer dedizierten, read-only Session gegen den tatsächlichen `nora-crm-prod`-Katalog (nicht nur den Repo-Stand) untersucht — Definition, Owner, `security_invoker`, Dependency-Baum, Grants (inkl. `anon`/`authenticated`/`service_role`), zugrunde liegende RLS, tatsächliche Consumer und reale Zugriffsszenarien (anon, viewer, office, admin, manipulierter Client). Beide bereits vor der Customer & Contact Workflow Wave vorhanden.
-
-**Wichtig für zukünftige Agenten:** Die Advisor-ERROR-Klassifikation bezieht sich ausschließlich auf den Mechanismus (`SECURITY DEFINER`/`security_invoker=false`), nicht auf einen nachgewiesenen Exploit. Der Advisor ist ein automatisiertes Signal, keine abschließende Risikobewertung — die tatsächliche Einstufung erfolgt anhand von Definition, Grants, RLS, Consumer und exponiertem Datenumfang.
-
-### `public.init_state`
-
-**Status: `ASSESSED — LOW — KEEP`**
-
-- **Zweck:** Pre-Auth-Bootstrap-Check (`getIsInitialized()` in `authProvider.ts`), ob Nora bereits initialisiert wurde — steuert, ob die öffentliche Sign-up-Seite den Erstregistrierungs-Modus anbietet.
-- **Security-Semantik:** `security_invoker = off`, Owner `postgres` — bewusster Owner-Privilege-Zugriff auf `public.sales`, weil `anon` unter der normalen `sales`-RLS-Policy (`"Sales select own or admin"`, nur `authenticated` + eigene Zeile/Admin) diesen Bootstrap-Zustand sonst nicht feststellen könnte.
-- **Exponierter Datenumfang:** ausschließlich `is_initialized` — faktisch 0/1 (`count(...) from (select ... limit 1) sub`).
-- **Nicht exponiert:** keine Mitarbeiteridentität, Rollen, E-Mails, IDs oder sonstige `sales`-Spalten.
-- **Wichtige Sicherheitsgrenze:** Die tatsächliche Erstbenutzer-/Admin-Rollenvergabe wird **unabhängig von dieser View** serverseitig und atomar durch `nora_private.resolve_first_signup_role()` (`pg_advisory_xact_lock` + frischer `count(*)`) im `handle_new_user()`-Trigger geprüft — nicht via PostgREST erreichbar. Selbst ein falscher `init_state`-Wert kann keine zusätzliche Admin-Vergabe auslösen.
-- **Bewertung:** kein aktueller Privilege-Escalation-Pfad, kein Production-Blocker.
-- **Optionales Defense-in-Depth (nicht dringend, kein Security-Fix):** Die View trägt zusätzlich zu `SELECT` auch `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`/`REFERENCES`/`TRIGGER`-Grants für `anon`/`authenticated` (`grant all on table public.init_state ...` in `06_grants.sql`) — heute wirkungslos, da die View nicht automatisch updatebar ist (Subquery mit `LIMIT`) und keine `INSTEAD OF`-Trigger existieren. Könnte in einer künftigen, separaten kleinen Migration auf `grant select` reduziert werden.
-
-### `public.sales_directory`
-
-**Status: `ASSESSED — LOW — KEEP`**
-
-- **Zweck:** internes Team-/Assignee-Verzeichnis für Zuständigkeits-Picker (z. B. „Zuständig" an Vorgängen), nutzbar von allen aktiven Rollen inkl. `viewer`/`office`, die laut Rollenmatrix (`11-google-calendar-rbac.md` C.3) Teamlisten lesen dürfen, aber laut `sales`-RLS nur die eigene Zeile sehen.
-- **Security-Semantik:** `security_invoker = false`, Owner `postgres` — bewusste, enge Privilegienerweiterung über die strengere `sales`-RLS hinaus.
-- **Exponierte Spalten:** `id`, `first_name`, `last_name`, `avatar` — für alle nicht-`disabled` Sales-Zeilen.
-- **Nicht exponiert (per View-Kommentar dokumentiert):** `role`, `email`, `user_id`, `administrator`, `disabled`.
-- **Zugriff:** kein Tabellen-Grant für `anon` (`revoke all ... from anon`); `SELECT` nur für `authenticated`/`service_role`. Zusätzlich WHERE-Klausel `nora_private.is_active_user()` — SECURITY DEFINER, aber invoker-relativ (liest `auth.uid()` des tatsächlichen Aufrufers, nicht des View-Owners) — EXECUTE ebenfalls nicht an `anon` vergeben.
-- **Bewertung:** keine nachgewiesene unautorisierte Datenexposition. Manipulierter authentifizierter Client (jede Rolle) erhält exakt dieselben 4 Spalten wie über die UI — keine Rollen-/Auth-Metadaten erreichbar.
-- **Ausdrücklich festgehalten:** `security_invoker = true` ist **nicht** als pauschaler Fix vorgesehen — ein Wechsel würde nicht-Admin-Rollen (`office`/`viewer`) auf die eigene `sales`-Zeile beschränken und damit den dokumentierten Team-Picker funktional brechen (verifiziert gegen die aktuelle `"Sales select own or admin"`-Policy).
-
-### Guardrail für zukünftige Änderungen
-
-Die LOW/KEEP-Bewertung gilt **nur** für die aktuell geprüfte Definition, Projektion und Grants (Stand 2026-08-28, gegen `nora-crm-prod` verifiziert). Eine erneute Security-Bewertung ist zwingend erforderlich, wenn geändert werden:
-
-- die projizierten Spalten einer der beiden Views
-- die View-Grants (`anon`/`authenticated`/`service_role`)
-- die zugrunde liegende `sales`-RLS
-- `nora_private.is_active_user()`
-- der Bootstrap-/Sign-up-Auth-Flow
-- `nora_private.resolve_first_signup_role()`
-- die `security_invoker`-Semantik einer der beiden Views
-
-Für `sales_directory` ausdrücklich: **keine** Erweiterung um `role`, `email`, `user_id`, `administrator` oder sonstige Identity-/Security-Metadaten ohne neue, explizite Security-Entscheidung (Decision Log).
-
-Vollständige technische Herleitung (Dependency-Baum, Grant-Tabellen, Rollen-Szenarien): Session-Assessment 2026-08-28, zusammengefasst in `06-decision-log.md` „2026-08-28 – Intentional privileged read views".
-
-## Residual Security Advisor Follow-ups — assessed 2026-08-28
-
-Die zuvor als `UNASSESSED` geführten Findings wurden in einer Folge-Session (2026-08-28, „Residual Security Advisor Closure", siehe `06-decision-log.md`) read-only gegen `nora-crm-prod` bewertet:
-
-### `public.number_counters`
-
-**Status: `ASSESSED — INFORMATIONAL — KEEP`**
-
-RLS aktiviert, keine Policy — aber kein Tabellen-Grant für `anon`/`authenticated` (auch `service_role` hat nur `REFERENCES`/`TRIGGER`/`TRUNCATE`, kein SELECT/DML). Deny-by-grants unabhängig von RLS. Einzige Consumer: `assign_customer_number()`/`assign_case_number()` (`SECURITY DEFINER`, Owner `postgres`, ausschließlich als BEFORE-INSERT-Trigger auf `companies`/`deals`). Deliberate deny-all-Architektur.
-
-### Ausführbare `SECURITY DEFINER`-Trigger-/Event-Trigger-Functions
-
-**Status: `ASSESSED — INFORMATIONAL — KEEP`**
-
-17 Functions (alle `audit_*`, `handle_new_user`, `handle_update_user`, `assign_case_number`, `assign_customer_number`, `cleanup_note_attachments`, `enforce_google_calendar_connection_rules`, `handle_contact_note_created_or_updated`, `rls_auto_enable`) haben Rückgabetyp `trigger` bzw. `event_trigger` — Postgres verbietet den direkten Aufruf unabhängig von Grants/Rolle, PostgREST exponiert sie nicht als RPC-Endpunkte. Advisor-Falsch-Positiv-Klasse (Lint berücksichtigt keinen Rückgabetyp), kein Exploit.
-
-### Aufrufbare `authenticated`-only `SECURITY DEFINER`-Business-RPCs
-
-**Status: `ASSESSED — KEEP`**
-
-`create_customer_with_contact`, `create_quick_capture_case`, `set_primary_contact`, `set_sales_role_by_admin`, `start_checklist_run_from_template`, `link_google_calendar_event`, `unlink_google_calendar_event`, `get_audit_storage_stats`, `get_entity_audit_events`, `get_global_audit_events`, `record_operation_error`, `report_operation_error`. Keine für `anon` ausführbar; jede prüft serverseitig `can_write()`/`has_role([...])`/`is_admin()`/Actor-Ownership. Kein Authorization-Bug gefunden.
-
-### Search-Path-Schutz (`SECURITY DEFINER` mit `search_path=public`)
-
-**Status: `NO SEARCH PATH SECURITY BLOCKER`**
-
-`CREATE` auf `public`/`pg_catalog`/`nora_private` ist auf Production für keine client-facing Rolle vergeben. Alle `SECURITY DEFINER`-Functions haben explizites `proconfig` (`search_path=''` oder `search_path=public`, eine mit `search_path=pg_catalog`); die neun `search_path=public`-Functions referenzieren intern ausschließlich schema-qualifizierte Objekte, keine Dynamic SQL.
-
-### `auth_leaked_password_protection`
-
-**Status: `RESOLVED — ENABLED` (2026-08-28, Production)**
-
-Über Supabase Dashboard (Authentication → Sign In/Providers → Email → „Prevent use of leaked passwords") aktiviert; kein Management-API-/SQL-Zugriff auf Auth-Config vorhanden, daher gezielte Browser-Interaktion mit Nutzerbestätigung vor dem Speichern. Ausschließlich dieser eine Toggle geändert, alle übrigen Felder im Panel unverändert (per Re-Open verifiziert). `get_advisors` danach erneut abgerufen: WARN verschwunden, alle anderen Findings unverändert.
-
-Vollständige Herleitung: `06-decision-log.md` „2026-08-28 – Residual Security Advisor Closure".
-
-## Default-Privilegien im Schema `public` vergeben TRUNCATE an API-Rollen (Folgebefund aus Security Hardening Wave 0)
-
-**Status: OPEN / PLANNED FOLLOW-UP** (festgestellt 2026-09-04, gegen `nora-crm-prod` verifiziert)
-
-Security Hardening Wave 0 hat `TRUNCATE` auf `public.audit_events` geschlossen (Details und Begründung: `06-decision-log.md`, „2026-09-04 – Security Hardening Wave 0"). Die **Ursache** dieses Befunds ist bewusst **nicht** mitbehoben worden, weil sie jede künftige Tabelle betrifft und damit ein eigener, breiterer Eingriff ist.
-
-### Der Mechanismus
-
-Die Default-Tabellen-Privilegien des Schemas `public` (Grantor `postgres`) vergeben an `anon`, `authenticated` und `service_role` bei **jedem** `CREATE TABLE` automatisch:
-
-```
-Dxtm  =  TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
-```
-
-Empirisch in Production nachgewiesen (Probetabelle in einer zurückgerollten Transaktion): eine frisch angelegte Tabelle in `public` trägt sofort `authenticated=Dxtm` — **inklusive `TRUNCATE`, noch bevor irgendein Grant geschrieben wurde**.
-
-Eine Migration, die anschließend nur additiv `grant select ...` schreibt, lässt dieses Erbe stehen. Genau so ist der `audit_events`-Befund entstanden.
-
-### Warum das mehr ist als Kosmetik
-
-`TRUNCATE` ist **kein** zeilenweises DML: es umgeht Row Level Security vollständig und feuert keine Row-Trigger. Für Tabellen, auf denen `authenticated` ohnehin `DELETE` besitzt, ist das trotzdem eine echte Rechteausweitung — `DELETE` wird durch RLS pro Zeile gefiltert, `TRUNCATE` nicht. Ein `viewer`, dem die RLS-Policies das Löschen fremder Zeilen verwehren, könnte die Tabelle dennoch in einer Anweisung leeren.
-
-### Aktueller Stand in Production (nach Wave 0)
+Stand in Production nach Wave 0:
 
 | Klassifikation | Tabellen |
 |---|---|
-| sauber (kein TRUNCATE für `authenticated`) | `audit_events` ✅ (Wave 0), `email_delivery_events`, `number_counters`, `operation_errors` |
-| **read-only für `authenticated`, aber truncatable** — dieselbe Form wie der `audit_events`-Bug | `configuration`, `google_calendar_connections`, `google_calendar_events` |
-| truncatable, besitzt aber ohnehin `DELETE` (RLS-Bypass bleibt relevant) | `checklist_run_items`, `checklist_runs`, `checklist_template_items`, `checklist_templates`, `companies`, `contact_notes`, `contacts`, `deal_notes`, `deals`, `favicons_excluded_domains`, `sales`, `saved_text_snippets`, `tags`, `tasks` |
-
-Die mittlere Gruppe ist der naheliegende nächste Schritt: dort ist `TRUNCATE` unstrittig unbeabsichtigt, weil `authenticated` dort bewusst nur lesen (bzw. bei `configuration` lesen/ändern) soll. `google_calendar_connections` / `google_calendar_events` sind exakt aus demselben Grund betroffen wie `audit_events` — `06_grants.sql` verwendet dort `revoke insert, update, delete ...` statt `revoke all ...`.
-
-### Zusätzliche Repo-/Production-Drift
-
-`supabase/schemas/06_grants.sql` deklariert
-
-```sql
-alter default privileges for role postgres in schema public grant all on tables to anon;
-alter default privileges for role postgres in schema public grant all on tables to authenticated;
-alter default privileges for role postgres in schema public grant all on tables to service_role;
-```
-
-also `arwdDxtm`, während Production tatsächlich nur `Dxtm` vergibt. Diese Verengung ist in **keiner** Repo-Migration enthalten (die einzigen `alter default privileges`-Anweisungen im Migrationsverzeichnis betreffen `nora_private`-Funktionen) und stammt offenbar aus einer manuellen bzw. plattformseitigen Änderung.
-
-**Praktische Konsequenz:** ein reiner `npx supabase db reset` reproduziert Production nicht — lokal erhält `authenticated` auf neuen Tabellen `arwdDxt`, also **mehr** Rechte als live. Sicherheitsaussagen, die nur lokal geprüft wurden, sind für Production daher nicht automatisch gültig; umgekehrt kann eine lokal harmlose Migration live anders wirken. Wave 0 hat das dadurch umgangen, dass die Migration mit `revoke all` + gezieltem `grant` in beiden Umgebungen denselben Endzustand erzwingt — **das ist das Muster, das für Folgewellen übernommen werden sollte.**
-
-### Vorschlag für eine eigene Welle (nicht Teil von Wave 0)
-
-1. `configuration`, `google_calendar_connections`, `google_calendar_events` auf das Muster „`revoke all` → gezielter `grant`" bringen.
-2. Entscheiden, ob die Default-Privilegien in `public` dauerhaft auf `Dxtm` (oder enger) korrigiert und im Repo als Migration festgeschrieben werden — damit Repo und Production wieder deckungsgleich sind.
-3. Entscheiden, ob `service_role` `TRUNCATE` auf `audit_events` behalten soll (in Wave 0 bewusst unangetastet, siehe Decision Log).
-4. `public.init_state` mitnehmen — dort ist derselbe `grant all`-Befund bereits als optionales Defense-in-Depth notiert (siehe oben, „Security Advisor Findings").
-
-Jede dieser Änderungen berührt Grants breit und braucht denselben Ablauf wie Wave 0: lokaler Replay, Verhaltensnachweis pro Rolle, Production-Apply, Live-Verifikation.
-
----
-
-## User Lifecycle W1 — Zugangs-Drift in Production, repariert
-
-**Status: `PRODUCTION VERIFIED — DRIFT REPAIRED` (2026-09-05)**
-
-Read-only gegen `nora-crm-prod` (2026-09-04, Reconnaissance) und lokal
-reproduziert: genau **ein** Mitarbeiter hat `sales.disabled = true`, aber
-`auth.users.banned_until IS NULL`. Ursache (lokal bewiesen): die RPC
-`public.set_sales_role_by_admin` war für `authenticated` ausführbar und setzt
-nur den Nora-Wert; nur die `users` Edge Function synchronisierte den Auth-Bann,
-und auch dort nicht beim Einladen mit `disabled = true`. Kein Datenzugriff war
-möglich (RLS verweigert deaktivierte `sales`-Zeilen), aber die Identität konnte
-weiterhin Token erneuern.
-
-W1 schließt den Direktpfad (EXECUTE entzogen), führt den Executor mit
-verifiziertem Actor ein, synchronisiert den Bann in jedem Zweig und meldet die
-Drift als `accessConsistency = inconsistent` (Details: Decision Log
-„2026-09-05 – User Lifecycle W1").
-
-**Reparatur — nur im kontrollierten Release, nur über den unterstützten Pfad:**
-
-1. Erkennung: `GET /users?sales_id=<id>` (Admin-JWT) liefert
-   `accessState = disabled`, `noraDisabled = true`,
-   `accessConsistency = inconsistent`.
-2. Reparatur: im Admin-UI (`/sales/<id>`) „Zugangsstatus synchronisieren" —
-   technisch `PATCH /users {sales_id, disabled: true}`. Der Executor wendet den
-   unveränderten Nora-Wert an (kein neues `user.disabled`-Audit-Ereignis),
-   setzt den Auth-Bann und verifiziert beide Fakten.
-3. Nachlesen: `GET /users?sales_id=<id>` → `accessConsistency = consistent`;
-   read-only SQL: `auth.users.banned_until` in der Zukunft, `sales.disabled`
-   unverändert `true`, Anzahl `user.disabled`-Ereignisse für diese `sale_id`
-   unverändert.
-4. Kein rohes Production-SQL, keine Dashboard-Bearbeitung des Datensatzes.
-
-**Ausgeführt am 2026-09-05 (kontrollierter Release):** Ziel unabhängig
-bestätigt (genau eine Zeile mit `sales.disabled = true` ohne aktiven Bann:
-`sales.id = 4`, Rolle `office`, nie aktiviertes Testkonto). Reparatur über
-„Zugangsstatus synchronisieren" im Admin-UI auf dem neuen Bundle. Danach
-`banned_until` in 2036, `sales.disabled` unverändert `true`,
-`GET /users?sales_id=4` → `accessConsistency = consistent`,
-`user.disabled`-Ereignisse für diese `sale_id` unverändert 1, `audit_events`
-insgesamt unverändert. Kein Production-SQL, keine Dashboard-Bearbeitung.
-Der Migrations-Ledger wurde nach Halt und expliziter PO-Freigabe mit einer
-einzigen `update`-Zeile von der Apply-Zeit `20260904224445` auf den
-Datei-Zeitstempel `20260904220000` korrigiert (Decision Log, Nachtrag Release).
-
-**Bewusst offen nach W1:** service_role-Audit-Ereignisse bleiben `System`
-(W3); keine Session-Revokation beim Deaktivieren (Bann stoppt Refresh, ein
-laufendes Access-Token läuft regulär aus; RLS verweigert sofort) — W5; die
-Legacy-RPC ist in W2 entfernt (RC, siehe Abschnitt „User Lifecycle W2"); FakeRest kennt die neuen Guards nicht
-(Demo-Modus hat keine Autorisierung auf Datenebene, bestehende Lücke); die
-SQL-Suiten laufen weiterhin nicht in CI (W9); Nebenbefund aus dem Release: die 401-Antworten aus `_shared/authentication.ts` tragen noch den Fehlertext der JOSE-Bibliothek (technisches Vokabular, keine Daten) — Follow-up.
-
-## User Lifecycle W2 — Referenzintegrität & historische Identität
-
-**Status: `PRODUCTION VERIFIED` (2026-09-05; `main = f12c908e`, beide Migrationen live, Live-Smoke durch den Product Owner — Details im Decision Log „User Lifecycle W2", Nachtrag Release)**
-
-Lokal bewiesen und read-only gegen `nora-crm-prod` bestätigt (Katalog identisch):
-`contact_notes.sales_id → sales.id` war `ON DELETE CASCADE` (Mitarbeiter löschen
-= Kontaktnotizen still löschen), `tasks.sales_id` hatte keinen Foreign Key
-(Waisen und Fantasie-IDs möglich), und der einzige Namens-Lookup
-(`sales_directory`, `disabled = false`) ließ deaktivierte Mitarbeiter auf alten
-Notizen, Vorgängen und im Kontakt-Export namenlos werden. Production hält
-aktuell 10 Aufgaben (0 Waisen), 13 Kontaktnotizen, 1 deaktivierten
-Mitarbeiter.
-
-**W2 (Migration `20260905120000_nora_lifecycle_reference_integrity.sql`):**
-sechs `NO ACTION`-FKs auf `sales.id` (neu: `tasks_sales_id_fkey`; geändert:
-`contactNotes_sales_id_fkey`), kein `SET NULL`, `DELETE` auf `sales` für
-`anon`/`authenticated` entzogen, `sales_directory` und die neue
-`sales_identities` `SELECT`-only, Legacy-RPC `set_sales_role_by_admin`
-gelöscht. Frontend: `useGetSalesName` und der Kontakt-Export lesen
-`sales_identities`; die Picker bleiben auf `sales_directory`.
-
-**Lösch-Modell:** referenzierter Mitarbeiter → DELETE verweigert (23503) auf
-jedem Pfad; unreferenzierter Mitarbeiter → nur `postgres`/`service_role`
-(künftiger kontrollierter Executor). Kein versteckter Bypass. Welche
-Referenzen blockieren: `companies`, `contacts`, `deals`, `deal_notes`,
-`contact_notes`, `tasks` (jeweils `sales_id`). Nicht blockierend, bewusst:
-`audit_events.actor_sales_id` (Name gesnapshottet) und
-`email_delivery_events.employee_sale_id` (Adresse gesnapshottet).
-
-**Nebenbefund, nur lokal:** Default-Privilegien in `public` gaben lokal
-`authenticated` Schreibrechte auf `sales_directory`; die View ist
-auto-updatable mit Owner `postgres` — ein Viewer-JWT konnte lokal
-`sales`-Zeilen über die View umbenennen und löschen (Rollback-Probe).
-Production trägt nur `SELECT`. W2 pinnt den Endzustand explizit; die
-allgemeine Default-Privilegien-Bereinigung (siehe Abschnitt oben) bleibt
-offen.
-
-**Nebenfix FakeRest:** die Demo-Synchronisation von `sales_directory` war eine
-wirkungslose Array-Mutation (FakeRest kopiert Seed-Arrays) — ein in der Demo
-deaktivierter Mitarbeiter blieb im Picker. Beide Projektionen laufen jetzt
-über den Store.
-
-**Hardening vor dem RC-Freeze (zweite Migration
-`20260905150000_nora_lifecycle_active_assignment.sql`):** aktive Zuweisung
-ist unterhalb der UI autoritativ — `guard_active_assignment_trigger` auf
-`companies`/`contacts`/`deals`/`tasks` verweigert `INSERT`/`UPDATE OF
-sales_id` auf einen deaktivierten Mitarbeiter
-(`NORA_EMPLOYEE_NOT_ASSIGNABLE`), lässt unverwandte Updates und Wegwechseln
-zu und fehlt bewusst auf `contact_notes`/`deal_notes`. Das
-Bearbeiten-Formular zeigt einen deaktivierten Zuständigen sichtbar, aber
-nicht wählbar (`SalesAssignmentInput`). Bekannte Kante: `merge_contacts`
-kann bei Gewinner ohne Zuständigen und Verlierer mit deaktiviertem
-Zuständigen mit diesem Code abgelehnt werden (fachlich korrekt).
-
-**Bewusst offen nach W2:** Offboarding-Command und Hard-Delete-Executor mit
-Abhängigkeits-Preview (die Preview zählt genau die sechs FK-Referenzen;
-Test-Datenpurge nie über CASCADE); ~~Audit-Actor `System` (W3)~~ — W3 released (2026-09-06), siehe Abschnitt „User Lifecycle W3“;
-Session-Revokation (W5); SQL-Suiten in CI (W9); `rbac_rls_first_admin_parallel`
-weiterhin nur manuell (bekannter Runner-Bug); FakeRest ohne Datenbank-Guards;
-kein „ehemalig"-Badge in der UI (bewusst: Name bleibt Name).
-
-**Release-Reihenfolge:** Decision Log „2026-09-05 – User Lifecycle W2",
-Abschnitt „Release-Reihenfolge" — Datenbank zuerst (ein neues Frontend gegen
-die alte Datenbank zeigt „??" statt Namen), kein Edge-Deploy nötig.
-
-## User Lifecycle W3 — Audit-Actor & stabile Mitarbeiter-Historie
-
-**Status: `PRODUCTION VERIFIED` (2026-09-06; RC `929948da` = `main`,
-Migration `20260905180000` live auf `nora-crm-prod`, `users` Edge v6; Live-Beweis
-und Ledger-Korrektur im Decision Log „2026-09-05 – User Lifecycle W3",
-Nachtrag Release)**
-
-Bewiesen (read-only gegen `nora-crm-prod`, lokal reproduziert): alle 12
-`user.*`-Audit-Zeilen in Production tragen Actor `System` mit `actor_id`,
-`actor_sales_id`, `request_id` = NULL, obwohl jede von einem verifizierten
-Administrator über die `users` Edge Function ausgelöst wurde (service_role-JWT
-ohne `sub`). Die drei Edge-Ereignisse (`user.invited`,
-`user.invitation_resent`, `user.password_setup_requested`) hatten zufällige
-`entity_id`s — derselbe Mitarbeiter hatte keine gemeinsame Audit-Identität.
-
-**W3 (Migration `20260905180000_nora_lifecycle_audit_actor.sql`):**
-Actor-Bridge in `resolve_audit_actor()` (transaktionslokale GUC
-`nora.audit_actor_user_id`, nur unter `service_role`, nur vom Executor
-verankert, Snapshots aus `public.sales`), Executor mit `p_operation_id`,
-neue `service_role`-only RPC `record_employee_admin_event` (Ereignistyp-,
-Actor-, Ziel- und Metadaten-Validierung, stabile Entity). Edge: `users/audit.ts`,
-Operation-ID pro Request, `audit_write_failed`. Details und
-Release-Reihenfolge: Decision Log „2026-09-05 – User Lifecycle W3".
-
-**Legacy-Limitation (bewusst, unveränderlich):** die 12 bestehenden
-`user.*`-Zeilen bleiben „System"; sie sind wahre Aufzeichnungen der alten
-Implementierung und werden nicht nachträglich korrigiert (append-only). Nur
-künftige Zeilen sind attribuiert.
-
-**Kanonische Sequenz (lokal, nach `db reset` von null, 24 Läufe):**
-`production_check` → W1 → W2 → **W3** → `setup` → `matrix` →
-`final_hardening` → `safe_auth_role` → W1 → W2 → **W3** → `checklists_audit`
-→ `crm_audit` → `customer_contact_workflow` → `error_contract` →
-`error_observatory` → `operation_correlation` →
-`operation_status_disposition` → `task_customer_context` →
-`google_calendar` → `audit_immutability` → `core_indexes` → `teardown` →
-`production_check` — alle grün.
-
-**Bewusst offen nach W3:**
-
-- `public.insert_audit_event` bleibt für `service_role` ausführbar
-  (Aufrufer: Google-Kalender-Edge-Functions, `calendarAudit.ts`). Das ist
-  eine vorbestehende generische Schreibfähigkeit für den Server-Schlüssel mit
-  Actor `System`; die `users`-Function nutzt sie nicht mehr. Kandidat für
-  eine spätere Härtung (eigene schmale Writer je Function), nicht W3.
-- Der Browser sendet `x-nora-operation-id` an die `users`-Function heute
-  nicht (`functions.invoke` ohne Header); die Edge Function prägt deshalb pro
-  Request eine ID. Frontend-Weitergabe wäre eine additive Verbesserung.
-- `invitee_email` / `employee_email` bleiben in `metadata` (personenbezogen,
-  retentions-sensibel; keine Retention-Regel erfunden).
-- `user.invited` ist nicht in derselben Transaktion wie die Rolle (Einladung
-  läuft über GoTrue + Executor + Record-RPC). Scheitert der Audit-Write nach
-  erfolgreicher Einladung, antwortet Nora `audit_write_failed` (kein Grün);
-  ein Retry der Einladung meldet `already_exists`. Bewusst so — kein
-  verteiltes Commit.
-- Profiländerungen über PATCH (Name, Avatar) erzeugen weiterhin kein
-  `user.*`-Ereignis; E-Mail-Änderung ist W4 (RC 2026-09-06, `user.email_changed`,
-  siehe Abschnitt „User Lifecycle W4").
-- ~~Release-Fenster zwischen Migration und Edge v6~~ — geschlossen
-  (2026-09-06): Edge v6 wurde unmittelbar nach der Migration deployt; in dem
-  Fenster fand kein Edge-Ereignis statt (`audit_events` 276 → 280, alle vier
-  neuen Zeilen sind attribuierte Trigger-Ereignisse des Live-Beweises).
-- Live-Beweis-Befund: der Product Owner berichtete zwei Rollenwechsel
-  (office→viewer→office), Production zeigt vier (zusätzlich office→admin→office
-  aus derselben Sitzung, Sekunden später). Alle vier sind korrekt attribuiert,
-  der Endzustand ist `office`/deaktiviert. Kein Defekt — aber die Benutzer-UI
-  bestätigt einen Rollenwechsel nicht als eigenständigen, sichtbaren Vorgang;
-  Kandidat für eine UX-Nachbesserung (LOW).
-- W5 Session-Revokation, Offboarding/Hard-Delete-Executor, W9 SQL-Suiten in
-  CI: unverändert offen.
-
-## User Lifecycle W4 — kontrollierte Änderung der Anmeldeadresse
-
-**Status: `PRODUCTION VERIFIED` (2026-09-06; RC `693a84c9` + Hotfix
-`64ac11c1` auf `origin/main`, Migration `20260906120000` live, `users` Edge v7,
-Live-Beweis am deaktivierten Testkonto `sales.id = 4` — Decision Log
-„2026-09-06 – User Lifecycle W4", Nachtrag Release).**
-
-Bewiesen (lokal, echter Stack; read-only gegen `nora-crm-prod`): Jede
-Auth-E-Mail-Änderung scheiterte an `prevent_sales_privilege_escalation`
-(`handle_update_user` schreibt `sales.email` als `postgres`), die PATCH-Route
-antwortete `500 internal_error` — fail closed, aber kein unterstützter Weg.
-GoTrue 2.196 prüft Einladungs-/Passwort-Links gegen `auth.one_time_tokens`;
-nach einer Admin-E-Mail-Änderung A→B blieb der an A gesendete Einladungslink
-(und ein ausstehender Passwort-Link) gültig und aktivierte das Konto unter B.
-Production: 5 Mitarbeiter, 0 Drift, 0 Duplikate, 1 ausstehendes
-Einladungs-Token (deaktiviertes Testkonto `sales.id = 4`).
-
-**W4 (Migration `20260906120000_nora_lifecycle_email_change.sql`):** Rolle
-`nora_identity_manager` (nur `sales.email`), Ticket-Tabelle
-`nora_private.sales_email_change_tickets`, RPCs `prepare_sales_email_change` /
-`cancel_sales_email_change` (nur `service_role`), Guard
-`guard_auth_email_change_trigger` (`BEFORE UPDATE OF email ON auth.users`:
-ohne Ticket verweigert; mit Ticket `sales.email` + Token-Löschung + Audit in
-einer Transaktion), `handle_update_user` ohne E-Mail, `resolve_audit_actor`
-ehrt die Verankerung auch in JWT-losen Sitzungen, Unique-Index
-`uq__sales__email`. Edge: `users/emailChange.ts`, Aktion `change_email`,
-PATCH ohne `email`. UI: „E-Mail-Adresse ändern" im Bereich Nora-Zugang;
-Bearbeiten-Formular zeigt die Anmeldeadresse read-only. Details: Decision Log
-„2026-09-06 – User Lifecycle W4".
-
-**Kanonische Sequenz (lokal, nach `db reset` von null):**
-`production_check` → W1 → W2 → W3 → **W4** → `setup` → `matrix` →
-`final_hardening` → `safe_auth_role` → W1 → W2 → W3 → **W4** →
-`checklists_audit` → `crm_audit` → `customer_contact_workflow` →
-`error_contract` → `error_observatory` → `operation_correlation` →
-`operation_status_disposition` → `task_customer_context` → `google_calendar`
-→ `audit_immutability` → `core_indexes` → `teardown` → `production_check` —
-26 Läufe, alle grün (53 Migrationen; GUCs und Ticket-Tabelle danach leer).
-
-**Beim Release behoben (Hotfix `64ac11c1`):**
-
-- **No-op-„Speichern" im Bearbeiten-Formular** zeigte „Die Benutzerrolle
-  konnte nicht geändert werden.": ohne geändertes Feld ging ein leerer PATCH
-  (`{sales_id}`) an die Edge Function, die ihn als `invalid_payload` abwies;
-  `SalesEdit` mappte diesen Code auf den Rollen-Fehlertext. Vorbestehend,
-  durch W4 sichtbar (die E-Mail reist nicht mehr im Formular mit). Jetzt löst
-  ein leerer Patch lokal auf (kein Request), `sales/salesEditPatch.ts` + Test.
-- **`npm run typecheck` des RC** scheiterte an drei Typfehlern nur in
-  `ChangeEmployeeEmailDialog.test.tsx` (parameterloses `vi.fn`,
-  `mock.calls[0]?.[0]`); `npm run build` (Root-`tsconfig`, ohne Tests) und die
-  Suite waren grün. Behoben; Lehre für Release-Agenten: `typecheck` gehört
-  ausdrücklich zu den RC-Gates und ist nicht durch `build` abgedeckt.
-
-**Bewusst offen nach W4 / Nebenbefunde:**
-
-- **`invalid_payload` → Rollen-Fehlertext** in `SalesEdit` bleibt als Mapping
-  bestehen (nur noch bei echten ungültigen Payloads erreichbar); ein neutraler
-  Text wäre sauberer (LOW, UX).
-
-- **GoTrue verbirgt die Guard-Verweigerung.** Die Admin API antwortet bei
-  einer vom Guard abgelehnten Änderung mit generischem
-  `500 unexpected_failure "Error updating user"`; die Detail-Kennung
-  `NORA_EMAIL_CHANGE_NOT_AUTHORIZED` erreicht die Edge Function nicht. Der
-  Fall wird deshalb als `email_change_provider_failed` gemeldet (nicht grün,
-  nichts verändert, Ticket gelöscht); die Verifikation, nicht der Fehlertext,
-  entscheidet. Keine Auswirkung auf Korrektheit, nur auf die Diagnose.
-- **Selbständerung blockiert:** Ein einzelner Administrator kann seine eigene
-  Anmeldeadresse nicht selbst ändern (Lockout-Schutz); er braucht einen
-  zweiten Administrator oder die technische Betreuung. Bewusst; eine spätere
-  Welle könnte eine bestätigungsbasierte Selbständerung entwerfen.
-- **Selbstbedienungs-Änderung über GoTrue (`PUT /auth/v1/user`)** scheitert
-  jetzt an der Datenbank (`500` beim Bestätigen). Es gab dafür nie eine
-  Nora-Oberfläche; das Verhalten ist gewollt (nur Administratoren ändern
-  Identitäten), aber nicht benutzerfreundlich formuliert.
-- **E-Mail-Drift wird nur erkannt, nicht repariert.** `GET /users` meldet
-  `identityConsistency = inconsistent`, das Panel bietet die Aktion nicht an.
-  Reparatur bleibt der technischen Betreuung vorbehalten (kein Runbook, da in
-  Production kein Fall existiert).
-- **Neue Einladung nach der Änderung ist nicht atomar** (Provider-Aufruf nach
-  dem Commit). Scheitert sie, meldet Nora `email_change_invitation_failed`
-  (`emailChanged: true`), der Administrator nutzt „Einladung erneut senden";
-  der alte Link ist in jedem Fall bereits tot.
-- **Nebenbefund (vorbestehend, nicht W4):** `public.record_operation_error`
-  akzeptiert nur `^[a-z][a-z0-9_.]*$` als `operation_type`; die bestehenden
-  camelCase-Katalogtypen (`quickCapture.createCase`, `customer.createWithContact`,
-  …) werden seit jeher mit `invalid operation_type` abgewiesen — technische
-  Fehlschläge dieser Operationen landen nie in `operation_errors` (der
-  Recorder ist best-effort und schweigt). W4 nutzt deshalb
-  `employee.change_login_email`. Eigene Folgewelle (Katalog oder Check-
-  Constraint anpassen, Suite ergänzen).
-- **Tickets** verfallen nach zwei Minuten und werden bei jedem `prepare`
-  aufgeräumt; ein verwaistes Ticket kann nur genau die eine vorbereitete
-  Änderung autorisieren.
-- Weiterhin offen aus W1–W3: Session-Revokation (W5), Offboarding/Hard-Delete,
-  Default-Privilegien, JOSE-Wortlaut der 401-Antworten, SQL-Suiten in CI (W9),
-  `insert_audit_event` für `service_role` (Kalender), Retention/Anonymisierung
-  der E-Mail-Adressen im Audit (`changes.email` kommt hinzu).
-
-## User Lifecycle W5 — kontrolliertes Offboarding, Session-Revokation, Abhängigkeits-Preview
-
-**Status: `PRODUCTION VERIFIED` (2026-09-06; RC `3baf5b02` = `main`, Migration
-`20260906180000` live, `users` Edge v8, Vercel READY; Live-Beweis am Testkonto
-`sales.id = 4`, Endzustand deaktiviert/gebannt — Nachtrag Release im Decision
-Log „2026-09-06 – User Lifecycle W5")**
-
-Bewiesen (lokal gegen GoTrue 2.196/PostgREST, read-only gegen `nora-crm-prod`
-bestätigt): Deaktivieren (W1) ließ die Sitzungen eines Mitarbeiters in
-`auth.sessions`/`auth.refresh_tokens` liegen (GoTrue hat keinen Admin-Logout-
-Endpunkt), und PostgREST prüft nie, ob die im JWT genannte Sitzung noch
-existiert — ein vor dem Deaktivieren ausgestelltes Access-Token bekam mit der
-Reaktivierung für seine Restlaufzeit (3600 s) wieder Datenzugriff. Production:
-3 aktive Admins, 1 aktiver Office, Testkonto `sales.id = 4` deaktiviert/gebannt
-mit 0 Sitzungen und 0 Referenzen; `postgres` hält `SELECT`/`DELETE` auf beiden
-Auth-Tabellen.
-
-**W5 (Migration `20260906180000_nora_lifecycle_offboarding.sql`):** `public.offboard_employee_by_executor` (eine
-Transaktion: `disabled` über W1-Capability, Sitzungen + Refresh-Tokens gelöscht,
-Preview, `user.offboarded`), `public.get_employee_dependency_preview`,
-`nora_private.revoke_auth_sessions`, **Session-Bindung** in
-`nora_private.is_active_user()`/`current_role()` über
-`nora_private.jwt_session_is_live()`. Edge: Aktion `offboard`, Modul
-`users/offboarding.ts`, `GET /users?sales_id=` mit `dependencies`. UI: „Zugang
-beenden" mit Preview sowie dauerhafter Block „Offene Zuständigkeiten" in der
-Mitarbeiterakte (jeder Zugangszustand, auch bei null) mit Follow-up-Links.
-
-**Bekannte Kanten / bewusst offen nach W5:**
-
-- **Restlaufzeit eines alten Tokens ist nur durch die RLS gedeckt, nicht
-  durch GoTrue-Entwertung.** Ein JWT bleibt bis `exp` kryptografisch gültig;
-  PostgREST akzeptiert es, die Datenbank verweigert (deaktiviert **und**
-  Sitzung gelöscht). Kein Pfad in Nora liefert einem solchen Token noch
-  Daten. Das ist eine Autorisierungs-, keine Authentifizierungsentwertung —
-  bewusst so dokumentiert.
-- **Session-Bindung ist Fail-open bei fehlendem Leserecht auf
-  `auth.sessions`** (WARNING im Log, Vor-W5-Verhalten). In Production ist das
-  Privileg vorhanden (direkt **und** über `pg_read_all_data`; im Release
-  bestätigt). Der Zweig ist von keinem Aufrufer auslösbar; der degradierte
-  Zustand ist das Vor-W5-Verhalten (Deaktivierte bleiben über `sales.disabled`
-  verweigert). Fehlt das Privileg je, ist die Bindung still inaktiv —
-  beobachten (Logs auf „session binding inactive"). **W6-Empfehlung:**
-  fail-closed (Claim vorhanden + Sitzung nicht prüfbar → DENY) plus
-  Privileg-Monitor.
-- **Helfer prüft nur die Existenz der Sitzung, nicht den Besitzer**
-  (`auth.sessions.id = session_id`, kein `user_id = sub`-Abgleich), und ein
-  malformed `session_id`-Claim fällt auf den No-Claim-Pfad zurück. Beides ist
-  über ein signiertes GoTrue-Token nicht erreichbar (Claims sind signiert),
-  aber als Defense-in-Depth-Härtung für W6 vorgemerkt.
-- **Dialog „Zugang beenden" nennt das Ziel nur über Anmeldeadresse und
-  Status.** Im Live-Beweis traf der Product Owner damit einmal einen echten
-  Administrator statt des Testkontos (sofort per W1-Checkbox reaktiviert,
-  Sitzungen bleiben gelöscht → Neuanmeldung). Kein Codefehler; UX-Härtung
-  vorgemerkt: Name im Dialogkopf, zusätzliche Bestätigung bei Admin-Zielen.
-- **Bann-Ausfall nach erfolgreichem DB-Schritt** meldet
-  `employee_access_sync_incomplete` (`offboarded: true`); Zugang ist bereits
-  aus (RLS + Sitzungen), nur eine neue Passwort-Anmeldung würde GoTrue noch
-  akzeptieren und dann keinen Zugang finden. Konvergenz über Retry oder
-  „Zugangsstatus synchronisieren" (W1). Keine Automatik.
-- **Kein „Sitzungen beenden" für bereits Deaktivierte in der Oberfläche.**
-  Der Executor deckt den Fall (`executed`, `sessions_revoked > 0`, kein zweites
-  `user.disabled`); die UI bietet die Aktion für Deaktivierte nicht an, weil
-  „Zugang beenden" neben „Zugang deaktiviert" verwirren würde. Durch die
-  Session-Bindung erhält eine solche Restsitzung ohnehin keine Daten.
-- **Aufgaben-Follow-up nur als Zähler.** Es gibt keine Desktop-Aufgabenliste
-  mit Route; Kunden/Kontakte/Vorgänge verlinken auf die bestehenden Listen mit
-  `?filter={"sales_id":…}`. Umverteilung bleibt das normale Bearbeiten (kein
-  Massen-Reassign, kein Automatismus).
-- **Preview-Definition:** offene Vorgänge = `archived_at is null`, offene
-  Aufgaben = `done_date is null`; Kunden/Kontakte ungefiltert. Notizen werden
-  gezeigt, aber nie als Umverteilungsarbeit gezählt.
-- **Kein Grund-Feld (`p_reason`)** im Audit — bewusst (Freitext, Retention);
-  nachrüstbar.
-- **Deaktivierter Admin, Rolle:** unverändert die LOW-W3-Frage.
-- Weiterhin offen aus W1–W4: Hard Delete (W6), Default-Privilegien, JOSE-Wortlaut
-  der 401-Antworten, SQL-Suiten in CI (W9), `record_operation_error`-camelCase-
-  Nebenbefund, Retention/Anonymisierung (`employee_email` kommt in
-  `user.offboarded` hinzu).
-- **Produktionsstand nach dem Release:** 3 `user.offboarded`-Zeilen (1×
-  `sales 2` Zwischenfall, 2× Testkonto `sales 4`), Testkonto-Anmeldeadresse
-  jetzt eine unechte Adresse außerhalb der Firmendomain (vom Product Owner
-  über „E-Mail ändern" gesetzt), `sales 2` aktiv ohne Sitzungen bis zur
-  nächsten Anmeldung.
-
-## Operation Manager — pendente Operationen ohne eigenen TTL
-
-**Status: `ASSESSED — LOW — PLANNED FOLLOW-UP`**
-
-`operationManager.ts::enforceCapacity()` eviktiert bei Kapazitätsüberschreitung ausschließlich nicht-pendente (`success`/`error`) Records — pendente Operationen werden nie automatisch entfernt und haben keinen eigenen TTL-/Timeout-Lifecycle. Vorbestehend seit Foundation Wave 2 (Operation Manager Grundgerüst), **nicht** durch die Operation Status Contract Wave v1 (2026-08-29) eingeführt oder verändert. Bewusst kein Fix in dieser oder der Operation Status Contract Wave — kein neuer Lifecycle-Status (z. B. `timed_out`/`cancelled`) ohne reale Semantik/Bedarf eingeführt (siehe `03-data-model-guardrails.md` Grundregel 5). Bei künftigem Bedarf (z. B. hängende Handler, die nie resolven/rejecten) eigene, spätere Welle mit explizitem Timeout-Mechanismus statt stillschweigender Kapazitätslogik.
-
-Bestätigt read-only in der Phase-6D.1-Closure-Verifikation (2026-08-29) — kein neuer RC-Blocker, siehe `06-decision-log.md` Nachtrag „Phase 6D.1".
-
-## Notification-UI — Stand nach Phase 7B.4
-
-Phase 7B.4 (2026-08-29) hat die Notification-Schicht erstmals produktiv montiert, aber bewusst nur für **einen** Flow. Seit dem kontrollierten Release am 2026-08-30 (Commit `9db08c4b`, Vercel READY, `nora.ergart.de`) ist dieser Stand **PRODUCTION VERIFIED** — siehe Decision Log, Nachtrag „Kontrollierter Production Release — PHASE 7B PRODUCTION VERIFIED". Der Release enthielt keine Migration und keine Änderung unter `supabase/`.
-
-**Abgeschlossen (PRODUCTION VERIFIED seit 2026-08-30):**
-
-- Quick Capture zeigt genau eine Karte pro Benutzer-Intent (Core + optionale Aufgabe), inkl. pending / success / partial / error.
-- `NotificationProvider` unterhalb von `OperationProvider`, `NoraNotificationOutlet` in Desktop- und Mobile-Layout.
-- Die vier Quick-Capture-`notify()`-Toasts sind entfernt; sonner bleibt für alle übrigen Flows aktiv — live bestätigt, sonner ist weiterhin im Production-Bundle enthalten.
-
-**Noch nicht live nachgewiesen (kein Defekt, offener Nachweis):**
-
-- Der echte Live-**Write**-Smoke (Schnellerfassung in Production absenden) wurde nicht durchgeführt, weil es keinen freigegebenen Production-Testdatensatz gibt und dafür echte Geschäftsdaten hätten entstehen müssen. Gedeckt durch Browser-Integrationstests und die lokale UX-Abnahme; die Live-Bestätigung ergibt sich aus der nächsten regulären Nutzeraktion.
-- Der PWA-Service-Worker liefert unmittelbar nach jedem Deployment beim ersten Aufruf noch die Assets des Vorgänger-Builds aus und aktualisiert sich erst beim Reload. **Nicht 7B-verursacht**, bestehendes `vite-plugin-pwa`-Verhalten — hier nur festgehalten, damit ein künftiger Release-Smoke nicht versehentlich den alten Build prüft. Ursache seit 2026-08-30 nachgewiesen, siehe „PWA-Update-Verhalten nach Deployment" weiter unten.
-
-**Offen, geplant für 7C (nicht Teil von 7B.4):**
-
-- Weitere Intents: `deal.update`, `customer.createWithContact`, `contact.convertToCustomer` — jeweils Policy-Eintrag plus Controller am passenden Aufrufer.
-- Isolierter Task-Retry (Core bereits committed, Aufgabe unter eigenem Idempotency-Scope wiederholen). Braucht eine eigene Entscheidung — Retry ist nie allein aus `errorCode` ableitbar.
-- Migration der `OPERATION_CATALOG`-Literale, die `DealEdit.tsx` heute als Pseudo-i18n-Key benutzt.
-
-**Offen, 7C Hardening (LOW, aus dem Final Adversarial Review 2026-08-30):**
-
-- **Vorgegebene `operationId` ohne Rückkopplung an die tatsächlich vergebene ID.** `createOperationContext()` verwirft eine ungültige ID und lowercased eine gültige. Der Store meldet den Intent aber unter der *gewünschten* ID an — bei einer ungültigen oder uppercase-UUID wartet die Karte damit auf eine Operation, die es nie geben wird, und bleibt für immer `pending`. **Im ausgelieferten Code nicht erreichbar**, weil `useNotifiedQuickCapture` ausschließlich `createOperationId()` benutzt (immer gültig, immer lowercase). Relevant, sobald ein 7C-Aufrufer IDs aus einer anderen Quelle durchreicht. Kandidat: Registrierung an die Kontext-ID binden oder ungültige Vorgaben hart ablehnen. Siehe `03-data-model-guardrails.md`, Falle 38.
-- **`announced`-Set im `NoraNotificationAnnouncer` ist unbegrenzt.** Es merkt sich jede `(notificationId, lifecycle)`-Kombination für die Lebensdauer der Session, um Doppelansagen zu verhindern. Pro Benutzeraktion sind das wenige Einträge, es gibt keinen realen Druck — nur anfassen, falls die Notification-Schicht auf viele Flows ausgeweitet wird.
-
-**Offen, 7C UX-Polish (LOW, aus der 7B.4a–7B.4c-Abnahme):**
-
-- **Langer Vorgangstitel verdrängt den Kundennamen.** Die Kontextzeile ist auf zwei Zeilen begrenzt (vertragskonform); bei einem sehr langen Titel wird dafür der Kundenname abgeschnitten („… für Immobilienverwaltung…“). Gerade der Kunde unterscheidet aber zwei ähnliche Karten. Kandidat: Kunde gegenüber dem Titel priorisieren, wenn beide nicht passen. Kein Release-Blocker.
-- **Hover-Pause bei offenem Dialog.** Bewusster Preis der Click-through-Garantie (7B.4c): solange ein Dialog offen ist, pausiert Hover die Auto-Ausblendung nicht. Nur relevant für Success/Partial, die ohnehin von selbst gehen; Fehler bleiben stehen. Nur anfassen, falls es sich real störend zeigt.
-- **Ein Schritt-Tab kann bei offenem Quick-Capture-Dialog visuell überlagert werden** (Desktop, schmale Viewports). Funktional folgenlos — die Karte ist click-through, und „Zurück“/„Weiter“ decken dieselbe Navigation ab.
-
-Erledigt und damit geschlossen: die Desktop-Überlappung des Dialog-Footers und die auf Mobile hinter dem Dialog wartende Karte — beide durch das modal-aware Placement in 7B.4c behoben (gemessen: kein Dialog-Control mehr blockiert; im Final Review bei 1212 px unabhängig bestätigt, 0 von 14 Controls blockiert).
-
-**Beobachtet, bewusst NICHT als Follow-up geöffnet:**
-
-- **`drawer-content` (vaul) ist von der modal-aware Regel nicht erfasst** — nur `dialog-content` und `sheet-content` sind es. Aktuell existiert kein Nora-Flow, in dem eine Statusmeldung mit einem Drawer kollidiert (Drawer wird nur in `admin/breadcrumb.tsx` benutzt, ohne Aktionsleiste). Erst relevant, wenn ein Drawer eigene Primäraktionen bekommt.
-- **Nicht Phase-7B-verursacht** und daher hier nur benannt, nicht als Notification-Schuld geführt: eine Prettier-Formatdrift in `providers/fakerest/dataProvider.ts` (besteht schon vor 7B), die Radix-Warnung `Missing Description or aria-describedby for DialogContent`, die `react-refresh`-ESLint-Warnung bei Provider-Dateien (gleiches Muster wie `OperationProvider`), sowie ein einmalig im Demo-Modus beobachtetes Redirect-Race nach Quick Capture (FakeRest liefert die frisch erzeugte Deal-ID noch nicht lesbar zurück → Legacy-sonner „Der Eintrag existiert nicht"). Letzteres betrifft den unveränderten Redirect-Pfad, nicht die Notification-Schicht.
-
-**Offen, Phase 8 oder später:**
-
-- Sichtbare IT-Eskalation (`canEscalateToIT` / `publicErrorRef` existieren im Contract, werden nicht gerendert — es fehlt der auswertende Incident-Workflow, nicht die Technik).
-- Persistente Notification-History, Notification-Sidebar, Browser-Push.
-- Ablösung von sonner. Bis dahin existieren bewusst zwei Feedback-Schichten nebeneinander; jeder Flow gehört genau einer davon.
-
-**Bekannte, akzeptierte Eigenschaften:**
-
-- Eine `pending`-Karte lässt sich schließen. Das blendet nur aus und bricht die Operation nicht ab (die Operation hat weiterhin keinen eigenen Timeout-Lifecycle, siehe Abschnitt „Operation Manager — pendente Operationen ohne eigenen TTL“).
-- `retentionSoftCap` ist kein hartes Limit: gleichzeitig laufende Intents können ihn überschreiten, weil `pending` nie verdrängt wird. Hart begrenzt ist nur die Anzahl gleichzeitig sichtbarer Karten.
-
-## PWA-Update-Verhalten nach Deployment — Ursache bewiesen (PWA-1A, 2026-08-30)
-
-**Severity:** MEDIUM (operativ/UX, kein Daten- oder Sicherheitsrisiko; im Deployment-Fenster mit sichtbarem Fehlerpotenzial — siehe Benutzerwirkung)
-**Status:** **URSACHE GESCHLOSSEN durch PWA-1B (2026-08-30, lokal implementiert und verifiziert — noch kein Production-Release).** Der Abschnitt bleibt als Ursachen- und Reproduktionsprotokoll stehen. Was sich geändert hat, steht am Ende unter „Behebung (PWA-1B)".
-
-**Symptom:** Nach einem Vercel-Deployment rendert der erste Aufruf noch den Vorgänger-Build. Prüft man die Asset-URLs dieses Aufrufs gegen den Server, liefern sie 404. Ein Reload heilt den Zustand.
-
-**Ursache (nachgewiesen, nicht geraten):** `vite.config.ts` nutzt `VitePWA({ registerType: "autoUpdate" })` ohne `injectRegister`-Angabe. Das hat zwei Konsequenzen, die zusammen das Verhalten erzeugen:
-
-1. Der Plugin erzwingt für diese Kombination `workbox.skipWaiting = true` und `workbox.clientsClaim = true` (`node_modules/vite-plugin-pwa/dist/index.js`, Auflösung von `injectRegister: "auto"`). Der generierte `dist/sw.js` enthält entsprechend `self.skipWaiting()`, `clientsClaim()`, `cleanupOutdatedCaches()` und `NavigationRoute(createHandlerBoundToURL("index.html"))`.
-2. Weil **keine** Datei unter `src/` `virtual:pwa-register` importiert, injiziert der Plugin nur das schlanke `dist/registerSW.js`: `navigator.serviceWorker.register('./sw.js', { scope: './' })` — ohne Reload-Logik. Der Reload nach einem Update steckt ausschließlich im virtuellen Client-Modul (`dist/client/build/register.js`: im `autoUpdate`-Zweig `wb.addEventListener("activated", … window.location.reload())`), das Nora nicht lädt.
-
-Das „auto" in `autoUpdate` bezieht sich also nur auf die **Aktivierung des Workers**, nicht auf die **Aktualisierung der laufenden Seite**. Zusätzlich beantwortet die `NavigationRoute` jede Navigation aus dem Precache — der Browser sieht das neue `index.html` erst, nachdem der neue Worker aktiv ist.
-
-**Reproduziert (lokal, zwei aufeinanderfolgende Builds auf demselben Origin, `http://localhost:4177`):**
-
-| Schritt | Beobachtung |
-|---|---|
-| Build A installiert | SW aktiv, 38 Precache-Einträge, `index-CSEIzXGx.js` |
-| Build B „deployed" (Server serviert nur noch B) | alte Asset-URLs liefern am Server 404 |
-| Aufruf #1 danach | rendert **Build A** (`index-CSEIzXGx.js`) — Symptom reproduziert |
-| Aufruf #2 (Reload) | rendert Build B, Precache enthält A nicht mehr |
-| Offener Tab + `registration.update()` | neuer Worker geht ohne `waiting` direkt auf `activated`, ein `controllerchange`, **kein** Reload — die Seite läuft weiter auf A |
-| Alte Chunk-URL aus der laufenden A-Seite | `fetch` = 200 (nur wegen HTTP-Cache), mit `cache: "reload"` = **404** |
-
-**Gegen Production nachgemessen (2026-08-30, read-only, `nora.ergart.de`):**
-
-- Der live ausgelieferte `/sw.js` hat exakt dieselbe Struktur wie der lokale Build: `skipWaiting()`, `clientsClaim()`, `cleanupOutdatedCaches()`, `NavigationRoute` auf `index.html`, 38 Precache-Einträge, darunter der gehashte Lazy-Chunk `assets/DealList-CUiVL1zD.js`. Das lokale Reproduktionsmodell entspricht damit dem echten Production-Worker.
-- Eine Asset-URL, die nicht zum aktuellen Deployment gehört, liefert einen **harten 404** (`x-vercel-error: NOT_FOUND`), **kein** SPA-Fallback.
-- **Wichtig — Annahme widerlegt:** Vercel liefert `/assets/*` hier **nicht** `immutable`, sondern `cache-control: public, max-age=0, must-revalidate` (gemessen an `assets/inter-greek-wght-normal-CkhJZR-_.woff2`). Es gibt keine `vercel.json`, und die automatische Immutable-Regel greift nur bei Framework-erkannten Build-Outputs, nicht bei einem reinen Vite-`dist`. **Der HTTP-Cache ist in Production also kein Schutzschild** — jede Asset-Anfrage revalidiert gegen den Origin und bekommt nach einem Deploy 404.
-
-**Benutzerwirkung:** Zwei Effekte, unterschiedlich schwer.
-
-1. **Sicher und bei jedem Release (gesichert):** der erste Aufruf nach einem Deployment zeigt den Vorgänger-Build. Mitarbeiter arbeiten ohne jedes Signal eine Session lang auf dem alten Stand weiter; ein Release-Smoke misst ohne Reload den falschen Build. Kein Absturz, kein Datenverlust.
-2. **Realer Fehlerfall im Deployment-Fenster:** der einzige dynamisch nachgeladene Chunk ist `DealList` (`src/components/atomic-crm/deals/index.ts`, `React.lazy`). Läuft eine Seite noch auf Build A, ist Worker B bereits aktiv (Precache-Eintrag von A nachweislich entfernt) und öffnet der Nutzer *in dieser Sitzung erstmals* die Vorgangsliste, geht die Chunk-Anfrage ins Netz und läuft in einen 404 → `React.lazy` schlägt fehl, die Vorgangsliste rendert nicht. Weil Production **nicht** `immutable` ausliefert, fängt der HTTP-Cache das anders als im lokalen Versuch **nicht** verlässlich ab. Heilt durch Reload, ist aber ein sichtbarer Defekt und keine reine Messartefakt-Frage.
-
-Der Fehlerfall wurde in dieser Session **nicht** live in Production ausgelöst (das hätte ein zusätzliches Production-Deployment erfordert). Nachgewiesen sind alle vier Einzelbedingungen: Precache-Eviction (lokal reproduziert), fehlender Reload (lokal reproduziert), harter 404 auf nicht mehr existente Asset-URLs (Production gemessen), fehlender `immutable`-Schutz (Production gemessen).
-
-**Nicht die Ursache** (geprüft und ausgeschlossen): fehlendes `cleanupOutdatedCaches` (ist aktiv), `base: "./"`/Scope (HashRouter, Dokument-URL immer Root), Phase 7B.
-
-### Behebung (PWA-1B, 2026-08-30) — lokal verifiziert, noch nicht deployed
-
-`registerType: "prompt"` + explizit geladenes `virtual:pwa-register`. Der neue Worker bleibt WAITING, bis der Benutzer aktualisiert; der Precache des laufenden Builds bleibt damit vollständig. Details und Begründung: `06-decision-log.md`, „2026-08-30 – PWA-Update: wartender Worker statt automatischer Übernahme (PWA-1B)".
-
-**Am generierten Build bewiesen:** `dist/sw.js` enthält jetzt `self.addEventListener("message", … "SKIP_WAITING" … self.skipWaiting())` statt eines top-level `self.skipWaiting()`; `clientsClaim()` ist verschwunden; `registerSW.js` wird nicht mehr injiziert.
-
-**Am Zwei-Build-Test bewiesen** (Build A installiert → Build B deployed, alte Chunk-URL am Server 404):
-
-| Beobachtung | vorher (`autoUpdate`) | nachher (`prompt`) |
-|---|---|---|
-| Neuer Worker | sofort `activated` | **`waiting`/`installed`** |
-| Laufende Seite | wird stillschweigend übernommen | bleibt unangetastet auf Build A |
-| Precache | A wird beim Aktivieren geräumt (38 Einträge, nur B) | **A und B koexistieren (42 Einträge)** |
-| `DealList`-Chunk A, HTTP-Cache umgangen | 404 | **200 aus dem Precache** |
-| Dynamischer Import von Chunk A | schlägt fehl | **erfolgreich** |
-| Nach „Jetzt aktualisieren" | — | Worker B aktiv, Reload, Build B, Precache wieder 38 Einträge, A sauber entfernt |
-
-**Verbleibendes Risiko:** aktualisiert ein Benutzer in einem Tab, laden alle anderen offenen Nora-Tabs ebenfalls neu (gemessen). Sie landen sauber auf dem neuen Build — der ursprüngliche Fehler wird also nicht auf den zweiten Tab verschoben —, aber ungespeicherte Eingaben in einem zweiten Tab gehen verloren. Bewusst offen für PWA-1C.
-
-### PWA-1C — Update-Experience (2026-08-30): `LOCAL VERIFIED` (UX-Abnahme inzwischen erteilt, siehe Nachtrag PWA-1C.2)
-
-Der Platzhalter aus PWA-1B ist durch ein **Anwendungs-Systemereignis** ersetzt: eigener Layer `z-70`, prominentes nicht-modales Panel (`pwa/NoraUpdateEvent.tsx`), eigenes organisches Update-Motiv (`pwa/NoraUpdateOrb.tsx`, reines CSS), und **bei offenem Dialog/Sheet gar nicht sichtbar**. „Später" verschiebt um 2 Stunden. Die Lifecycle-Logik wurde nicht angefasst — nur die Wiederanzeige-Konstante. Details: `02-design-system.md` („Anwendungs-Systemereignisse / Update-Experience") und `06-decision-log.md` („2026-08-30 – Update-Experience als Anwendungs-Systemereignis (PWA-1C)").
-
-**In der gestylten App nachgemessen:** Layer `z-index: 70`; Panel `top: 5rem` (Desktop) räumt den 46 px hohen Header inkl. globaler Suche und „Schnellerfassung" frei — **kein persistentes Bedienelement wird verdeckt** (bei `top: 1.5rem` waren es zwei); alle 84 Hit-Test-Punkte im Panel erreichen das Panel; bei offener Schnellerfassung `display: none`, Fläche 0, nicht fokussierbar, danach wieder sichtbar; Kontrast hell 4,74–19,8 / dunkel 6,94–17,2; Touch-Ziele 44 px (Desktop) bzw. 47 px (Mobile); Mobile 500×615 ohne Overflow und frei von der `MobileNavigation`.
-
-**Zwei echte Befunde, die erst der Lauf in der echten App zeigte** — beide behoben: das Panel verdeckte in der ersten Fassung Header-Controls, und das Update-Motiv zerfiel bei `prefers-reduced-motion: reduce` zu Rechtecken, weil seine Rundung nur aus Keyframes kam.
-
-**Offen und bewusst nicht entschieden:** die Designqualität selbst. Automatische Tests belegen Zustände, Semantik, Accessibility-Verdrahtung und Aktionen; „fühlt sich hochwertig an" kann nur der Product Owner abnehmen. Ebenfalls offen: das Mehr-Tab-Verhalten aus PWA-1B (andere Tabs laden beim Aktualisieren ebenfalls neu) — bewusst ohne Nutzer-Copy und ohne Cross-Tab-Architektur belassen.
-
-**Kein Production-Release.** Nächste Schritte: Product-Owner-UX-Abnahme → Final Review → RC Freeze → kontrollierter Production Release.
-
-### Nachtrag PWA-1C.1 (2026-08-30): visuelle Ablehnung und Neufassung
-
-Die visuelle Fassung aus PWA-1C wurde vom Product Owner **nicht abgenommen** (generisch, zu sehr nach Standard-UI). PWA-1C.1 ist die daraus folgende reine Art-Direction-/Motion-Welle: Orb-zentrierte Komposition, mehrschichtiger Orb, Warnsymbol des Product Owners, 8-Sekunden-Choreografie, Recovery-Zustand. Kein Eingriff in Service-Worker-Lifecycle, Store, Build-Konfiguration oder Datenbank. Details: `06-decision-log.md`, „2026-08-30 – Premium Update Experience und 8-Sekunden-Choreografie (PWA-1C.1)".
-
-**Diese visuelle Fassung ist inzwischen vom Product Owner abgenommen.** Orb, Aura, Warnsymbol, Panelkomposition, Timeline und Art Direction gelten damit als fixiert und wurden in PWA-1C.2 nicht mehr angefasst.
-
-**Vier echte Befunde, die erst die Messung in der gestylten App zeigte** — alle behoben:
-
-1. Der Orb las sich als **Zielscheibe**: drei konzentrische Kreise durch Zweistopp-Verläufe mit linearem Abfall, einen konturierten zentrierten Kern und eine flach gefüllte Innenform.
-2. Bei **150 % Browser-Zoom** (960×600 CSS-Pixel) lief die Komposition 50 px unter den Fensterrand — „Jetzt aktualisieren" war unerreichbar. Behoben über höhenbasierte Regeln; Browser-Zoom verkleinert den Viewport in beiden Achsen, und Höhe ist die Achse, die diese Komposition verbraucht.
-3. `overflow: hidden auto` machte die **Aura zu scrollbarer Fläche**: dauerhafte Scrollleiste am Panel, 17 px Inhaltsbreite verloren, Komposition aus der Mitte gezogen.
-4. Der **Titeltext wechselte beim Klick** statt in der unsichtbaren Phase — ein harter Sprung, der die gesamte Auflösung-per-Unschärfe wirkungslos machte.
-
-**Offene Product-Frage:** Dauer der Choreografie bei `prefers-reduced-motion: reduce`. Empfehlung: von 8 s auf ~2,5 s kürzen und direkt in die ruhige Szene springen. Bewusst nicht eigenmächtig umgesetzt. PWA-1C.2 hat daran nichts geändert.
-
-### Nachtrag PWA-1C.2 (2026-08-30): abgelehnter RC und Recovery-Contract-Korrektur
-
-Der **Final Adversarial Review** des ersten PWA-RC (`0329c0aedb7b250436ab43b651a9577ced10b0af`) hat den Kandidaten mit `PWA UPDATE RC REJECTED — FIX REQUIRED` abgelehnt: 0 BLOCKER, 0 HIGH, **1 MEDIUM**, mehrere LOW. Unabhängig bestätigt hat derselbe Review u. a. den Zwei-Build-Lifecycle (Worker B WAITING, A bleibt Controller, A-Lazy-Chunk 200 aus dem Precache während der Server 404 liefert, genau ein Reload, alter Cache danach aufgeräumt), den generierten `sw.js` (kein `skipWaiting()`, kein `clientsClaim()`), die vollständige Abwesenheit des Dev-Harness im Production-Build und die Choreografie-Grenze (`applyUpdate()` erst nach acht Sekunden, genau einmal).
-
-**Der MEDIUM.** Der Recovery-Zustand hing am Promise von `updateServiceWorker()`. Der ausgelieferte Client von `vite-plugin-pwa` 1.2.0 lehnt dieses Promise praktisch nie ab — es wartet nur auf die Registrierung (die alle Fehler abfängt) und feuert dann ein `postMessage` ohne `await`. Damit war der `catch`-Zweig toter Code, der Recovery-Zustand in Production unerreichbar, und der reale Fehlerfall — Anfrage gesendet, `controllerchange` kommt nie — hätte Nora **dauerhaft** auf „Nora wird aktualisiert" stehen lassen, ohne Aktion und ohne Timeout. Die Doku behauptete an zwei Stellen ausdrücklich das Gegenteil.
-
-**Zweiter Befund, erst bei der Reparatur gemessen.** Nach `SKIP_WAITING` feuert `controllerchange` genau einmal und der neue Worker übernimmt — die Seite lädt aber **nicht** neu. Der Client von `vite-plugin-pwa` lädt nur bei Funden, die Workbox als „intern" führt; Noras eigene Prüfung (stündlich bzw. bei Tab-Rückkehr, also lange nach dem Seitenaufbau) zählt nicht dazu. Am unveränderten RC-Code identisch gemessen. Ohne Gegenmaßnahme hätte der Watchdog das Problem sogar verdeckt, weil die Übernahme ja stattgefunden hat. Nora lädt deshalb 1,5 s nach der Übernahme selbst neu.
-
-**Behoben in PWA-1C.2** (lokal implementiert und verifiziert, kein Production-Release): `activated` aus `controllerchange` als einziges Erfolgssignal, 5-Sekunden-Watchdog ab `applyUpdate()` (empirisch begründet: gemessene Übernahme 2–3 ms normal, max. 34 ms bei 20× CPU-Drosselung), Copy ohne Fehlerbehauptung, Recovery-Aktion nach echtem Worker-Zustand, verspätete Übernahme nimmt Recovery zurück. Details: `06-decision-log.md`, „2026-08-30 – Aktivierungsanfrage ist kein Erfolgssignal: Watchdog statt Promise (PWA-1C.2)".
-
-**Ebenfalls geschlossen** (LOW aus demselben Review): Fokus fiel nach der Primäraktion auf `<body>`; `role="status"` auf der sich mehrfach umbauenden Fläche hätte Screenreader-Wiederholungsansagen erzeugt; `src/index.css` bestand Prettier nicht; das SVG-Design-Asset hatte gemischte Zeilenenden; der Kommentar „byteweise identisch" war zu stark; der Verweis auf „Falle 37" in `pwaUpdateStore.ts` passte nicht.
-
-**Offen geblieben und bewusst nicht in dieser Welle gelöst:** der Kontrast der Primäraktion (siehe nächster Abschnitt) und die Reduced-Motion-Dauer.
-
-### PWA Update State Contract V2 (2026-09-01): Recovery-Bug behoben — `LOCAL VERIFIED / RC`
-
-**Befund (Read-only-Diagnose, Zwei-Build-Repro in Chromium, TYPE D).** Der Product Owner sah in Production den Recovery-Zustand mit „Nora neu laden", obwohl kein Fehler vorlag. Ursache: `onNeedRefresh` aus `vite-plugin-pwa` (Prompt-Modus) feuert für externe Funde bereits beim `installed`, und Nora behandelte den Callback als „ein Worker wartet". In einem **unkontrollierten Dokument** (kein `controller` — Erstbesuch, Hard Reload, gelöschte Site-Daten; ohne `clients.claim()` bleibt es das bis zur nächsten Navigation) aktiviert sich der Worker 2 ms später selbst, SKIP_WAITING geht ins Leere und `controllerchange` erreicht das Dokument nie → nach 13 s Recovery B. Zweiter Befund (MEDIUM): hatte ein anderer Tab aktiviert, zeigte die Fläche weiter „verfügbar" und spielte beim Klick acht Sekunden ohne Wirkung ab. Der 5-s-Watchdog selbst war **nicht** zu aggressiv (Übernahme im kontrollierten Tab: 14 ms).
-
-**Behoben:** Browser-Fakten als Wahrheit (`syncFacts()` an allen Entscheidungspunkten, ereignisbasiert über `statechange`/`updatefound`/`controllerchange`/`visibilitychange`), expliziter Zustand `reloadRequired`, `applyUpdate()` sendet nur mit wartendem Worker, Watchdog liest Fakten statt Fehler zu setzen (`slow` mit genau einem stillen zweiten Versuch), `failed` nur bei abgelehnter Anfrage, Presentation Contract V2 mit ruhiger Copy und ohne Warnoptik. Kein `clients.claim()`, kein Cross-Tab-Messaging, keine Dependency-Änderung, der production-bewiesene Happy Path (waiting → 8 s → ein SKIP_WAITING → ein controllerchange → ein Reload) ist unverändert. Details: `16-current-state.md` 6b, `02-design-system.md` (Presentation Contract V2), Decision Log „2026-09-01 – PWA Update State Contract V2".
-
-**Doku-Korrektur:** Die Aussage aus PWA-1C.2, der Client lade nach der Übernahme nie selbst neu, gilt nur für unkontrollierte Dokumente. Im kontrollierten Tab meldet Workbox `controlling.isUpdate = true` und `register.js` lädt synchron neu (gemessen); Noras 1,5-s-Reload ist das Sicherheitsnetz für alle anderen Fälle — es entsteht kein Doppel-Reload.
-
-**Offen / bewusst nicht in dieser Welle:** Reduced-Motion-Dauer der Choreografie; Kontrast/Touch-Höhe der Primäraktion (unten); der globale Loader (nächster Abschnitt). Production-Verifikation steht aus.
-
-**Unabhängiger finaler technischer Review (2026-09-01):** `TECHNICALLY APPROVED — FREEZE STATE CONTRACT`, 0 BLOCKER / 0 HIGH / 0 MEDIUM. Verbleibend und bewusst offen gelassen: LOW-1 Assessment `nothing` (Worker verschwindet ohne Aktivierung/Ersatz — Choreografie ohne Exit; theoretisch), LOW-2 Nutzen des stillen zweiten SKIP_WAITING nur im Ersetzt-Fall, NOTE `vite-plugin-pwa` lädt kontrollierte Nicht-Klick-Tabs nach Fremdaktivierung sofort neu (Plugin, pre-existing), NOTE ein per Navigations-Update-Check < 60 s nach Registrierung gefundener Worker löst im unkontrollierten Dokument kein `onNeedRefresh` aus (Plugin). Der State Contract wird dafür nicht wieder geöffnet.
-
-### PWA Visual Polish 2 (2026-09-01): Präsentation — `RC VERIFIED — READY FOR PRODUCT OWNER ACCEPTANCE`
-
-Reine Präsentationswelle auf `polish/nora-pwa-update-visual-v2` (Store/Registrierung/Hooks/SW-Erzeugung byteweise unverändert). **UX-1 aus dem Final Review behoben:** in „Gleich bereit" kein „Nora neu laden" und kein „Falls es nicht weitergeht …" mehr — der Zwei-Build-Beweis hatte gezeigt, dass ein Reload bei weiterhin wartendem Worker denselben Build lädt und das Panel sofort wieder auf „verfügbar" stellt; stattdessen nach der zweiten Frist ein leises „Weiterarbeiten" über den bestehenden Verschiebe-Pfad. **NOTE-2 behoben:** die in V2 verlorenen Abschnitte von `02-design-system.md` (Reduced Motion, Accessibility, Kontrast, Mobile, Tokens, Texte, lokal ansehen) sind aktualisiert wiederhergestellt. Sichtbare Änderung: 30-rem-Fläche, flaches Material, Orb 7 rem mit Orbital-Ring (Bogen / langsamer Bogen / geschlossener Ring / gedämpfter Orb), eine Nebenzeile, eine Primäraktion, mobil gestapelt. Details: `02-design-system.md` „Visual Polish 2" und Decision Log „2026-09-01 – PWA Visual Polish 2".
-
-**Offen:** Product-Owner-Sichtabnahme; danach Production-Release (kein Deployment aus dieser Welle). Weiterhin offen: Kontrast der Primäraktion (unten), Reduced-Motion-Dauer, globaler Loader. Dev-Harness-Eigenheit, kein Produktfehler: nach einem simulierten `failed` bleibt `failed` im Store bis zum Reload gesetzt (eingefrorene Store-Semantik) — ein erneutes „Update anzeigen" zeigt deshalb wieder den Fehlerzustand; für weitere Zustände „Neu laden" drücken.
-
-### PWA Completion Acknowledgement (2026-09-01): „Aktualisierung abgeschlossen" — `RC — LOCAL VERIFIED`
-
-Kleine Presentation-Welle auf `feat/nora-pwa-update-success-ack` (Basis `0e505456`). Die frisch geladene Version bestätigt nach einem erfolgreichen Update genau einmal „Aktualisierung abgeschlossen / Nora ist bereit." (grün, ohne Aktion, Auto-Dismiss 6 s). Transport per `sessionStorage`-Bit (`pwa/pwaUpdateCompletion.ts`), geschrieben nur bei `controllerchange` im Store und bei Noras eigenem Reload; nie bei `failed`, `slow`, „Später" oder F5. State Contract V2 unverändert bis auf eine Nebenwirkungszeile im Store. Details: `02-design-system.md` „Abschlussbestätigung", Decision Log „2026-09-01 – PWA Completion Acknowledgement".
-
-**Offen:** Product-Owner-Sichtabnahme (Screenshots hell/dunkel/Reduced Motion liegen vor); Release zusammen mit Visual Polish 2. **Bekannter, akzeptierter Randfall:** ein Tab, der die Übernahme nur mitbekommt (externes Update, anderer Tab hat ausgelöst) und vom Client nicht neu geladen wird, zeigt „Neue Version bereit"; lädt der Benutzer dort später von Hand neu, erscheint die Bestätigung — zutreffend, weil dieser Reload das Update in diesem Tab vollendet. **Nicht abgedeckt durch automatische Tests:** der echte `window.location.reload()`-Pfad (im Browser-Testrunner nicht ersetzbar) — im Dev-Server über „Abschluss anzeigen" und den echten Weg „Jetzt aktualisieren → Übernahme simulieren → Auto-Reload" nachgestellt. Dev-Harness-Hinweis: „Abschluss anzeigen" lädt sofort neu; ein zweites „Neu laden" danach zeigt nichts mehr (Beweis für „kein Success bei gewöhnlichem Reload").
-
-## Nora Loading Motion System (geplante Welle, noch nicht begonnen)
-
-Aus der PWA-Diagnose 2026-09-01: Nora hat **zwei identische Spinner-Komponenten** (`src/components/ui/spinner.tsx`, `src/components/admin/spinner.tsx` — beide lucide `Loader2` + `animate-spin text-primary`), `admin/loading.tsx` darauf aufbauend, rund 13 direkte `animate-spin`-Vorkommen und ~45 `Loader2`/`Spinner`-Referenzen in ~25 Dateien (Quick Capture, Kontakt→Kunde, Import, Audit, Kalender-Admin, Notification-Card, sonner-Loading-Icon, Mobile-Dashboard), dazu `ui/skeleton.tsx`, `ui/progress.tsx` und den eigenständigen PWA-Orb. Der Product Owner wünscht einen hochwertigeren, ruhigeren Nora-Ladekreis. **Bewusst nicht in der PWA-V2-Welle umgesetzt** — die PWA-Fläche hat nur ihre eigene ruhige Wartebewegung (langsamer atmende Punkte) bekommen. Empfehlung für die eigene Welle: einen zentralen Nora Motion Primitive einführen, die beiden Spinner-Komponenten darauf umstellen (deckt den Großteil ab), dann die Inline-`animate-spin`-Stellen nachziehen; Reduced Motion, Hell/Dunkel und 44-px-Touchziele mit abnehmen.
-
-## Kontrast der Nora-Primäraktion unterschreitet AA (LOW, projektweit, 2026-08-30)
-
-**Befund.** `.nora-primary-action` trägt Weiß auf `--nora-brand` (`#ff3b1f`). Canvas-aufgelöst gemessen: **3,56:1** — unter den 4,5:1, die WCAG 1.4.3 für normalen Text verlangt (14 px bei Schriftschnitt 600 zählt nicht als „large text"). Der Wert ist in Hell und Dunkel identisch, weil die Markenfarbe in beiden Modi dieselbe ist.
-
-**Nicht von der PWA-Welle verursacht.** Dieselben 3,56 wurden am bestehenden Header-Button „Neue Anfrage erfassen" nachgemessen. Betroffen ist jede Primäraktion in Nora.
-
-**Warum in PWA-1C.2 nicht lokal korrigiert.** Technisch ginge es (rund 15 % Schwarz in den Markenton mischen ergibt 4,76 — gerechnet, nicht gemessen). Das hätte aber genau einen Knopf anders eingefärbt als jede andere Primäraktion in Nora, direkt neben dem markenroten Orb, an einer vom Product Owner abgenommenen Komposition — und das eigentliche, globale Problem trotzdem nicht gelöst.
-
-**Empfohlener Fix (eigene kleine Welle, zusammen mit dem 44-px-Punkt unten).** Markenton für Flächen mit weißem Text einmal projektweit auf ≥ 4,5 absenken oder eine eigene `--nora-brand-on-white`-Variante einführen, dann alle Primäraktionen nachmessen. Product-Owner-Entscheidung, weil es die Markenfarbe berührt.
-
-## `nora-primary-action` unterschreitet das 44-px-Touch-Minimum (LOW, projektweit, 2026-08-30)
-
-**Befund.** `.nora-primary-action` in `src/index.css` nutzt `@apply min-h-10 …`. Tailwind v4 verschiebt **jede** Regel, die `@apply` verwendet, in die `utilities`-Layer, wo sie nach `.min-h-*` einsortiert wird und diese gewinnt. Ergebnis: die Klasse nagelt jede Primäraktion auf 40 px fest und überschreibt dabei
-
-- eine `min-h-11`/`min-h-12`-Utility-Klasse am selben Element **und**
-- jede Regel in der `components`-Layer (Layer-Reihenfolge schlägt Spezifität)
-
-Damit unterschreitet die Nora-Primäraktion Noras eigenes Touch-Minimum von 44 px (`--nora-touch-min`). Gemessen im Systemereignis: Primärbutton 164×**40**, Ghost-Button daneben 144×**44**.
-
-**Betroffen sind vermutlich weitere Stellen.** Mehrere bestehende Aufrufe kombinieren `nora-primary-action` mit einer `min-h-*`-Klasse in der Annahme, dass diese greift — z. B. `ContactCreateSheet.tsx` (`min-h-12`) und `DealProductionChecklistSection.tsx` (`nora-touch-target`, das ebenfalls `@apply` nutzt). Ob sie tatsächlich zu klein rendern, ist **nicht** nachgemessen worden; die Mechanik legt es nahe.
-
-**Aktueller Stand.** In PWA-1C.1 nur lokal gelöst, über eine bewusst ungelayerte, eng auf `.nora-system-event-action` gescopte Regel — die einzige ungelayerte Regel in `index.css`. Die geteilte Klasse wurde **nicht** angefasst, weil sie zu anderen Wellen gehört und eine Änderung dort jede Primäraktion in Nora betrifft.
-
-**Empfohlener Fix (eigene kleine Welle).** `min-h-10` aus `.nora-primary-action` entfernen und die Höhe dort über `--nora-touch-min` setzen, dann alle Aufrufstellen einmal nachmessen. Vorher prüfen, ob irgendwo bewusst ein 40-px-Button gewollt ist.
-
-## Bekannte, nicht in dieser Wave untersuchte Themen
-
-Aus einer früheren Analyse vor der Customer & Contact Workflow Wave als „bekannt, nicht Kern des Auftrags" benannt, hier zur Vollständigkeit aufgeführt — **nicht in dieser Session verifiziert oder detailliert**, vor Bearbeitung gegen aktuellen Code/Produktion neu prüfen:
-
-- Offene Selbstregistrierung
-- Attachment-Bucket-Konfiguration
-- Nicht deployte Edge Functions
-- Rollen-Cache-Verhalten
-- Audit-Retention-/Löschstrategie
-
-Diese Liste ist bewusst knapp gehalten, da keine Detailanalyse aus dieser Session vorliegt, die über die Kategorienamen hinausgeht.
-
-## BLOCKER: Öffentliche Selbstregistrierung ist in Produktion AKTIV (verifiziert 2026-09-04)
-
-**Status: offen, release-blockierend. Read-only am Live-System nachgewiesen.**
-
-Der öffentliche GoTrue-Endpunkt
-`https://kixxroxtfzbcbzctohex.supabase.co/auth/v1/settings` liefert am
-2026-09-04:
-
-```json
-{ "disable_signup": false, "mailer_autoconfirm": false, "external": { "email": true } }
-```
-
-`disable_signup: false` bedeutet: **jede Person im Internet kann sich mit einer
-beliebigen E-Mail-Adresse selbst bei Nora registrieren.** Das widerspricht der
-ausdrücklichen Produktentscheidung „Nora ist ausschließlich einladungsbasiert".
-
-**Vollständig nachverfolgte Auswirkung** (jeder Schritt read-only in
-`nora-crm-prod` belegt):
-
-1. `POST /auth/v1/signup` legt einen `auth.users`-Datensatz an.
-2. Der Trigger `on_auth_user_created` ruft `public.handle_new_user()`.
-3. Diese Funktion legt **automatisch eine `public.sales`-Zeile** an, mit
-   `disabled = false` (Spaltendefault) und Rolle aus
-   `nora_private.resolve_first_signup_role()` — bei bereits vorhandenen
-   Benutzern `viewer` (nicht `admin`; die Eskalation auf `admin` greift nur beim
-   allerersten Benutzer, das ist hier nicht mehr möglich).
-4. `nora_private.is_active_user()` prüft ausschließlich „nicht deaktivierte
-   `sales`-Zeile vorhanden" — für diesen Selbstregistrierer also **wahr**.
-5. Die RLS-Policies `Companies select active`, `Contacts select active` und
-   `Deals select active` erlauben `SELECT` an jeden `authenticated`-Benutzer,
-   für den `is_active_user()` wahr ist.
-
-**Ergebnis: Lesezugriff auf sämtliche echten Kunden-, Kontakt- und
-Vorgangsdaten der Ergart Gruppe.** Wegen `mailer_autoconfirm: false` muss die
-Person vorher ihre eigene E-Mail-Adresse bestätigen — das ist eine triviale
-Hürde, kein Schutz.
-
-**Nicht ausgenutzt:** alle 5 vorhandenen `sales`-Zeilen wurden am 2026-09-04
-geprüft und sind legitim (1 Dashboard-Erstadmin, 4 eingeladen). Es existiert
-kein Hinweis auf eine Selbstregistrierung.
-
-**Wichtig:** dies ist ein **Bestandsproblem**, kein von V1A verursachter Fehler.
-Es besteht unabhängig von dieser Welle und wurde erst durch die V1A-Prüfung
-belegt. Es blockiert das V1A-Release aber, weil V1A genau die Zusage macht,
-Nora sei einladungsbasiert.
-
-**Erforderliche Behebung (nur der Product Owner / ein Konto mit
-Dashboard-Zugriff kann das ausführen — MCP bietet dafür kein Werkzeug):**
-
-Supabase Dashboard → Projekt `nora-crm-prod` → Authentication → Sign In / Up →
-Email → **„Allow new users to sign up" ausschalten**.
-
-Danach zwingend nachprüfen:
-
-1. `curl -H "apikey: <publishable key>" https://kixxroxtfzbcbzctohex.supabase.co/auth/v1/settings`
-   muss `"disable_signup": true` liefern.
-2. Einladung über `/benutzer` funktioniert weiterhin (Admin-Invite ist ein
-   getrennter Endpunkt und wird von dieser Einstellung nicht erfasst — nach der
-   Umstellung dennoch **real nachweisen**, nicht annehmen).
-3. „Passwort einrichten lassen" / Passwort-vergessen funktioniert weiterhin
-   (betrifft nur bestehende Benutzer).
-4. Normale Anmeldung bestehender Benutzer funktioniert weiterhin.
-
-`supabase/config.toml` enthält unter `[auth.email]` ebenfalls
-`enable_signup = true`. Das ist die **lokale** Stack-Konfiguration und steuert
-Produktion nicht. Sie wurde bewusst nicht geändert, damit `supabase db reset
---local` und die lokale Entwicklung unverändert bleiben; sie sollte in einer
-eigenen kleinen Welle nachgezogen werden, wenn Produktion umgestellt ist.
-
-Was in V1A **nachweislich** gilt: der Client-Pfad ist hart einladungsbasiert.
-`dataProvider.signUp` wirft („Öffentliche Registrierung ist deaktiviert"), die
-`/sign-up`-Seite zeigt nur „Zugang nur per Einladung", und keiner der drei
-öffentlichen Login-Modi (`anmelden`, `einladung`, `passwort`) bietet eine
-Registrierung an — durch Tests abgesichert. Das schützt aber nur die Nora-UI,
-**nicht** den direkt erreichbaren GoTrue-Endpunkt.
-
-## Employee Onboarding & Access V1B — RC (2026-09-04): `PO UX ACCEPTED — READY FOR RELEASE`
-
-Präsentations-Welle über V1A (Branch `feat/nora-employee-onboarding-access-v1b`,
-nicht auf `main`, nicht deployt). Kein Eingriff in Zustandsmaschine, Auth,
-Routen, Edge Function oder Datenbank. Details: `06-decision-log.md`
-„2026-09-04 – Employee Onboarding & Access V1B", Gestaltung:
-`02-design-system.md`.
-
-**Offen, bewusst nicht Teil von V1B:**
-
-- ~~Visuelle Abnahme durch den Product Owner~~ — erteilt am 2026-09-04 über
-  den kompletten Demo-Ablauf (`npm run dev:demo`, Simulation siehe
-  `02-design-system.md`). Offen bleibt nur der Release selbst (Push, Vercel,
-  Live-Smoke).
-- Dark-Mode der öffentlichen Shell (Tokens vorbereitet, kein `.dark`-Block).
-- Reduced Motion wurde über die injizierte Stylesheet-Regel gemessen, nicht
-  über die echte Browsereinstellung; `matchMedia`-Pfade (Fokus-Timing 300 ms)
-  sind dadurch nur durch Code-Review gedeckt.
-- Echter Screenreader-Lauf.
-- Der Pflicht-Stern an Labels („Passwort *") ist react-admin-Standard und wurde
-  nicht neu gestaltet; falls der Product Owner ihn auf der Mitarbeiterfläche
-  nicht will, ist das eine Folgeentscheidung (projektweit).
-
-## `users` Edge Function ist nicht automatisch deployt (Stand 2026-09-04)
-
-Die Employee-Access-Serverlogik (`GET /users`, die beiden POST-Aktionen) lebt in
-`supabase/functions/users/`. Edge Functions werden **nicht** durch den
-Vercel-Deploy ausgeliefert. Ohne ein `supabase functions deploy users` gegen
-`nora-crm-prod` zeigt die Admin-Oberfläche „Der Zugangsstatus konnte nicht
-geladen werden." und die beiden Aktionen schlagen fehl. Das ist Teil des
-Release-Ablaufs dieser Welle, nicht ein Fehler im Code.
-
----
-
-## Employee Access V1C-A – E-Mail-Zustellbeobachtung (offene Punkte)
-
-### V1C-A.1 Migration wurde gegen keine Postgres-Instanz ausgeführt
-
-**Status: CLOSED (2026-09-04)** — beim kontrollierten DB-First-Release auf
-`nora-crm-prod` angewendet und live verifiziert: Spalten/Typen, 12 CHECKs,
-Unique-Dedupe-Index, RLS mit Admin-Only-Policy, keine `UPDATE`/`DELETE`-Grants
-für Anwendungsrollen, beide RPCs `SECURITY DEFINER` mit leerem `search_path`.
-Nicht-Admin-Aufruf des Lesemodells liefert real `42501 forbidden`,
-Duplikat-Ingest liefert `stored = false` ohne zweite Zeile. Ursprünglicher
-Befund unten zur Nachvollziehbarkeit.
-
-`20260904120000_nora_email_delivery_observability.sql` ist geschrieben und
-review-fest, aber in der erstellenden Session lief **kein** Apply: Docker war
-nicht verfügbar (`npx supabase db reset --local` daher unmöglich), und ein
-Apply gegen `nora-crm-prod` war ausdrücklich ausgeschlossen. Der im Repo
-vorhandene `pgsql-ast-parser` deckt diesen DDL-/plpgsql-Dialekt nicht ab und
-taugt nicht als Ersatzprüfung.
-
-**Vor dem Release zwingend:** Migration gegen eine echte Postgres-Instanz
-anwenden (lokaler Supabase-Stack oder ein Supabase-Branch), danach
-`ingest_email_delivery_event()` und `employee_email_delivery_status()` real
-aufrufen — inklusive Duplikat-Ingest, unbekanntem Empfänger und einem
-Nicht-Admin-Aufruf des Lesemodells (muss `42501` liefern).
-
-### V1C-A.2 Produktions-SMTP-Transport nur indirekt beurteilt
-
-**Status: CLOSED (2026-09-04)** — durch den realen E2E belegt: eine echte
-Nora-Zugangs-E-Mail lief über Brevo und erzeugte `request` und `delivered` mit
-Brevo-Message-ID. Der Transport ist damit nachgewiesen, nicht mehr nur
-erschlossen. Ursprünglicher Befund unten zur Nachvollziehbarkeit.
-
-Die SMTP-Konfiguration von Supabase Auth ist über die verfügbaren
-Management-/MCP-Werkzeuge **nicht lesbar**. Aus den Auth-Logs von
-`nora-crm-prod` (2026-09-04) sind sieben erfolgreiche `/invite`- bzw.
-`/recover`-Anfragen ohne eine einzige `429`-Antwort belegt, davon drei
-innerhalb von zwei Minuten — das liegt weit über dem Limit des
-Supabase-Standardversands und spricht stark für einen aktiven Custom-SMTP.
-**Das ist eine Schlussfolgerung, kein Nachweis.** Welcher Anbieter, welcher
-Absender und welcher Anzeigename tatsächlich konfiguriert sind, ist aus den
-Logs nicht erkennbar.
-
-**Manuell zu prüfen:** Supabase Dashboard → Project Settings → Authentication →
-SMTP Settings (Anbieter, Host, Absender `zugang@nora.ergart.de`, Anzeigename
-`Nora`) sowie Authentication → Email Templates (Betreffzeilen, siehe
-`18-email-delivery-observability.md` Abschnitt 5 und 7).
-
-### V1C-A.3 Edge Function nicht deployt, Brevo-Webhook nicht angelegt
-
-**Status: CLOSED (2026-09-04)** — `brevo-email-events` ist als Version 1 mit
-`verify_jwt = false` deployt, `BREVO_WEBHOOK_TOKEN` gesetzt, der
-Brevo-Outgoing-Webhook aktiv und der Pfad End-to-End belegt. Ursprünglicher
-Befund unten zur Nachvollziehbarkeit.
-
-`brevo-email-events` existiert nur im Repository. Weder ist die Function
-deployt, noch ist `BREVO_WEBHOOK_TOKEN` gesetzt, noch existiert ein
-Brevo-Webhook. Bis dahin erreicht Nora kein einziges Zustellereignis. Ablauf
-und Reihenfolge: `18-email-delivery-observability.md` Abschnitt 7.
-
-### V1C-A.7 `mail_kind` bleibt im echten Betrieb `unknown`
-
-**Status: OPEN (2026-09-04) — Ursache eingegrenzt, entscheidbar beim nächsten
-echten Versand. Blockiert V1C-B NICHT.**
-
-Im realen Production-E2E wurden beide Zeilen mit `mail_kind = unknown`
-gespeichert. `classifyMailKind()` vergleicht den Betreff der Brevo-Nutzlast
-gegen `MAIL_KIND_SUBJECTS` (`einladung zu nora`,
-`persönliches passwort für nora einrichten`); getroffen hat keine der beiden
-Needles. Das ist der bewusst entworfene degradierte, aber ehrliche Pfad — die
-Zustellwahrheit (`EMAIL_ACCEPTED` / `EMAIL_DELIVERED`), die Korrelation und das
-Lesemodell sind davon **nicht** betroffen.
-
-**Ursachenanalyse (V1C-B).** Nicht abschließend bestimmbar mit den vorhandenen
-Belegen, weil der Betreff bewusst nirgends gespeichert wird und weder Auth-
-noch Function-Logs ihn enthalten. Zwei Ursachen bleiben möglich:
-
-- **A — Betreff-Drift.** Der gehostete Auth-Betreff weicht von
-  `supabase/config.toml` ab. Das Repository enthält **keine** CI, die
-  `supabase config push` ausführt; die Dashboard-Betreffzeilen sind reine
-  Handkonfiguration. Das macht A zur wahrscheinlicheren Ursache.
-- **B — Kein `subject` in der Nutzlast.** Brevo liefert für SMTP-Relay-
-  Ereignisse kein Betreff-Feld. Dann ist `unknown` dauerhaft korrekt.
-
-**Kein Matcher wurde in V1C-B geändert.** Ein Matcher auf geratene
-Standardbetreffzeilen („Reset Your Password") erzeugte eine selbstbewusst
-falsche statt einer ehrlich degradierten Antwort; die Tests halten fest, dass
-solche Betreffzeilen **nicht** gemappt werden.
-
-**Entscheidbar gemacht:** die Edge Function protokolliert bei `unknown` genau
-ein inhaltsfreies Bit — `subject_present: true|false`. `false` ⇒ Ursache B (dann
-schließen). `true` ⇒ Ursache A, Betreff im Dashboard angleichen
-(→ Authentication → Email Templates). Der Betreff selbst wird weiterhin nirgends
-geloggt oder gespeichert.
-
-**Warum V1C-B trotzdem ausgeliefert werden kann:** die Zustell-UI rendert die
-Mailart gar nicht (Best-Effort-Korrelation trägt keine Aussage über *einen*
-Sendeversuch) und fasst ohnehin auf eine Zeile „Letzte E-Mail-Zustellung"
-zusammen. `mail_kind` ist damit heute ohne Produktwirkung.
-
-### V1C-B.1 PARKED — deterministische Sendekorrelation
-
-**Status: PARKED (2026-09-04) — bewusst nicht in V1C-B**
-
-Solange Supabase Auth über reines SMTP versendet, kann Nora der Nachricht keinen
-eigenen Korrelationswert mitgeben; Ereignisse werden über die Empfängeradresse
-zugeordnet (`correlation_confidence = best_effort`). Deterministisch würde es
-erst über den Supabase **Send Email Hook**: Supabase erzeugt den sicheren Link,
-Nora versendet selbst über die Brevo-API mit eigener Korrelations-ID bzw. Tags.
-
-Das ersetzt den Auth-Mailversand, ist eine eigene Architekturentscheidung mit
-eigenem Risiko und war ausdrücklich **kein** Teil dieser Welle — ebenso wenig
-wie eine Mail-Warteschlange, ein Sendeversuchs-Subsystem, Öffnungs-/Klick-
-Tracking oder ein User Lifecycle Admin V1.
-
-Erst danach dürfte eine Oberfläche „**diese** Einladung wurde zugestellt" sagen.
-
-### V1C-B.2 PARKED — feinere Unterscheidung innerhalb `undeliverable`
-
-**Status: PARKED (2026-09-04)**
-
-Das Lesemodell `employee_email_delivery_status()` fasst Hard Bounce, Blocked und
-Invalid zu `undeliverable` zusammen. Die UI zeigt deshalb einen Hinweis
-(„E-Mail-Adresse prüfen") statt „Zustellung blockiert" / „E-Mail-Adresse
-ungültig". Der nächste Schritt des Administrators ist in allen drei Fällen
-derselbe; eine feinere Unterscheidung wäre eine eigene Erweiterung des
-Lesemodells.
-
-### V1C-A.8 Edge-Log-Stream für erfolgreiche Aufrufe unvollständig
-
-**Status: OPEN (2026-09-04) — Beobachtbarkeitslücke, kein Funktionsfehler**
-
-Im E2E-Fenster (15:08–15:35 UTC) enthielt `function_edge_logs` **keine**
-Einträge für die erfolgreichen Brevo-Aufrufe von `brevo-email-events` — auch
-der auslösende `POST /users` fehlt, während `GET`/`OPTIONS` derselben Minute
-protokolliert sind. Die eigenen 401-Smoke-Tests von 15:03–15:04 sind dagegen
-vollständig vorhanden.
-
-Die gespeicherten Zeilen sind der belastbare Beweis, dass der Webhook
-authentifiziert und erfolgreich ingestiert hat: nur `service_role` besitzt
-`INSERT`, und der einzige Schreibpfad ist die SECURITY-DEFINER-RPC. Eine
-`200`-Antwort ließ sich aber **nicht** aus dem Log belegen. Wer künftig
-Zustellprobleme untersucht, sollte sich nicht auf diesen Log-Stream verlassen,
-sondern auf `email_delivery_events` und die Webhook-Historie in Brevo.
-
-### V1C-A.4 Deterministische Korrelation bleibt offene Architekturfrage
-
-**Status: PLANNED FOLLOW-UP**
-
-Solange Supabase Auth über SMTP versendet, ist die Zuordnung eines
-Provider-Ereignisses zu einem konkreten Sendeversuch `BEST_EFFORT` (Zuordnung
-über die Empfängeradresse). Deterministisch wäre sie über den Supabase **Send
-Email Hook** mit anschließendem Nora-eigenem Versand über die Brevo-API und
-eigener Korrelations-ID. Das ersetzt den Auth-Mailversand und ist eine eigene
-Architekturentscheidung mit eigenem Risiko — bewusst nicht Teil von V1C-A.
-
-### V1C-A.5 Privilegierte Purge für Test-/Fake-Benutzer fehlt noch
-
-**Status: PLANNED FOLLOW-UP**
-
-`email_delivery_events` ist append-only, weil keine Anwendungsrolle ein
-`UPDATE`- oder `DELETE`-Grant besitzt. Der Tabelleneigentümer behält es — eine
-spätere privilegierte `SECURITY DEFINER`-Purge-Funktion (User Lifecycle Admin
-V1) kann alle Ereignisse eines Benutzers restlos entfernen, damit eine
-vollständige Test-Benutzer-Löschung keine personenbezogenen Fragmente
-hinterlässt. **In V1C-A bewusst nicht implementiert.**
-
-Davon getrennt: das Offboarding echter Mitarbeiter. Dass historische
-Betriebs-/Sicherheitsereignisse gelöscht gehören, ist nicht vorausgesetzt;
-vorbereitet ist nur, dass Referenz und personenbezogener Snapshot getrennt von
-der nicht-personenbezogenen technischen Historie entfernt werden könnten.
-Aufbewahrungsfristen sind in dieser Welle **nicht** entschieden.
-
-### V1C-A.6 `public.sales.id` ist `GENERATED BY DEFAULT`
-
-**Status: OPEN (2026-09-04, LOW)**
-
-Read-only in `nora-crm-prod` nachgewiesen: `sales.id` hat `attidentity = 'd'`
-(`GENERATED BY DEFAULT AS IDENTITY`, Sequenz `public.sales_id_seq`). Die Sequenz
-läuft nur vorwärts und wird durch ein `DELETE` nicht zurückgesetzt, und kein
-Nora-Codepfad vergibt eine explizite Id — eine weiche `employee_sale_id` in
-`email_delivery_events` kann also praktisch nicht auf einen anderen Mitarbeiter
-zeigen. **Strukturell garantiert ist das nicht:** eine von Hand gesetzte Id wäre
-möglich. `recipient_email_snapshot` ist die Gegenprobe, mit der eine
-Fehlzuordnung erkennbar bliebe.
-
-Mögliche Härtung (`alter table public.sales alter column id set generated
-always`) betrifft eine bestehende Tabelle und mehrere Testfixtures und wäre eine
-eigene Entscheidung — nicht Teil von V1C-A.
+| sauber | `audit_events` (Wave 0), `email_delivery_events`, `number_counters`, `operation_errors` |
+| **read-only für `authenticated`, aber truncatable** — gleiche Form wie der `audit_events`-Bug | `configuration`, `google_calendar_connections`, `google_calendar_events` |
+| truncatable, besitzt aber ohnehin `DELETE` (RLS-Bypass bleibt relevant) | `checklist_*`, `companies`, `contact_notes`, `contacts`, `deal_notes`, `deals`, `favicons_excluded_domains`, `sales`, `saved_text_snippets`, `tags`, `tasks` |
+
+Zusätzliche Repo-/Production-Drift: `supabase/schemas/06_grants.sql` deklariert `alter default privileges … grant all on tables` (lokal `arwdDxtm`), Production vergibt nur `Dxtm`; die Verengung ist in keiner Repo-Migration enthalten. **Ein lokaler `db reset` reproduziert Production nicht** — lokal erhält `authenticated` auf neuen Tabellen mehr Rechte als live.
+
+Vorschlag für eine eigene Welle: (1) `configuration`, `google_calendar_connections`, `google_calendar_events` auf `revoke all` → gezielter `grant` bringen; (2) entscheiden, ob die Default-Privilegien dauerhaft korrigiert und im Repo festgeschrieben werden; (3) entscheiden, ob `service_role` `TRUNCATE` auf `audit_events` behält; (4) `public.init_state` mitnehmen (trägt wirkungslose DML-Grants für `anon`/`authenticated`). Ablauf wie Wave 0: lokaler Replay, Verhaltensnachweis pro Rolle, Production-Apply, Live-Verifikation.
+
+### A.2 Session-Bindung der RLS ist fail-open bei fehlendem Leserecht auf `auth.sessions`
+
+**Status: `ACCEPTED LIMITATION`, W6-Empfehlung fail-closed** (W5, 2026-09-06)
+
+`nora_private.jwt_session_is_live()` antwortet mit `WARNING` „live", wenn `postgres` `auth.sessions` nicht lesen kann (Vor-W5-Verhalten). In Production ist das Privileg vorhanden (direkt **und** über `pg_read_all_data`); der Zweig ist von keinem Aufrufer auslösbar; der degradierte Zustand = Vor-W5-Baseline (Deaktivierte bleiben über `sales.disabled` verweigert). Restrisiko: das eigene unverfallene Token eines gerade reaktivierten Mitarbeiters (≤ 3600 s). Beobachten: Logs auf „session binding inactive". **W6-Empfehlung:** Claim vorhanden + Sitzung nicht prüfbar → DENY, plus Privileg-Monitor.
+
+Defense-in-Depth, ebenfalls für W6 vorgemerkt: der Helfer prüft nur die **Existenz** der Sitzung (kein `user_id = sub`-Abgleich); ein malformed `session_id`-Claim fällt auf den No-Claim-Pfad zurück. Beides über signierte GoTrue-Tokens nicht erreichbar.
+
+### A.3 Restlaufzeit eines alten JWT nur durch RLS gedeckt
+
+**Status: `ACCEPTED LIMITATION`** — ein JWT bleibt bis `exp` kryptografisch gültig; PostgREST akzeptiert es, die Datenbank verweigert (deaktiviert und/oder Sitzung gelöscht). Autorisierungs-, keine Authentifizierungsentwertung. Kein Pfad in Nora liefert einem solchen Token Daten.
+
+### A.4 `public.insert_audit_event` bleibt für `service_role` ausführbar
+
+**Status: `PLANNED FOLLOW-UP`** — Aufrufer sind die Google-Kalender-Edge-Functions (Actor `System`). Vorbestehende generische Schreibfähigkeit; die `users`-Function nutzt sie seit W3 nicht mehr. Kandidat: schmale Writer je Function.
+
+### A.5 401-Antworten der Edge Functions tragen JOSE-Wortlaut
+
+**Status: `OPEN (LOW)`** — `_shared/authentication.ts` gibt den Fehlertext der JOSE-Bibliothek zurück (z. B. „JWSInvalid: …"). Keine Daten, aber technisches Vokabular. Auf neutralen Text reduzieren.
+
+### A.6 `record_operation_error` weist die bestehenden camelCase-Operationstypen ab
+
+**Status: `OPEN`, vorbestehend (bemerkt in W4)** — `public.record_operation_error` akzeptiert nur `^[a-z][a-z0-9_.]*$`; die Katalogtypen `quickCapture.createCase`, `customer.createWithContact`, … werden seit jeher mit `invalid operation_type` abgewiesen — technische Fehlschläge dieser Operationen landen nie in `operation_errors` (der Recorder ist best-effort und schweigt). W4/W5 nutzen deshalb `employee.change_login_email` / `employee.offboard`. Eigene Folgewelle: Katalog oder Check-Constraint anpassen, Suite ergänzen.
+
+### A.7 `public.sales.id` ist `GENERATED BY DEFAULT`
+
+**Status: `OPEN (LOW)`** (V1C-A.6) — eine handgesetzte Id wäre möglich; praktisch zeigt eine weiche `employee_sale_id` in `email_delivery_events` nie auf einen anderen Mitarbeiter (Sequenz nur vorwärts, kein Codepfad setzt Ids), `recipient_email_snapshot` ist die Gegenprobe. `GENERATED ALWAYS` wäre eine eigene Entscheidung an einer bestehenden Tabelle.
+
+## B. Mitarbeiter-Lifecycle (offen nach W1–W5)
+
+Aktuelle Architektur: `19-user-lifecycle-architecture.md` (Roadmap in §17, Einschränkungen in §16).
+
+- **W6 Hard-Delete-Executor** für unreferenzierte Test-/Fake-Konten — `PLANNED DOMAIN WAVE`, nicht begonnen. Die Datenbankbarriere (W2) steht, die Preview (W5) zählt die sechs Referenzen; Purge von `email_delivery_events` und Behandlung der Auth-Identität sind Teil des Entwurfs. Umfang nicht entschieden.
+- **W9 SQL-Verifikationssuiten in CI** — `PLANNED FOLLOW-UP`. Die kanonische Sequenz (`07-agent-change-checklist.md`) läuft weiterhin nur lokal; `rbac_rls_first_admin_parallel_runner.ps1` hat einen bekannten Windows-Regex-Bug (Vorbedingung „sales must be empty" wird falsch geparst) — Workaround: die enthaltene SQL manuell mit zwei parallelen `psql`-Sessions nachbilden, das Skript nicht nebenbei patchen.
+- **Dialog „Zugang beenden" nennt das Ziel nur über Anmeldeadresse und Status** — `OPEN (UX)`. Im Live-Beweis 2026-09-06 traf der Product Owner damit einen echten Administrator statt des Testkontos (sofort reaktiviert; Sitzungen blieben gelöscht → Neuanmeldung). Kein Codefehler. Härtung: Name im Dialogkopf, zusätzliche Bestätigung bei Admin-Zielen.
+- **Rollenwechsel wird in der Benutzer-UI nicht als eigener sichtbarer Vorgang bestätigt** — `OPEN (LOW, UX)`; im W3-Live-Beweis entstanden vier Rollenwechsel, wo zwei beabsichtigt waren.
+- **`invalid_payload` → Rollen-Fehlertext** in `SalesEdit` (nur noch bei echten ungültigen Payloads erreichbar) — `OPEN (LOW, UX)`.
+- **GoTrue verbirgt die Guard-Verweigerung** (`500 unexpected_failure` statt `NORA_EMAIL_CHANGE_NOT_AUTHORIZED`); der Fall wird als `email_change_provider_failed` gemeldet, nichts verändert — nur Diagnose, keine Korrektheit betroffen. `ACCEPTED LIMITATION`.
+- **Selbständerung der Anmeldeadresse blockiert** (Lockout-Schutz) — ein einzelner Administrator braucht einen zweiten oder die technische Betreuung; eine bestätigungsbasierte Selbständerung wäre eine spätere Welle. `PARKED`.
+- **Selbstbedienungs-Änderung über GoTrue (`PUT /auth/v1/user`)** scheitert an der Datenbank (`500` beim Bestätigen) — gewollt, aber nicht benutzerfreundlich formuliert; es gab nie eine Nora-Oberfläche dafür. `ACCEPTED LIMITATION`.
+- **E-Mail-Drift wird nur erkannt, nicht repariert** (`identityConsistency = inconsistent`, keine Aktion im Panel; kein Runbook, da kein Production-Fall). `ACCEPTED LIMITATION`.
+- **Neue Einladung nach E-Mail-Änderung ist nicht atomar** (`email_change_invitation_failed`, `emailChanged: true`; Administrator nutzt „Einladung erneut senden"). `ACCEPTED LIMITATION`.
+- **Bann-Ausfall nach erfolgreichem DB-Schritt** beim Offboarding meldet `employee_access_sync_incomplete` (`offboarded: true`); Konvergenz über Retry oder „Zugangsstatus synchronisieren", keine Automatik. `ACCEPTED LIMITATION`.
+- **Kein „Sitzungen beenden" für bereits Deaktivierte in der Oberfläche** (der Executor deckt den Fall; die Session-Bindung entwertet Restsitzungen ohnehin). `ACCEPTED LIMITATION`.
+- **Aufgaben-Follow-up nur als Zähler** (keine Desktop-Aufgabenliste mit Route); Umverteilung bleibt normales Bearbeiten. `ACCEPTED LIMITATION`.
+- **`x-nora-operation-id` aus dem Browser** erreicht die `users`-Function nur für W4/W5-Aktionen (Operation Manager); PATCH/Invite werden serverseitig geprägt — additive Verbesserung. `PLANNED FOLLOW-UP`.
+- **Retention/Anonymisierung personenbezogener Audit-Metadaten** (`invitee_email`, `employee_email`, `changes.email`) — `PARKED`, siehe `13-crm-audit-retention.md`.
+- **`user.invited` ist nicht in derselben Transaktion wie die Rolle** (GoTrue + Executor + Record-RPC; bei Audit-Fehler `audit_write_failed`, Retry meldet `already_exists`) — bewusst kein verteiltes Commit. `ACCEPTED LIMITATION`.
+- **Deaktivierter Admin, Rollenwechsel** (LOW-W3-UX-Frage) — `OPEN (LOW)`.
+- **FakeRest kennt die Datenbank-Guards nicht** (Demo hat keine Autorisierung auf Datenebene) — dokumentierte Demo-Lücke, `ACCEPTED LIMITATION`; eine vollständige FakeRest-Autorisierungsparität wäre eine eigene Welle.
+- **Produktionsstand nach W5** (Kontext, kein Bug): 3 `user.offboarded`-Zeilen (1× `sales 2` Zwischenfall, 2× Testkonto `sales 4`); Testkonto-Anmeldeadresse ist eine unechte Adresse außerhalb der Firmendomain; `sales 2` aktiv, ohne Sitzungen bis zur nächsten Anmeldung.
+
+## C. E-Mail-Zustellbeobachtung (V1C)
+
+Vertrag: `18-email-delivery-observability.md`.
+
+- **V1C-A.7 `mail_kind` bleibt im echten Betrieb `unknown`** — `OPEN`, Ursache eingegrenzt (A: Betreff-Drift im Dashboard, B: kein `subject` in der Brevo-Nutzlast). Die Edge Function (v2) protokolliert bei `unknown` ein inhaltsfreies `subject_present`-Bit; es wurde **noch nie ausgelöst**, weil seit dem v2-Deploy keine Nora-E-Mail versendet wurde. Entscheidbar beim nächsten kontrollierten Versand (ausgehende Aktion, braucht Freigabe). Blockiert nichts — die UI rendert die Mailart nicht.
+- **V1C-A.8 Edge-Log-Stream für erfolgreiche Webhook-Aufrufe unvollständig** — `OPEN` (Beobachtbarkeitslücke, kein Funktionsfehler). Zustellprobleme über `email_delivery_events` und die Brevo-Webhook-Historie untersuchen, nicht über `function_edge_logs`.
+- **V1C-A.4 / V1C-B.1 Deterministische Sendekorrelation** (Supabase Send Email Hook + Brevo-API-Versand mit eigener Korrelations-ID) — `PARKED`; ersetzt den Auth-Mailversand, eigene Architekturentscheidung. Erst danach dürfte eine UI „**diese** Einladung wurde zugestellt" sagen.
+- **V1C-B.2 Feinere Unterscheidung innerhalb `undeliverable`** (Hard Bounce / Blocked / Invalid) — `PARKED`; nächster Admin-Schritt ist in allen Fällen derselbe.
+- **V1C-A.5 Privilegierte Purge für Test-/Fake-Benutzer** in `email_delivery_events` — `PLANNED FOLLOW-UP` (Teil des W6-Entwurfs); Aufbewahrungsfristen nicht entschieden.
+- **Weitere Edge Functions im Repo sind nicht deployt** (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) — Kontext, kein Bug; nur `users` (v8) und `brevo-email-events` (v2) sind live. Edge Functions werden nie von Vercel ausgeliefert.
+
+## D. Operationen, Fehler, Feedback
+
+### D.1 Operation Manager — pendente Operationen ohne eigenen TTL
+
+**Status: `ASSESSED — LOW — PLANNED FOLLOW-UP`** — `enforceCapacity()` eviktiert nur nicht-pendente Records; pendente haben keinen Timeout-Lifecycle. Vorbestehend seit Foundation Wave 2; bewusst kein neuer Lifecycle-Status ohne reale Semantik (Falle 37). Bei Bedarf eigene Welle mit explizitem Timeout-Mechanismus. Folge: eine `pending`-Karte lässt sich schließen (blendet nur aus), `retentionSoftCap` ist kein hartes Limit.
+
+### D.2 Notification-UI — offen nach Phase 7B (geplant für 7C)
+
+- Weitere Intents: `deal.update`, `customer.createWithContact`, `contact.convertToCustomer` — je Policy-Eintrag + Controller.
+- Isolierter Task-Retry (Core committed, Aufgabe unter eigenem Idempotency-Scope wiederholen) — braucht eigene Entscheidung; Retry ist nie allein aus `errorCode` ableitbar.
+- Migration der `OPERATION_CATALOG`-Literale, die `DealEdit.tsx` als Pseudo-i18n-Key nutzt.
+- Hardening (LOW): eine vorgegebene `operationId` wird registriert, ohne die tatsächlich vergebene zu prüfen (Falle 38; im ausgelieferten Code nicht erreichbar); `announced`-Set im Announcer ist unbegrenzt.
+- UX-Polish (LOW): langer Vorgangstitel verdrängt den Kundennamen in der Kontextzeile; Hover-Pause wirkt bei offenem Dialog nicht (bewusster Preis des Click-through); ein Schritt-Tab kann bei offenem Quick-Capture-Dialog überlagert werden (funktional folgenlos).
+- Bewusst nicht als Follow-up geöffnet: `drawer-content` (vaul) ist von der modal-aware Regel nicht erfasst (kein Flow betroffen); Prettier-Drift in `providers/fakerest/dataProvider.ts`; Radix-Warnung `Missing Description`; `react-refresh`-ESLint-Warnung bei Provider-Dateien; ein einmaliges Redirect-Race im Demo-Modus nach Quick Capture.
+- Phase 8 oder später: sichtbare IT-Eskalation (`canEscalateToIT`/`publicErrorRef` existieren im Contract, es fehlt der Incident-Workflow), persistente Notification-History, Browser-Push, Ablösung von sonner (bis dahin zwei Feedback-Schichten, jeder Flow gehört genau einer).
+- Kein Live-**Write**-Smoke der Schnellerfassung in Production (kein freigegebener Testdatensatz) — gedeckt durch Browser-Integrationstests und lokale Abnahme; kein Blocker.
+
+### D.3 FakeRest ohne Datenebene-Autorisierung
+
+`NORA_PERMISSION_DENIED` ist in FakeRest strukturell nicht end-to-end testbar (nur `canAccess` in der UI). `PLANNED FOLLOW-UP`, eigene größere Welle.
+
+### D.4 Legacy-Regex in `normalizeCrmError`
+
+Bleibt als Fallback bestehen, bis nachgewiesen ist, dass alle relevanten Production-Aufrufer `DETAIL` liefern. `PLANNED FOLLOW-UP`.
+
+## E. PWA und Motion
+
+- **Reduced-Motion-Dauer der Update-Choreografie** — `PARKED` (Product-Frage): bei `prefers-reduced-motion: reduce` steht die Bewegung, die Dauer bleibt 8 s. Empfehlung: ~2,5 s und direkt in die ruhige Szene.
+- **Nora Loading Motion System** — `PLANNED DOMAIN WAVE`, nicht begonnen. Zwei identische Spinner-Komponenten (`ui/spinner.tsx`, `admin/spinner.tsx`), ~13 direkte `animate-spin`-Vorkommen, ~45 `Loader2`/`Spinner`-Referenzen in ~25 Dateien, dazu Skeleton/Progress und der PWA-Orb. Empfehlung: zentraler Motion Primitive, beide Spinner darauf umstellen, Inline-Stellen nachziehen; Reduced Motion, Hell/Dunkel, 44-px-Touchziele mit abnehmen.
+- **Live-Browser-Verifikation des PWA-V2-Happy-Path** (alter Tab → „Neue Nora-Version verfügbar" → „Jetzt aktualisieren" → Bestätigung genau einmal → zweites F5 ohne Bestätigung) — `NEEDS RE-VERIFICATION`: beim Release `672ebc76` (2026-09-01) nur per Bundle-Copy-Guard geprüft; der 1B–1C.3-Happy-Path war beim Kanban-Release live bestätigt.
+- Bekannte Plugin-Eigenheiten (LOW, `vite-plugin-pwa`, bewusst offen gelassen): Assessment `nothing` (Worker verschwindet ohne Ersatz — Choreografie ohne Exit, theoretisch); kontrollierte Nicht-Klick-Tabs laden nach Fremdaktivierung sofort neu; ein < 60 s nach Registrierung gefundener Worker löst im unkontrollierten Dokument kein `onNeedRefresh` aus. Der State Contract wird dafür nicht wieder geöffnet.
+- **Multi-Tab:** aktualisiert ein Benutzer in einem Tab, laden alle anderen Nora-Tabs ebenfalls neu — ungespeicherte Eingaben dort gehen verloren. Bewusst ohne Cross-Tab-Architektur. `ACCEPTED LIMITATION`.
+- **Nach jedem Deployment liefert der Service Worker beim ersten Aufruf noch den Vorgänger-Build** — gewollt (Prompt-Modus); Release-Smokes müssen „Jetzt aktualisieren" auslösen oder in frischem Profil testen (`07-agent-change-checklist.md`).
+
+## F. Design-System (projektweit)
+
+- **Kontrast der Nora-Primäraktion unterschreitet AA** — `OPEN (LOW, projektweit)`: `.nora-primary-action` Weiß auf `--nora-brand` (`#ff3b1f`) misst 3,56:1 (< 4,5:1), in Hell und Dunkel identisch. Empfehlung: Markenton für weiße Textflächen projektweit absenken oder `--nora-brand-on-white` einführen, dann alle Primäraktionen nachmessen. PO-Entscheidung (Markenfarbe).
+- **`.nora-primary-action` unterschreitet das 44-px-Touch-Minimum** — `OPEN (LOW, projektweit)`: `@apply min-h-10` landet in Tailwinds `utilities`-Layer und schlägt `min-h-11`/`min-h-12` am selben Element sowie jede `components`-Regel (40 px gemessen). Vermutlich weitere Stellen betroffen (`ContactCreateSheet.tsx`, `DealProductionChecklistSection.tsx`), nicht nachgemessen. Nur im Systemereignis über eine ungelayerte Regel gelöst. Empfehlung: `min-h-10` entfernen, Höhe über `--nora-touch-min`, Aufrufstellen nachmessen.
+- **Dark-Mode der öffentlichen Zugangs-Shell** — Tokens vorbereitet (`--nora-access-*`), kein `.dark`-Block. `PLANNED FOLLOW-UP`.
+- **Echter Screenreader-Lauf und echte Reduced-Motion-Browsereinstellung** für Onboarding (V1B) und PWA-Fläche — nur per injizierter Stylesheet-Regel bzw. Code-Review gedeckt. `NEEDS RE-VERIFICATION`.
+- **Pflicht-Stern an Labels** auf der Mitarbeiterfläche ist react-admin-Standard — Folgeentscheidung, falls unerwünscht (projektweit). `PARKED`.
+
+## G. Kunden, Kontakte, Vorgänge, Aufgaben
+
+### G.1 Kundenanlage — Findings aus Customer Create Speed & Clarity (2026-09-01)
+
+Beobachtet, bewusst nicht in dieser Wave behoben:
+
+1. **Produktions-Datenhygiene `companies.country`** (LOW, Daten): Bestand enthält `"Deutschland "` (mit Leerzeichen), `"DE"`, `"Deutschland"` und `NULL`; neue Kunden erhalten konsistent `"Deutschland"`. Ein einmaliges, vom Product Owner freigegebenes Read-Then-Update der abweichenden Bestandswerte wäre sinnvoll — kein Constraint, Freitext bleibt Freitext.
+2. **Demo-Seed `state_abbr = "NW"` vs. Produktion/PO `"NRW"`** (LOW, Demo): für Demo-Konsistenz auf „NRW" angleichen (`05-demo-data-guidelines.md`).
+3. **Ansprechpartner-Unterabschnitt auf `/kunden/create`** (MEDIUM, UX): E-Mail-Liste trägt das Label „Persönliche Angaben", Telefon-/Link-Listen sind unbeschriftet (drei ⊕-Buttons). Gehört in eine Contact-Wave (`CustomerContactCaptureInputs.tsx`).
+4. **Privatperson: Namensfelder stehen ganz unten** (MEDIUM, UX): Vor-/Nachname ist bei `individual` das wichtigste Feld — Slot direkt unter der Kundenart wäre der saubere Fix (strukturell).
+5. **Leerer rechter Rand auf `/kunden/create`** (LOW, Layout): `lg:mr-72` reserviert Platz für ein nicht vorhandenes Aside; bewusste `max-w`-Regel im Design System nötig.
+6. **E-Mail/Telefon erfordern erst einen ⊕-Klick** (LOW, UX, geteiltes `ArrayInput`-Muster von Kunden und Kontakten) — nicht isoliert ändern.
+
+### G.2 Geplante Domain-Waves
+
+- **Privatperson/Firma-Unterscheidung in Quick Capture** — `PLANNED FOLLOW-UP`: die Schnellerfassung erzeugt Kunden ohne `customer_kind`-Auswahl (Default `business`); die „Diese Person ist selbst Ansprechpartner"-Option fehlt dort bewusst (Self Contact Wave).
+- **Customer-Archive-/Soft-Delete-Lifecycle** (`ArchiveCustomer`/`RestoreCustomer`) — `PLANNED FOLLOW-UP`, kein Zeitdruck. Domänenregel steht (INAKTIV ≠ NICHT-EXISTENT, W2); bisher nur die Self-Contact-Delete-Invariante abgesichert; kein generisches Archiv-Framework.
+- **Legacy-Spalten-Cleanup** (`companies.linkedin_url`, `website`, `context_links`, `phone_number`, `contacts.linkedin_url`) — `PLANNED FOLLOW-UP`, kein Zeitdruck; erst nach Übergangszeit und Bestätigung, dass keine Integration (CSV-Import, alte Clients) mehr schreibt.
+- **Mobile „Aufgaben"-Bereich auf der Kundenakte** — der Tab existiert nur im Desktop-`CompanyShow`; `CompanyShowContentMobile` hat keine Tab-Struktur. `PLANNED FOLLOW-UP`.
+- **`deals.contact_ids bigint[]`** als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen-/Zeitdimension) — `PLANNED DOMAIN WAVE`, nicht designt.
+- **Kontakterstellung UI-Polish**: förmliche Rollen-UX-Abnahme nach `12-role-ux-acceptance.md` nie durchlaufen (technisch deployed). `NEEDS RE-VERIFICATION`.
+- **Application Queries / Read Models** für künftige KI-/Automatisierungs-Konsumenten (Falle 36) — Richtung dokumentiert, nichts implementiert.
+
+## H. Bekannte, nicht untersuchte Themen
+
+Aus einer frühen Analyse benannt, seither **nicht** in einer Session verifiziert oder detailliert — vor Bearbeitung gegen aktuellen Code/Produktion prüfen:
+
+- Attachment-Bucket-Konfiguration (öffentlicher Bucket laut Lifecycle-Reconnaissance 2026-09-04; keine Härtung entschieden)
+- Rollen-Cache-Verhalten im Frontend
+- Audit-Retention-/Löschstrategie (`13-crm-audit-retention.md` beschreibt das Modell; kein automatischer Purge)
+- `supabase/config.toml` enthält lokal weiterhin `enable_signup = true` (steuert Produktion nicht; dort ist die Selbstregistrierung seit 2026-09-04 deaktiviert) — in einer kleinen Welle nachziehen.

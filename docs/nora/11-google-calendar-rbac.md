@@ -234,7 +234,7 @@ auth.users.id
 | `nora_private.has_role` | postgres | authenticated, service_role | nein | Matrix-Check für RLS |
 | `nora_private.can_write` | postgres | authenticated, service_role | nein | office/admin für RLS |
 | `nora_private.is_admin` | postgres | authenticated, service_role | nein | admin für RLS |
-| `public.set_sales_role_by_admin` | postgres | **service_role** (W1: authenticated entzogen, deprecated) | ja | Delegiert an `apply_sales_role_change` |
+| ~~`public.set_sales_role_by_admin`~~ | — | — | — | **gelöscht in User Lifecycle W2 (2026-09-05)**; einziger Lifecycle-Pfad ist `public.set_sales_access_by_executor` (nur `service_role`, siehe `19-user-lifecycle-architecture.md`) |
 | `public.set_sales_access_by_executor` | postgres | **service_role** | ja | W1-Executor: verifizierter Actor, Selbstschutz, delegiert an `apply_sales_role_change` |
 | `nora_private.guard_last_active_admin` | postgres | (Trigger) | nein | W1: nie null aktive Admins |
 | `nora_private.active_admin_count` | postgres | postgres only | nein | W1: die eine Definition von „aktiver Admin" |

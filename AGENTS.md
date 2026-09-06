@@ -18,6 +18,9 @@ Bevor Code geändert wird, muss der Agent diese Datei und die referenzierten Dok
 10. `docs/nora/11-google-calendar-rbac.md`
 11. `docs/nora/12-role-ux-acceptance.md` (Rollen-UX-Abnahmeprotokoll)
 12. `docs/nora/17-known-issues-and-planned-waves.md` (offene Bugs, geplante Waves)
+13. `docs/nora/19-user-lifecycle-architecture.md` (aktuelle Architektur des Mitarbeiter-/Benutzer-Lifecycle — Pflicht bei allen Änderungen an `sales`, `users` Edge Function, Auth, Audit `user.*`)
+
+Historische Release-Evidenz (RC-SHAs, Migrationen, Live-Beweise) liegt im Archiv `docs/nora/releases/` und muss für die Orientierung **nicht** gelesen werden. Das Produkt-Changelog (`docs/nora/20-product-changelog.md`) wird bei benutzerspürbaren Änderungen ergänzt. Dokument-Zuständigkeiten: `docs/nora/16-current-state.md` Abschnitt 0; Dokumentations-Abschlusscheck: `docs/nora/07-agent-change-checklist.md`.
 
 Wenn eine Änderung fachliche Entscheidungen berührt, muss der Agent `docs/nora/06-decision-log.md` ergänzen oder einen neuen Decision-Eintrag vorschlagen.
 

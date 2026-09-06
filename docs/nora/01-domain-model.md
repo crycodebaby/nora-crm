@@ -1,6 +1,10 @@
 # 01 – Fachliches Domänenmodell
 
+Stand: 2026-09-06. Dieses Dokument beschreibt das **aktuelle** Fach-/Domänenmodell kompakt; Begründungen stehen in `06-decision-log.md`, Fallen in `03-data-model-guardrails.md`, der Mitarbeiter-Lifecycle im Detail in `19-user-lifecycle-architecture.md`.
+
 ## Zentrale fachliche Unterscheidung
+
+Kunde ≠ Kontakt ≠ Vorgang ≠ Aufgabe.
 
 Kunde ist nicht Vorgang.
 
@@ -36,9 +40,10 @@ Kunde
 | Ansprechpartner | `contacts` | Person beim Kunden |
 | Vorgang | `deals` | Anfrage, Auftrag, Angebot, Nachfassung |
 | Aufgabe | `tasks` | Rückruf, Besichtigung, Angebot nachfassen |
-| Notiz | `notes` | Kontakt- oder Vorgangsnotiz |
+| Notiz | `contact_notes` / `deal_notes` | Kontakt- oder Vorgangsnotiz; Autor über `sales_id` |
 | Markierung | `tags` | fachliche Kennzeichnung |
-| Kundentyp | `companies.sector` | vorläufig fachlich umgenutzt |
+| Kundentyp | `companies.sector` | vorläufig fachlich umgenutzt (lose Klassifikation); die binäre Kundenart ist `companies.customer_kind` |
+| Mitarbeiter | `sales` (1:1 `auth.users`) | Rolle, Zugang, Anmeldeadresse — siehe „Rollenmodell" unten |
 
 ## Gewünschte Statuslogik für Vorgänge
 
@@ -142,16 +147,22 @@ Vollständige Spezifikation: `docs/nora/11-google-calendar-rbac.md`
 
 Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administrator` ist nur Kompatibilitätsspiegel (`role = admin` ↔ `true`). Teamlisten nutzen **`sales_directory`** (v0.4b.2).
 
-**Mitarbeiter-Lebenszyklus (User Lifecycle W1/W2, 2026-09-05):**
+**Mitarbeiter-Lebenszyklus (Employee Access V1A–V1C, User Lifecycle W1–W5; Stand 2026-09-06).** Vollständige Architektur: `19-user-lifecycle-architecture.md`.
 
 | Fachlich | Technisch | Hinweis |
 |---|---|---|
-| Zugang deaktivieren / Rolle ändern | `users` Edge Function → `set_sales_access_by_executor` | einziger Schreibpfad; Selbstschutz, mindestens ein aktiver Admin |
-| „Wem darf ich neue Arbeit zuweisen?" | `sales_directory` (nur aktive) | Picker in Kunden-, Kontakt-, Vorgangsformular |
+| Zugangsstatus | abgeleitet aus Supabase Auth + `sales.disabled`: `invited` / `active` / `disabled` / `unknown` | nie gespeichert; `unknown` bietet keine Aktion |
+| Mitarbeiter einladen, Einladung erneut senden, Passwort einrichten lassen | `users` Edge Function → GoTrue + Executor | Nora ist einladungsbasiert; keine öffentliche Registrierung |
+| Zugang deaktivieren / reaktivieren / Rolle ändern | `users` Edge Function → `set_sales_access_by_executor` | einziger Schreibpfad; Selbstschutz, mindestens ein aktiver Admin, Auth-Bann wird mitgeführt und verifiziert |
+| Anmeldeadresse ändern | Aktion „E-Mail-Adresse ändern" → `prepare_sales_email_change` → GoTrue → Guard auf `auth.users` | `auth.users.email` ist Master, `sales.email` Spiegel; alte Links werden ungültig; Selbständerung blockiert |
+| Zugang beenden (Offboarding) | Aktion „Zugang beenden" → `offboard_employee_by_executor` | Deaktivieren + alle Sitzungen beenden + `user.offboarded` in einer Transaktion; nichts wird gemailt; Reaktivierung erfordert neue Anmeldung |
+| Offene Zuständigkeiten | `get_employee_dependency_preview` → Block „Offene Zuständigkeiten" in der Mitarbeiterakte | Kunden, Kontakte, offene Vorgänge, offene Aufgaben — blockieren nie, werden gezählt und verlinkt; Notizen sind Urheberschaft, keine offene Arbeit |
+| „Wem darf ich neue Arbeit zuweisen?" | `sales_directory` (nur aktive) + Trigger `guard_active_assignment` | Picker `SalesAssignmentInput`; Neuzuweisung an Deaktivierte wird serverseitig abgelehnt |
 | „Wer war zuständig / wer hat das geschrieben?" | `sales_identities` (alle, inkl. `disabled`) | Namen auf bestehenden Notizen, Vorgängen, Akten, im Aktivitätslog und Export |
-| Mitarbeiter löschen | nur unreferenzierte Zeilen, nur privilegierter Pfad (künftiger Executor) | sechs `NO ACTION`-FKs blockieren jede referenzierte Identität; Browser-Rollen nie |
+| Wer hat das entschieden? | `audit_events` `user.*` mit echtem Admin-Actor, stabiler Mitarbeiter-Entity, Operation-ID | `13-crm-audit-retention.md` |
+| Mitarbeiter löschen | kein unterstützter Pfad; nur unreferenzierte Zeilen wären für einen künftigen kontrollierten Executor (W6) löschbar | sechs `NO ACTION`-FKs blockieren jede referenzierte Identität; Browser-Rollen nie |
 
-Ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**. Domänenregel: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — deaktivierte Mitarbeiter behalten ihren echten Namen auf allem Bestehenden und verschwinden nur aus Auswahllisten für Neues.
+Ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**. Domänenregel: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — deaktivierte Mitarbeiter behalten ihren echten Namen auf allem Bestehenden und verschwinden nur aus Auswahllisten für Neues. Identität (Anmeldeadresse), Zugang (aktiv/deaktiviert) und Rolle sind drei getrennte Fakten. Der Datenzugriff eines Mitarbeiters ist an eine lebende Auth-Sitzung gebunden.
 
 ## Änderungshistorie / Audit (Welle v0.3l)
 

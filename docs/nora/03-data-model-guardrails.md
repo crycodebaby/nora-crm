@@ -1,5 +1,7 @@
 # 03 – Datenmodell-Guardrails
 
+Dieses Dokument hält **durable Invarianten und technische Guardrails** fest — Regeln, die unabhängig von einzelnen Releases gelten. Release-Evidenz (SHAs, Testzahlen, Live-Beweise) gehört nicht hierher, sondern ins Archiv (`releases/`); Begründungen stehen in `06-decision-log.md`; der Mitarbeiter-Lifecycle als Ganzes in `19-user-lifecycle-architecture.md`.
+
 ## Oberstes Ziel
 
 Doppelte Datenhaltung und rekursive Modellfehler vermeiden.
@@ -364,9 +366,9 @@ ERROR-Lint), kein Beweis für einen Exploit — und kein Beweis für
 Harmlosigkeit. Beide Richtungen müssen belegt werden.
 ```
 
-`public.init_state` und `public.sales_directory` sind verifizierte, bewusste Ausnahmen mit geprüfter minimaler Datenprojektion — siehe `17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28" und `06-decision-log.md` „2026-08-28 – Intentional privileged read views". Für diese beiden Views gilt zusätzlich: Änderungen an Projektion, Grants, zugrunde liegender RLS oder `security_invoker` erfordern eine neue Security-Bewertung, keine Wiederverwendung der alten Einstufung.
+`public.init_state` und `public.sales_directory` sind verifizierte, bewusste Ausnahmen mit geprüfter minimaler Datenprojektion — siehe `06-decision-log.md` „2026-08-28 – Intentional privileged read views" (Einzelbewertungen im Archiv `releases/2026-08.md`, Anhang „Security Advisor Findings — assessed 2026-08-28"). Für diese beiden Views gilt zusätzlich: Änderungen an Projektion, Grants, zugrunde liegender RLS oder `security_invoker` erfordern eine neue Security-Bewertung, keine Wiederverwendung der alten Einstufung.
 
-Die vom Advisor gemeldeten ausführbaren `SECURITY DEFINER`-Functions/RPCs (`anon_security_definer_function_executable` / `authenticated_security_definer_function_executable`) wurden in der Folge-Session „Residual Security Advisor Closure" (2026-08-28) bewertet — siehe `17-known-issues-and-planned-waves.md` und `06-decision-log.md`. Wichtige Unterscheidung für künftige Agenten: eine Function mit Rückgabetyp `trigger` oder `event_trigger` kann **nicht** direkt aufgerufen werden (Postgres-Engine-Restriktion, unabhängig von EXECUTE-Grants; PostgREST exponiert sie ohnehin nicht als RPC) — ein Advisor-Warning dazu ist strukturell ein Falsch-Positiv, kein Nachweis für Exposure. Ein Advisor-Warning zu einer Function mit „echtem" Rückgabetyp (z. B. `jsonb`, `uuid`, `void`) muss dagegen immer einzeln geprüft werden (Grants, serverseitige Auth-Checks, search_path).
+Die vom Advisor gemeldeten ausführbaren `SECURITY DEFINER`-Functions/RPCs (`anon_security_definer_function_executable` / `authenticated_security_definer_function_executable`) wurden in der Folge-Session „Residual Security Advisor Closure" (2026-08-28) bewertet — siehe `06-decision-log.md` und Archiv `releases/2026-08.md`. Wichtige Unterscheidung für künftige Agenten: eine Function mit Rückgabetyp `trigger` oder `event_trigger` kann **nicht** direkt aufgerufen werden (Postgres-Engine-Restriktion, unabhängig von EXECUTE-Grants; PostgREST exponiert sie ohnehin nicht als RPC) — ein Advisor-Warning dazu ist strukturell ein Falsch-Positiv, kein Nachweis für Exposure. Ein Advisor-Warning zu einer Function mit „echtem" Rückgabetyp (z. B. `jsonb`, `uuid`, `void`) muss dagegen immer einzeln geprüft werden (Grants, serverseitige Auth-Checks, search_path).
 
 Ebenso wurde geprüft: ein gesetzter `search_path = public` (statt `''`) bei `SECURITY DEFINER` ist auf Production nur deshalb unkritisch, weil keine client-facing Rolle (`anon`/`authenticated`/`PUBLIC`) `CREATE` auf `public` besitzt. Diese Grant-Voraussetzung vor jeder neuen `SECURITY DEFINER`-Function mit nicht-leerem `search_path` erneut prüfen — nicht pauschal von der aktuellen Bewertung ausgehen, falls sich Schema-Grants künftig ändern.
 
@@ -392,7 +394,7 @@ Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` —
 - **Was ein späterer Executor prüfen muss:** Zählung der sechs FK-Referenzen = 0 (Preview „Kann sicher gelöscht werden?"); Snapshots in `audit_events`/`email_delivery_events` bleiben; `sales.user_id → auth.users` ist `NO ACTION` in Gegenrichtung (Auth-Identität separat behandeln). Test-Datenpurge nie über `CASCADE`.
 - **Aktive Zuweisung ist autoritativ (Hardening):** `guard_active_assignment_trigger` (`BEFORE INSERT OR UPDATE OF sales_id`) auf `companies`, `contacts`, `deals`, `tasks` verweigert, einen deaktivierten Mitarbeiter **neu** zuzuweisen (`DETAIL = NORA_EMPLOYEE_NOT_ASSIGNABLE`, `NoraErrorCode` `EMPLOYEE_NOT_ASSIGNABLE`). Bestehende Referenzen, unverwandte Updates und das Wegwechseln bleiben erlaubt. Nie auf `contact_notes`/`deal_notes` (Urheberschaft). Im Formular: `SalesAssignmentInput` — aktuelle deaktivierte Zuständigkeit sichtbar, nicht wählbar.
 - **Archivierungsprinzip:** INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT. Gilt perspektivisch für Kontakte, Kunden, Vorgänge — in W2 nur für Mitarbeiter umgesetzt, kein generisches Framework.
-- **Neue Referenz auf `sales.id`?** Immer als `NO ACTION`-FK anlegen, in `lifecycle_reference_integrity_verification.sql` Abschnitt 1 (Anzahl 6 → n) und Abschnitt 5 (Blockade je Tabelle) ergänzen, und im Decision Log W2 die Referenztabelle erweitern.
+- **Neue Referenz auf `sales.id`?** Immer als `NO ACTION`-FK anlegen, in `lifecycle_reference_integrity_verification.sql` Abschnitt 1 (Anzahl 6 → n) und Abschnitt 5 (Blockade je Tabelle) ergänzen, und die Referenzliste in `19-user-lifecycle-architecture.md` §7 erweitern (Referenzgraph im Original: Archiv `releases/2026-09.md`, Eintrag W2).
 
 ### Anmeldeadresse ist Identität (User Lifecycle W4, 2026-09-06)
 
@@ -739,3 +741,11 @@ Vor einer Migration dokumentieren:
 - Welche alten Daten müssen migriert werden?
 - Welche UI-Stellen müssen angepasst werden?
 - Gibt es eine rückwärtskompatible Lösung?
+
+Technische Regeln, die sich aus früheren Migrationen ergeben haben (Begründung jeweils in `06-decision-log.md`):
+
+- **Views nur am Ende erweitern:** neue Spalten in `companies_summary`/`contacts_summary` (oder jeder anderen View) ans Ende der `select`-Liste — `create or replace view` interpretiert eine verschobene Position als Umbenennung (`42P16`).
+- **Signaturänderung einer RPC = `DROP FUNCTION` + `CREATE`:** ein zusätzlicher Parameter per `CREATE OR REPLACE` erzeugt eine Überladung, die PostgREST nicht auflösen kann (`PGRST203`).
+- **Grants: immer `revoke all` vor `grant`:** additive Grants lassen die von den Default-Privilegien geerbten Rechte (`TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN`) stehen; ein lokaler `db reset` ist großzügiger als Production — Privilegienaussagen gegen Production prüfen.
+- **Kein `CREATE INDEX CONCURRENTLY`** in CLI-Migrationen (Transaktion); bei großen Tabellen eigene nicht-transaktionale Migration.
+- **Bereits angewendete Migrationen nie editieren**; `supabase/schemas/*.sql` synchron nachziehen; nach jedem Production-Apply den Ledger gegen den Dateinamen-Zeitstempel prüfen (`07-agent-change-checklist.md`).

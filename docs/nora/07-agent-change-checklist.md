@@ -25,16 +25,33 @@ Nach der Änderung:
 - [ ] bei Demo-Daten: `npm run dev:demo`
 - [ ] manuelle Prüfung relevanter Seiten
 - [ ] bei Kanban/Detail: Zoom 125 %/150 %, Hell/Dunkel, Maus + Trackpad
-- [ ] Decision Log ergänzt, falls fachliche/architektonische Entscheidung — neuer Eintrag auch im Index am Anfang von `06-decision-log.md` verlinkt
-- [ ] Themen-Tabelle in `16-current-state.md` §9 aktualisiert, falls ein neues Thema/Dokument betroffen ist (sonst findet die nächste Session es nicht gezielt und liest unnötig viel)
+- [ ] Dokumentations-Abschlusscheck durchlaufen (Abschnitt „Dokumentations-Abschluss" unten)
 - [ ] Commit-Nachricht klar formuliert
+
+## Dokumentations-Abschluss (nach jeder bedeutsamen Änderung)
+
+Nicht jedes Dokument muss bei jeder Änderung angefasst werden — **nur die zuständigen**. Nach einer bedeutsamen Änderung fragen: *Hat diese Änderung Folgendes berührt?*
+
+| Frage | Zuständiges Dokument | Was dorthin gehört |
+|---|---|---|
+| das Fach-/Domänenmodell (neue Entität, Begriff, Regel, Rolle)? | `01-domain-model.md` | kompakte aktuelle Beschreibung, Link auf Details |
+| eine durable Invariante oder Guardrail (Falle, Grant-/RLS-Regel, Migrationsregel)? | `03-data-model-guardrails.md` | die Regel selbst, ohne Release-Evidenz |
+| eine durable fachliche/architektonische Entscheidung? | `06-decision-log.md` | Datum, Kontext, Entscheidung, Begründung — knapp; Eintrag in der Index-Tabelle; Link ins Archiv |
+| ein dediziertes Architektur-/Spezifikationsdokument (z. B. `19-user-lifecycle-architecture.md`, `18-…`, `13-…`, `11-…`, `02-…`)? | das jeweilige Dokument | aktueller Zustand des Subsystems |
+| den aktuellen Live-Zustand (Versionen, Ledger-Kopf, Edge-Versionen, abgeschlossene Wellen, Navigation)? | `16-current-state.md` | Momentaufnahme + Themen-Tabelle (sonst findet die nächste Session das Thema nicht) |
+| offene Punkte (neuer Bug, Restrisiko, geplante Welle — oder ein erledigter)? | `17-known-issues-and-planned-waves.md` | nur genuin Offenes; Erledigtes ins Archiv verschieben, nicht löschen |
+| die Release-Historie (RC-SHA, Migration, Ledger, Edge-Deploy, Live-Beweis, Zwischenfall)? | `releases/<jahr-monat>.md` | Chronik-Zeile + Abschnitt mit Evidenz |
+| etwas, das Benutzer merken? | `20-product-changelog.md` | Datum, Titel, „Was ändert sich für Sie", optional technischer Hinweis |
+
+Zusätzlich: interne Links prüfen, wenn Überschriften verschoben oder umbenannt wurden; überholte Zwischenstände als überholt markieren statt löschen; `AGENTS.md` nur ändern, wenn sich der Pflicht-Leseeinstieg ändert.
 
 Bei jedem `apply_migration` gegen eine echte Production-Datenbank (Supabase MCP) zusätzlich:
 
 - [ ] Zielprojekt vor JEDEM Write per `list_projects` gegen Name UND Ref bestätigt (nicht nur einmal zu Sessionbeginn)
-- [ ] Sofort nach dem Apply `list_migrations` prüfen: Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` hat bislang fünfmal (2026-08-25, zweimal 2026-08-28, 2026-08-28 Idempotency Wave, 2026-08-29 Operation Status Contract Wave) stattdessen den Anwendungszeitstempel eingetragen
+- [ ] Sofort nach dem Apply `list_migrations` prüfen: Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` trägt regelmäßig den Anwendungszeitstempel ein (bei jedem Production-Apply seit 2026-08-25 aufgetreten, zuletzt W1–W5; Evidenz im Archiv `releases/`); Korrektur nur nach Halt und expliziter PO-Freigabe als transaktionale Einzeilen-Änderung
 - [ ] Bei Drift: vor der Korrektur read-only verifizieren, dass die betroffene Zeile eindeutig zur gerade angewendeten Migration gehört (Name + Inhalt/`statements`-Spalte), dann transaktional exakt eine Zeile korrigieren, danach erneut read-only bestätigen (`list_migrations` deckt sich wieder 1:1 mit dem Repo, keine andere Zeile verändert)
-- [ ] Release-Reihenfolge bei schemaabhängigen Waves mit automatischem Vercel-Deploy: RC einfrieren (Commit-SHA + Migration-SHA-256) → Production-DB-Migration → DB-Verifikation → Git Push → automatisches Vercel-Deployment → Live-Smoke — **nicht** Push zuerst
+- [ ] Release-Reihenfolge bei schemaabhängigen Waves mit automatischem Vercel-Deploy: RC einfrieren (Commit-SHA + Migration-SHA-256) → Production-DB-Migration → DB-Verifikation → ggf. Edge-Function-Deploy aus byteexakten RC-Blobs (Edge Functions werden **nicht** von Vercel deployt) → Git Push → automatisches Vercel-Deployment → Live-Smoke — **nicht** Push zuerst
+- [ ] `npm run typecheck` gehört ausdrücklich zu den RC-Gates und ist nicht durch `npm run build` abgedeckt (Root-`tsconfig` schließt Tests aus)
 
 Bei Nummern-/DB-Änderungen zusätzlich:
 
@@ -64,7 +81,8 @@ Bei Änderungen an `SECURITY DEFINER`-Functions/Views, `security_invoker`, Grant
 
 - [ ] Zugriffsmatrix geprüft: `anon`, `authenticated viewer`, `authenticated office`, `authenticated admin`, `service_role` (nur soweit relevant)
 - [ ] UI niemals als Security Boundary behandelt — Prüfung erfolgt gegen Grants/RLS/Function-Body, nicht gegen sichtbare UI-Zustände
-- [ ] Bei `init_state`/`sales_directory`: bestehende Bewertung (`17-known-issues-and-planned-waves.md` „Security Advisor Findings — assessed 2026-08-28") gilt nur für die dort geprüfte Projektion/Grants — bei Änderung neu bewerten, nicht die alte Einstufung übernehmen
+- [ ] Bei `init_state`/`sales_directory`: bestehende Bewertung (`06-decision-log.md` „Intentional privileged read views"; Einzelbewertungen im Archiv `releases/2026-08.md`) gilt nur für die dort geprüfte Projektion/Grants — bei Änderung neu bewerten, nicht die alte Einstufung übernehmen
+- [ ] Grants immer als `revoke all` → gezielter `grant`; Privilegienaussagen gegen Production prüfen (lokaler `db reset` ist großzügiger) — siehe `03-data-model-guardrails.md` Migrationsregel
 
 Bei RBAC-/Kalender-Änderungen (ab v0.4a) zusätzlich:
 

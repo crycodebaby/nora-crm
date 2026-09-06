@@ -1,6 +1,6 @@
-# 13 – CRM-Audit-Verlauf und Aufbewahrung (v0.3l)
+# 13 – CRM-Audit-Verlauf und Aufbewahrung
 
-Stand: 2026-07-15 · **Abschluss v0.3l.1:** 2026-07-15
+Stand: 2026-09-06 (v0.3l/v0.3l.1 vom 2026-07-15, ergänzt um Operation Correlation 2026-08-10, Security Hardening Wave 0 2026-09-04 und User Lifecycle W3/W4/W5 2026-09-05/06). Dieses Dokument beschreibt den **aktuellen** Audit-Vertrag; Release-Evidenz liegt im Archiv (`releases/`).
 
 ## Zweck
 
@@ -18,7 +18,7 @@ Er dient der **betrieblichen Nachvollziehbarkeit** im Team — nicht der Mitarbe
 | Aufgaben | `task.created`, `task.updated`, `task.completed`, `task.reopened`, `task.deleted` |
 | Kontaktnotizen | `contact_note.created`, `contact_note.updated`, `contact_note.deleted` |
 | Vorgangsnotizen | `deal_note.created`, `deal_note.updated`, `deal_note.deleted` |
-| Benutzer | `user.role_changed`, `user.disabled`, `user.enabled` (Trigger), `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (`record_employee_admin_event`, W3) |
+| Benutzer (Mitarbeiter-Lifecycle) | `user.role_changed`, `user.disabled`, `user.enabled` (Trigger `audit_sales_privilege_change` auf `sales`) · `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (`users` Edge Function → `record_employee_admin_event`, W3) · `user.email_changed` (Guard `guard_auth_email_change` in GoTrues Transaktion, W4) · `user.offboarded` (`offboard_employee_by_executor`, nur bei `disposition executed`, W5) — vollständiges Modell: `19-user-lifecycle-architecture.md` §10 |
 | Checklisten | bestehende `checklist.*`-Codes (unverändert) |
 | Google Kalender (v0.4c.1+) | `calendar.event_linked`, `calendar.event_unlinked` (Sync/Connect ab v0.4c.2) |
 
@@ -50,10 +50,11 @@ Office hat **kein** globales `SELECT` auf `audit_events` — nur die kontrollier
 
 ### Schreibweg
 
-- **Nur** DB-Trigger → `nora_private.write_audit_event` (Owner: `nora_audit_writer`)
-- Ausnahme seit User Lifecycle W3 (2026-09-05): die `service_role`-only RPC `public.record_employee_admin_event` schreibt genau drei Mitarbeiter-Ereignisse aus der `users` Edge Function (Ereignistyp, Actor, Ziel, Metadaten validiert; Entity und Snapshots aus der DB). `public.insert_audit_event` bleibt für die Kalender-Functions (Actor `System`).
+- **Regelfall:** DB-Trigger → `nora_private.write_audit_event` (Capability `nora_audit_writer`).
+- **Privilegierte Lifecycle-Pfade** (alle `SECURITY DEFINER`, in der Datenbank, mit verankertem Actor): die `service_role`-only RPC `public.record_employee_admin_event` schreibt genau `user.invited` / `user.invitation_resent` / `user.password_setup_requested` aus der `users` Edge Function (Ereignistyp-Allowlist, Actor/Ziel/Metadaten validiert, Entity und Snapshots aus der DB; W3); der W4-Guard `nora_private.guard_auth_email_change` schreibt `user.email_changed` innerhalb von GoTrues `UPDATE`-Transaktion; der W5-Executor `public.offboard_employee_by_executor` schreibt `user.offboarded`. Alle drei rufen intern `write_audit_event` nach `pin_audit_context`.
+- `public.insert_audit_event` bleibt für die Google-Kalender-Functions ausführbar (Actor `System`) — vorbestehende generische Schreibfähigkeit, Härtungskandidat (`17-known-issues-and-planned-waves.md`).
 - `nora_audit_writer`: NOLOGIN, INSERT-only auf `audit_events`
-- Clients (`authenticated`) können **nicht** direkt INSERT/UPDATE/DELETE
+- Clients (`authenticated`) können **nicht** direkt INSERT/UPDATE/DELETE; seit Security Hardening Wave 0 (2026-09-04) besitzt `authenticated` auf `audit_events` **genau `SELECT`** (auch `TRUNCATE`/`TRIGGER`/`REFERENCES`/`MAINTAIN` entzogen — `TRUNCATE` umgeht RLS und Row-Trigger). `service_role` behält `TRUNCATE` (bewusst akzeptiertes Restrisiko).
 
 ### Actor-Snapshot
 
@@ -64,7 +65,9 @@ Bei jedem Ereignis serverseitig:
 - `actor_name_snapshot`
 - `actor_role_snapshot`
 
-**Actor-Vertrauensgrenze (W3, 2026-09-05):** Browser-Sitzung → Actor aus dem JWT-`sub`. Privilegierter Server-Pfad (`users` Edge Function, `service_role`) → die Edge Function verifiziert das Caller-JWT und übergibt nur die User-ID; der Executor bzw. `record_employee_admin_event` prüft sie (existierender aktiver Admin) und verankert sie transaktionslokal (`nora.audit_actor_user_id`); `resolve_audit_actor()` löst Name/Rolle/`sales.id` selbst aus `public.sales` auf. Kein Aufrufer kann Snapshots liefern. Ein `service_role`-Write ohne Verankerung bleibt `System` (echte Automation). `entity_id` für Mitarbeiter ist immer `nora_entity_uuid('sales', sales.id)` — Actor (wer), Ziel (`entity_id`, welcher Mitarbeiter) und Operation (`request_id`, welche Ausführung) sind drei verschiedene Fakten. Zeilen vor W3 tragen `System`; sie bleiben unverändert.
+**Actor-Vertrauensgrenze (W3, 2026-09-05; W4 erweitert):** Browser-Sitzung → Actor aus dem JWT-`sub`. Privilegierter Server-Pfad (`users` Edge Function, `service_role`) → die Edge Function verifiziert das Caller-JWT und übergibt nur die User-ID; der Executor bzw. `record_employee_admin_event` prüft sie (existierender aktiver Admin) und verankert sie transaktionslokal (`nora.audit_actor_user_id`, `nora.operation_id` über `pin_audit_context`); `resolve_audit_actor()` löst Name/Rolle/`sales.id` selbst aus `public.sales` auf und ehrt die Verankerung seit W4 auch in JWT-losen Datenbanksitzungen (GoTrue-Transaktion). Kein Aufrufer kann Snapshots liefern. Ein `service_role`-Write ohne Verankerung bleibt `System` (echte Automation); eine verankerte ID ohne Mitarbeiter bricht hart ab (`NORA_AUDIT_ACTOR_INVALID`). `entity_id` für Mitarbeiter ist immer `nora_entity_uuid('sales', sales.id)` — Actor (wer), Ziel (`entity_id`, welcher Mitarbeiter) und Operation (`request_id`, welche Ausführung) sind drei verschiedene Fakten. Zeilen vor W3 tragen `System`; sie bleiben unverändert (append-only, kein Backfill).
+
+**Metadaten-Hygiene:** nie JWT, Access-/Refresh-Token, Service-Role-Secret, SMTP-Zugang, Invite-Token, OTP, Reset-Token, Sitzungs-IDs, Provider-Nutzlasten oder Stacktraces in `metadata`. Enthalten (retentions-sensibel, offene Entscheidung): `invitee_email`, `employee_email`, `changes.email`.
 
 ### Änderungsformat (kompakt)
 
@@ -84,7 +87,7 @@ Bei jedem Ereignis serverseitig:
 |---|---|
 | `crm_change` | Normale CRM-Feldänderungen |
 | `security` | Löschungen |
-| `user_management` | Rollen, Deaktivierung |
+| `user_management` | alle `user.*`-Ereignisse (Rolle, Zugang, Einladung, Passwort-Link, Anmeldeadresse, Offboarding) |
 | `checklist` | Checklisten-Ereignisse |
 | `integration` | Kalender-Integration (`calendar.*`, v0.4c.1+) |
 | `system` | Migrationen, System |
@@ -162,5 +165,7 @@ Welle v0.3l.1 schließt CRM-Audit für den Mitarbeiterbetrieb ab:
 ## Offene Entscheidungen
 
 - Endgültige gesetzliche Aufbewahrungsfristen (Datenschutz/Compliance)
-- Externer WORM-Export und Befüllung von `event_hash` / `request_id`
+- Externer WORM-Export und Befüllung von `event_hash` (`request_id` ist seit der Operation-Correlation-Welle befüllt)
+- Retention/Anonymisierung personenbezogener Audit-Metadaten (`invitee_email`, `employee_email`, `changes.email`)
 - `company.archived` / `contact.archived` (noch kein DB-Feld)
+- Ablösung von `public.insert_audit_event` für `service_role` durch schmale Writer je Function
