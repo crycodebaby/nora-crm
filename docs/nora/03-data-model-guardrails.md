@@ -394,6 +394,16 @@ Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` —
 - **Archivierungsprinzip:** INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT. Gilt perspektivisch für Kontakte, Kunden, Vorgänge — in W2 nur für Mitarbeiter umgesetzt, kein generisches Framework.
 - **Neue Referenz auf `sales.id`?** Immer als `NO ACTION`-FK anlegen, in `lifecycle_reference_integrity_verification.sql` Abschnitt 1 (Anzahl 6 → n) und Abschnitt 5 (Blockade je Tabelle) ergänzen, und im Decision Log W2 die Referenztabelle erweitern.
 
+### Anmeldeadresse ist Identität (User Lifecycle W4, 2026-09-06)
+
+- **Ein Master, ein Spiegel, ein Schreiber.** Die Login-E-Mail lebt in `auth.users.email`; `public.sales.email` ist ihr Spiegel und wird ausschließlich von `nora_private.guard_auth_email_change()` (Owner-Capability `nora_identity_manager`) innerhalb von GoTrues eigener `UPDATE`-Transaktion geschrieben. `handle_update_user` synchronisiert nur noch Namen.
+- **Ticket oder Verweigerung.** Jede Änderung von `auth.users.email` ohne lebendes Ticket aus `public.prepare_sales_email_change` (nur `service_role`, verifizierter Admin-Actor) wird von der Datenbank abgelehnt (`NORA_EMAIL_CHANGE_NOT_AUTHORIZED`) — auch über die Admin API mit Service-Key, auch über GoTrue-Selbstbedienung, auch aus dem Dashboard. Mit Ticket geschehen `sales.email`, das Löschen der `auth.one_time_tokens` des Users und `user.email_changed` in derselben Transaktion.
+- **Zugang und Identität sind orthogonal.** Der Identity-Manager darf nur `email` (Spalten-Grant + Trigger-Zweig); Rolle/`disabled`/Bann bleiben beim W1-Executor. Eine E-Mail-Änderung aktiviert nie, deaktiviert nie, sendet einem Deaktivierten nie eine Einladung.
+- **Normalisierung = Provider-Contract.** `lower(btrim(x))`, Format geprüft, `sales.email` citext + `uq__sales__email`; Eindeutigkeit gegen beide Speicher. Nie eine Adresse ungetrimmt an GoTrue geben (400), nie auf `email_exists` hoffen (Admin-Update liefert rohes `23505`).
+- **Alte Links sterben mit der Adresse.** GoTrue prüft Einladungs-/Passwort-Links gegen `auth.one_time_tokens`, nicht gegen die Token-Spalten in `auth.users`. Wer eine Identität bewegt, löscht diese Zeilen; eine neue Einladung wird danach ausdrücklich versendet (nur für Eingeladene, nie für Deaktivierte).
+- **Kein generischer Profil-PATCH für Identität.** Ein PATCH-Body mit `email` wird als Ganzes abgewiesen; „Name gespeichert, E-Mail gescheitert" darf nicht existieren. Das Bearbeiten-Formular zeigt die Anmeldeadresse read-only, die Änderung ist eine eigene Aktion mit Konsequenztext je Zustand.
+- **Selbständerung ist blockiert** (`NORA_SELF_EMAIL_CHANGE_FORBIDDEN`), Erfolg wird erst nach serverseitiger Verifikation beider Speicher gemeldet, ein Retry ist ein typisiertes No-op (`email_unchanged`) ohne zweites Audit und ohne zweite Einladung.
+
 ## Checklisten- und Audit-Guardrails (Welle 7b)
 
 Details in `10-checklists-snippets-audit.md`:

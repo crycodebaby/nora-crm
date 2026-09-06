@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-08-29 (nach Security Advisor Baseline Closure + Error Contract Wave Production Release + Idempotency Wave Production Release + Operation Status Contract v1 Production Release).
+Stand: 2026-09-06 (User Lifecycle W4 RC; davor 2026-08-29 nach Security Advisor Baseline Closure + Error Contract Wave Production Release + Idempotency Wave Production Release + Operation Status Contract v1 Production Release).
 
 Dieses Dokument ist eine **schnelle Orientierung**, kein Ersatz für die referenzierten Dokumente. Es verlinkt, statt Inhalte zu duplizieren.
 
@@ -275,6 +275,35 @@ Endzustand `office`/deaktiviert; die 12 alten `System`-Zeilen unverändert
 (Digest identisch). Details: Decision Log „2026-09-05 – User Lifecycle W3",
 Nachtrag Release.
 
+28. **User Lifecycle W4 – kontrollierte Änderung der Anmeldeadresse**
+(2026-09-06): Die Login-E-Mail eines Mitarbeiters lässt sich jetzt ändern —
+administratorgesteuert, ohne dass Auth-Identität und `sales.email`
+auseinanderlaufen, ohne Änderung des Zugangsstatus, und ohne dass alte
+Einladungs-/Passwort-Links weiterleben. Vorher scheiterte jede Auth-E-Mail-
+Änderung an `prevent_sales_privilege_escalation` (`500 internal_error`);
+GoTrue hätte außerdem den alten Einladungslink nach A→B weiterhin akzeptiert
+(lokal bewiesen). Mechanik: `Admin-UI („E-Mail-Adresse ändern") → users Edge
+(action change_email) → public.prepare_sales_email_change (service_role,
+verifizierter Actor, alle Guards, Ticket) → GoTrue Admin API → BEFORE-UPDATE-
+Guard auf auth.users` — der Guard schreibt `sales.email` (Capability-Owner
+`nora_identity_manager`), löscht die `auth.one_time_tokens` des Users,
+konsumiert das Ticket und schreibt `user.email_changed` (Actor = Admin,
+stabile Entity, Request-ID) **in GoTrues Transaktion**; ohne Ticket wird jede
+Auth-E-Mail-Änderung verweigert. Danach verifiziert die Edge Function beide
+Speicher und den Zugangsstatus; eingeladene Mitarbeiter erhalten eine neue
+Einladung an die neue Adresse, deaktivierte bleiben deaktiviert/gebannt und
+erhalten nichts. Normalisierung `lower(btrim())`, Unique-Index
+`uq__sales__email` (citext), Eindeutigkeit gegen `sales` und `auth.users`.
+Selbständerung blockiert; PATCH mit `email` wird als Ganzes abgewiesen
+(`email_change_requires_command`); `GET /users` liefert `identityConsistency`.
+Migration `20260906120000_nora_lifecycle_email_change.sql`, neue SQL-Suite
+`lifecycle_email_change_verification.sql` (11 Abschnitte), `users/emailChange.ts`
+(+26 Tests), `sales/ChangeEmployeeEmailDialog.tsx`, Operation-Katalog
+`employee.change_login_email`. **Status: `RC VERIFIED — READY FOR CONTROLLED
+RELEASE` (2026-09-06)** — nicht released; Release-Reihenfolge im Decision Log
+„2026-09-06 – User Lifecycle W4". Details und offene Punkte:
+`17-known-issues-and-planned-waves.md` Abschnitt „User Lifecycle W4".
+
 ## 5. Customer & Contact Workflow Wave — was ist tatsächlich implementiert
 
 Vollständige Entscheidung: Decision Log "2026-08-25 – Customer & Contact Workflow Wave".
@@ -458,7 +487,7 @@ Hinweis: Unified Tasks Wave und Self Contact Wave (inkl. Final RC Hardening) sin
 8. Zukünftige Application Queries / Read Models (noch nicht implementiert, nur als Richtung dokumentiert).
 9. ~~Separate Prüfung der beiden bestehenden, vorbestehenden Security-Advisor-Findings (`init_state`/`sales_directory`, `SECURITY DEFINER`-Views)~~ — **erledigt am 2026-08-28**, siehe Abschnitt 6a. Ergebnis: `ASSESSED / LOW / KEEP`, kein Blocker. Weitere INFO/WARN-Advisor-Hinweise bleiben unbewertet (separate Follow-up-Welle, siehe `17-known-issues-and-planned-waves.md`).
 10. ~~Operation Status Contract v1~~ — **PRODUCTION VERIFIED seit 2026-08-29** (Phase 6E), siehe Abschnitt 4 Punkt 18, Decision Log „Operation Status Contract Wave" inkl. Nachtrag Phase 6C, 6D.1 und 6E. Die Notification-/Status-UI, die diesen Contract konsumiert, ist inzwischen als Phase 7B umgesetzt — siehe Abschnitt 4 Punkt 19. Sie ist seit 2026-08-30 **PRODUCTION VERIFIED** (Release-Commit `9db08c4b`), deckt aber bislang **nur Quick Capture** ab; die weiteren Intents bleiben Phase 7C.
-11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 27), W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
+11. User-Lifecycle-Folgewellen: ~~W3 Audit-Actor~~ (PRODUCTION VERIFIED 2026-09-06, siehe Abschnitt 4 Punkt 27), W4 E-Mail-Änderung (RC VERIFIED 2026-09-06, nicht released, siehe Abschnitt 4 Punkt 28), W5 Session-Revokation beim Deaktivieren, kontrolliertes Offboarding / Hard-Delete-Executor mit Abhängigkeits-Preview (die Datenbankbarriere aus W2 steht; die Preview zählt die sechs FK-Referenzen), W9 SQL-Suiten in CI.
 
 ## 9. Welche Dokumente muss ich für welches Thema lesen?
 

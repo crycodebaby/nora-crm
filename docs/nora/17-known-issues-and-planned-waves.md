@@ -461,7 +461,8 @@ künftige Zeilen sind attribuiert.
   ein Retry der Einladung meldet `already_exists`. Bewusst so — kein
   verteiltes Commit.
 - Profiländerungen über PATCH (Name, Avatar) erzeugen weiterhin kein
-  `user.*`-Ereignis; E-Mail-Änderung ist W4.
+  `user.*`-Ereignis; E-Mail-Änderung ist W4 (RC 2026-09-06, `user.email_changed`,
+  siehe Abschnitt „User Lifecycle W4").
 - ~~Release-Fenster zwischen Migration und Edge v6~~ — geschlossen
   (2026-09-06): Edge v6 wurde unmittelbar nach der Migration deployt; in dem
   Fenster fand kein Edge-Ereignis statt (`audit_events` 276 → 280, alle vier
@@ -474,6 +475,85 @@ künftige Zeilen sind attribuiert.
   Kandidat für eine UX-Nachbesserung (LOW).
 - W5 Session-Revokation, Offboarding/Hard-Delete-Executor, W9 SQL-Suiten in
   CI: unverändert offen.
+
+## User Lifecycle W4 — kontrollierte Änderung der Anmeldeadresse
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-06; Branch
+`security/nora-lifecycle-w4-email-change`, Basis `origin/main = 5c6744cb`;
+keine Production-Migration, kein Edge-Deploy, kein Push).**
+
+Bewiesen (lokal, echter Stack; read-only gegen `nora-crm-prod`): Jede
+Auth-E-Mail-Änderung scheiterte an `prevent_sales_privilege_escalation`
+(`handle_update_user` schreibt `sales.email` als `postgres`), die PATCH-Route
+antwortete `500 internal_error` — fail closed, aber kein unterstützter Weg.
+GoTrue 2.196 prüft Einladungs-/Passwort-Links gegen `auth.one_time_tokens`;
+nach einer Admin-E-Mail-Änderung A→B blieb der an A gesendete Einladungslink
+(und ein ausstehender Passwort-Link) gültig und aktivierte das Konto unter B.
+Production: 5 Mitarbeiter, 0 Drift, 0 Duplikate, 1 ausstehendes
+Einladungs-Token (deaktiviertes Testkonto `sales.id = 4`).
+
+**W4 (Migration `20260906120000_nora_lifecycle_email_change.sql`):** Rolle
+`nora_identity_manager` (nur `sales.email`), Ticket-Tabelle
+`nora_private.sales_email_change_tickets`, RPCs `prepare_sales_email_change` /
+`cancel_sales_email_change` (nur `service_role`), Guard
+`guard_auth_email_change_trigger` (`BEFORE UPDATE OF email ON auth.users`:
+ohne Ticket verweigert; mit Ticket `sales.email` + Token-Löschung + Audit in
+einer Transaktion), `handle_update_user` ohne E-Mail, `resolve_audit_actor`
+ehrt die Verankerung auch in JWT-losen Sitzungen, Unique-Index
+`uq__sales__email`. Edge: `users/emailChange.ts`, Aktion `change_email`,
+PATCH ohne `email`. UI: „E-Mail-Adresse ändern" im Bereich Nora-Zugang;
+Bearbeiten-Formular zeigt die Anmeldeadresse read-only. Details: Decision Log
+„2026-09-06 – User Lifecycle W4".
+
+**Kanonische Sequenz (lokal, nach `db reset` von null):**
+`production_check` → W1 → W2 → W3 → **W4** → `setup` → `matrix` →
+`final_hardening` → `safe_auth_role` → W1 → W2 → W3 → **W4** →
+`checklists_audit` → `crm_audit` → `customer_contact_workflow` →
+`error_contract` → `error_observatory` → `operation_correlation` →
+`operation_status_disposition` → `task_customer_context` → `google_calendar`
+→ `audit_immutability` → `core_indexes` → `teardown` → `production_check` —
+26 Läufe, alle grün (53 Migrationen; GUCs und Ticket-Tabelle danach leer).
+
+**Bewusst offen nach W4 / Nebenbefunde:**
+
+- **GoTrue verbirgt die Guard-Verweigerung.** Die Admin API antwortet bei
+  einer vom Guard abgelehnten Änderung mit generischem
+  `500 unexpected_failure "Error updating user"`; die Detail-Kennung
+  `NORA_EMAIL_CHANGE_NOT_AUTHORIZED` erreicht die Edge Function nicht. Der
+  Fall wird deshalb als `email_change_provider_failed` gemeldet (nicht grün,
+  nichts verändert, Ticket gelöscht); die Verifikation, nicht der Fehlertext,
+  entscheidet. Keine Auswirkung auf Korrektheit, nur auf die Diagnose.
+- **Selbständerung blockiert:** Ein einzelner Administrator kann seine eigene
+  Anmeldeadresse nicht selbst ändern (Lockout-Schutz); er braucht einen
+  zweiten Administrator oder die technische Betreuung. Bewusst; eine spätere
+  Welle könnte eine bestätigungsbasierte Selbständerung entwerfen.
+- **Selbstbedienungs-Änderung über GoTrue (`PUT /auth/v1/user`)** scheitert
+  jetzt an der Datenbank (`500` beim Bestätigen). Es gab dafür nie eine
+  Nora-Oberfläche; das Verhalten ist gewollt (nur Administratoren ändern
+  Identitäten), aber nicht benutzerfreundlich formuliert.
+- **E-Mail-Drift wird nur erkannt, nicht repariert.** `GET /users` meldet
+  `identityConsistency = inconsistent`, das Panel bietet die Aktion nicht an.
+  Reparatur bleibt der technischen Betreuung vorbehalten (kein Runbook, da in
+  Production kein Fall existiert).
+- **Neue Einladung nach der Änderung ist nicht atomar** (Provider-Aufruf nach
+  dem Commit). Scheitert sie, meldet Nora `email_change_invitation_failed`
+  (`emailChanged: true`), der Administrator nutzt „Einladung erneut senden";
+  der alte Link ist in jedem Fall bereits tot.
+- **Nebenbefund (vorbestehend, nicht W4):** `public.record_operation_error`
+  akzeptiert nur `^[a-z][a-z0-9_.]*$` als `operation_type`; die bestehenden
+  camelCase-Katalogtypen (`quickCapture.createCase`, `customer.createWithContact`,
+  …) werden seit jeher mit `invalid operation_type` abgewiesen — technische
+  Fehlschläge dieser Operationen landen nie in `operation_errors` (der
+  Recorder ist best-effort und schweigt). W4 nutzt deshalb
+  `employee.change_login_email`. Eigene Folgewelle (Katalog oder Check-
+  Constraint anpassen, Suite ergänzen).
+- **Tickets** verfallen nach zwei Minuten und werden bei jedem `prepare`
+  aufgeräumt; ein verwaistes Ticket kann nur genau die eine vorbereitete
+  Änderung autorisieren.
+- Weiterhin offen aus W1–W3: Session-Revokation (W5), Offboarding/Hard-Delete,
+  Default-Privilegien, JOSE-Wortlaut der 401-Antworten, SQL-Suiten in CI (W9),
+  `insert_audit_event` für `service_role` (Kalender), Retention/Anonymisierung
+  der E-Mail-Adressen im Audit (`changes.email` kommt hinzu).
 
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
