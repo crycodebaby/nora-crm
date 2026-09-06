@@ -18,9 +18,11 @@ import type { CrmDataProvider } from "../../providers/types";
 import {
   isAdminActionAllowed,
   isEmailChangeApplicable,
+  isOffboardingApplicable,
   type EmployeeAccessRecord,
   type EmployeeAccessState,
   type EmployeeEmailChangeResult,
+  type EmployeeOffboardingResult,
   type IdentityConsistency,
 } from "../../sales/employeeAccessContract";
 import { OPERATION_CATALOG } from "../../operations/operationCatalog";
@@ -146,6 +148,42 @@ export const changeEmployeeLoginEmail = async (
         return await dataProvider.changeEmployeeLoginEmail({
           salesId: input.salesId,
           newEmail: input.newEmail,
+          operationId: context.operationId,
+        });
+      } catch (error) {
+        throw normalizeAccessError(error);
+      }
+    },
+  );
+};
+
+/**
+ * "Zugang beenden" (User Lifecycle W5) — ends an employee's operational
+ * access now through the single privileged server path: access off, every
+ * login session ended, history and references kept, nothing mailed. Open
+ * assignments are returned as counts, never required first. The Operation
+ * Manager owns the operation id (request_id of the audit rows) and records a
+ * technical failure in the Error Observatory; business refusals stay typed.
+ */
+export const offboardEmployee = async (
+  dataProvider: CrmDataProvider,
+  input: { salesId: Identifier; currentState?: EmployeeAccessState },
+  manager: OperationManager = getDefaultOperationManager(),
+): Promise<EmployeeOffboardingResult> => {
+  if (
+    input.currentState &&
+    !isOffboardingApplicable({ accessState: input.currentState })
+  ) {
+    throw new EmployeeAccessActionNotApplicableError(input.currentState);
+  }
+
+  return manager.execute(
+    OPERATION_CATALOG["employee.offboard"],
+    { resourceId: input.salesId },
+    async (context) => {
+      try {
+        return await dataProvider.offboardEmployee({
+          salesId: input.salesId,
           operationId: context.operationId,
         });
       } catch (error) {

@@ -5,6 +5,7 @@ import {
   useRefresh,
   type Identifier,
 } from "ra-core";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 
 import type { CrmDataProvider } from "../providers/types";
@@ -14,7 +15,9 @@ import {
   resyncEmployeeAccess,
 } from "../application/commands/employeeAccess";
 import {
+  countOpenResponsibilities,
   describeAccessResync,
+  describeOffboardingFollowUp,
   EMPLOYEE_ACCESS_ACTION_LABEL,
   EMPLOYEE_ACCESS_CONSISTENCY_NOTICE,
   EMPLOYEE_ACCESS_RESYNC_ACTION_LABEL,
@@ -23,10 +26,14 @@ import {
   isAccessResyncApplicable,
   isAdminActionAllowed,
   isEmailChangeApplicable,
+  isOffboardingApplicable,
   mapEmployeeAccessError,
   type EmployeeAccessRecord,
+  type EmployeeDependencyPreview,
 } from "./employeeAccessContract";
 import { ChangeEmployeeEmailDialog } from "./ChangeEmployeeEmailDialog";
+import { OffboardEmployeeDialog } from "./OffboardEmployeeDialog";
+import { noraCreatePath } from "../routing/noraRoutes";
 import { EmployeeAccessStatus } from "./EmployeeAccessStatus";
 import { EmployeeMailDeliveryStatus } from "./EmployeeMailDeliveryStatus";
 import {
@@ -63,6 +70,65 @@ function accessDateLine(record: EmployeeAccessRecord): string | null {
 }
 
 type PanelAction = "resend_invitation" | "request_password_setup" | "resync";
+
+/** `#/kunden?filter={"sales_id":7}` — the existing list filter, nothing new. */
+function filteredListPath(resource: string, salesId: Identifier): string {
+  return `${noraCreatePath({ resource, type: "list" })}?filter=${encodeURIComponent(
+    JSON.stringify({ sales_id: salesId }),
+  )}`;
+}
+
+/**
+ * W5 follow-up: after access ended, what still needs a new owner. Links go
+ * to the existing lists filtered by this employee; tasks have no own desktop
+ * list, so they are named only. Reassignment itself stays the normal edit.
+ */
+function OffboardingFollowUp({
+  salesId,
+  dependencies,
+}: {
+  salesId: Identifier;
+  dependencies: EmployeeDependencyPreview;
+}) {
+  if (countOpenResponsibilities(dependencies) === 0) return null;
+  const links: Array<{ label: string; count: number; resource: string }> = [
+    { label: "Kunden", count: dependencies.companies, resource: "companies" },
+    { label: "Kontakte", count: dependencies.contacts, resource: "contacts" },
+    { label: "Vorgänge", count: dependencies.openDeals, resource: "deals" },
+  ].filter((l) => l.count > 0);
+  return (
+    <div
+      className="space-y-2 rounded-md border border-border p-3"
+      role="status"
+      data-testid="employee-offboarding-followup-panel"
+    >
+      <p className="text-sm font-medium text-foreground">Noch zugewiesen</p>
+      <p className="text-sm text-muted-foreground">
+        {describeOffboardingFollowUp(dependencies)}
+      </p>
+      {links.length > 0 ? (
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {links.map((l) => (
+            <li key={l.resource}>
+              <Link
+                className="underline underline-offset-4"
+                to={filteredListPath(l.resource, salesId)}
+              >
+                {l.label} anzeigen ({l.count})
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {dependencies.openTasks > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Offene Aufgaben ({dependencies.openTasks}) finden Sie in der
+          Aufgabenliste über den Filter „Zuständig".
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * Nora-Zugang panel for one employee (V1A contract, V1B presentation).
@@ -155,6 +221,13 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
   );
   const needsResync = isAccessResyncApplicable(record);
   const canChangeEmail = isEmailChangeApplicable(record);
+  const canOffboard = isOffboardingApplicable(record);
+  const invalidateAndRefresh = () => {
+    void queryClient.invalidateQueries({
+      queryKey: EMPLOYEE_ACCESS_QUERY_KEY,
+    });
+    refresh();
+  };
   const identityInconsistent = record.identityConsistency === "inconsistent";
 
   return (
@@ -277,19 +350,36 @@ export function EmployeeAccessPanel({ salesId }: { salesId: Identifier }) {
         </div>
       ) : null}
 
-      {/* The single write path for enabled/disabled is the form field below.
-          The panel names it instead of offering a second control. */}
-      {state === "disabled" ? (
-        <p className="text-sm text-muted-foreground">
-          Zum Aktivieren entfernen Sie unten den Haken bei „Zugang deaktiviert“
-          und speichern.
-        </p>
+      {/* W5: ending access is a distinct administrative action with its own
+          confirmation and dependency preview — never a hidden side effect of
+          "Speichern". Re-enabling stays the W1 form field below. */}
+      {canOffboard ? (
+        <div className="space-y-2" data-testid="employee-offboarding">
+          <OffboardEmployeeDialog
+            salesId={salesId}
+            record={record}
+            onChanged={invalidateAndRefresh}
+          />
+          <p className="text-sm text-muted-foreground">
+            Beendet den Nora-Zugang sofort. Daten und Zuweisungen bleiben
+            erhalten und können anschließend neu zugewiesen werden.
+          </p>
+        </div>
       ) : null}
-      {state === "invited" || state === "active" ? (
-        <p className="text-sm text-muted-foreground">
-          Zum Deaktivieren setzen Sie unten den Haken bei „Zugang deaktiviert“
-          und speichern.
-        </p>
+      {state === "disabled" ? (
+        <>
+          {record.dependencies ? (
+            <OffboardingFollowUp
+              salesId={salesId}
+              dependencies={record.dependencies}
+            />
+          ) : null}
+          <p className="text-sm text-muted-foreground">
+            Zum Aktivieren entfernen Sie unten den Haken bei „Zugang
+            deaktiviert“ und speichern. Eine neue Anmeldung ist danach
+            erforderlich.
+          </p>
+        </>
       ) : null}
       {state === "unknown" ? (
         <p className="text-sm text-muted-foreground">

@@ -80,6 +80,8 @@ import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 import type {
   EmployeeAccessRecord,
   EmployeeEmailChangeResult,
+  EmployeeOffboardingResult,
+  EmployeeDependencyPreview,
 } from "../../sales/employeeAccessContract";
 import type { EmployeeMailDeliveryStatus } from "../../sales/emailDeliveryContract";
 /**
@@ -561,6 +563,33 @@ export const createDataProvider = ({
     });
   };
 
+  /** W5 demo parity: real counts from the demo store, notes separate. */
+  const countDemoDependencies = async (
+    salesId: Identifier,
+  ): Promise<EmployeeDependencyPreview> => {
+    const count = async (
+      resource: string,
+      predicate: (row: Record<string, unknown>) => boolean = () => true,
+    ) => {
+      const { data } = await dataProvider.getList<
+        Record<string, unknown> & { id: Identifier }
+      >(resource, {
+        filter: { sales_id: salesId },
+        pagination: { page: 1, perPage: 10000 },
+        sort: { field: "id", order: "ASC" },
+      });
+      return data.filter(predicate).length;
+    };
+    return {
+      companies: await count("companies"),
+      contacts: await count("contacts"),
+      openDeals: await count("deals", (d) => d.archived_at == null),
+      openTasks: await count("tasks", (t) => t.done_date == null),
+      contactNotes: await count("contact_notes"),
+      dealNotes: await count("deal_notes"),
+    };
+  };
+
   const dataProviderWithCustomMethod: CrmDataProvider = {
     ...baseDataProvider,
     async globalSearch(query: string) {
@@ -777,6 +806,44 @@ export const createDataProvider = ({
         record: toDemoAccessRecord(updated),
         previousEmail: sale.email,
         invitationSent: false,
+      };
+    },
+
+    /**
+     * "Zugang beenden" (W5) — FakeRest parity. The demo has one store and no
+     * sessions to revoke: the access flag goes off through the same update
+     * the edit form uses (which also maintains the sales_directory /
+     * sales_identities projections), the dependency counts are real demo
+     * counts, nothing is mailed. A second call replays.
+     */
+    offboardEmployee: async (input: {
+      salesId: Identifier;
+      operationId?: string;
+    }): Promise<EmployeeOffboardingResult> => {
+      const { data: sale } = await dataProvider.getOne<Sale>("sales", {
+        id: input.salesId,
+      });
+      if (!sale) throw new Error("not_found");
+      const currentUser = await getIdentity();
+      if (currentUser && String(currentUser.id) === String(sale.id)) {
+        throw new Error("self_access_change_forbidden");
+      }
+      const wasDisabled = sale.disabled === true;
+      const updated = wasDisabled
+        ? sale
+        : (
+            await dataProvider.update<Sale>("sales", {
+              id: input.salesId,
+              data: { disabled: true },
+              previousData: sale,
+            })
+          ).data;
+      const dependencies = await countDemoDependencies(sale.id);
+      return {
+        record: { ...toDemoAccessRecord(updated), dependencies },
+        disposition: wasDisabled ? "replayed" : "executed",
+        sessionsRevoked: 0,
+        dependencies,
       };
     },
 

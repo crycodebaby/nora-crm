@@ -30,7 +30,8 @@ export type CatalogOperationType =
   | "contact.convertToCustomer"
   | "quickCapture.createCase"
   | "quickCapture.createTask"
-  | "employee.change_login_email";
+  | "employee.change_login_email"
+  | "employee.offboard";
 
 export const OPERATION_CATALOG: {
   readonly [K in CatalogOperationType]: OperationCatalogEntry & {
@@ -106,6 +107,13 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Anmeldeadresse wird geändert …",
     successMessage: "Anmeldeadresse wurde geändert.",
     errorMessage: "Anmeldeadresse konnte nicht geändert werden.",
+  },
+  "employee.offboard": {
+    operationType: "employee.offboard",
+    resourceType: "sales",
+    pendingMessage: "Nora-Zugang wird beendet …",
+    successMessage: "Nora-Zugang wurde beendet.",
+    errorMessage: "Nora-Zugang konnte nicht beendet werden.",
   },
 } as const;
 

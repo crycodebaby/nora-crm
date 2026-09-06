@@ -32,7 +32,9 @@ import { performGlobalSearch } from "../../misc/globalSearch";
 import type {
   EmployeeAccessRecord,
   EmployeeEmailChangeResult,
+  EmployeeOffboardingResult,
 } from "../../sales/employeeAccessContract";
+import { EMPTY_DEPENDENCY_PREVIEW } from "../../sales/employeeAccessContract";
 import type {
   EmployeeMailDeliveryOutcome,
   EmployeeMailDeliveryStatus,
@@ -366,6 +368,41 @@ const getDataProviderWithCustomMethods = () => {
         record: data.data,
         previousEmail: data.previousEmail ?? "",
         invitationSent: data.invitationSent === true,
+      };
+    },
+
+    /**
+     * "Zugang beenden" (W5). The only way the browser ends an employee's
+     * access: the users Edge Function runs the offboarding executor
+     * (database: access off + sessions revoked + audit in one transaction →
+     * Auth ban → verification). The operation id travels as the request
+     * header so the audit rows carry it as request_id.
+     */
+    async offboardEmployee(input: {
+      salesId: Identifier;
+      operationId?: string;
+    }): Promise<EmployeeOffboardingResult> {
+      const { data, error } = await getSupabaseClient().functions.invoke<{
+        data: EmployeeAccessRecord;
+        disposition?: "executed" | "replayed";
+        sessionsRevoked?: number;
+      }>("users", {
+        method: "POST",
+        body: { action: "offboard", sales_id: input.salesId },
+        ...(input.operationId
+          ? { headers: { [NORA_OPERATION_ID_HEADER]: input.operationId } }
+          : {}),
+      });
+
+      if (error || !data?.data) {
+        throw new Error(await readEmployeeAccessErrorCode(error));
+      }
+      return {
+        record: data.data,
+        disposition: data.disposition === "replayed" ? "replayed" : "executed",
+        sessionsRevoked:
+          typeof data.sessionsRevoked === "number" ? data.sessionsRevoked : 0,
+        dependencies: data.data.dependencies ?? EMPTY_DEPENDENCY_PREVIEW,
       };
     },
 

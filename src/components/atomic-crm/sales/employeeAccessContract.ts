@@ -38,6 +38,30 @@ export type EmployeeAccessAction =
   | "disable_access"
   | "enable_access";
 
+/**
+ * W5: what still depends operationally on an employee. Mirrors
+ * EmployeeDependencyPreview on the server. Current responsibility (the four
+ * assignment tables) is separate from historical authorship (notes), which
+ * never needs reassignment. Counts only.
+ */
+export type EmployeeDependencyPreview = {
+  companies: number;
+  contacts: number;
+  openDeals: number;
+  openTasks: number;
+  contactNotes: number;
+  dealNotes: number;
+};
+
+export const EMPTY_DEPENDENCY_PREVIEW: EmployeeDependencyPreview = {
+  companies: 0,
+  contacts: 0,
+  openDeals: 0,
+  openTasks: 0,
+  contactNotes: 0,
+  dealNotes: 0,
+};
+
 /** Exactly the fields the server returns — nothing here is provider metadata. */
 export type EmployeeAccessRecord = {
   employeeId: number;
@@ -52,6 +76,17 @@ export type EmployeeAccessRecord = {
   identityConsistency: IdentityConsistency;
   invitedAt: string | null;
   activatedAt: string | null;
+  /** W5: present on single-employee reads and offboarding results only. */
+  dependencies?: EmployeeDependencyPreview;
+};
+
+/** What the server returns after a verified offboarding (W5). */
+export type EmployeeOffboardingResult = {
+  record: EmployeeAccessRecord;
+  /** executed = access ended / sessions revoked now; replayed = already done. */
+  disposition: "executed" | "replayed";
+  sessionsRevoked: number;
+  dependencies: EmployeeDependencyPreview;
 };
 
 /** What the server returns after a verified login-email change (W4). */
@@ -228,6 +263,85 @@ export function describeEmployeeEmailChangeSuccess(
     default:
       return `Anmeldeadresse geändert auf ${next}. Die neue Adresse wird künftig für den Nora-Zugang verwendet.`;
   }
+}
+
+/* ---------------------------------------------------------------------- */
+/* W5 — "Zugang beenden"                                                    */
+/* ---------------------------------------------------------------------- */
+
+export const EMPLOYEE_OFFBOARDING_ACTION_LABEL = "Zugang beenden";
+
+export const EMPLOYEE_OFFBOARDING_DESCRIPTION =
+  "Der Nora-Zugang dieser Person wird sofort beendet. Sie kann sich nicht mehr anmelden, laufende Anmeldungen werden abgemeldet. Kunden, Kontakte, Vorgänge, Aufgaben und Notizen bleiben mit ihrem Namen erhalten. Der Zugang kann später wieder aktiviert werden.";
+
+export const EMPLOYEE_OFFBOARDING_NO_MAIL_HINT =
+  "Es wird keine E-Mail versendet.";
+
+/**
+ * Offered for every employee who currently has (or is about to get) access.
+ * A disabled employee is already out; the server would replay anyway, but
+ * the action would only confuse next to "Zugang deaktiviert".
+ */
+export function isOffboardingApplicable(
+  record: Pick<EmployeeAccessRecord, "accessState">,
+): boolean {
+  return record.accessState === "invited" || record.accessState === "active";
+}
+
+/** What still needs a new owner — current responsibility only, never notes. */
+export function countOpenResponsibilities(
+  deps: EmployeeDependencyPreview,
+): number {
+  return deps.companies + deps.contacts + deps.openDeals + deps.openTasks;
+}
+
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+/** "3 Vorgänge und 5 offene Aufgaben" — only the non-zero parts, in product words. */
+export function describeOpenResponsibilities(
+  deps: EmployeeDependencyPreview,
+): string {
+  const parts: string[] = [];
+  if (deps.companies > 0) parts.push(plural(deps.companies, "Kunde", "Kunden"));
+  if (deps.contacts > 0)
+    parts.push(plural(deps.contacts, "Kontakt", "Kontakte"));
+  if (deps.openDeals > 0)
+    parts.push(plural(deps.openDeals, "Vorgang", "Vorgänge"));
+  if (deps.openTasks > 0)
+    parts.push(
+      `${deps.openTasks} offene ${deps.openTasks === 1 ? "Aufgabe" : "Aufgaben"}`,
+    );
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} und ${parts[parts.length - 1]}`;
+}
+
+/**
+ * The follow-up sentence shown before and after offboarding. Assignments
+ * never block the action; they are named so they can be reassigned next.
+ */
+export function describeOffboardingFollowUp(
+  deps: EmployeeDependencyPreview,
+): string {
+  const open = countOpenResponsibilities(deps);
+  if (open === 0) {
+    return "Es bestehen keine Kunden, Kontakte, Vorgänge oder offenen Aufgaben, die neu zugewiesen werden müssten.";
+  }
+  return `Es ${open === 1 ? "besteht" : "bestehen"} noch ${describeOpenResponsibilities(deps)}, die anschließend neu zugewiesen werden sollten.`;
+}
+
+/** Success copy — spoken only after the server verified the access state. */
+export function describeEmployeeOffboardingSuccess(
+  result: EmployeeOffboardingResult,
+): string {
+  const lead =
+    result.disposition === "replayed"
+      ? "Der Nora-Zugang war bereits beendet."
+      : "Der Nora-Zugang wurde beendet.";
+  const open = countOpenResponsibilities(result.dependencies);
+  if (open === 0) return `${lead} Es sind keine Zuweisungen offen.`;
+  return `${lead} ${describeOffboardingFollowUp(result.dependencies)}`;
 }
 
 /** Calm German copy for the failure modes the access commands can return. */
