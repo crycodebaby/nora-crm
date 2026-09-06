@@ -574,6 +574,70 @@ Bearbeiten-Formular zeigt die Anmeldeadresse read-only. Details: Decision Log
   `insert_audit_event` für `service_role` (Kalender), Retention/Anonymisierung
   der E-Mail-Adressen im Audit (`changes.email` kommt hinzu).
 
+## User Lifecycle W5 — kontrolliertes Offboarding, Session-Revokation, Abhängigkeits-Preview
+
+**Status: `RC VERIFIED — READY FOR CONTROLLED RELEASE` (2026-09-06; Branch
+`security/nora-lifecycle-w5-offboarding`, Basis `origin/main = c96dbe98`; nicht
+gepusht, keine Production-Migration, kein Edge-Deploy — Release-Reihenfolge im
+Decision Log „2026-09-06 – User Lifecycle W5")**
+
+Bewiesen (lokal gegen GoTrue 2.196/PostgREST, read-only gegen `nora-crm-prod`
+bestätigt): Deaktivieren (W1) ließ die Sitzungen eines Mitarbeiters in
+`auth.sessions`/`auth.refresh_tokens` liegen (GoTrue hat keinen Admin-Logout-
+Endpunkt), und PostgREST prüft nie, ob die im JWT genannte Sitzung noch
+existiert — ein vor dem Deaktivieren ausgestelltes Access-Token bekam mit der
+Reaktivierung für seine Restlaufzeit (3600 s) wieder Datenzugriff. Production:
+3 aktive Admins, 1 aktiver Office, Testkonto `sales.id = 4` deaktiviert/gebannt
+mit 0 Sitzungen und 0 Referenzen; `postgres` hält `SELECT`/`DELETE` auf beiden
+Auth-Tabellen.
+
+**W5 (Migration `20260906180000_nora_lifecycle_offboarding.sql`):** `public.offboard_employee_by_executor` (eine
+Transaktion: `disabled` über W1-Capability, Sitzungen + Refresh-Tokens gelöscht,
+Preview, `user.offboarded`), `public.get_employee_dependency_preview`,
+`nora_private.revoke_auth_sessions`, **Session-Bindung** in
+`nora_private.is_active_user()`/`current_role()` über
+`nora_private.jwt_session_is_live()`. Edge: Aktion `offboard`, Modul
+`users/offboarding.ts`, `GET /users?sales_id=` mit `dependencies`. UI: „Zugang
+beenden" mit Preview und Follow-up-Links.
+
+**Bekannte Kanten / bewusst offen nach W5:**
+
+- **Restlaufzeit eines alten Tokens ist nur durch die RLS gedeckt, nicht
+  durch GoTrue-Entwertung.** Ein JWT bleibt bis `exp` kryptografisch gültig;
+  PostgREST akzeptiert es, die Datenbank verweigert (deaktiviert **und**
+  Sitzung gelöscht). Kein Pfad in Nora liefert einem solchen Token noch
+  Daten. Das ist eine Autorisierungs-, keine Authentifizierungsentwertung —
+  bewusst so dokumentiert.
+- **Session-Bindung ist Fail-open bei fehlendem Leserecht auf
+  `auth.sessions`** (WARNING im Log, Vor-W5-Verhalten). In Production ist das
+  Privileg vorhanden (read-only bewiesen); der Release-Preflight prüft es
+  erneut. Fehlt es je, ist die Bindung still inaktiv — beobachten
+  (`pg_stat`/Logs auf „session binding inactive").
+- **Bann-Ausfall nach erfolgreichem DB-Schritt** meldet
+  `employee_access_sync_incomplete` (`offboarded: true`); Zugang ist bereits
+  aus (RLS + Sitzungen), nur eine neue Passwort-Anmeldung würde GoTrue noch
+  akzeptieren und dann keinen Zugang finden. Konvergenz über Retry oder
+  „Zugangsstatus synchronisieren" (W1). Keine Automatik.
+- **Kein „Sitzungen beenden" für bereits Deaktivierte in der Oberfläche.**
+  Der Executor deckt den Fall (`executed`, `sessions_revoked > 0`, kein zweites
+  `user.disabled`); die UI bietet die Aktion für Deaktivierte nicht an, weil
+  „Zugang beenden" neben „Zugang deaktiviert" verwirren würde. Durch die
+  Session-Bindung erhält eine solche Restsitzung ohnehin keine Daten.
+- **Aufgaben-Follow-up nur als Zähler.** Es gibt keine Desktop-Aufgabenliste
+  mit Route; Kunden/Kontakte/Vorgänge verlinken auf die bestehenden Listen mit
+  `?filter={"sales_id":…}`. Umverteilung bleibt das normale Bearbeiten (kein
+  Massen-Reassign, kein Automatismus).
+- **Preview-Definition:** offene Vorgänge = `archived_at is null`, offene
+  Aufgaben = `done_date is null`; Kunden/Kontakte ungefiltert. Notizen werden
+  gezeigt, aber nie als Umverteilungsarbeit gezählt.
+- **Kein Grund-Feld (`p_reason`)** im Audit — bewusst (Freitext, Retention);
+  nachrüstbar.
+- **Deaktivierter Admin, Rolle:** unverändert die LOW-W3-Frage.
+- Weiterhin offen aus W1–W4: Hard Delete (W6), Default-Privilegien, JOSE-Wortlaut
+  der 401-Antworten, SQL-Suiten in CI (W9), `record_operation_error`-camelCase-
+  Nebenbefund, Retention/Anonymisierung (`employee_email` kommt in
+  `user.offboarded` hinzu).
+
 ## Operation Manager — pendente Operationen ohne eigenen TTL
 
 **Status: `ASSESSED — LOW — PLANNED FOLLOW-UP`**

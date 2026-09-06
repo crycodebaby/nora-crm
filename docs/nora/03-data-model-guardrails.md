@@ -404,6 +404,15 @@ Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` —
 - **Kein generischer Profil-PATCH für Identität.** Ein PATCH-Body mit `email` wird als Ganzes abgewiesen; „Name gespeichert, E-Mail gescheitert" darf nicht existieren. Das Bearbeiten-Formular zeigt die Anmeldeadresse read-only, die Änderung ist eine eigene Aktion mit Konsequenztext je Zustand.
 - **Selbständerung ist blockiert** (`NORA_SELF_EMAIL_CHANGE_FORBIDDEN`), Erfolg wird erst nach serverseitiger Verifikation beider Speicher gemeldet, ein Retry ist ein typisiertes No-op (`email_unchanged`) ohne zweites Audit und ohne zweite Einladung.
 
+### Zugang beenden und Sitzungen (User Lifecycle W5, 2026-09-06)
+
+- **Offboarding ist Deaktivieren + Sitzungsende + Audit in einer Transaktion** (`public.offboard_employee_by_executor`, nur `service_role`, verifizierter Admin-Actor). Der Zugang endet sofort; Person, Historie und alle sechs Referenzen bleiben (W2). Offene Zuständigkeiten blockieren nie — sie werden gezählt (`public.get_employee_dependency_preview`: Kunden, Kontakte, offene Vorgänge, offene Aufgaben; Notizen getrennt) und anschließend umverteilt.
+- **Sitzungen werden in der Datenbank beendet.** GoTrue bietet keinen Admin-Logout; `nora_private.revoke_auth_sessions` löscht `auth.sessions` (Refresh-Tokens kaskadieren) und Restbestände in `auth.refresh_tokens`. Nur postgres-intern, nur aus dem Executor. Nie aus einer Edge Function oder über einen Browser-Pfad.
+- **Ein JWT ist nur so lange etwas wert wie seine Sitzung.** PostgREST prüft die Sitzung nicht; Nora tut es in `nora_private.is_active_user()`/`current_role()` über `jwt_session_is_live()` (Claim `session_id` ↔ `auth.sessions`). Tokens ohne Claim (Fixtures, Nicht-GoTrue) sind unverändert; `service_role` unbetroffen. Ein Token, dessen Sitzung fehlt, bekommt keine Daten — auch nach Reaktivierung. Wer die RLS-Helfer anfasst, erhält die Bindung.
+- **Idempotenz über `disposition`, nicht über neue Spalten.** `executed` (Zugang war aktiv oder es gab Sitzungen) schreibt genau ein `user.offboarded`; `replayed` ändert und schreibt nichts. Kein `offboarded_at`, kein fünfter Zugangsstatus: der Zustand ist aus `sales.disabled` + Bann + Sitzungen abgeleitet.
+- **Reihenfolge und Teilausfall:** Datenbank (Guards, Zustand, Sitzungen, Audit) → Auth-Bann → Verifikation. Scheitert der Bann, ist der Zugang trotzdem aus (RLS + Sitzungen); Antwort `employee_access_sync_incomplete` mit `offboarded: true`, Konvergenz per Retry oder „Zugangsstatus synchronisieren". Nie grün ohne Verifikation.
+- **Audit-Metadaten bleiben gebunden:** Zähler, Flags, Rolle, Adresse — nie Token, Sitzungs-IDs, Provider-Antworten.
+
 ## Checklisten- und Audit-Guardrails (Welle 7b)
 
 Details in `10-checklists-snippets-audit.md`:
