@@ -1,6 +1,6 @@
 # 19 – User-Lifecycle-Architektur (Mitarbeiterzugang)
 
-Stand: 2026-09-06 — aktueller Zustand nach User Lifecycle **W1–W5** (alle `PRODUCTION VERIFIED`).
+Stand: 2026-09-06 — aktueller Zustand nach User Lifecycle **W1–W5** (alle `PRODUCTION VERIFIED`); **W6-A** (Session-Autorisierung fail-closed/Owner-gebunden) ist als RC verifiziert, aber **nicht released** — Abschnitt 11 beschreibt den W6-A-Vertrag, in Production gilt bis zum Release der W5-Stand (Abschnitt 16).
 
 Dieses Dokument ist die **aktuelle Quelle der Wahrheit** für den Mitarbeiter-/Benutzer-Lebenszyklus in Nora. Es beschreibt, wie das Subsystem heute funktioniert. Historische Release-Evidenz (RC-SHAs, Migrationshashes, Testzahlen, Live-Beweise, Zwischenfälle) steht im Release-Archiv (`releases/2026-09.md`), die knappen Entscheidungen mit Begründung in `06-decision-log.md`.
 
@@ -140,18 +140,28 @@ Ereignisvokabular `user.*` (live): `user.role_changed`, `user.disabled`, `user.e
 
 Regeln: kein Audit ohne Änderung, keine Änderung ohne Audit (Trigger/Executor in derselben Transaktion); Audit nach einem Provider-Erfolg (Einladung, Passwort-Link) erst nach dessen Annahme, Audit-Fehler → `audit_write_failed`, nie grün; nie Token, JWTs, Sitzungs-IDs oder Provider-Antworten in `metadata`; alte Zeilen (vor W3 `System`) bleiben unverändert (append-only, kein Backfill). Details zur Tabelle: `13-crm-audit-retention.md`.
 
-## 11. Session-gebundene RLS-Autorisierung (W5)
+## 11. Session-gebundene RLS-Autorisierung (W5, finalisiert in W6-A)
 
-Ein JWT bleibt bis `exp` kryptografisch gültig; PostgREST prüft nie, ob die im Token genannte Sitzung noch existiert, und GoTrue bietet keinen Admin-Logout. Nora bindet deshalb die Autorisierung an die Sitzung:
+Ein JWT bleibt bis `exp` kryptografisch gültig; PostgREST prüft nie, ob die im Token genannte Sitzung noch existiert, und GoTrue bietet keinen Admin-Logout. Nora bindet deshalb die Autorisierung an die Sitzung. **Sicherheitsinvariante (W6-A):** ein Browser-Request, der eine Sitzung nennt, ist nur autorisiert, wenn Nora beweisen kann, dass genau diese lebende Sitzung genau diesem authentifizierten Benutzer gehört.
 
-- `nora_private.jwt_session_is_live()` liest den `session_id`-Claim (`safe_auth_session_id()`) und verlangt eine Zeile in `auth.sessions`.
-- `nora_private.is_active_user()` und `nora_private.current_role()` — und damit `has_role`, `is_admin`, `can_write` und alle Policies — tragen diese Bindung.
-- Bewusst eng: ein JWT **ohne** `session_id`-Claim (Test-Fixtures, Nicht-GoTrue-Kontexte) verhält sich wie vorher; `service_role` ist unbetroffen. Ein Browser kann den Claim aus einem signierten Token nicht entfernen.
-- Effekt: eine widerrufene Sitzung ist sofort tot — auch nach Reaktivierung, auch bei unverfallenem Token. Reaktivierung erfordert eine neue Anmeldung.
-- Kosten: ein PK-Lookup pro Policy-Auswertung.
-- **Fail-open (bekannte Einschränkung):** ist `auth.sessions` für `postgres` nicht lesbar, antwortet der Helper mit `WARNING` „live" (Vor-W5-Verhalten). Siehe Abschnitt 16.
+- `nora_private.jwt_session_claim()` klassifiziert den `session_id`-Claim an einer Stelle: `absent` \| `present` \| `malformed`, plus `jwt_transported` (= PostgREST hat ein JWT übergeben, d. h. `request.jwt.claims` ist gesetzt). Quellen in dieser Reihenfolge: `request.jwt.claim.session_id` (Legacy-GUC, nur SQL-Fixtures — PostgREST ≥ 9 setzt sie nie), dann `request.jwt.claims`.
+- `nora_private.jwt_session_is_live()` entscheidet:
 
-Wer die RLS-Helfer ändert, erhält die Bindung; neue Helfer, die „aktiver Benutzer" beantworten, binden ebenfalls.
+  | Claim-Zustand | Ergebnis |
+  |---|---|
+  | `present` (UUID-String) | live **nur** wenn `auth.sessions.id = session_id` **und** `auth.sessions.user_id = JWT-sub`; kein `sub`, keine Zeile, fremder Besitzer oder **jeder** Fehler beim Nachschlagen → verweigert |
+  | `malformed` (Key vorhanden, aber kein UUID-String: ungültiger String, JSON `null`, Zahl, Boolean, Objekt, Array; Claims kein JSON-Objekt) | verweigert |
+  | `absent`, JWT übergeben (`request.jwt.claims` gesetzt) | verweigert — ein von PostgREST transportiertes Benutzer-JWT ohne Sitzung ist nie ein echtes GoTrue-Token |
+  | `absent`, **kein** JWT übergeben (SQL-Fixtures mit Legacy-GUCs, `psql`, Trigger-Kontexte von GoTrue/pg_cron) | Kompatibilität: `true` (Vor-W5-Verhalten); über die API unerreichbar, weil nichts, was ein Client sendet, `request.jwt.claim.*` setzen kann |
+
+- `nora_private.is_active_user()` und `nora_private.current_role()` — und damit `has_role`, `is_admin`, `can_write`, alle Policies, beide Identitäts-Views und alle RPCs darauf — tragen diese Bindung (Blast Radius: 57 von 74 Policies auf 20 Tabellen, 2 Views, 11 RPCs; die übrigen 17 Policies sind rollennamenbasiert für Capability-Rollen bzw. Storage).
+- `service_role` ist unbetroffen (RLS-Bypass; Executoren prüfen `safe_auth_role()` und konsultieren die Sitzung nie); Capability-Rollen (`nora_role_manager`, `nora_identity_manager`, `nora_audit_writer`, Kalender-Rollen) haben rollennamenbasierte Policies ohne Session-Bezug.
+- **Fail-closed:** kann `postgres` `auth.sessions` nicht lesen, antwortet der Helfer `WARNING` „session binding DENIED" und **verweigert** (kein Vor-W5-Fallback mehr). Voraussetzung dafür ist das Leserecht; die W6-A-Migration verweigert die Installation ohne dieses Recht (Hard Gate + Lookup-Probe), und `nora_private.session_binding_health()` (nur `postgres`; keine Sitzungsdaten) beantwortet „ist die Bindung auf dieser Datenbank auswertbar?" für Suites, Runbook und Störungsdiagnose.
+- Effekt: eine widerrufene Sitzung ist sofort tot — auch nach Reaktivierung, auch bei unverfallenem Token; ein Token mit fremder Sitzung, manipuliertem oder fehlendem Claim bekommt keine Daten. Reaktivierung erfordert eine neue Anmeldung.
+- Kosten: ein PK-Lookup mit Besitzer-Vergleich pro Policy-Auswertung.
+- Bewiesen lokal gegen GoTrue 2.196 / PostgREST 16 (echte Anmeldungen, mit dem lokalen Schlüssel signierte Claim-Formen); in Production läuft PostgREST 14.5 (setzt ebenfalls nur `request.jwt.claims`).
+
+Wer die RLS-Helfer ändert, erhält die Bindung; neue Helfer, die „aktiver Benutzer" beantworten, binden ebenfalls. Der Kompatibilitätspfad wird nicht verbreitert; wer ihn entfernen will, stellt zuerst alle SQL-Fixtures auf simulierte Sitzungen um.
 
 ## 12. Abhängigkeits-Preview / „Offene Zuständigkeiten"
 
@@ -193,8 +203,8 @@ Heute gibt es **keinen** unterstützten Löschpfad für Mitarbeiter:
 
 | Einschränkung | Bewertung | Vorgemerkt |
 |---|---|---|
-| Session-Bindung ist **fail-open**, wenn `postgres` `auth.sessions` nicht lesen kann (WARNING, Vor-W5-Verhalten) | von keinem Aufrufer auslösbar; in Production ist das Privileg vorhanden (direkt **und** über `pg_read_all_data`); Restrisiko = eigenes unverfallenes Token eines gerade reaktivierten Mitarbeiters (≤ 3600 s) | W6: fail-closed + Privileg-Monitor |
-| Helfer prüft nur die **Existenz** der Sitzung (kein `user_id = sub`-Abgleich); malformed `session_id`-Claim fällt auf den No-Claim-Pfad | über signierte GoTrue-Tokens nicht erreichbar | W6: Owner-Abgleich, malformed → deny |
+| Session-Bindung fail-open / nur Existenzprüfung / malformed → No-Claim-Pfad (W5) | **in W6-A geschlossen** (RC, noch nicht released): fail-closed, Owner-Bindung, malformed → deny, transportiertes JWT ohne Claim → deny; bis zum Release gilt in Production der W5-Stand | W6-A Release |
+| Fail-closed macht das Leserecht von `postgres` auf `auth.sessions` zur Betriebsvoraussetzung: fällt es weg, sehen alle Mitarbeiter sofort keine Daten | kein Angriffspfad; Diagnose über Log-Suchbegriff „session binding DENIED" und `nora_private.session_binding_health()`; Migration verweigert Installation ohne das Recht | dokumentiert (W6-A) |
 | Restlaufzeit eines alten JWT ist nur durch die RLS gedeckt, nicht durch GoTrue-Entwertung | Autorisierungs-, keine Authentifizierungsentwertung; kein Pfad liefert Daten | akzeptiert, dokumentiert |
 | `public.insert_audit_event` bleibt für `service_role` ausführbar (Kalender-Functions, Actor `System`) | vorbestehend; `users`-Function nutzt sie nicht mehr | spätere Härtung (schmale Writer je Function) |
 | Default-Privilegien in `public` vergeben `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` an API-Rollen; lokaler `db reset` ist großzügiger als Production | `audit_events` geschlossen (Wave 0); Folgetabellen offen | eigene Grant-Welle (`17-known-issues-and-planned-waves.md`) |
@@ -216,7 +226,8 @@ Heute gibt es **keinen** unterstützten Löschpfad für Mitarbeiter:
 | **W3** | Audit-Actor-Korrektheit, stabile Ziel-Entity, `record_employee_admin_event`, Operation-Korrelation | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W4** | Kontrollierte Änderung der Anmeldeadresse (Ticket + Guard, `nora_identity_manager`) | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W5** | Offboarding, Session-Revokation, session-gebundene RLS, Abhängigkeits-Preview | `PRODUCTION VERIFIED` (2026-09-06) |
-| **W6** | Kontrollierter Hard-Delete-Executor für unreferenzierte Test-/Fake-Konten; Empfehlung: Session-Bindung fail-closed + Privileg-Monitor, Owner-Abgleich im Helfer | **geplant / nicht begonnen** — Umfang TBD |
+| **W6-A** | Session-Autorisierung finalisiert: fail-closed, Owner-Bindung (`sessions.user_id = sub`), malformed/fehlender Claim → deny, Migrations-Hard-Gate, `session_binding_health()` | **RC verifiziert, nicht released** (2026-09-06) — Migration `20260906210000_nora_lifecycle_session_authorization` |
+| **W6-B** | Kontrollierter Hard-Delete-Executor für unreferenzierte Test-/Fake-Konten (Ticket + `auth.users` BEFORE-DELETE-Guard, Purge `email_delivery_events`) | **geplant / nicht begonnen** — Entwurf liegt vor, Umfang nicht entschieden |
 | **W7** | — | **geplant / TBD** (nicht entschieden) |
 | **W8** | — | **geplant / TBD** (nicht entschieden) |
 | **W9** | SQL-Verifikationssuiten (kanonische Sequenz) in CI | **geplant / nicht begonnen** |
@@ -231,7 +242,7 @@ Kandidaten ohne Wellen-Zuordnung (nicht entschieden): Default-Privilegien-Berein
 - Neue `user.*`-Ereignisse: Allowlist in `record_employee_admin_event` (oder DB-Executor mit `pin_audit_context`), Actor = verifizierte JWT-User-ID, Ziel = `sales.id`, Operation-ID weiterreichen — nie `insert_audit_event` + `crypto.randomUUID()`.
 - Jede neue Referenz auf `sales.id`: `NO ACTION`-FK, W2-Suite ergänzen; jede Spalte mit aktueller Zuständigkeit: zusätzlich `guard_active_assignment_trigger` und Preview-Zähler; Picker über `SalesAssignmentInput`.
 - Namen bestehender Datensätze über `sales_identities`, Auswahl für Neues über `sales_directory`; beide Views bleiben `SELECT`-only und ohne Identity-/Security-Metadaten.
-- RLS-Helfer, die „aktiver Benutzer" beantworten, tragen `jwt_session_is_live()`. Test-Fixtures setzen nur `request.jwt.claim.sub`; eine Sitzung simuliert man mit `request.jwt.claim.session_id` auf eine echte `auth.sessions.id`. Migrationen, die `auth.sessions` berühren, prüfen vorher `has_table_privilege('postgres', 'auth.sessions', 'SELECT')`.
+- RLS-Helfer, die „aktiver Benutzer" beantworten, tragen `jwt_session_is_live()`; die Claim-Klassifikation bleibt allein in `jwt_session_claim()` (keine zweite Parser-Stelle, keine Session-Checks in einzelnen Policies). Test-Fixtures: wer nur die Legacy-GUCs `request.jwt.claim.sub`/`role` setzt, läuft im Kompatibilitätspfad (kein JWT übergeben); wer `request.jwt.claims` (JSON, der API-Pfad) setzt, **muss** eine echte `auth.sessions`-Zeile des Users anlegen und deren `id` als `session_id` mitgeben (Konvention der Suites: Fixture-Sitzungs-ID = User-ID). Migrationen, die `auth.sessions` berühren, prüfen vorher `has_table_privilege('postgres', 'auth.sessions', 'SELECT')` und eine echte Lookup-Probe (Vorbild: W6-A-Gate).
 - Keine Testdaten, Fixtures oder Beweise an echten Mitarbeitern in Production; Live-Beweise nur am freigegebenen Testkonto.
 - Kanonische SQL-Sequenz nach `db reset` (W1 → W2 → W3 → W4 → W5 je zweimal, leer und mit Fixtures) — siehe `07-agent-change-checklist.md`.
 - Bei Änderungen an diesem Subsystem: dieses Dokument, `01-domain-model.md` (Kurzfassung), `03-data-model-guardrails.md` (Invarianten), `06-decision-log.md` (durable Entscheidung) und `16-current-state.md` nachziehen; Release-Evidenz ins Archiv (`releases/`).

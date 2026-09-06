@@ -43,7 +43,7 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 
 - Rollen `admin` / `office` / `viewer` an `sales.role`; Matrix in `11-google-calendar-rbac.md` Abschnitt C; UI spiegelt sie (`canAccess.ts`), die Datenbank bleibt autoritativ.
 - RLS auf allen Kern-Tabellen; `SECURITY DEFINER`-RPCs prüfen Rolle/Ownership selbst; interne Helper in `nora_private`.
-- **Datenzugriff ist an eine lebende Auth-Sitzung gebunden** (W5): ein JWT, dessen Sitzung fehlt, bekommt keine Daten.
+- **Datenzugriff ist an eine lebende Auth-Sitzung gebunden** (W5): ein JWT, dessen Sitzung fehlt, bekommt keine Daten. **W6-A** (Sitzung muss dem JWT-`sub` gehören, malformed/fehlender Claim → verweigert, fail-closed) ist als RC verifiziert, aber **noch nicht released** — `19-user-lifecycle-architecture.md` §11/§16.
 - Mitarbeiter-Lifecycle (Einladung, Rolle, Deaktivieren, Anmeldeadresse, Offboarding) läuft ausschließlich über die `users` Edge Function und `service_role`-only Executoren mit verifiziertem Actor — `19-user-lifecycle-architecture.md`.
 - `operation_id` (Header `x-nora-operation-id`) ist **ausschließlich Korrelation**, nie Auth.
 - Audit: `audit_events`, append-only, Trigger + schmale Writer; Actor/Ziel/Operation sind drei Fakten — `13-crm-audit-retention.md`. Error Observatory: `operation_errors`, getrennt vom Audit.
@@ -90,6 +90,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | E-Mail | V1C-A Zustellbeobachtung, V1C-B Zustellstatus-UI | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Security | Security Hardening Wave 0 (`audit_events` TRUNCATE) | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Lifecycle | User Lifecycle W1, W2, W3, W4, W5 | `PRODUCTION VERIFIED` (2026-09-05/06) | `2026-09` |
+| Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | **RC verifiziert, nicht released** (2026-09-06; Migration `20260906210000`, nur Datenbank) | — |
 
 **Was heute gilt (Kurzfassungen der Subsysteme):**
 
