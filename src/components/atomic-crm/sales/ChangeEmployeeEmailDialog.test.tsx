@@ -109,14 +109,17 @@ describe("ChangeEmployeeEmailDialog (W4)", () => {
     await screen.getByTestId("employee-email-change-submit").click();
 
     await expect.poll(() => change.mock.calls.length).toBe(1);
-    expect(change.mock.calls[0]?.[0]).toMatchObject({
+    // The mock is declared without parameters; read the recorded call as the
+    // command input it actually received.
+    const firstCall = change.mock.calls[0] as unknown as
+      | [{ salesId: number; newEmail: string; operationId?: string }]
+      | undefined;
+    expect(firstCall?.[0]).toMatchObject({
       salesId: 7,
       newEmail: "Neu.Adresse@ergart.de",
     });
     // The operation id minted by the Operation Manager travels with the call.
-    expect(
-      (change.mock.calls[0]?.[0] as { operationId?: string }).operationId,
-    ).toMatch(/^[0-9a-f-]{36}$/);
+    expect(firstCall?.[0]?.operationId).toMatch(/^[0-9a-f-]{36}$/);
     await expect.poll(() => onChanged.mock.calls.length).toBe(1);
     await expect
       .poll(() =>

@@ -20,6 +20,7 @@ import type { CrmDataProvider } from "../providers/types";
 import { syncCurrentSaleCacheIfSelf } from "../providers/supabase/authProvider";
 import type { Sale, SalesFormData } from "../types";
 import { SalesInputs } from "./SalesInputs";
+import { buildSalesEditPatch } from "./salesEditPatch";
 import { EmployeeAccessPanel } from "./EmployeeAccessPanel";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
 
@@ -71,24 +72,14 @@ function SalesEditForm({ record }: { record: Sale | undefined }) {
         );
       }
 
-      // Send only changed fields — pure role edits must not rewrite names.
-      // The login email is never part of this PATCH (W4): it moves only
-      // through "E-Mail-Adresse ändern" in the Nora-Zugang panel, and the
-      // server refuses a PATCH that carries it.
-      const patch: Partial<Omit<SalesFormData, "password" | "email">> = {};
-      if (data.first_name !== record.first_name) {
-        patch.first_name = data.first_name;
+      const patch = buildSalesEditPatch(record, data);
+      // Nothing changed (e.g. "Speichern" right after "E-Mail-Adresse ändern",
+      // which already persisted through its own command): do not send an
+      // empty PATCH — the server refuses it as invalid_payload, which used to
+      // surface as a misleading role error.
+      if (Object.keys(patch).length === 0) {
+        return record;
       }
-      if (data.last_name !== record.last_name) {
-        patch.last_name = data.last_name;
-      }
-      if (data.role !== record.role) {
-        patch.role = data.role;
-      }
-      if (data.disabled !== record.disabled) {
-        patch.disabled = data.disabled;
-      }
-      // Avatar is not part of SalesInputs; omit to avoid accidental clears.
 
       return dataProvider.salesUpdate(record.id, patch);
     },
