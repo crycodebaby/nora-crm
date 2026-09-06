@@ -26,13 +26,9 @@ Zusätzliche Repo-/Production-Drift: `supabase/schemas/06_grants.sql` deklariert
 
 Vorschlag für eine eigene Welle: (1) `configuration`, `google_calendar_connections`, `google_calendar_events` auf `revoke all` → gezielter `grant` bringen; (2) entscheiden, ob die Default-Privilegien dauerhaft korrigiert und im Repo festgeschrieben werden; (3) entscheiden, ob `service_role` `TRUNCATE` auf `audit_events` behält; (4) `public.init_state` mitnehmen (trägt wirkungslose DML-Grants für `anon`/`authenticated`). Ablauf wie Wave 0: lokaler Replay, Verhaltensnachweis pro Rolle, Production-Apply, Live-Verifikation.
 
-### A.2 Session-Bindung der RLS ist fail-open bei fehlendem Leserecht auf `auth.sessions`
+### A.2 Fail-closed Session-Bindung: Leserecht von `postgres` auf `auth.sessions` ist Betriebsvoraussetzung
 
-**Status: `ACCEPTED LIMITATION` in Production — behoben im W6-A-RC (`20260906210000_nora_lifecycle_session_authorization`, 2026-09-06, nicht released).** Nach dem W6-A-Release wandert dieser Punkt ins Archiv; bis dahin gilt in Production der unten beschriebene W5-Stand. Der W6-A-Vertrag (fail-closed, `sessions.user_id = sub`, malformed/fehlender Claim → deny) steht in `19-user-lifecycle-architecture.md` §11. Neue Betriebsvoraussetzung nach dem Release: verliert `postgres` das Leserecht auf `auth.sessions`, sehen **alle** Mitarbeiter sofort keine Daten — Diagnose über Log-Suchbegriff „session binding DENIED" und `select nora_private.session_binding_health()`; Abhilfe: Leserecht wiederherstellen.
-
-`nora_private.jwt_session_is_live()` antwortet mit `WARNING` „live", wenn `postgres` `auth.sessions` nicht lesen kann (Vor-W5-Verhalten). In Production ist das Privileg vorhanden (direkt **und** über `pg_read_all_data`); der Zweig ist von keinem Aufrufer auslösbar; der degradierte Zustand = Vor-W5-Baseline (Deaktivierte bleiben über `sales.disabled` verweigert). Restrisiko: das eigene unverfallene Token eines gerade reaktivierten Mitarbeiters (≤ 3600 s). Beobachten: Logs auf „session binding inactive". **W6-Empfehlung:** Claim vorhanden + Sitzung nicht prüfbar → DENY, plus Privileg-Monitor.
-
-Defense-in-Depth, ebenfalls für W6 vorgemerkt: der Helfer prüft nur die **Existenz** der Sitzung (kein `user_id = sub`-Abgleich); ein malformed `session_id`-Claim fällt auf den No-Claim-Pfad zurück. Beides über signierte GoTrue-Tokens nicht erreichbar.
+**Status: `ACCEPTED LIMITATION`** (W6-A, `PRODUCTION VERIFIED` 2026-09-06). Seit W6-A verweigert `nora_private.jwt_session_is_live()` jede nicht prüfbare Sitzung (`WARNING` „session binding DENIED"). Verliert `postgres` das Leserecht auf `auth.sessions`, sehen deshalb **alle** Mitarbeiter sofort keine Daten. Kein Angriffspfad; in Production ist das Recht vorhanden (direkt **und** über `pg_read_all_data`). Diagnose: Log-Suchbegriff „session binding DENIED" und `select nora_private.session_binding_health()` (nur `postgres`); Abhilfe: Leserecht wiederherstellen, keine Nora-Codeänderung. Der frühere Fail-open-Punkt (W5) ist aufgelöst und im Originalwortlaut im Archiv (`releases/2026-09.md`, Anhang).
 
 ### A.3 Restlaufzeit eines alten JWT nur durch RLS gedeckt
 
@@ -54,11 +50,10 @@ Defense-in-Depth, ebenfalls für W6 vorgemerkt: der Helfer prüft nur die **Exis
 
 **Status: `OPEN (LOW)`** (V1C-A.6) — eine handgesetzte Id wäre möglich; praktisch zeigt eine weiche `employee_sale_id` in `email_delivery_events` nie auf einen anderen Mitarbeiter (Sequenz nur vorwärts, kein Codepfad setzt Ids), `recipient_email_snapshot` ist die Gegenprobe. `GENERATED ALWAYS` wäre eine eigene Entscheidung an einer bestehenden Tabelle.
 
-## B. Mitarbeiter-Lifecycle (offen nach W1–W5)
+## B. Mitarbeiter-Lifecycle (offen nach W1–W6-A)
 
 Aktuelle Architektur: `19-user-lifecycle-architecture.md` (Roadmap in §17, Einschränkungen in §16).
 
-- **W6-A Session-Autorisierung** — `RC VERIFIED, NOT RELEASED` (2026-09-06): Migration `20260906210000_nora_lifecycle_session_authorization`, Suite `lifecycle_session_authorization_verification.sql`, keine Frontend-/Edge-Änderung. Release-Ablauf: Production-Preflight read-only (`has_table_privilege('postgres','auth.sessions','SELECT')`, Ledger-Kopf `20260906180000`) → Migration → `select nora_private.session_binding_health()` = healthy → Push → Live-Smoke (Anmeldung, Lesen/Schreiben je Rolle, Zugang beenden am Testkonto → altes Token tot).
 - **W6-B Hard-Delete-Executor** für unreferenzierte Test-/Fake-Konten — `PLANNED DOMAIN WAVE`, nicht begonnen. Die Datenbankbarriere (W2) steht, die Preview (W5) zählt die sechs Referenzen; Purge von `email_delivery_events` und Behandlung der Auth-Identität sind Teil des Entwurfs (Ticket + `auth.users` BEFORE-DELETE-Guard). Umfang nicht entschieden.
 - **W9 SQL-Verifikationssuiten in CI** — `PLANNED FOLLOW-UP`. Die kanonische Sequenz (`07-agent-change-checklist.md`) läuft weiterhin nur lokal; `rbac_rls_first_admin_parallel_runner.ps1` hat einen bekannten Windows-Regex-Bug (Vorbedingung „sales must be empty" wird falsch geparst) — Workaround: die enthaltene SQL manuell mit zwei parallelen `psql`-Sessions nachbilden, das Skript nicht nebenbei patchen.
 - **Dialog „Zugang beenden" nennt das Ziel nur über Anmeldeadresse und Status** — `OPEN (UX)`. Im Live-Beweis 2026-09-06 traf der Product Owner damit einen echten Administrator statt des Testkontos (sofort reaktiviert; Sitzungen blieben gelöscht → Neuanmeldung). Kein Codefehler. Härtung: Name im Dialogkopf, zusätzliche Bestätigung bei Admin-Zielen.

@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-06 · letzter Laufzeit-Release: User Lifecycle W5 `PRODUCTION VERIFIED` (Laufzeit-SHA `3baf5b02`). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
+Stand: 2026-09-06 · letzter Laufzeit-Release: User Lifecycle W6-A `PRODUCTION VERIFIED` (Laufzeit-SHA `401bb08b`, nur Datenbank — Production-Ledger-Kopf `20260906210000`; Frontend und Edge Functions unverändert seit W5 `3baf5b02`). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
 
 Dieses Dokument ist der **Navigations-Einstieg** und eine **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Es enthält bewusst **keine** Release-Evidenz (RC-SHAs, Testzahlen, Live-Beweise) — die liegt im Release-Archiv (`releases/`).
 
@@ -43,13 +43,13 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 
 - Rollen `admin` / `office` / `viewer` an `sales.role`; Matrix in `11-google-calendar-rbac.md` Abschnitt C; UI spiegelt sie (`canAccess.ts`), die Datenbank bleibt autoritativ.
 - RLS auf allen Kern-Tabellen; `SECURITY DEFINER`-RPCs prüfen Rolle/Ownership selbst; interne Helper in `nora_private`.
-- **Datenzugriff ist an eine lebende Auth-Sitzung gebunden** (W5): ein JWT, dessen Sitzung fehlt, bekommt keine Daten. **W6-A** (Sitzung muss dem JWT-`sub` gehören, malformed/fehlender Claim → verweigert, fail-closed) ist als RC verifiziert, aber **noch nicht released** — `19-user-lifecycle-architecture.md` §11/§16.
+- **Datenzugriff ist an eine lebende Auth-Sitzung gebunden** (W5): ein JWT, dessen Sitzung fehlt, bekommt keine Daten. **W6-A** (`PRODUCTION VERIFIED` 2026-09-06): die genannte Sitzung muss dem JWT-`sub` gehören; malformed oder fehlender Claim eines übergebenen JWT → verweigert; nicht prüfbare Sitzung → verweigert (fail-closed) — `19-user-lifecycle-architecture.md` §11.
 - Mitarbeiter-Lifecycle (Einladung, Rolle, Deaktivieren, Anmeldeadresse, Offboarding) läuft ausschließlich über die `users` Edge Function und `service_role`-only Executoren mit verifiziertem Actor — `19-user-lifecycle-architecture.md`.
 - `operation_id` (Header `x-nora-operation-id`) ist **ausschließlich Korrelation**, nie Auth.
 - Audit: `audit_events`, append-only, Trigger + schmale Writer; Actor/Ziel/Operation sind drei Fakten — `13-crm-audit-retention.md`. Error Observatory: `operation_errors`, getrennt vom Audit.
 - Öffentliche Selbstregistrierung ist in Production **deaktiviert** (`disable_signup: true`, nachgewiesen 2026-09-04); Nora ist einladungsbasiert.
 - Supabase Security Advisor: Snapshot 2026-08-28 vollständig bewertet (`ASSESSED/KEEP` bzw. `RESOLVED`); jede neue Migration/Function/Grant-Änderung braucht eine eigene Bewertung. Guardrails: `03-data-model-guardrails.md` Falle 34; Bewertungen: `06-decision-log.md` 2026-08-28 und Archiv `releases/2026-08.md`.
-- Bekannte Restrisiken: `17-known-issues-and-planned-waves.md` (Default-Privilegien, Fail-open der Session-Bindung, JOSE-Wortlaut, …).
+- Bekannte Restrisiken: `17-known-issues-and-planned-waves.md` (Default-Privilegien, JOSE-Wortlaut, Leserecht von `postgres` auf `auth.sessions` als Betriebsvoraussetzung, …).
 
 ## 4. Was ist live? (Momentaufnahme 2026-09-06)
 
@@ -90,7 +90,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | E-Mail | V1C-A Zustellbeobachtung, V1C-B Zustellstatus-UI | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Security | Security Hardening Wave 0 (`audit_events` TRUNCATE) | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Lifecycle | User Lifecycle W1, W2, W3, W4, W5 | `PRODUCTION VERIFIED` (2026-09-05/06) | `2026-09` |
-| Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | **RC verifiziert, nicht released** (2026-09-06; Migration `20260906210000`, nur Datenbank) | — |
+| Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | `PRODUCTION VERIFIED` (2026-09-06; nur Datenbank, Migration `20260906210000`, keine sichtbare Änderung) | `2026-09` |
 
 **Was heute gilt (Kurzfassungen der Subsysteme):**
 

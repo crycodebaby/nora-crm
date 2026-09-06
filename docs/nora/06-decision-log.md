@@ -29,7 +29,7 @@ Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabell
 
 ## 2026-09-06 – User Lifecycle W6-A: Session-Autorisierung fail-closed und Owner-gebunden
 
-**Status:** `RC VERIFIED — NOT RELEASED` (2026-09-06). Migration `20260906210000_nora_lifecycle_session_authorization`. Aktuelle Architektur: `19-user-lifecycle-architecture.md` §11. Release-Evidenz folgt im Archiv erst nach dem Release.
+**Status:** `PRODUCTION VERIFIED` (2026-09-06; Laufzeit-SHA `401bb08b`, Migration `20260906210000_nora_lifecycle_session_authorization` live, nur Datenbank, keine sichtbare Änderung). Aktuelle Architektur: `19-user-lifecycle-architecture.md` §11. Release-Evidenz: `releases/2026-09.md` ([Nachtrag Release W6-A](releases/2026-09.md#2026-09-06--user-lifecycle-w6-a-session-autorisierung-fail-closed-und-owner-gebunden)).
 
 **Kontext.** W5 band die Autorisierung an eine lebende Sitzung, ließ aber drei Schwächen bewusst offen. Alle drei wurden vor der Änderung lokal reproduziert (GoTrue 2.196, PostgREST 16, echte Sitzungen): ein JWT mit der lebenden Sitzung eines **anderen** Benutzers bestand die Existenzprüfung; ein malformed `session_id`-Claim (ungültiger String, JSON `null`, Zahl, Array) fiel auf den No-Claim-Pfad und wurde erlaubt; ohne Leserecht auf `auth.sessions` antwortete der Helfer mit `WARNING` „live".
 

@@ -1,6 +1,6 @@
 # 19 – User-Lifecycle-Architektur (Mitarbeiterzugang)
 
-Stand: 2026-09-06 — aktueller Zustand nach User Lifecycle **W1–W5** (alle `PRODUCTION VERIFIED`); **W6-A** (Session-Autorisierung fail-closed/Owner-gebunden) ist als RC verifiziert, aber **nicht released** — Abschnitt 11 beschreibt den W6-A-Vertrag, in Production gilt bis zum Release der W5-Stand (Abschnitt 16).
+Stand: 2026-09-06 — aktueller Zustand nach User Lifecycle **W1–W6-A** (alle `PRODUCTION VERIFIED`); W6-B (Hard Delete) ist geplant, nicht begonnen. Abschnitt 11 beschreibt den in Production gültigen Session-Autorisierungsvertrag.
 
 Dieses Dokument ist die **aktuelle Quelle der Wahrheit** für den Mitarbeiter-/Benutzer-Lebenszyklus in Nora. Es beschreibt, wie das Subsystem heute funktioniert. Historische Release-Evidenz (RC-SHAs, Migrationshashes, Testzahlen, Live-Beweise, Zwischenfälle) steht im Release-Archiv (`releases/2026-09.md`), die knappen Entscheidungen mit Begründung in `06-decision-log.md`.
 
@@ -196,15 +196,14 @@ Heute gibt es **keinen** unterstützten Löschpfad für Mitarbeiter:
 
 - Browser-Rollen haben weder `DELETE`-Privileg noch DELETE-Policy auf `sales`.
 - Ein referenzierter Mitarbeiter ist durch die sechs `NO ACTION`-FKs auf jedem Pfad unlöschbar (`23503`) — auch für `postgres`/`service_role`.
-- Ein unreferenzierter Mitarbeiter ist technisch nur für `postgres`/`service_role` löschbar. Das ist der Pfad eines **künftigen kontrollierten Hard-Delete-Executors** (W6, nicht gebaut) für Fake-, Versehens- und nie genutzte Testkonten: Preview = alle sechs Zähler 0, Snapshots in `audit_events`/`email_delivery_events` bleiben, Auth-Identität separat (`sales.user_id → auth.users` ist `NO ACTION`), Test-Datenpurge nie über `CASCADE`. Eine privilegierte Purge für `email_delivery_events` eines Testbenutzers ist ebenfalls nur vorbereitet, nicht gebaut.
+- Ein unreferenzierter Mitarbeiter ist technisch nur für `postgres`/`service_role` löschbar. Das ist der Pfad eines **künftigen kontrollierten Hard-Delete-Executors** (W6-B, nicht gebaut) für Fake-, Versehens- und nie genutzte Testkonten: Preview = alle sechs Zähler 0, Snapshots in `audit_events`/`email_delivery_events` bleiben, Auth-Identität separat (`sales.user_id → auth.users` ist `NO ACTION`), Test-Datenpurge nie über `CASCADE`. Eine privilegierte Purge für `email_delivery_events` eines Testbenutzers ist ebenfalls nur vorbereitet, nicht gebaut.
 - **Produktregel:** ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**.
 
 ## 16. Bekannte Sicherheitseinschränkungen (aktuell)
 
 | Einschränkung | Bewertung | Vorgemerkt |
 |---|---|---|
-| Session-Bindung fail-open / nur Existenzprüfung / malformed → No-Claim-Pfad (W5) | **in W6-A geschlossen** (RC, noch nicht released): fail-closed, Owner-Bindung, malformed → deny, transportiertes JWT ohne Claim → deny; bis zum Release gilt in Production der W5-Stand | W6-A Release |
-| Fail-closed macht das Leserecht von `postgres` auf `auth.sessions` zur Betriebsvoraussetzung: fällt es weg, sehen alle Mitarbeiter sofort keine Daten | kein Angriffspfad; Diagnose über Log-Suchbegriff „session binding DENIED" und `nora_private.session_binding_health()`; Migration verweigert Installation ohne das Recht | dokumentiert (W6-A) |
+| Fail-closed macht das Leserecht von `postgres` auf `auth.sessions` zur Betriebsvoraussetzung: fällt es weg, sehen alle Mitarbeiter sofort keine Daten | kein Angriffspfad; Diagnose über Log-Suchbegriff „session binding DENIED" und `nora_private.session_binding_health()`; Migration verweigert Installation ohne das Recht | akzeptiert, dokumentiert (W6-A; `17-known-issues-and-planned-waves.md` A.2) |
 | Restlaufzeit eines alten JWT ist nur durch die RLS gedeckt, nicht durch GoTrue-Entwertung | Autorisierungs-, keine Authentifizierungsentwertung; kein Pfad liefert Daten | akzeptiert, dokumentiert |
 | `public.insert_audit_event` bleibt für `service_role` ausführbar (Kalender-Functions, Actor `System`) | vorbestehend; `users`-Function nutzt sie nicht mehr | spätere Härtung (schmale Writer je Function) |
 | Default-Privilegien in `public` vergeben `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` an API-Rollen; lokaler `db reset` ist großzügiger als Production | `audit_events` geschlossen (Wave 0); Folgetabellen offen | eigene Grant-Welle (`17-known-issues-and-planned-waves.md`) |
@@ -226,7 +225,7 @@ Heute gibt es **keinen** unterstützten Löschpfad für Mitarbeiter:
 | **W3** | Audit-Actor-Korrektheit, stabile Ziel-Entity, `record_employee_admin_event`, Operation-Korrelation | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W4** | Kontrollierte Änderung der Anmeldeadresse (Ticket + Guard, `nora_identity_manager`) | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W5** | Offboarding, Session-Revokation, session-gebundene RLS, Abhängigkeits-Preview | `PRODUCTION VERIFIED` (2026-09-06) |
-| **W6-A** | Session-Autorisierung finalisiert: fail-closed, Owner-Bindung (`sessions.user_id = sub`), malformed/fehlender Claim → deny, Migrations-Hard-Gate, `session_binding_health()` | **RC verifiziert, nicht released** (2026-09-06) — Migration `20260906210000_nora_lifecycle_session_authorization` |
+| **W6-A** | Session-Autorisierung finalisiert: fail-closed, Owner-Bindung (`sessions.user_id = sub`), malformed/fehlender Claim → deny, Migrations-Hard-Gate, `session_binding_health()` | `PRODUCTION VERIFIED` (2026-09-06) — Migration `20260906210000_nora_lifecycle_session_authorization`, nur Datenbank |
 | **W6-B** | Kontrollierter Hard-Delete-Executor für unreferenzierte Test-/Fake-Konten (Ticket + `auth.users` BEFORE-DELETE-Guard, Purge `email_delivery_events`) | **geplant / nicht begonnen** — Entwurf liegt vor, Umfang nicht entschieden |
 | **W7** | — | **geplant / TBD** (nicht entschieden) |
 | **W8** | — | **geplant / TBD** (nicht entschieden) |

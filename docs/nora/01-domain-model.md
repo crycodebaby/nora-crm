@@ -147,7 +147,7 @@ Vollständige Spezifikation: `docs/nora/11-google-calendar-rbac.md`
 
 Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administrator` ist nur Kompatibilitätsspiegel (`role = admin` ↔ `true`). Teamlisten nutzen **`sales_directory`** (v0.4b.2).
 
-**Mitarbeiter-Lebenszyklus (Employee Access V1A–V1C, User Lifecycle W1–W5; Stand 2026-09-06).** Vollständige Architektur: `19-user-lifecycle-architecture.md`.
+**Mitarbeiter-Lebenszyklus (Employee Access V1A–V1C, User Lifecycle W1–W6-A; Stand 2026-09-06).** Vollständige Architektur: `19-user-lifecycle-architecture.md`.
 
 | Fachlich | Technisch | Hinweis |
 |---|---|---|
