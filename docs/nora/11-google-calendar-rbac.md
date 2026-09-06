@@ -214,7 +214,7 @@ auth.users.id
 | Backfill | `administrator = true` → `role = 'admin'`; sonst `role = 'viewer'`; `office` nur manuell |
 | Internes Schema | `nora_private` — Helper nicht in PostgREST (`config.toml` schemas) |
 | Funktionen (intern) | `safe_auth_uid()`, `is_active_user()`, `current_role()`, `has_role()`, `can_write()`, `is_admin()` |
-| Öffentliche RPCs | `start_checklist_run_from_template`; seit W1 (2026-09-05): `set_sales_access_by_executor` nur service_role, `set_sales_role_by_admin` deprecated + nur service_role |
+| Öffentliche RPCs | `start_checklist_run_from_template`; `set_sales_access_by_executor` nur service_role (seit W1, 2026-09-05). Die Legacy-RPC `set_sales_role_by_admin` existiert **nicht mehr** — gelöscht in User Lifecycle W2 (2026-09-05); historisch hatte W1 sie zuvor auf service_role verengt |
 | `search_path` | `''` auf SECURITY DEFINER; vollständig schemaqualifiziert |
 | GUC | ~~GUC-Token~~ → **`nora_role_manager`** Capability (v0.4b.2) |
 | View | `sales_directory` — reduzierte Teamliste (v0.4b.2) |

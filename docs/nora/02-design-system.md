@@ -622,7 +622,7 @@ Alle sechs sichtbaren Zustände sind damit herstellbar: **available** (Standard)
 
 ## Mitarbeiter-Onboarding & Zugang (Welle V1B, 2026-09-04)
 
-Reine Präsentations-Welle über dem technischen Fundament V1A. Die Zustandsmaschine `login/employeeOnboardingFlow.ts`, die Auth-Semantik, Routen und die `users` Edge Function sind **unverändert**; V1B entscheidet nur, wie jeder Zustand aussieht — nie, welcher Zustand gezeigt wird. Status: `PO UX ACCEPTED — READY FOR RELEASE` (2026-09-04, siehe Abschnitt „Demo-Simulation").
+Reine Präsentations-Welle über dem technischen Fundament V1A. Die Zustandsmaschine `login/employeeOnboardingFlow.ts`, die Auth-Semantik, Routen und die `users` Edge Function sind **unverändert**; V1B entscheidet nur, wie jeder Zustand aussieht — nie, welcher Zustand gezeigt wird. Status: `PRODUCTION VERIFIED — PO UX ACCEPTED` (2026-09-04, siehe Abschnitt „Demo-Simulation").
 
 ### Karte und Shell (`EmployeeAccessShell`)
 

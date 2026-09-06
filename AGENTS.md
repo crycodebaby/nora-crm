@@ -4,8 +4,9 @@ Diese Datei ist der verpflichtende Einstiegspunkt für KI-Agenten, die an Nora C
 
 ## Sofortregel
 
-Bevor Code geändert wird, muss der Agent diese Datei und die referenzierten Dokumente lesen:
+Bevor Code geändert wird, liest der Agent zuerst diese Datei und den Dokumentationsindex `docs/nora/README.md` (Leseeinstieg, Zuständigkeiten, Kontextdisziplin). Danach werden **aufgabenbezogen** die zuständigen Dokumente geladen — nicht pauschal alle. Die folgende Liste ist der Kanon der Nora-Dokumente; Pflicht sind immer `README.md`, 16, 01, 03 und 07, die übrigen je nach betroffenem Bereich:
 
+0. `docs/nora/README.md` (Dokumentationsindex — immer zuerst)
 1. `docs/nora/16-current-state.md` (schnelle Orientierung — was ist aktuell live, welche Waves sind abgeschlossen)
 2. `docs/nora/00-project-context.md`
 3. `docs/nora/01-domain-model.md`

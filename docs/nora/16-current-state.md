@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-06 · `origin/main = 96fb1082` (User Lifecycle W5 `PRODUCTION VERIFIED`; Laufzeitstand `3baf5b02`).
+Stand: 2026-09-06 · letzter Laufzeit-Release: User Lifecycle W5 `PRODUCTION VERIFIED` (Laufzeit-SHA `3baf5b02`). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
 
 Dieses Dokument ist der **Navigations-Einstieg** und eine **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Es enthält bewusst **keine** Release-Evidenz (RC-SHAs, Testzahlen, Live-Beweise) — die liegt im Release-Archiv (`releases/`).
 
@@ -55,7 +55,8 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 
 | Komponente | Stand | Nachweis |
 |---|---|---|
-| Git `origin/main` | `96fb1082` (Docs-Closure); letzter Laufzeit-Commit `3baf5b02` | `git log` |
+| Repository-/Dokumentationskopf | aktueller `main` — bei Bedarf aus Git auflösen, hier bewusst nicht festgeschrieben (Docs-Commits verschieben ihn, ohne die Laufzeit zu ändern) | `git log` |
+| Letzter Laufzeit-Release | User Lifecycle W5 `3baf5b0210975f65142fb7b7747a23312cc8d3d0` (2026-09-06) | Archiv `releases/2026-09.md` |
 | Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main` | Release-Archiv `releases/2026-09.md` |
 | Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **54 Einträge, Kopf `20260906180000_nora_lifecycle_offboarding`**, deckungsgleich mit `supabase/migrations/` (54 Dateien) | `list_migrations` read-only 2026-09-06 |
 | Edge Function `users` | **Version 8** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-06 |
