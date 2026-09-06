@@ -56,10 +56,10 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — bei Bedarf aus Git auflösen, hier bewusst nicht festgeschrieben (Docs-Commits verschieben ihn, ohne die Laufzeit zu ändern) | `git log` |
-| Letzter Laufzeit-Release | User Lifecycle W5 `3baf5b0210975f65142fb7b7747a23312cc8d3d0` (2026-09-06) | Archiv `releases/2026-09.md` |
-| Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main` | Release-Archiv `releases/2026-09.md` |
-| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **54 Einträge, Kopf `20260906180000_nora_lifecycle_offboarding`**, deckungsgleich mit `supabase/migrations/` (54 Dateien) | `list_migrations` read-only 2026-09-06 |
-| Edge Function `users` | **Version 8** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-06 |
+| Letzter Laufzeit-Release | User Lifecycle W6-A, Laufzeit-Commit `401bb08b` (2026-09-06; nur Datenbank — Migration `20260906210000_nora_lifecycle_session_authorization`). Frontend und Edge Functions unverändert seit W5 `3baf5b0210975f65142fb7b7747a23312cc8d3d0` | Archiv `releases/2026-09.md` (Nachtrag Release W6-A) |
+| Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main`; fachlich Stand W5 `3baf5b02` (W6-A änderte kein Frontend) | Release-Archiv `releases/2026-09.md` |
+| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **55 Einträge, Kopf `20260906210000_nora_lifecycle_session_authorization`**, deckungsgleich mit `supabase/migrations/` (55 Dateien) | `list_migrations` read-only 2026-09-06 |
+| Edge Function `users` | **Version 8** (`verify_jwt = false`, verifiziert JWTs selbst; Stand W5, von W6-A nicht berührt) | `list_edge_functions` read-only 2026-09-06 |
 | Edge Function `brevo-email-events` | **Version 2** (`verify_jwt = false`, Bearer-Token) | dito |
 | Weitere Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht** in Production deployt (nur `users` und `brevo-email-events` sind live) | dito |
 | Produktionsdaten | real (5 Mitarbeiter, davon ein deaktiviertes Testkonto `sales.id = 4`; Geschäftsdaten wachsen durch Nutzung) | Archiv W5 |
