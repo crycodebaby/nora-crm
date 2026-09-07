@@ -88,7 +88,7 @@ Bei Änderungen an `SECURITY DEFINER`-Functions/Views, `security_invoker`, Grant
 - [ ] **Nie `MAINTAIN` im DDL** (existiert erst ab PG17, lokal läuft PG15) — `revoke all` deckt beide Versionen ab; nur Assertions über `current_setting('server_version_num')` verzweigen
 - [ ] **Kein neues `DELETE`-Grant für `service_role` in `public`** ohne belegten, deployten Aufrufer; `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` gehören keiner API-Rolle. Capability-Rollen sind nie Ziel eines `revoke` — `revoke` richtet sich namentlich an `anon, authenticated, service_role`
 - [ ] **`CREATE ON SCHEMA public`** bleibt bei keiner Rolle stehen. Braucht eine Migration es für `alter function … owner to <capability>`, wird es **in derselben Migration** gewährt und vor deren Ende wieder entzogen
-- [ ] Neue sensible Function bekommt ihr eigenes `revoke all on function … from public, anon, authenticated` — PostgreSQLs eingebauter Default ist `PUBLIC EXECUTE` und über Default-Privilegien nicht abstellbar (`17-known-issues-and-planned-waves.md` A.8)
+- [ ] Neue sensible Function bekommt ihr eigenes `revoke all on function … from public, anon, authenticated` — PostgreSQLs eingebauter Default ist `PUBLIC EXECUTE`, und das **schema-scoped** `alter default privileges … revoke execute on functions` aus Wave 1 stellt ihn **nicht** ab (nur eine creator-scoped globale Zeile ohne `in schema` täte das; sie ist nicht gesetzt). Der explizite `revoke` pro Function ist deshalb Pflicht, nicht Gürtel-und-Hosenträger (`17-known-issues-and-planned-waves.md` A.8)
 
 Bei RBAC-/Kalender-Änderungen (ab v0.4a) zusätzlich:
 

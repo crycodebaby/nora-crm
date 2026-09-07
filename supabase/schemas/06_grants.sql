@@ -434,12 +434,20 @@ grant execute on function public.start_checklist_run_from_template(text, bigint,
 -- migration grants on purpose.
 --
 -- Note the asymmetry: for TABLES and SEQUENCES this really does yield "no
--- privileges". For FUNCTIONS, PostgreSQL's BUILT-IN default is
--- `owner + PUBLIC EXECUTE`, and that PUBLIC grant cannot be removed through
--- ALTER DEFAULT PRIVILEGES (verified 2026-09-07). Every sensitive function
--- therefore still needs its own explicit
--- `revoke all on function ... from public, anon, authenticated`, exactly as the
--- rest of this file does. See 17-known-issues-and-planned-waves.md A.8.
+-- privileges". For FUNCTIONS it does not. PostgreSQL's BUILT-IN default is
+-- `owner + PUBLIC EXECUTE`, and the SCHEMA-SCOPED revoke below does not remove
+-- it: the stored row is merged with the built-in default, so a new function
+-- still comes out with `proacl = NULL` and anon/authenticated/service_role can
+-- execute it. Only a CREATOR-SCOPED GLOBAL row would remove it --
+-- `alter default privileges for role postgres revoke execute on functions from
+-- public;` (no `in schema`) -- which this wave deliberately does not set, and
+-- which would apply to every schema postgres creates in. Corrected 2026-09-07
+-- by the independent certification; an earlier wording claimed the PUBLIC grant
+-- could not be removed via ALTER DEFAULT PRIVILEGES at all.
+--
+-- So: new functions stay PUBLIC-executable, and every sensitive function needs
+-- its own explicit `revoke all on function ... from public, anon, authenticated`
+-- -- as the rest of this file does. See 17-known-issues-and-planned-waves.md A.8.
 alter default privileges for role postgres in schema public grant all on sequences to postgres;
 alter default privileges for role postgres in schema public
     revoke all on sequences from anon, authenticated, service_role;
