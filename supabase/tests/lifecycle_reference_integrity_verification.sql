@@ -88,8 +88,15 @@ begin
        or has_table_privilege('anon', 'public.sales', 'DELETE') then
         raise exception 'FAIL: browser roles hold DELETE on sales';
     end if;
-    if not has_table_privilege('service_role', 'public.sales', 'DELETE') then
-        raise exception 'FAIL: service_role must keep DELETE on sales (future executor)';
+    -- Superseded by W6-B + Security Hardening Wave 1 (2026-09-07): W2 kept DELETE
+    -- on sales for a "future executor". That executor exists now and it is NOT
+    -- service_role — the only supported deletion runs as `postgres` inside
+    -- nora_private.guard_auth_user_delete (SECURITY DEFINER), driven by GoTrue's
+    -- own DELETE on auth.users. A direct service_role DELETE is refused by
+    -- nora_private.guard_sales_delete regardless, so the privilege was dead
+    -- weight and has been revoked. No role may hold DELETE on sales.
+    if has_table_privilege('service_role', 'public.sales', 'DELETE') then
+        raise exception 'FAIL: service_role must not hold DELETE on sales (W6-B: deletion runs as postgres inside guard_auth_user_delete)';
     end if;
     if exists (
         select 1 from pg_policies
@@ -258,8 +265,11 @@ begin
     exception
         when foreign_key_violation then null;
         when insufficient_privilege then
+            -- Two acceptable refusals, both 42501: the W6-B guard (carries
+            -- DETAIL) and, since Security Hardening Wave 1, the missing DELETE
+            -- object privilege (no DETAIL) — that one fires first.
             get stacked diagnostics v_detail = pg_exception_detail;
-            if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
+            if coalesce(v_detail, '') not in ('', 'NORA_SALES_DELETE_NOT_AUTHORIZED') then raise; end if;
     end;
     reset role;
 
@@ -470,11 +480,13 @@ begin
     set local role service_role;
     begin
         delete from public.sales where id = v_tmp;
-        raise exception 'FAIL: W6-B guard must refuse a direct sales DELETE for service_role';
+        raise exception 'FAIL: a direct sales DELETE for service_role must be refused';
     exception
         when insufficient_privilege then
+            -- Guard DETAIL, or the missing DELETE privilege (Security Hardening
+            -- Wave 1) which refuses before any trigger runs and carries no DETAIL.
             get stacked diagnostics v_detail = pg_exception_detail;
-            if v_detail is distinct from 'NORA_SALES_DELETE_NOT_AUTHORIZED' then raise; end if;
+            if coalesce(v_detail, '') not in ('', 'NORA_SALES_DELETE_NOT_AUTHORIZED') then raise; end if;
     end;
     reset role;
     if not exists (select 1 from public.sales where id = v_tmp) or not exists (select 1 from auth.users where id = v_tmp_uid) then

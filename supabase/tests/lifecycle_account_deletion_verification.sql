@@ -446,13 +446,23 @@ begin
         if v_detail = 'NORA_SALES_DELETE_NOT_AUTHORIZED' then v_ok := true; else raise; end if;
     end;
     if not v_ok then raise exception 'FAIL: direct sales DELETE (postgres) must be refused'; end if;
-    -- direct DELETE FROM sales as service_role (has the table privilege since W2)
+    -- direct DELETE FROM sales as service_role. Two independent layers refuse it
+    -- since Security Hardening Wave 1 (2026-09-07): the table privilege is gone
+    -- (42501, raised before any trigger runs) and guard_sales_delete would refuse
+    -- it anyway (NORA_SALES_DELETE_NOT_AUTHORIZED). Accept either — but require
+    -- that the privilege really is absent, so this cannot silently become a
+    -- single-layer proof again.
+    if has_table_privilege('service_role', 'public.sales', 'DELETE') then
+        raise exception 'FAIL: service_role must not hold DELETE on sales';
+    end if;
     perform set_config('request.jwt.claim.role', 'service_role', true);
     set local role service_role;
     v_ok := false;
     begin
         delete from public.sales where id = v_f;
-    exception when others then
+    exception when insufficient_privilege then
+        v_ok := true;
+    when others then
         get stacked diagnostics v_detail = pg_exception_detail;
         if v_detail = 'NORA_SALES_DELETE_NOT_AUTHORIZED' then v_ok := true; else raise; end if;
     end;
