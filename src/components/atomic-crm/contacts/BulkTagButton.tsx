@@ -18,8 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+import { hasTag, withTag } from "../application/commands/ensureTag";
 import { TagForm } from "../tags/TagForm";
-import { useCreateTag } from "../tags/useCreateTag";
+import { useEnsureTag } from "../tags/useEnsureTag";
 import { useTags } from "../tags/useTags";
 import type { Contact, Tag } from "../types";
 
@@ -32,7 +33,7 @@ export function BulkTagButton() {
   const [update] = useUpdate<Contact>("contacts", undefined, {
     returnPromise: true,
   });
-  const createTag = useCreateTag();
+  const ensureTag = useEnsureTag();
   const { onUnselectItems, selectedIds = [] } = useListContext<Contact>();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<BulkTagDialogMode>("select");
@@ -59,10 +60,15 @@ export function BulkTagButton() {
     }
   }, [closeDialog, open, selectedIds.length]);
 
+  /**
+   * Only contacts that do not already carry the Markierung are written, and
+   * `withTag` keeps every array null-safe and duplicate-free — the same
+   * attachment semantics the single-contact path uses.
+   */
   const applyTagToSelection = useCallback(
     async (tag: Tag) => {
       const contactsToUpdate = selectedContacts.filter(
-        (contact) => !contact.tags.includes(tag.id),
+        (contact) => !hasTag(contact.tags, tag.id),
       );
 
       setIsApplying(true);
@@ -72,7 +78,7 @@ export function BulkTagButton() {
           contactsToUpdate.map((contact) =>
             update("contacts", {
               id: contact.id,
-              data: { tags: [...(contact.tags ?? []), tag.id] },
+              data: { tags: withTag(contact.tags, tag.id) },
               previousData: contact,
             }),
           ),
@@ -102,8 +108,18 @@ export function BulkTagButton() {
     [closeDialog, update, notify, onUnselectItems, refresh, selectedContacts],
   );
 
+  // Bulk create goes through the SAME EnsureTag command as the single-contact
+  // dialog: creating "Privatperson" here while it already exists reuses the
+  // existing Markierung instead of adding a second row. A failure propagates
+  // into TagForm, which keeps the dialog open and shows why.
   const handleCreateTag = async (data: Pick<Tag, "name" | "color">) => {
-    const tag = await createTag(data);
+    const { tag, created } = await ensureTag(data);
+    if (!created) {
+      notify("resources.tags.notification.existing_reused", {
+        type: "info",
+        messageArgs: { name: tag.name },
+      });
+    }
     await applyTagToSelection(tag);
   };
 
@@ -203,6 +219,7 @@ export function BulkTagButton() {
               <TagForm
                 cancelLabel={translate("resources.contacts.bulk_tag.back")}
                 open={open && mode === "create"}
+                existingTags={tags}
                 onCancel={() => setMode("select")}
                 onSubmit={handleCreateTag}
               />

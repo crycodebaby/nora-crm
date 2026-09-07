@@ -18,6 +18,7 @@ import type {
   Sale,
   SalesFormData,
   SignUpData,
+  Tag,
   Task,
 } from "../../types";
 import type { StartChecklistRunFromTemplateArgs } from "../../types/checklists";
@@ -76,6 +77,10 @@ import {
   isEffectiveContactOfCompany,
 } from "./internal/taskContextCheck";
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
+import {
+  normalizeTagName,
+  toDisplayTagName,
+} from "../../application/commands/ensureTag";
 
 import type {
   EmployeeAccessRecord,
@@ -509,6 +514,63 @@ async function fetchAndUpdateCompanyData(
   newData.company_name = company.name;
   return { ...params, data: newData };
 }
+
+/**
+ * Markierungen Identity (2026-09-07) — FakeRest mirror of the three database
+ * rules installed by 20260907140000_nora_tag_identity.sql, so demo mode and
+ * the browser tests fail in exactly the ways Production fails:
+ *   * nora_private.normalize_tag_name()    — trim, reject blank
+ *   * uq__tags__normalized_name            — one logical name, once
+ *   * nora_private.normalize_contact_tags() — non-null, duplicate-free array
+ * The unique-violation message deliberately carries the real constraint name,
+ * because that string is what normalizeCrmError() anchors on (Falle 33 /
+ * Error Contract parity).
+ */
+const assertTagNameAvailable = async (
+  dataProvider: DataProvider,
+  name: string,
+  ignoreId?: Identifier,
+) => {
+  const key = normalizeTagName(name);
+  const { data } = await dataProvider.getList<Tag>("tags", {
+    filter: {},
+    pagination: { page: 1, perPage: 1000 },
+    sort: { field: "id", order: "ASC" },
+  });
+  const clash = data.find(
+    (tag) => tag.id !== ignoreId && normalizeTagName(tag.name) === key,
+  );
+  if (clash) {
+    throw new Error(
+      `duplicate key value violates unique constraint "uq__tags__normalized_name"`,
+    );
+  }
+};
+
+const normalizeTagWriteData = <T extends { name?: string }>(data: T): T => {
+  if (data.name == null) return data;
+  const name = toDisplayTagName(data.name);
+  if (name === "") {
+    throwNoraError(
+      "Der Name der Markierung darf nicht leer sein.",
+      NORA_ERROR_CODES.TAG_NAME_REQUIRED,
+    );
+  }
+  return { ...data, name };
+};
+
+/** Mirrors nora_private.normalize_contact_tags(): never null, never a repeated id, first-occurrence order kept. */
+const normalizeContactTagsData = <T extends { tags?: unknown }>(data: T): T => {
+  if (!("tags" in data)) return data;
+  const raw = Array.isArray(data.tags) ? (data.tags as Identifier[]) : [];
+  const seen = new Set<Identifier>();
+  const tags = raw.filter((id) => {
+    if (id == null || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  return { ...data, tags };
+};
 
 export interface CreateFakeRestDataProviderOptions {
   db?: Db;
@@ -1390,13 +1452,14 @@ export const createDataProvider = ({
           await guardAssignmentOnCreate(createParams, dataProvider);
           const params = {
             ...createParams,
-            data: {
+            data: normalizeContactTagsData({
               ...createParams.data,
+              tags: createParams.data.tags ?? [],
               first_seen:
                 createParams.data.first_seen ?? new Date().toISOString(),
               last_seen:
                 createParams.data.last_seen ?? new Date().toISOString(),
-            },
+            }),
           };
           const newParams = await processContactAvatar(params);
           return fetchAndUpdateCompanyData(newParams, dataProvider);
@@ -1410,7 +1473,11 @@ export const createDataProvider = ({
 
           return result;
         },
-        beforeUpdate: async (params, dataProvider) => {
+        beforeUpdate: async (rawParams, dataProvider) => {
+          const params = {
+            ...rawParams,
+            data: normalizeContactTagsData(rawParams.data),
+          };
           await guardAssignmentOnUpdate(params, dataProvider);
           // Individual Name Invariant, rename-path — mirrors
           // nora_private.sync_individual_company_name(): renaming this
@@ -1704,10 +1771,72 @@ export const createDataProvider = ({
         resource: "deal_notes",
         beforeSave: async (params) => preserveAttachmentMimeType(params),
       } satisfies ResourceCallbacks<DealNote>,
+      {
+        // Markierungen Identity (2026-09-07) — see assertTagNameAvailable().
+        resource: "tags",
+        beforeCreate: async (params, dataProvider) => {
+          const data = normalizeTagWriteData(params.data);
+          await assertTagNameAvailable(dataProvider, data.name as string);
+          return { ...params, data };
+        },
+        beforeUpdate: async (params, dataProvider) => {
+          if (params.data.name == null) return params;
+          const data = normalizeTagWriteData(params.data);
+          await assertTagNameAvailable(
+            dataProvider,
+            data.name as string,
+            params.id,
+          );
+          return { ...params, data };
+        },
+        beforeDelete: async (params, dataProvider) => {
+          const { total } = await dataProvider.getList("contacts", {
+            filter: { "tags@cs": `{${params.id}}` },
+            pagination: { page: 1, perPage: 1 },
+            sort: { field: "id", order: "ASC" },
+          });
+          if ((total ?? 0) > 0) {
+            throwNoraError(
+              `Markierung wird noch von ${total} Kontakt(en) verwendet und kann nicht gelöscht werden.`,
+              NORA_ERROR_CODES.TAG_IN_USE,
+            );
+          }
+          return params;
+        },
+      } satisfies ResourceCallbacks<Tag>,
     ],
   ) as CrmDataProvider;
 
-  return dataProvider;
+  /**
+   * Markierungen Identity (2026-09-07): the uniqueness guard above reads the
+   * tag list and then inserts — two concurrent creates would both pass the
+   * read before either wrote. Postgres has no such gap (uq__tags__normalized_name
+   * is atomic), so FakeRest serialises tag writes to reproduce the same
+   * outcome: the second attempt sees the first one's row and is rejected,
+   * and EnsureTag converges on the winner. Scoped to this provider instance
+   * so tests never share a queue.
+   */
+  let tagWriteQueue: Promise<unknown> = Promise.resolve();
+  const serializeTagWrite = <T>(run: () => Promise<T>): Promise<T> => {
+    const next = tagWriteQueue.then(run, run);
+    tagWriteQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  };
+
+  return {
+    ...dataProvider,
+    create: ((resource: string, params: any) =>
+      resource === "tags"
+        ? serializeTagWrite(() => dataProvider.create(resource, params))
+        : dataProvider.create(resource, params)) as CrmDataProvider["create"],
+    update: ((resource: string, params: any) =>
+      resource === "tags"
+        ? serializeTagWrite(() => dataProvider.update(resource, params))
+        : dataProvider.update(resource, params)) as CrmDataProvider["update"],
+  } as CrmDataProvider;
 };
 
 /** W6-B: demo has no real deletion path — the record says so explicitly. */

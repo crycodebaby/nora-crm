@@ -130,6 +130,23 @@ Bleibt als Fallback bestehen, bis nachgewiesen ist, dass alle relevanten Product
 
 ## G. Kunden, Kontakte, Vorgänge, Aufgaben
 
+### G.0 Markierungen: Merge zweier **benutzter** Markierungen fehlt
+
+**Status: `PLANNED FOLLOW-UP`** (Markierungen Identity Wave, 2026-09-07)
+
+Seit der Welle gilt: ein logischer Markierungsname existiert höchstens einmal (`uq__tags__normalized_name`), und Umbenennen auf einen belegten Namen wird **abgelehnt**. Damit fehlt bewusst ein Weg, zwei *inhaltlich gleiche, aber unterschiedlich geschriebene* und **beide benutzte** Markierungen zusammenzuführen (z. B. „Privatperso“ → „Privatperson“, falls beide je Kontakte tragen).
+
+Heute ausreichend, weil die betroffenen Production-Zeilen die Verwendung 0 haben: „Markierungen verwalten“ erlaubt Umbenennen und Löschen unbenutzter Markierungen. Sobald eine benutzte Markierung wirklich in eine andere überführt werden soll, braucht es einen expliziten Merge (Referenzen umschreiben, deduplizieren, Quelle löschen) — mit derselben Beweisführung wie die Cleanup-Migration. Nicht spekulativ vorbauen.
+
+### G.0a Markierungen: „Privatperso“ bleibt nach der Bereinigung als eigener Name bestehen
+
+**Status: `OPEN / PRODUKTENTSCHEIDUNG`** (Markierungen Identity Wave, 2026-09-07)
+
+Die Cleanup-Migration führt ausschließlich **exakt gleichnamige** Zeilen zusammen (Schlüssel `lower(btrim(name))`). In Production bleiben danach `Privatperson` (id 3) und `Privatperso` (id 6) als **zwei** Markierungen bestehen, beide mit Verwendung 0. Ob „Privatperso“ ein Tippfehler ist, darf die Migration nicht raten (siehe Decision Log, Punkt 1).
+
+Erwartete Auflösung durch die Produktverantwortung nach dem Release: „Markierungen verwalten“ öffnen und `Privatperso` löschen (Verwendung 0, daher erlaubt). Kein Code nötig.
+
+
 ### G.1 Kundenanlage — Findings aus Customer Create Speed & Clarity (2026-09-01)
 
 Beobachtet, bewusst nicht in dieser Wave behoben:

@@ -227,3 +227,16 @@ create or replace trigger audit_checklist_run_item_changes_trigger
 create or replace trigger audit_saved_text_snippet_changes_trigger
     after insert or update on public.saved_text_snippets
     for each row execute function public.audit_saved_text_snippet_changes();
+
+-- Markierungen Identity (2026-09-07)
+create or replace trigger normalize_tag_name_trigger
+    before insert or update of name on public.tags
+    for each row execute function nora_private.normalize_tag_name();
+
+create or replace trigger normalize_contact_tags_trigger
+    before insert or update of tags on public.contacts
+    for each row execute function nora_private.normalize_contact_tags();
+
+create or replace trigger guard_tag_delete_trigger
+    before delete on public.tags
+    for each row execute function nora_private.guard_tag_delete();

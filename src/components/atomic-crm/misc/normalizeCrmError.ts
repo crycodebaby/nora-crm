@@ -90,6 +90,13 @@ const PRIVATE_CUSTOMER_ALREADY_EXISTS_PATTERNS = [
   /uq_companies_self_contact_individual/i,
 ];
 
+// Markierungen Identity (2026-09-07): a plain unique-index violation carries
+// no DETAIL of its own, so the constraint name is the anchor — same narrow,
+// constraint-scoped pattern as uq_companies_self_contact_individual above.
+// This is what turns the loser of a concurrent create into "already exists,
+// reused" instead of a raw 23505 in front of an office user.
+const TAG_ALREADY_EXISTS_PATTERNS = [/uq__tags__normalized_name/i];
+
 const DISABLED_PATTERNS = [/disabled/i, /deactivated/i, /inactive user/i];
 
 const NETWORK_PATTERNS = [
@@ -248,6 +255,16 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
       messageKey: "crm.errors.private_customer_already_exists",
       status,
       code: NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS,
+      technicalMessage,
+    };
+  }
+
+  if (matchesAny(message, TAG_ALREADY_EXISTS_PATTERNS)) {
+    return {
+      kind: "unknown",
+      messageKey: "crm.errors.tag_already_exists",
+      status,
+      code: NORA_ERROR_CODES.TAG_ALREADY_EXISTS,
       technicalMessage,
     };
   }

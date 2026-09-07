@@ -490,13 +490,44 @@ export const englishCrmMessages = {
       action: {
         add: "Add tag",
         create: "Create new tag",
+        existing: "Existing tags",
+        manage: "Manage tags",
+        none_found: "No tag found.",
+        search: "Search tag …",
       },
       dialog: {
         color: "Color",
         create_title: "Create a new tag",
+        create_description: "The tag will then be available for all contacts.",
         edit_title: "Edit tag",
+        exists_hint: "Tag “%{name}” already exists and will be used.",
         name_label: "Tag name",
         name_placeholder: "Enter tag name",
+        saving: "Saving …",
+      },
+      filters: {
+        show_less: "Show less",
+        show_more: "Show %{smart_count} more |||| Show %{smart_count} more",
+      },
+      manage: {
+        title: "Manage tags",
+        description: "Rename, recolour or remove a tag that is not in use.",
+        empty: "There are no tags yet.",
+        usage:
+          "Used by %{smart_count} contact |||| Used by %{smart_count} contacts",
+        rename: "Edit tag “%{name}”",
+        delete: "Delete tag “%{name}”",
+        confirm_delete: "Really delete",
+        in_use_hint: "This tag is still in use and cannot be deleted.",
+      },
+      notification: {
+        created_and_assigned: "Tag “%{name}” was created and added.",
+        existing_and_assigned: "Tag “%{name}” already exists and was added.",
+        existing_reused: "Tag “%{name}” already exists and is used.",
+        assigned: "Tag “%{name}” was added.",
+        removed: "Tag “%{name}” was removed.",
+        updated: "Tag “%{name}” was saved.",
+        deleted: "Tag “%{name}” was deleted.",
       },
     },
   },
@@ -1047,6 +1078,10 @@ export const englishCrmMessages = {
         "This submission was already started with different data. Please reload the page and try again.",
       employee_not_assignable:
         "This employee is deactivated and cannot be newly assigned.",
+      tag_name_required: "Please enter a name for the tag.",
+      tag_already_exists:
+        "A tag with this name already exists. Please choose a different name.",
+      tag_in_use: "This tag is still used by contacts and cannot be deleted.",
     },
     pwa: {
       available_title: "New Nora version available",

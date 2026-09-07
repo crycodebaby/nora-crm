@@ -27,6 +27,12 @@ export const NORA_ERROR_CODES = {
   IDEMPOTENCY_CONFLICT: "NORA_IDEMPOTENCY_CONFLICT",
   /** User Lifecycle W2: a disabled employee cannot be newly assigned as responsible. */
   EMPLOYEE_NOT_ASSIGNABLE: "NORA_EMPLOYEE_NOT_ASSIGNABLE",
+  /** Markierungen Identity: a Markierung name is blank or whitespace-only. */
+  TAG_NAME_REQUIRED: "NORA_TAG_NAME_REQUIRED",
+  /** Markierungen Identity: uq__tags__normalized_name — the logical name is taken. */
+  TAG_ALREADY_EXISTS: "NORA_TAG_ALREADY_EXISTS",
+  /** Markierungen Identity: the Markierung is still attached to contacts. */
+  TAG_IN_USE: "NORA_TAG_IN_USE",
 } as const;
 
 export type NoraErrorCode =
@@ -82,6 +88,18 @@ export const NORA_ERROR_DEFINITIONS: Record<
   [NORA_ERROR_CODES.EMPLOYEE_NOT_ASSIGNABLE]: {
     category: "domain",
     messageKey: "crm.errors.employee_not_assignable",
+  },
+  [NORA_ERROR_CODES.TAG_NAME_REQUIRED]: {
+    category: "validation",
+    messageKey: "crm.errors.tag_name_required",
+  },
+  [NORA_ERROR_CODES.TAG_ALREADY_EXISTS]: {
+    category: "conflict",
+    messageKey: "crm.errors.tag_already_exists",
+  },
+  [NORA_ERROR_CODES.TAG_IN_USE]: {
+    category: "domain",
+    messageKey: "crm.errors.tag_in_use",
   },
 };
 

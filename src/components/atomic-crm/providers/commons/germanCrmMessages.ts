@@ -500,14 +500,53 @@ export const germanCrmMessages = {
       name: "Markierung |||| Markierungen",
       action: {
         add: "Markierung hinzufügen",
-        create: "Neue Markierung anlegen",
+        create: "Neue Markierung erstellen",
+        existing: "Vorhandene Markierungen",
+        manage: "Markierungen verwalten",
+        none_found: "Keine Markierung gefunden.",
+        search: "Markierung suchen …",
       },
       dialog: {
         color: "Farbe",
-        create_title: "Neue Markierung anlegen",
+        create_title: "Neue Markierung erstellen",
+        create_description:
+          "Die Markierung steht danach für alle Kontakte zur Verfügung.",
         edit_title: "Markierung bearbeiten",
+        exists_hint:
+          "Markierung „%{name}“ existiert bereits und wird verwendet.",
         name_label: "Name der Markierung",
         name_placeholder: "Name eingeben",
+        saving: "Wird gespeichert …",
+      },
+      filters: {
+        show_less: "Weniger anzeigen",
+        show_more:
+          "%{smart_count} weitere anzeigen |||| %{smart_count} weitere anzeigen",
+      },
+      manage: {
+        title: "Markierungen verwalten",
+        description:
+          "Umbenennen, Farbe ändern oder eine nicht verwendete Markierung entfernen.",
+        empty: "Es gibt noch keine Markierungen.",
+        usage:
+          "Wird von %{smart_count} Kontakt verwendet |||| Wird von %{smart_count} Kontakten verwendet",
+        rename: "Markierung „%{name}“ bearbeiten",
+        delete: "Markierung „%{name}“ löschen",
+        confirm_delete: "Wirklich löschen",
+        in_use_hint:
+          "Diese Markierung wird noch verwendet und kann nicht gelöscht werden.",
+      },
+      notification: {
+        created_and_assigned:
+          "Markierung „%{name}“ wurde erstellt und hinzugefügt.",
+        existing_and_assigned:
+          "Markierung „%{name}“ existiert bereits und wurde hinzugefügt.",
+        existing_reused:
+          "Markierung „%{name}“ existiert bereits und wird verwendet.",
+        assigned: "Markierung „%{name}“ wurde hinzugefügt.",
+        removed: "Markierung „%{name}“ wurde entfernt.",
+        updated: "Markierung „%{name}“ wurde gespeichert.",
+        deleted: "Markierung „%{name}“ wurde gelöscht.",
       },
     },
   },
@@ -1061,6 +1100,11 @@ export const germanCrmMessages = {
         "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
       employee_not_assignable:
         "Dieser Mitarbeiter ist deaktiviert und kann nicht neu zugewiesen werden.",
+      tag_name_required: "Bitte geben Sie einen Namen für die Markierung ein.",
+      tag_already_exists:
+        "Eine Markierung mit diesem Namen existiert bereits. Bitte wählen Sie einen anderen Namen.",
+      tag_in_use:
+        "Diese Markierung wird noch von Kontakten verwendet und kann nicht gelöscht werden.",
     },
     pwa: {
       // Presentation Contract V2: ein Titel, hoechstens eine ruhige Zeile,

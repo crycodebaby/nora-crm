@@ -3879,3 +3879,95 @@ revoke all on function nora_private.guard_auth_email_change() from public;
 revoke all on function nora_private.guard_auth_email_change() from anon;
 revoke all on function nora_private.guard_auth_email_change() from authenticated;
 revoke all on function nora_private.guard_auth_email_change() from service_role;
+
+
+-- ---------------------------------------------------------------------------
+-- Markierungen Identity (2026-09-07) — see
+-- supabase/migrations/20260907140000_nora_tag_identity.sql
+-- ---------------------------------------------------------------------------
+
+create or replace function nora_private.tag_name_key(p_name text)
+returns text
+language sql
+immutable
+strict
+parallel safe
+set search_path = ''
+as $$
+    select pg_catalog.lower(pg_catalog.btrim(p_name));
+$$;
+
+comment on function nora_private.tag_name_key(text) is
+    'Canonical identity of a Markierung name: lower(btrim(name)). Backs uq__tags__normalized_name; changing it requires dropping that index first, which is deliberate.';
+
+create or replace function nora_private.normalize_tag_name()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+    new.name := pg_catalog.btrim(new.name);
+    if new.name = '' then
+        raise exception 'Der Name der Markierung darf nicht leer sein.'
+            using errcode = '23514', detail = 'NORA_TAG_NAME_REQUIRED';
+    end if;
+    return new;
+end;
+$$;
+
+comment on function nora_private.normalize_tag_name() is
+    'Stores Markierung names trimmed and rejects blank ones, so the unique index and the UI agree on what a name is.';
+
+create or replace function nora_private.normalize_contact_tags()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+    if new.tags is null then
+        new.tags := '{}'::bigint[];
+        return new;
+    end if;
+
+    new.tags := coalesce((
+        select pg_catalog.array_agg(d.tag_id order by d.first_pos)
+          from (
+              select distinct on (u.tag_id) u.tag_id, u.ord as first_pos
+                from pg_catalog.unnest(new.tags) with ordinality as u(tag_id, ord)
+               where u.tag_id is not null
+               order by u.tag_id, u.ord
+          ) d
+    ), '{}'::bigint[]);
+
+    return new;
+end;
+$$;
+
+comment on function nora_private.normalize_contact_tags() is
+    'contacts.tags is always a non-null, duplicate-free bigint[] with first-occurrence order preserved.';
+
+create or replace function nora_private.guard_tag_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+    v_refs bigint;
+begin
+    select count(*) into v_refs
+      from public.contacts c
+     where c.tags @> array[old.id];
+
+    if v_refs > 0 then
+        raise exception
+            'Markierung wird noch von % Kontakt(en) verwendet und kann nicht gelöscht werden.', v_refs
+            using errcode = '23503', detail = 'NORA_TAG_IN_USE';
+    end if;
+
+    return old;
+end;
+$$;
+
+comment on function nora_private.guard_tag_delete() is
+    'Refuses deletion of a Markierung that is still referenced, so contacts.tags can never contain a dangling id.';

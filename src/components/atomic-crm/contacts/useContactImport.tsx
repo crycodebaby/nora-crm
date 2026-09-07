@@ -1,6 +1,8 @@
 import { useDataProvider, useGetIdentity, type DataProvider } from "ra-core";
 import { useCallback, useMemo } from "react";
 
+import { ensureTag, normalizeTagName } from "../application/commands/ensureTag";
+import type { CrmDataProvider } from "../providers/types";
 import type { Company, Tag } from "../types";
 
 export type ContactImportSchema = {
@@ -28,7 +30,7 @@ export type ContactImportSchema = {
 export function useContactImport() {
   const today = new Date().toISOString();
   const user = useGetIdentity();
-  const dataProvider = useDataProvider();
+  const dataProvider = useDataProvider<CrmDataProvider>();
 
   // company cache to avoid creating the same company multiple times and costly roundtrips
   // Cache is dependent of dataProvider, so it's safe to use it as a dependency
@@ -53,22 +55,35 @@ export function useContactImport() {
     [companiesCache, user?.identity?.id, dataProvider],
   );
 
-  // Tags cache to avoid creating the same tag multiple times and costly roundtrips
+  // Markierungen are resolved through the EnsureTag command, exactly like the
+  // contact and bulk dialogs — a CSV carrying "Privatperson" and
+  // "privatperson" therefore lands on ONE Markierung instead of creating a
+  // second row that the unique index would reject anyway. The cache is keyed
+  // by canonical name for the same reason.
   // Cache is dependent of dataProvider, so it's safe to use it as a dependency
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const tagsCache = useMemo(() => new Map<string, Tag>(), [dataProvider]);
   const getTags = useCallback(
-    async (names: string[]) =>
-      fetchRecordsWithCache<Tag>(
-        "tags",
-        tagsCache,
-        names,
-        (name) => ({
-          name,
-          color: "#f9f9f9",
-        }),
-        dataProvider,
-      ),
+    async (names: string[]) => {
+      const resolved = new Map<string, Tag>();
+      // Sequential on purpose: resolving the same new name twice in parallel
+      // would make both attempts miss the cache and race for the same row.
+      for (const rawName of names) {
+        const name = rawName.trim();
+        if (name === "") continue;
+        const key = normalizeTagName(name);
+        let tag = tagsCache.get(key);
+        if (!tag) {
+          ({ tag } = await ensureTag(dataProvider, {
+            name,
+            color: IMPORTED_TAG_COLOR,
+          }));
+          tagsCache.set(key, tag);
+        }
+        resolved.set(name, tag);
+      }
+      return resolved;
+    },
     [tagsCache, dataProvider],
   );
 
@@ -198,6 +213,9 @@ const fetchRecordsWithCache = async function <T>(
     return acc;
   }, new Map<string, T>());
 };
+
+/** Neutral colour for Markierungen that come into existence through a CSV import. */
+const IMPORTED_TAG_COLOR = "#f9f9f9";
 
 const parseTags = (tags: string) =>
   tags

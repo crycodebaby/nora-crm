@@ -503,13 +503,49 @@ export const frenchCrmMessages = {
       action: {
         add: "Ajouter une étiquette",
         create: "Créer une nouvelle étiquette",
+        existing: "Étiquettes existantes",
+        manage: "Gérer les étiquettes",
+        none_found: "Aucune étiquette trouvée.",
+        search: "Rechercher une étiquette …",
       },
       dialog: {
         color: "Couleur",
         create_title: "Créer une nouvelle étiquette",
+        create_description:
+          "L'étiquette sera ensuite disponible pour tous les contacts.",
         edit_title: "Modifier l'étiquette",
+        exists_hint: "L'étiquette « %{name} » existe déjà et sera utilisée.",
         name_label: "Nom de l'étiquette",
         name_placeholder: "Saisir le nom de l'étiquette",
+        saving: "Enregistrement …",
+      },
+      filters: {
+        show_less: "Afficher moins",
+        show_more:
+          "Afficher %{smart_count} de plus |||| Afficher %{smart_count} de plus",
+      },
+      manage: {
+        title: "Gérer les étiquettes",
+        description:
+          "Renommer, changer la couleur ou supprimer une étiquette inutilisée.",
+        empty: "Il n'y a pas encore d'étiquettes.",
+        usage:
+          "Utilisée par %{smart_count} contact |||| Utilisée par %{smart_count} contacts",
+        rename: "Modifier l'étiquette « %{name} »",
+        delete: "Supprimer l'étiquette « %{name} »",
+        confirm_delete: "Vraiment supprimer",
+        in_use_hint:
+          "Cette étiquette est encore utilisée et ne peut pas être supprimée.",
+      },
+      notification: {
+        created_and_assigned: "L'étiquette « %{name} » a été créée et ajoutée.",
+        existing_and_assigned:
+          "L'étiquette « %{name} » existe déjà et a été ajoutée.",
+        existing_reused: "L'étiquette « %{name} » existe déjà et est utilisée.",
+        assigned: "L'étiquette « %{name} » a été ajoutée.",
+        removed: "L'étiquette « %{name} » a été retirée.",
+        updated: "L'étiquette « %{name} » a été enregistrée.",
+        deleted: "L'étiquette « %{name} » a été supprimée.",
       },
     },
   },
@@ -1066,6 +1102,11 @@ export const frenchCrmMessages = {
         "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
       employee_not_assignable:
         "Cet employé est désactivé et ne peut pas être nouvellement assigné.",
+      tag_name_required: "Veuillez saisir un nom pour l'étiquette.",
+      tag_already_exists:
+        "Une étiquette portant ce nom existe déjà. Veuillez choisir un autre nom.",
+      tag_in_use:
+        "Cette étiquette est encore utilisée par des contacts et ne peut pas être supprimée.",
     },
     pwa: {
       available_title: "Nouvelle version de Nora disponible",
