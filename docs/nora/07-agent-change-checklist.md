@@ -82,7 +82,13 @@ Bei Änderungen an `SECURITY DEFINER`-Functions/Views, `security_invoker`, Grant
 - [ ] Zugriffsmatrix geprüft: `anon`, `authenticated viewer`, `authenticated office`, `authenticated admin`, `service_role` (nur soweit relevant)
 - [ ] UI niemals als Security Boundary behandelt — Prüfung erfolgt gegen Grants/RLS/Function-Body, nicht gegen sichtbare UI-Zustände
 - [ ] Bei `init_state`/`sales_directory`: bestehende Bewertung (`06-decision-log.md` „Intentional privileged read views"; Einzelbewertungen im Archiv `releases/2026-08.md`) gilt nur für die dort geprüfte Projektion/Grants — bei Änderung neu bewerten, nicht die alte Einstufung übernehmen
-- [ ] Grants immer als `revoke all` → gezielter `grant`; Privilegienaussagen gegen Production prüfen (lokaler `db reset` ist großzügiger) — siehe `03-data-model-guardrails.md` Migrationsregel
+- [ ] Grants immer als `revoke all` → gezielter `grant`; Privilegienaussagen gegen die **Datenbank** prüfen (`has_table_privilege`, `pg_class.relacl`, `pg_default_acl`), nie gegen `supabase/schemas/06_grants.sql` — diese Datei wird von keinem `db reset` ausgeführt (kein `[db.migrations] schema_paths` in `config.toml`), Migrationen sind autoritativ
+- [ ] **Security Hardening Wave 1 (RC 2026-09-07):** `supabase/tests/public_privilege_hardening_verification.sql` ausführen — sie prüft Default-Privilegien, die exakte Zielmatrix aller `public`-Objekte, `anon`-Reichweite, Capability-Rollen (inkl. Spalten-Grant `sales.email`), Schema-`CREATE`, die Future-Object-Regression und die tatsächlichen `TRUNCATE`/`DELETE`-Verweigerungen; sie rollt sich selbst zurück und ist an jeder Stelle nach einem `db reset` lauffähig
+- [ ] **Neue Tabelle/View in `public`?** Sie startet ohne jedes Recht für `anon`/`authenticated`/`service_role`. Zielmatrix in `06_grants.sql` **und** Assertion in der Wave-1-Suite ergänzen, sonst ist das Objekt über PostgREST unerreichbar (oder still zu weit offen)
+- [ ] **Nie `MAINTAIN` im DDL** (existiert erst ab PG17, lokal läuft PG15) — `revoke all` deckt beide Versionen ab; nur Assertions über `current_setting('server_version_num')` verzweigen
+- [ ] **Kein neues `DELETE`-Grant für `service_role` in `public`** ohne belegten, deployten Aufrufer; `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` gehören keiner API-Rolle. Capability-Rollen sind nie Ziel eines `revoke` — `revoke` richtet sich namentlich an `anon, authenticated, service_role`
+- [ ] **`CREATE ON SCHEMA public`** bleibt bei keiner Rolle stehen. Braucht eine Migration es für `alter function … owner to <capability>`, wird es **in derselben Migration** gewährt und vor deren Ende wieder entzogen
+- [ ] Neue sensible Function bekommt ihr eigenes `revoke all on function … from public, anon, authenticated` — PostgreSQLs eingebauter Default ist `PUBLIC EXECUTE` und über Default-Privilegien nicht abstellbar (`17-known-issues-and-planned-waves.md` A.8)
 
 Bei RBAC-/Kalender-Änderungen (ab v0.4a) zusätzlich:
 
@@ -103,6 +109,8 @@ Bei RBAC-/RLS-Härtung (v0.4b / v0.4b.1 / v0.4b.2) zusätzlich:
 - [ ] Migrationen `20260714120000` + `20260714140000` + `20260714150000` angewendet
 - [ ] **Keine Testrolle** nach `db reset` ohne Setup (`rbac_rls_production_check.sql`)
 - [ ] Lokaler Testfluss: `production_check` → `first_admin_parallel` → `setup` → `matrix` → `final_hardening` → `checklists_audit` → `crm_audit` → `google_calendar` → `teardown` → `production_check`
+- [ ] `rbac_rls_verification.sql` gehört wie `rbac_rls_production_check.sql` auf die **leere** Datenbank (vor `setup` oder nach `teardown`): ihre erste Assertion lautet „`nora_rls_test` must not exist after production migrations only". Nach `setup` schlägt sie fehl — das ist Reihenfolge, kein Regressionsbefund
+- [ ] `public_privilege_hardening_verification.sql` (Security Hardening Wave 1) an beliebiger Stelle nach einem `db reset` — sie ist self-contained, rollt zurück und hinterlässt keine Testrolle
 - [ ] **User Lifecycle W1:** `supabase/tests/lifecycle_single_executor_verification.sql` zusätzlich nach `production_check` (leere DB) **und** nach `safe_auth_role_verification` (mit Fixtures) ausführen — sie rollt sich selbst zurück
 - [ ] **Kein** neuer Schreibpfad für `sales.role` / `sales.disabled` außerhalb `users` Edge Function → `set_sales_access_by_executor`; die Legacy-RPC `set_sales_role_by_admin` ist seit W2 gelöscht und wird **nicht** wieder angelegt
 - [ ] Jede Änderung an `disabled` bewegt auch den Auth-Bann (Executor), nie nur eine Seite; kein grüner Erfolg ohne verifiziertes `accessConsistency = consistent`

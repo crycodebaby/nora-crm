@@ -10,21 +10,33 @@ Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (g
 
 ### A.1 Default-Privilegien im Schema `public` vergeben TRUNCATE an API-Rollen
 
-**Status: `OPEN / PLANNED FOLLOW-UP`** (festgestellt 2026-09-04, gegen `nora-crm-prod` verifiziert; Folgebefund aus Security Hardening Wave 0)
+**Status: `RC — NOCH NICHT AUF PRODUCTION ANGEWENDET`** (Befund 2026-09-04; behoben im RC von Security Hardening Wave 1, 2026-09-07). Solange die Migration `20260907120000_nora_public_privilege_hardening` nicht in Production angewendet ist, gilt der Befund **live unverändert**.
 
 Die Default-Tabellen-Privilegien von `public` (Grantor `postgres`) vergeben an `anon`, `authenticated` und `service_role` bei jedem `CREATE TABLE` automatisch `Dxtm` (`TRUNCATE`, `REFERENCES`, `TRIGGER`, `MAINTAIN`) — noch vor jedem expliziten Grant. Eine Migration, die nur additiv `grant select` schreibt, lässt dieses Erbe stehen; so entstand der `audit_events`-Befund. `TRUNCATE` umgeht RLS vollständig und feuert keine Row-Trigger.
 
-Stand in Production nach Wave 0:
+**Präzisierung der Reichweite (read-only gemessen 2026-09-07, PG17).** Der ursprüngliche Befund („rund 14 Tabellen für `authenticated`, rund 17 für `service_role`") war zu niedrig. Tatsächlich in Production:
 
-| Klassifikation | Tabellen |
-|---|---|
-| sauber | `audit_events` (Wave 0), `email_delivery_events`, `number_counters`, `operation_errors` |
-| **read-only für `authenticated`, aber truncatable** — gleiche Form wie der `audit_events`-Bug | `configuration`, `google_calendar_connections`, `google_calendar_events` |
-| truncatable, besitzt aber ohnehin `DELETE` (RLS-Bypass bleibt relevant) | `checklist_*`, `companies`, `contact_notes`, `contacts`, `deal_notes`, `deals`, `favicons_excluded_domains`, `sales`, `saved_text_snippets`, `tags`, `tasks` |
+| Rolle | Basistabellen mit `TRUNCATE` (von 21) | Views mit `TRUNCATE` (von 6) |
+|---|---|---|
+| `anon` | 0 | 4 (`activity_log`, `companies_summary`, `contacts_summary`, `init_state`) |
+| `authenticated` | **17** (alle außer `audit_events`, `email_delivery_events`, `operation_errors`, `number_counters`) | 4 |
+| `service_role` | **20** (alle außer `email_delivery_events`) | 4 |
 
-Zusätzliche Repo-/Production-Drift: `supabase/schemas/06_grants.sql` deklariert `alter default privileges … grant all on tables` (lokal `arwdDxtm`), Production vergibt nur `Dxtm`; die Verengung ist in keiner Repo-Migration enthalten. **Ein lokaler `db reset` reproduziert Production nicht** — lokal erhält `authenticated` auf neuen Tabellen mehr Rechte als live.
+Insgesamt 196 unerwünschte Privilegien-Treffer über `{TRUNCATE, REFERENCES, TRIGGER, MAINTAIN} × {anon, authenticated, service_role} × 27 Objekte`. Lokal (PG15) reproduziert: `set role authenticated; truncate public.sales cascade;` **gelingt** und kaskadiert in neun CRM-Tabellen, während `delete from public.sales` verweigert wird.
 
-Vorschlag für eine eigene Welle: (1) `configuration`, `google_calendar_connections`, `google_calendar_events` auf `revoke all` → gezielter `grant` bringen; (2) entscheiden, ob die Default-Privilegien dauerhaft korrigiert und im Repo festgeschrieben werden; (3) entscheiden, ob `service_role` `TRUNCATE` auf `audit_events` behält; (4) `public.init_state` mitnehmen (trägt wirkungslose DML-Grants für `anon`/`authenticated`). Ablauf wie Wave 0: lokaler Replay, Verhaltensnachweis pro Rolle, Production-Apply, Live-Verifikation.
+**Was der RC tut:** Default-Privilegien auf null für die API-Rollen, explizite Zielmatrix für alle 21 Tabellen und 6 Views, `service_role` verliert `DELETE` in ganz `public`, `nora_calendar_linker` verliert `CREATE ON SCHEMA public`, `06_grants.sql` angeglichen und als nicht-autoritativ gekennzeichnet, plus Regressionssuite `supabase/tests/public_privilege_hardening_verification.sql`. Vertrag: `03-data-model-guardrails.md` „Privilegien im Schema `public`"; Begründung: `06-decision-log.md` 2026-09-07; Runbook und Evidenz: `releases/2026-09.md`.
+
+**Bis zum Production-Apply weiter gültig:** die Repo-/Production-Drift ist im RC aufgelöst (lokal und Production konvergieren auf dieselbe Zielmatrix), aber erst nach dem Apply. Vorher gilt weiterhin: **ein lokaler `db reset` reproduziert Production nicht.**
+
+### A.8 Neue Functions in `public` sind per PostgreSQL-Default für `PUBLIC` ausführbar
+
+**Status: `ACCEPTED LIMITATION`** (unabhängig verifiziert 2026-09-07; korrigiert eine frühere Einschätzung, die Function-Defaults als „sicher" eingestuft hatte).
+
+Eine neu erzeugte Function in `public` erhält `proacl = NULL`, also PostgreSQLs eingebauten Default `owner + PUBLIC EXECUTE` — `anon`, `authenticated` und `service_role` können sie damit sofort ausführen. Das ist **nicht** der `pg_default_acl`-Defekt aus A.1: es tritt genauso in einem frisch angelegten, unkonfigurierten Schema auf, und es ist über `ALTER DEFAULT PRIVILEGES` nachweislich **nicht** abstellbar — weder `revoke execute on functions from public` noch grant-dann-revoke ändern die gespeicherte Zeile oder das Ergebnis (lokal auf PG15 geprüft; Production trägt dieselbe Default-Zeile `{postgres=X/postgres}`).
+
+Wirksame Gegenmaßnahme ist deshalb weiterhin **pro Function**: jede sensible Function trägt ihr eigenes `revoke all on function … from public, anon, authenticated`, so wie es die Migrationen und `06_grants.sql` durchgängig tun. Die Regressionssuite prüft genau das (Abschnitt 6c: kein Browser-Rolle-`EXECUTE` auf Executoren und privilegierte Writer) und protokolliert das Default-Verhalten als NOTICE, statt es zu behaupten. Sequenzen sind davon **nicht** betroffen: ein neues Identity-Sequence-Objekt vergibt an keine API-Rolle etwas (verifiziert), und Identity-Spalten brauchen ohnehin kein Sequenzrecht.
+
+Eigene Folgewelle wäre nötig, falls „neue Function ist standardmäßig unerreichbar" durchgesetzt werden soll — das ginge nur über einen Event-Trigger oder eine verbindliche Migrationskonvention, nicht über Default-Privilegien.
 
 ### A.2 Fail-closed Session-Bindung: Leserecht von `postgres` auf `auth.sessions` ist Betriebsvoraussetzung
 
@@ -155,7 +167,8 @@ Beobachtet, bewusst nicht in dieser Wave behoben:
 
 Aus einer frühen Analyse benannt, seither **nicht** in einer Session verifiziert oder detailliert — vor Bearbeitung gegen aktuellen Code/Produktion prüfen:
 
-- Attachment-Bucket-Konfiguration (öffentlicher Bucket laut Lifecycle-Reconnaissance 2026-09-04; keine Härtung entschieden)
+- **Schema `storage` / Attachment-Bucket** — `OPEN`, **ausdrücklich nicht** Teil von Security Hardening Wave 1. Öffentlicher Bucket laut Lifecycle-Reconnaissance 2026-09-04; zusätzlich read-only bestätigt (2026-09-07): `pg_default_acl` für Creator `postgres` in Schema `storage` vergibt `arwdDxtm` an `anon`, `authenticated` und `service_role` — dieselbe Form wie der A.1-Befund, aber mit anderem Owner, anderer Plattformmechanik und anderem Rollback-Pfad (`storage.objects`/`storage.buckets` gehören `supabase_storage_admin`). Braucht eine eigene Security-/Produktwelle mit eigener Abnahme; Wave 1 hat `storage` **nicht** angefasst und behauptet keine Härtung dort.
+- **`mcp` Edge Function** — `PARKED`, nicht deployt. Sie kann eine direkte PostgreSQL-Verbindung aufbauen und `set role authenticated` setzen. Wave 1 reduziert den Schaden eines solchen Kanals (`authenticated` hat kein `TRUNCATE`/`DELETE` mehr, wo es nichts zu suchen hat), ersetzt aber keine eigene Bewertung dieser Funktion vor einem etwaigen Deploy.
 - Rollen-Cache-Verhalten im Frontend
 - Audit-Retention-/Löschstrategie (`13-crm-audit-retention.md` beschreibt das Modell; kein automatischer Purge)
 - `supabase/config.toml` enthält lokal weiterhin `enable_signup = true` (steuert Produktion nicht; dort ist die Selbstregistrierung seit 2026-09-04 deaktiviert) — in einer kleinen Welle nachziehen.

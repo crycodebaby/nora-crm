@@ -345,6 +345,22 @@ Details in `11-google-calendar-rbac.md`:
 - **Testrolle `nora_rls_test`** nur lokal via `rbac_rls_setup.sql` — **nie** in Produktionsmigrationen
 - **`anon`:** kein Tabellen-GRANT auf CRM-Tabellen; RLS + Grants zusammen prüfen
 
+### Privilegien im Schema `public` (Security Hardening Wave 1, RC 2026-09-07 — **noch nicht auf Production angewendet**)
+
+Migration `20260907120000_nora_public_privilege_hardening`. Begründung: `06-decision-log.md` „Security Hardening Wave 1"; Nachweis: `supabase/tests/public_privilege_hardening_verification.sql`.
+
+- **Neue Tabellen starten bei null.** Die Default-Privilegien von `public` (Grantor `postgres`) vergeben an `anon`/`authenticated`/`service_role` **nichts** mehr — weder für Tabellen noch für Sequenzen noch als Function-EXECUTE. Jeder Laufzeitzugriff ist ab jetzt ein bewusster `GRANT` in einer Migration. Wer die Default-Privilegien wieder aufweitet, bricht die Regressionsprobe (Abschnitt 1 und 6 der Suite).
+- **`revoke all` vor jedem `grant`, ausnahmslos.** Additive Grants lassen geerbte Rechte stehen; genau so entstand der `audit_events`-`TRUNCATE`-Befund (Wave 0). Das gilt auch für Views.
+- **`TRUNCATE` ist die gefährlichste Zeile im ACL:** sie umgeht RLS vollständig **und** feuert keine Row-Trigger — Audit, `prevent_*`-Guards und Policies sind gleichzeitig wirkungslos. `TRUNCATE`, `REFERENCES`, `TRIGGER` und `MAINTAIN` gehören **keiner** API-Rolle; PostgREST kann sie ohnehin nicht nutzen.
+- **`authenticated` = genau die Operationen, die seine RLS-Policies ausdrücken.** Eine Policy ohne passendes Objektprivileg ist tot, ein Objektprivileg ohne Policy ist unerreichbar und damit nur Angriffsfläche. Wer eine neue Policy anlegt, prüft beides zusammen.
+- **`anon` hat genau ein Recht:** `SELECT` auf `public.init_state` (Vor-Login-Prüfung in `authProvider.getIsInitialized()`). Nichts auf Basistabellen, nichts auf den anderen Views.
+- **Kein Rolle hält `DELETE` auf `public.sales`** — auch `service_role` nicht (W6-B: die Löschung läuft als `postgres` in `nora_private.guard_auth_user_delete`). Allgemeiner: `service_role` hält nirgends in `public` `DELETE`; es existiert kein `.delete()` gegen eine `public`-Tabelle in `supabase/functions`. Wer einen solchen Pfad **braucht**, begründet ihn und ergänzt Matrix *und* Suite — er fügt nicht still ein `grant` hinzu.
+- **`public.audit_events` ist auch im ACL append-only:** `service_role` hat `SELECT`/`INSERT`, kein `UPDATE`, kein `DELETE`, kein `TRUNCATE`.
+- **Capability-Rollen sind nie Ziel eines Sicherheits-`revoke`.** `nora_audit_writer`, `nora_calendar_writer`, `nora_calendar_linker`, `nora_role_manager`, `nora_identity_manager` (inkl. **Spalten-Grant** `sales.email`) behalten ihre schmalen Rechte; `revoke` richtet sich immer namentlich an `anon, authenticated, service_role`. Positive Assertions sind so wichtig wie negative — eine Sicherheitsbereinigung darf keine Fähigkeit stillschweigend abschalten.
+- **Keine client-facing Rolle hält `CREATE` auf `public`** — Voraussetzung dafür, dass `SECURITY DEFINER`-Functions mit `search_path = public` unkritisch bleiben (Falle 34). Auch `nora_calendar_linker` nicht mehr. Braucht eine künftige Migration `CREATE` für ein `alter function … owner to <capability>`, wird es **innerhalb** dieser Migration gewährt und vor deren Ende wieder entzogen.
+- **PG15 lokal / PG17 Production:** `MAINTAIN` existiert erst ab PG17. Deshalb im DDL **nie** `MAINTAIN` schreiben — `revoke all` deckt beide Versionen ab; nur Assertions verzweigen über `current_setting('server_version_num')`. `has_table_privilege(…, 'MAINTAIN')` wirft auf PG15 „unrecognized privilege type".
+- **Nicht abgedeckt:** `pg_default_acl` für den Creator `supabase_admin` in `public` vergibt weiterhin `arwdDxtm` an die API-Rollen. `postgres` ist kein Mitglied von `supabase_admin` und kann das nicht ändern; die Regel ist ruhend, solange **alle** Objekte in `public` `postgres` gehören (die Migration prüft das als Vorbedingung). Ebenfalls nicht abgedeckt: Schema `storage` und die von PostgreSQL eingebaute `PUBLIC`-EXECUTE-Vorgabe für neue Functions (`17-known-issues-and-planned-waves.md` A.8) — sensible Functions brauchen weiterhin ihr eigenes `revoke all on function … from public`.
+
 ### Falle 34: `SECURITY DEFINER`-Views/Functions blind auf Advisor-Finding umstellen
 
 Falsch:
@@ -757,6 +773,8 @@ Technische Regeln, die sich aus früheren Migrationen ergeben haben (Begründung
 
 - **Views nur am Ende erweitern:** neue Spalten in `companies_summary`/`contacts_summary` (oder jeder anderen View) ans Ende der `select`-Liste — `create or replace view` interpretiert eine verschobene Position als Umbenennung (`42P16`).
 - **Signaturänderung einer RPC = `DROP FUNCTION` + `CREATE`:** ein zusätzlicher Parameter per `CREATE OR REPLACE` erzeugt eine Überladung, die PostgREST nicht auflösen kann (`PGRST203`).
-- **Grants: immer `revoke all` vor `grant`:** additive Grants lassen die von den Default-Privilegien geerbten Rechte (`TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN`) stehen; ein lokaler `db reset` ist großzügiger als Production — Privilegienaussagen gegen Production prüfen.
+- **Grants: immer `revoke all` vor `grant`** — additive Grants lassen geerbte Rechte stehen. Seit Security Hardening Wave 1 (RC 2026-09-07) vergeben die Default-Privilegien von `public` nichts mehr an `anon`/`authenticated`/`service_role`, aber die Regel bleibt: sie hält die Zielmatrix auch dann exakt, wenn ein Objekt aus einer älteren Migration stammt. Privilegienaussagen weiterhin **gegen die Datenbank** prüfen (`has_table_privilege`, `pg_class.relacl`, `pg_default_acl`), nie gegen `06_grants.sql` — diese Datei wird von keinem `db reset` ausgeführt.
+- **Kein `MAINTAIN` im DDL:** das Privileg existiert erst ab PG17, lokal läuft PG15. `revoke all` deckt beide ab; nur Assertions verzweigen über `current_setting('server_version_num')`.
+- **Neue Tabelle in `public` = neue Grant-Zeile.** Sie startet ohne jedes API-Rollen-Recht; ohne expliziten `grant` ist sie über PostgREST unerreichbar. Zielmatrix in `supabase/schemas/06_grants.sql` und Assertion in `supabase/tests/public_privilege_hardening_verification.sql` mit ergänzen.
 - **Kein `CREATE INDEX CONCURRENTLY`** in CLI-Migrationen (Transaktion); bei großen Tabellen eigene nicht-transaktionale Migration.
 - **Bereits angewendete Migrationen nie editieren**; `supabase/schemas/*.sql` synchron nachziehen; nach jedem Production-Apply den Ledger gegen den Dateinamen-Zeitstempel prüfen (`07-agent-change-checklist.md`).
