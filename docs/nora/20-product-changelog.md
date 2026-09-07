@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-06
+Stand: 2026-09-07
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,12 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-09-07 — Benutzerkonto endgültig löschen
+
+**Was ändert sich für Sie:** Versehentlich angelegte, doppelte, Test- oder nie genutzte Benutzerkonten können Administratoren jetzt kontrolliert endgültig löschen. Konten mit Geschäftshistorie bleiben geschützt: Sobald einer Person Kunden, Kontakte, Vorgänge, Aufgaben oder Notizen zugeordnet sind — auch archivierte oder erledigte — oder sie in Nora gearbeitet hat, ist das Löschen nicht möglich; für echte Mitarbeiter bleibt „Zugang beenden" der richtige Weg. Gelöscht werden kann nur ein Konto, dessen Zugang vorher beendet wurde. Vor dem Löschen zeigt Nora Name, Anmeldeadresse, Rolle, Zugangsstatus und alle Zähler an, und der vollständige Name muss abgetippt werden. Die Aktion lässt sich nicht rückgängig machen; die Einträge im Änderungsverlauf bleiben erhalten.
+
+**Technischer Hinweis:** Nora-Konto und Anmeldeidentität werden in einer einzigen Transaktion entfernt; die Datenbank prüft die Löschbarkeit unabhängig von der Oberfläche noch einmal und verweigert jeden anderen Löschweg. Details: `19-user-lifecycle-architecture.md`.
 
 ## 2026-09-06 — Mitarbeiterzugang beenden („Zugang beenden")
 

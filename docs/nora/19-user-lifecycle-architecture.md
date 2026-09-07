@@ -1,6 +1,6 @@
 # 19 – User-Lifecycle-Architektur (Mitarbeiterzugang)
 
-Stand: 2026-09-07 — aktueller Zustand nach User Lifecycle **W1–W6-A** (alle `PRODUCTION VERIFIED`); **W6-B (kontrollierter Hard Delete) liegt als RC vor und ist noch nicht released** — Abschnitt 15 beschreibt den RC-Vertrag, der erst mit dem Release Production-Wahrheit wird. Abschnitt 11 beschreibt den in Production gültigen Session-Autorisierungsvertrag.
+Stand: 2026-09-07 — aktueller Zustand nach User Lifecycle **W1–W6-B** (alle `PRODUCTION VERIFIED`); **W6-B (kontrollierter Hard Delete) ist seit 2026-09-07 live** — Abschnitt 15 beschreibt den in Production gültigen Vertrag. Abschnitt 11 beschreibt den in Production gültigen Session-Autorisierungsvertrag.
 
 Dieses Dokument ist die **aktuelle Quelle der Wahrheit** für den Mitarbeiter-/Benutzer-Lebenszyklus in Nora. Es beschreibt, wie das Subsystem heute funktioniert. Historische Release-Evidenz (RC-SHAs, Migrationshashes, Testzahlen, Live-Beweise, Zwischenfälle) steht im Release-Archiv (`releases/2026-09.md`), die knappen Entscheidungen mit Begründung in `06-decision-log.md`.
 
@@ -88,8 +88,8 @@ Rein lesend: `GET /users[?sales_id=]` (admin-only) liefert `employeeId/email/acc
 | `POST change_email` | `public.prepare_sales_email_change(...)` → GoTrue Admin API → Trigger `guard_auth_email_change` (schreibt `sales.email`, löscht `auth.one_time_tokens`, Audit) | Anmeldeadresse ändern | W4 |
 | `POST offboard` | `public.offboard_employee_by_executor(actor, sale, operation_id)` | Zugang beenden | W5 |
 | `GET /users?sales_id=` | `public.get_employee_dependency_preview(sale)` | offene Zuständigkeiten zählen | W5 |
-| `GET /users?sales_id=` (RC) | `public.get_employee_deletion_preview(sale)` | Löschprüfung: darf dieses Konto endgültig gelöscht werden? | W6-B RC |
-| `POST delete_account` (RC) | `public.prepare_employee_account_deletion(actor, sale, confirmation, admin_confirmed, operation_id)` → GoTrue Admin **Hard Delete** → Trigger `guard_auth_user_delete` (löscht `public.sales`, Nora-Technikzustand, schreibt `user.account_deleted` in GoTrues Transaktion) → `get_employee_deletion_evidence` | Benutzerkonto endgültig löschen | W6-B RC |
+| `GET /users?sales_id=` | `public.get_employee_deletion_preview(sale)` | Löschprüfung: darf dieses Konto endgültig gelöscht werden? | W6-B |
+| `POST delete_account` | `public.prepare_employee_account_deletion(actor, sale, confirmation, admin_confirmed, operation_id)` → GoTrue Admin **Hard Delete** → Trigger `guard_auth_user_delete` (löscht `public.sales`, Nora-Technikzustand, schreibt `user.account_deleted` in GoTrues Transaktion) → `get_employee_deletion_evidence` | Benutzerkonto endgültig löschen | W6-B |
 
 Gemeinsame Regeln:
 
@@ -138,7 +138,7 @@ Drei getrennte Fakten pro Zeile in `audit_events`:
 | **Ziel** (welcher Mitarbeiter) | `entity_type = 'sales'`, `entity_id = nora_entity_uuid('sales', sales.id)` | stabil über alle `user.*`-Ereignisse desselben Mitarbeiters |
 | **Operation** (welche Ausführung) | `request_id` | Operation-ID des Requests (`x-nora-operation-id` vom Browser, sonst von der Edge Function geprägt); alle Audit-Zeilen eines Requests teilen sie |
 
-Ereignisvokabular `user.*` (live): `user.role_changed`, `user.disabled`, `user.enabled` (Trigger `audit_sales_privilege_change`), `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (Edge → `public.record_employee_admin_event`, Allowlist, Metadaten aus der DB), `user.email_changed` (W4-Guard, in GoTrues Transaktion), `user.offboarded` (W5-Executor, nur bei `executed`), `user.account_deleted` (W6-B-Guard `guard_auth_user_delete`, in GoTrues DELETE-Transaktion — RC, noch nicht live). `retention_class = user_management`, `source = user`.
+Ereignisvokabular `user.*` (live): `user.role_changed`, `user.disabled`, `user.enabled` (Trigger `audit_sales_privilege_change`), `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (Edge → `public.record_employee_admin_event`, Allowlist, Metadaten aus der DB), `user.email_changed` (W4-Guard, in GoTrues Transaktion), `user.offboarded` (W5-Executor, nur bei `executed`), `user.account_deleted` (W6-B-Guard `guard_auth_user_delete`, in GoTrues DELETE-Transaktion). `retention_class = user_management`, `source = user`.
 
 Regeln: kein Audit ohne Änderung, keine Änderung ohne Audit (Trigger/Executor in derselben Transaktion); Audit nach einem Provider-Erfolg (Einladung, Passwort-Link) erst nach dessen Annahme, Audit-Fehler → `audit_write_failed`, nie grün; nie Token, JWTs, Sitzungs-IDs oder Provider-Antworten in `metadata`; alte Zeilen (vor W3 `System`) bleiben unverändert (append-only, kein Backfill). Details zur Tabelle: `13-crm-audit-retention.md`.
 
@@ -192,11 +192,11 @@ Ablauf (`public.offboard_employee_by_executor`, eine Postgres-Transaktion): Guar
 
 Unverändert W1: `PATCH {sales_id, disabled: false}` → Executor setzt `sales.disabled = false` (`user.enabled`) → Bann aufgehoben → Verifikation. Alte Sitzungen kommen **nicht** zurück (gelöscht), ein altes Token bleibt durch die Session-Bindung tot; eine frische Anmeldung erzeugt eine neue Sitzung. Nach einer Reaktivierung ist immer eine neue Anmeldung nötig — die Mitarbeiterakte weist darauf hin.
 
-## 15. Kontrollierter Hard Delete („Benutzerkonto endgültig löschen", W6-B — RC, nicht released)
+## 15. Kontrollierter Hard Delete („Benutzerkonto endgültig löschen", W6-B — `PRODUCTION VERIFIED`)
 
 **Produktregel (unverändert):** ein echter Mitarbeiter mit Geschäfts- oder Urheberschaftshistorie wird **offboarded, nie gelöscht** (§13). Hard Delete ist eine **Ausnahmeoperation** für versehentlich angelegte, doppelte, Test- oder nie genutzte Identitäten. Er entfernt das Nora-Benutzerkonto (`public.sales`) und die Anmeldeidentität (`auth.users` mit GoTrues CASCADE-Kindern). Er ist **keine DSGVO-Löschung**: `audit_events` (Nora) und `auth.audit_log_entries` (GoTrue) bleiben; Retention/Anonymisierung ist eine geparkte Entscheidung (`13-crm-audit-retention.md`). Bevorzugte Nutzerformulierung: „Das Nora-Benutzerkonto und die Anmeldeidentität werden endgültig gelöscht." — nie „Alle personenbezogenen Daten werden vollständig gelöscht."
 
-Bis zum W6-B-Release gilt in Production weiterhin: kein unterstützter Löschpfad (Browser-Rollen ohne `DELETE`-Privileg/-Policy auf `sales`; referenzierte Mitarbeiter durch die sechs `NO ACTION`-FKs auf jedem Pfad unlöschbar; unreferenzierte nur für `postgres`/`service_role` per SQL). Mit W6-B wird auch dieser letzte direkte Pfad geschlossen (`guard_sales_delete`).
+Seit dem W6-B-Release (2026-09-07) gilt in Production: der kontrollierte Pfad ist der **einzige** unterstützte Löschpfad. Browser-Rollen haben weiterhin kein `DELETE`-Privileg/keine Policy auf `sales`; referenzierte Mitarbeiter bleiben durch die sechs `NO ACTION`-FKs auf jedem Pfad unlöschbar; der früher für `postgres`/`service_role` offene direkte SQL-Pfad ist jetzt durch `guard_sales_delete` geschlossen. **Nicht** geschlossen ist das vorbestehende `TRUNCATE`-Recht der API-Rollen aus den Default-Privilegien (Zeilentrigger greifen bei `TRUNCATE` nicht) — siehe `17-known-issues-and-planned-waves.md`.
 
 **Löschprüfung (`public.get_employee_deletion_preview`, nur `service_role`)** — getrennt von der W5-Preview („Was ist noch offen?"): sie fragt „Ist diese Identität je zu durablem Geschäfts-/Historienzustand geworden?" und liefert nur Zähler.
 
@@ -245,7 +245,7 @@ Bis zum W6-B-Release gilt in Production weiterhin: kein unterstützter Löschpfa
 | **W4** | Kontrollierte Änderung der Anmeldeadresse (Ticket + Guard, `nora_identity_manager`) | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W5** | Offboarding, Session-Revokation, session-gebundene RLS, Abhängigkeits-Preview | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W6-A** | Session-Autorisierung finalisiert: fail-closed, Owner-Bindung (`sessions.user_id = sub`), malformed/fehlender Claim → deny, Migrations-Hard-Gate, `session_binding_health()` | `PRODUCTION VERIFIED` (2026-09-06) — Migration `20260906210000_nora_lifecycle_session_authorization`, nur Datenbank |
-| **W6-B** | Kontrollierter Hard Delete „Benutzerkonto endgültig löschen": Löschprüfung (all-time Geschäftshistorie + Provenienz), Ticket, `auth.users`- und `sales`-DELETE-Guards, GoTrue-Admin-Hard-Delete als Treiber, `user.account_deleted`, schmale Purge `email_delivery_events`, destruktiver Dialog mit Name/Tippbestätigung/Admin-Checkbox | **RC VERIFIED — nicht released** (2026-09-07; Migration `20260906230000_nora_lifecycle_account_deletion`, `users`-Edge-Änderung, Frontend) — §15; Release-Runbook im Archiv |
+| **W6-B** | Kontrollierter Hard Delete „Benutzerkonto endgültig löschen": Löschprüfung (all-time Geschäftshistorie + Provenienz), Ticket, `auth.users`- und `sales`-DELETE-Guards, GoTrue-Admin-Hard-Delete als Treiber, `user.account_deleted`, schmale Purge `email_delivery_events`, destruktiver Dialog mit Name/Tippbestätigung/Admin-Checkbox | **`PRODUCTION VERIFIED`** (2026-09-07; Migration `20260906230000_nora_lifecycle_account_deletion`, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`) — §15; Release-Evidenz im Archiv |
 | **W7** | — | **geplant / TBD** (nicht entschieden) |
 | **W8** | — | **geplant / TBD** (nicht entschieden) |
 | **W9** | SQL-Verifikationssuiten (kanonische Sequenz) in CI | **geplant / nicht begonnen** |

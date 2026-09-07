@@ -1,6 +1,6 @@
 # 13 – CRM-Audit-Verlauf und Aufbewahrung
 
-Stand: 2026-09-07 (v0.3l/v0.3l.1 vom 2026-07-15, ergänzt um Operation Correlation 2026-08-10, Security Hardening Wave 0 2026-09-04, User Lifecycle W3/W4/W5 2026-09-05/06 und W6-B als RC 2026-09-07). Dieses Dokument beschreibt den **aktuellen** Audit-Vertrag; Release-Evidenz liegt im Archiv (`releases/`).
+Stand: 2026-09-07 (v0.3l/v0.3l.1 vom 2026-07-15, ergänzt um Operation Correlation 2026-08-10, Security Hardening Wave 0 2026-09-04, User Lifecycle W3/W4/W5 2026-09-05/06 und W6-B 2026-09-07). Dieses Dokument beschreibt den **aktuellen** Audit-Vertrag; Release-Evidenz liegt im Archiv (`releases/`).
 
 ## Zweck
 

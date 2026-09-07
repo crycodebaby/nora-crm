@@ -186,7 +186,7 @@ bezogenen Fragmente hinterlässt. Die Append-only-Regel steht dem **nicht** im
 Weg: sie entsteht aus fehlenden `UPDATE`/`DELETE`-Grants für Anwendungsrollen,
 während der Tabelleneigentümer (`postgres`) das Recht behält. Eine privilegierte
 `SECURITY DEFINER`-Purge-Funktion ist damit später möglich. **In V1C-A wird sie
-nicht implementiert.** *Nachtrag W6-B (RC 2026-09-07, nicht released):* die Purge
+nicht implementiert.** *Nachtrag W6-B (live seit 2026-09-07):* die Purge
 läuft innerhalb des kontrollierten Hard Delete (`nora_private.guard_auth_user_delete`,
 in GoTrues Transaktion) und ist bewusst **schmal**: nur Zeilen mit
 `employee_sale_id = sale` **und** einer Adresse aus der Identitätshistorie des

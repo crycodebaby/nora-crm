@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-06 · letzter Laufzeit-Release: User Lifecycle W6-A `PRODUCTION VERIFIED` (Laufzeit-SHA `401bb08b`, nur Datenbank — Production-Ledger-Kopf `20260906210000`; Frontend und Edge Functions unverändert seit W5 `3baf5b02`). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
+Stand: 2026-09-07 · letzter Laufzeit-Release: User Lifecycle W6-B `PRODUCTION VERIFIED` (Laufzeit-SHA `ffc0183a` — Production-Ledger-Kopf `20260906230000`, `users`-Edge v9, Frontend mit dem Abschnitt „Benutzerkonto endgültig löschen"). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
 
 Dieses Dokument ist der **Navigations-Einstieg** und eine **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Es enthält bewusst **keine** Release-Evidenz (RC-SHAs, Testzahlen, Live-Beweise) — die liegt im Release-Archiv (`releases/`).
 
@@ -56,13 +56,13 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — bei Bedarf aus Git auflösen, hier bewusst nicht festgeschrieben (Docs-Commits verschieben ihn, ohne die Laufzeit zu ändern) | `git log` |
-| Letzter Laufzeit-Release | User Lifecycle W6-A, Laufzeit-Commit `401bb08b` (2026-09-06; nur Datenbank — Migration `20260906210000_nora_lifecycle_session_authorization`). Frontend und Edge Functions unverändert seit W5 `3baf5b0210975f65142fb7b7747a23312cc8d3d0` | Archiv `releases/2026-09.md` (Nachtrag Release W6-A) |
-| Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main`; fachlich Stand W5 `3baf5b02` (W6-A änderte kein Frontend) | Release-Archiv `releases/2026-09.md` |
-| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **55 Einträge, Kopf `20260906210000_nora_lifecycle_session_authorization`**, deckungsgleich mit `supabase/migrations/` (55 Dateien) | `list_migrations` read-only 2026-09-06 |
-| Edge Function `users` | **Version 8** (`verify_jwt = false`, verifiziert JWTs selbst; Stand W5, von W6-A nicht berührt) | `list_edge_functions` read-only 2026-09-06 |
+| Letzter Laufzeit-Release | User Lifecycle W6-B, Laufzeit-Commit `ffc0183ad557577a64863cc2b4f77d043447a1bd` (2026-09-07; Datenbank + `users`-Edge + Frontend — Migration `20260906230000_nora_lifecycle_account_deletion`) | Archiv `releases/2026-09.md` (Nachtrag Release W6-B) |
+| Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main`; fachlich Stand W6-B `ffc0183a` (Deployment `dpl_6tNN9619RTvwauXP3iUQhWjWubae`, READY) | Release-Archiv `releases/2026-09.md` |
+| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **56 Einträge, Kopf `20260906230000_nora_lifecycle_account_deletion`**, deckungsgleich mit `supabase/migrations/` (56 Dateien) | `list_migrations` read-only 2026-09-07 |
+| Edge Function `users` | **Version 9** (`verify_jwt = false`, verifiziert JWTs selbst; Stand W6-B) | `list_edge_functions` read-only 2026-09-07 |
 | Edge Function `brevo-email-events` | **Version 2** (`verify_jwt = false`, Bearer-Token) | dito |
 | Weitere Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht** in Production deployt (nur `users` und `brevo-email-events` sind live) | dito |
-| Produktionsdaten | real (5 Mitarbeiter, davon ein deaktiviertes Testkonto `sales.id = 4`; Geschäftsdaten wachsen durch Nutzung) | Archiv W5 |
+| Produktionsdaten | real (**4 Mitarbeiter**, davon 2 aktive Administratoren; das deaktivierte Testkonto `sales.id = 4` wurde am 2026-09-07 im W6-B-Live-Beweis endgültig gelöscht. Geschäftsdaten wachsen durch Nutzung und blieben unberührt) | Archiv W6-B |
 
 Release-Regel (schemaabhängige Wellen): RC einfrieren → Production-Migration → DB-Verifikation → Edge-Deploy → Push → Live-Smoke; Details in `07-agent-change-checklist.md`. **Nach einem Deployment holt ein Reload allein den neuen Build nicht** (PWA im Prompt-Modus) — siehe Abschnitt 5 und Checkliste.
 
@@ -91,7 +91,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | Security | Security Hardening Wave 0 (`audit_events` TRUNCATE) | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Lifecycle | User Lifecycle W1, W2, W3, W4, W5 | `PRODUCTION VERIFIED` (2026-09-05/06) | `2026-09` |
 | Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | `PRODUCTION VERIFIED` (2026-09-06; nur Datenbank, Migration `20260906210000`, keine sichtbare Änderung) | `2026-09` |
-| Lifecycle | User Lifecycle W6-B (kontrollierter Hard Delete „Benutzerkonto endgültig löschen") | **`RC VERIFIED — nicht released`** (2026-09-07; Migration `20260906230000`, `users`-Edge-Änderung, Frontend — **nichts davon ist in Production**) | `2026-09` |
+| Lifecycle | User Lifecycle W6-B (kontrollierter Hard Delete „Benutzerkonto endgültig löschen") | **`PRODUCTION VERIFIED`** (2026-09-07; Migration `20260906230000`, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`) | `2026-09` |
 
 **Was heute gilt (Kurzfassungen der Subsysteme):**
 
@@ -100,7 +100,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 - **Fehler/Operationen:** `NoraErrorCode` über `DETAIL`, Operation Manager mit `execution`/`errorCode`/`result`, Idempotency-Records — `06-decision-log.md` 2026-08-28/29, `domain/noraErrorCodes.ts`, `operations/*`.
 - **Feedback:** eine Statuskarte pro Intent, über Dialogen, click-through; nur Quick Capture migriert, sonner für alle anderen Flows — `notifications/*`, `02-design-system.md`.
 - **PWA:** Prompt-Modus (wartender Worker), Browser-Fakten als Wahrheit, Zustände `available · applying · slow · reloadRequired · failed`, Bestätigung nach dem Reload — `06-decision-log.md` „PWA-Update-Lifecycle", `02-design-system.md`, `pwa/*`.
-- **Mitarbeiter-Lifecycle:** abgeleiteter Zugangsstatus, ein Executor je Aktion, historische Identität, Audit-Actor, kontrollierte E-Mail-Änderung, Offboarding mit Session-Revokation und Preview — `19-user-lifecycle-architecture.md`. Kontrollierter Hard Delete (W6-B) liegt als RC vor und ist **nicht** live; bis zum Release existiert in Production kein Löschpfad für Mitarbeiterkonten.
+- **Mitarbeiter-Lifecycle:** abgeleiteter Zugangsstatus, ein Executor je Aktion, historische Identität, Audit-Actor, kontrollierte E-Mail-Änderung, Offboarding mit Session-Revokation und Preview — `19-user-lifecycle-architecture.md`. Kontrollierter Hard Delete (W6-B) ist live: der **einzige** unterstützte Löschpfad für Mitarbeiterkonten, nur für Konten ohne Geschäfts- und Urheberschaftshistorie; Konten mit Historie werden offboarded, nie gelöscht. Kontolöschung ist **keine** DSGVO-Löschung — das Audit bleibt.
 - **E-Mail-Zustellung:** Brevo-Webhook, Best-Effort-Korrelation, Zustellzeile im Panel, kein Tracking — `18-email-delivery-observability.md`.
 
 ## 6. Welche Dokumente muss ich für welches Thema lesen?
@@ -123,7 +123,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | Audit-Ereignisse, Actor-Modell, Retention | `13-crm-audit-retention.md` |
 | Offene Bugs, Restrisiken, geplante Wellen | `17-known-issues-and-planned-waves.md` |
 | E-Mail-Zustellbeobachtung (Brevo, Vertrag, Operator-Konfiguration) | `18-email-delivery-observability.md` |
-| **Mitarbeiter-/Benutzer-Lifecycle (Zustände, Executoren, Audit, Session-Bindung, Offboarding, Hard Delete W6-B (RC), Roadmap W1–W10)** | `19-user-lifecycle-architecture.md` |
+| **Mitarbeiter-/Benutzer-Lifecycle (Zustände, Executoren, Audit, Session-Bindung, Offboarding, Hard Delete W6-B, Roadmap W1–W10)** | `19-user-lifecycle-architecture.md` |
 | Produkt-Changelog, `/changelog`-Vertrag | `20-product-changelog.md` |
 | Historische Release-Evidenz, alte Decision-Log-Originale | `releases/README.md` → `releases/2026-06.md` … `releases/2026-09.md` |
 | Error Contract | `06-decision-log.md` „Error Contract Wave" + `domain/noraErrorCodes.ts` + `07-…` |
