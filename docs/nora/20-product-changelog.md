@@ -27,6 +27,19 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 
 ---
 
+## 2026-09-08 — Startseite: Ansprechpartner sind wieder da, kein leerer Bildschirm beim Laden
+
+**Was ändert sich für Sie:** In „Offene Aufgaben" auf der Startseite standen bei manchen Aufgaben keine
+Ansprechpartnernamen mehr — die Namen fehlten dort vollständig, obwohl sie in Nora hinterlegt waren. Das lag an
+der Startseite selbst und ist behoben: Die Namen werden wieder angezeigt, auch wenn mehrere Aufgaben zur selben
+Person gehören oder einzelne Aufgaben nur einem Kunden und keiner Person zugeordnet sind.
+
+Außerdem zeigt Nora beim Öffnen der Startseite jetzt sofort einen erkennbaren Ladezustand statt einer kurzen
+leeren Fläche — am Rechner wie am Telefon.
+
+**Technischer Hinweis:** Reine Oberflächenänderung, keine Datenbank- oder Datenänderung. Details:
+`releases/2026-09.md` „Startseite-Zuverlässigkeit W7-R1A".
+
 ## 2026-09-08 — Hauptansprechpartner wechseln funktioniert jetzt in einem Schritt
 
 **Was ändert sich für Sie:** Wenn Sie einen neuen Ansprechpartner anlegen oder bearbeiten und ihn dabei als **Hauptansprechpartner** markieren, übernimmt Nora das jetzt in einem einzigen Arbeitsschritt: Der bisherige Hauptansprechpartner verliert die Rolle, der neue erhält sie, und beides wird gemeinsam gespeichert. Vorher konnte das Speichern in dieser Situation mit der unverständlichen Meldung „Die Daten konnten gerade nicht geladen werden." abbrechen — der Kunde hatte dann weiterhin nur den alten Hauptansprechpartner. Das passiert nicht mehr.

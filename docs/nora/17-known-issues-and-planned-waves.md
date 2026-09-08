@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-07. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-08. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -150,10 +150,6 @@ Beobachtet, bewusst nicht in dieser Wave behoben:
 5. **Leerer rechter Rand auf `/kunden/create`** (LOW, Layout): `lg:mr-72` reserviert Platz für ein nicht vorhandenes Aside; bewusste `max-w`-Regel im Design System nötig.
 6. **E-Mail/Telefon erfordern erst einen ⊕-Klick** (LOW, UX, geteiltes `ArrayInput`-Muster von Kunden und Kontakten) — nicht isoliert ändern.
 
-### G.3 Dashboard sendet eine fehlerhafte Kontakt-Id-Abfrage (`contacts?id=in.(1,1,,29,)`)
-
-**Status: `OPEN`** (beobachtet 2026-09-07 während der Untersuchung des Hauptansprechpartner-Zwischenfalls; bewusst **nicht** Teil der Atomic-Contact-Primary-Intent-RC). Die Startseite fragt Kontakte mit einer `id=in.(…)`-Liste ab, die Duplikate und leere Elemente enthält (`1,1,,29,`). PostgREST verweigert die leere Elemente; die Ursache liegt in der Zusammensetzung der Kontakt-Id-Liste im Dashboard, nicht im Kontakt-Speicherpfad. Eigene, kleine Korrektur mit Regressionstest — vorher nicht im Kontakt-Kontext „mitfixen".
-
 ### G.4 Atomic Contact Primary Intent — offen nach dem Release (2026-09-08)
 
 **Status: die Welle selbst ist `PRODUCTION VERIFIED`** (2026-09-08, Migration `20260908120000`, Ledger 58, PO-Live-Smoke akzeptiert — `06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent", Evidenz `releases/2026-09.md`). Hier stehen nur die **bewusst offen gebliebenen** Restpunkte. Restpunkte: `contacts.import` (CSV) und die Notiz-/Aufgaben-Pfade schreiben Kontakte weiterhin roh und additiv (`is_primary` nie `true`) — beabsichtigt, kein Risiko für den Index, aber ohne Operation-Korrelation. Die Markierungen-RC (`74a67659`, älterer `main`) berührt `noraErrorCodes`, `normalizeCrmError` und die Kataloge und muss auf **diesen** Stand portiert werden (rein textuelle Konflikte erwartet). `set_primary_contact` hat weiterhin kein UI und behält seinen `service_role`-Grant aus 2026-08-25.
@@ -175,6 +171,8 @@ Nach den beiden Blocker-Fixes (RC `0fb3d6ba`, zwei unabhängige Reviews 2026-09-
 - **`deals.contact_ids bigint[]`** als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen-/Zeitdimension) — `PLANNED DOMAIN WAVE`, nicht designt.
 - **Kontakterstellung UI-Polish**: förmliche Rollen-UX-Abnahme nach `12-role-ux-acceptance.md` nie durchlaufen (technisch deployed). `NEEDS RE-VERIFICATION`.
 - **Application Queries / Read Models** für künftige KI-/Automatisierungs-Konsumenten (Falle 36) — Richtung dokumentiert, nichts implementiert.
+- **Wave 7 R1B — `Deal.company_id` Contract-Parity** — `PLANNED FOLLOW-UP`, noch nicht begonnen. `deals.company_id` ist in der Datenbank nullable, der TypeScript-Typ bildet das nicht ab. W7-R1A (`PRODUCTION VERIFIED` 2026-09-08) entschärft nur die Startseiten-Lesepfade über `resolveHotboardCompanyIds`; der Typvertrag selbst bleibt unangeglichen. Evidenz: `releases/2026-09.md` „Startseite-Zuverlässigkeit W7-R1A".
+- **Mobile-Ladezustand der Startseite live nachprüfen** — `PLANNED FOLLOW-UP` aus dem W7-R1A-Release (2026-09-08): der Ein-Sekunden-Vorlauf ist im ausgelieferten Build konstruktiv entfernt und durch Tests abgedeckt, eine Sichtprüfung auf einem echten mobilen Viewport steht aber aus (die Release-Session erreichte den ≤ 767-px-Breakpoint nicht).
 
 ## H. Bekannte, nicht untersuchte Themen
 
