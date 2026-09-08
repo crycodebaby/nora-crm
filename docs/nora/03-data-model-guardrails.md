@@ -143,7 +143,9 @@ Nur bei belegtem Bedarf:
 | `companies.links_jsonb` / `contacts.links_jsonb` | generisches Link-Modell (Website, LinkedIn, …) — **implementiert**, ersetzt LinkedIn-only-Validierung |
 | `companies.email_jsonb` / `companies.phone_jsonb` | mehrere Firmen-Kontaktmethoden mit Typ — **implementiert** |
 | `create_customer_with_contact` (RPC) | atomare Kunde+Ansprechpartner-Anlage — **implementiert**, erweitert um `self_contact_id`/`mark_self` (Self Contact Wave) |
-| `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert** |
+| `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert**; seit Atomic Contact Primary Intent (RC 2026-09-08) auf dem gemeinsamen Transitionskern |
+| `create_contact` / `update_contact` (RPC) | atomares Kontakt-Speichern mit expliziter Hauptansprechpartner-Absicht, Kundenlock, Stale-Schutz, Idempotenz (create) — **RC 2026-09-08, nicht in Production** |
+| `nora_private.prepare_primary_contact_slot` | einziger Transitionskern „bisherigen Halter demotieren" (Lock, No-op bei bereits primär, Verifikation des beobachteten Halters) — **RC 2026-09-08** |
 | `companies.self_contact_id` | Person repräsentiert Kundenakte, entkoppelt von `contacts.company_id` — **implementiert** (Self Contact Wave, 2026-08-26) |
 | `create_quick_capture_case` (RPC) | atomare Kunde+Kontakt+Vorgang-Anlage für Schnellerfassung — **implementiert** |
 | `nora_private.is_effective_contact_of_company` | zentrale „gehört Kontakt zu Kundenakte"-Regel — **implementiert**, FakeRest-Parität in Pre-Production-Hardening-Session (2026-08-27) korrigiert |
@@ -185,6 +187,27 @@ is_primary ist nur aussagekräftig, wenn zusätzlich company_id passt
 is_primary=true bei abweichendem company_id ist für DIESE Kundenakte
 bedeutungslos.
 ```
+
+### Falle 40: `contacts.is_primary` als rohe Spalte schreiben (Atomic Contact Primary Intent, RC 2026-09-08)
+
+Falsch:
+
+```text
+dataProvider.create("contacts", { data: { ..., is_primary: true } })      // Formular schreibt die Rolle als Spalte
+await create(contact); await setPrimaryContact(contact.id);               // zwei Requests, Teilzustand bei Netzverlust
+update public.contacts set is_primary = true where id = ...;              // Migration/Skript ohne Transition
+```
+
+Richtig:
+
+```text
+Formular → PrimaryContactIntent (keep | make_primary + beobachteter Halter | clear)
+        → executeCreateContact / executeUpdateContact (eine Operation, eine UUID)
+        → public.create_contact / public.update_contact (eine Transaktion, Kundenlock)
+        → nora_private.prepare_primary_contact_slot (der eine Demote-Kern)
+```
+
+`uq_contacts_one_primary_per_company` ist die letzte Verteidigung, nicht der Koordinationsmechanismus. Jede neue Stelle, die die Rolle verschiebt, benutzt den Transitionskern und den Kundenlock; sie erfindet keine zweite Demote-Regel. Die RPCs lesen `is_primary` aus der Nutzlast **nie** — nur die Absicht bewegt die Rolle. Ein `make_primary` trägt immer den Halter, den der Benutzer gesehen hat (`null` = keinen); weicht der tatsächliche Halter ab, wird alles zurückgerollt (`NORA_PRIMARY_CONTACT_CHANGED`) — nie still ersetzt. Beim Kundenwechsel reist die Rolle nie mit; `company_id = null` ⇒ `is_primary = false`. Der Legacy-Constraint-Treffer wird in `normalizeCrmError` **nur** über den Constraint-Namen erkannt (`NORA_PRIMARY_CONTACT_ALREADY_EXISTS`), nie über ein breites `duplicate key`-Muster. Rohe additive Pfade, die die Rolle nicht berühren (Import mit `is_primary = false`, Status-/Markierungs-Updates, `last_seen`), bleiben erlaubt. Verifikation: `supabase/tests/contact_primary_intent_verification.sql` + Real-Session-Matrix `contact_primary_intent_concurrency_runner.ps1`.
 
 ### Falle 33: `error.message` als i18n-Key oder Business-Code verwenden
 

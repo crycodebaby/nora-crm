@@ -84,6 +84,8 @@ Bei jedem Ereignis serverseitig:
 }
 ```
 
+**Hauptansprechpartner-Transition (Atomic Contact Primary Intent, RC 2026-09-08):** ein Kontakt-Speichern, das den Hauptansprechpartner wechselt, erzeugt in **einer** Transaktion genau ein `contact.updated` für den abgelösten Halter (`is_primary` `true → false`) und für den neuen Halter entweder ein `contact.created` **im Endzustand** (`is_primary = true`, kein „created, dann updated") oder ein `contact.updated` mit seinen Feld- und Rollenänderungen. Alle Zeilen einer Speicherung tragen denselben `request_id` und den echten Actor; ein idempotenter Replay schreibt keine Audit-Zeile; eine zurückgerollte Operation hinterlässt keine.
+
 ### Aufbewahrungsklassen (`retention_class`)
 
 | Klasse | Verwendung |

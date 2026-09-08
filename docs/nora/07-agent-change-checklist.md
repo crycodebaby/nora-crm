@@ -253,6 +253,15 @@ Bei Customer & Contact Workflow Wave (2026-08-25) zusätzlich:
 - [ ] `npx supabase db reset --local` nach Migration (nicht in diesem Sandbox-Environment ausführbar — siehe Abschlussbericht)
 - [ ] `npm run typecheck` / `npm run build` / `npm run dev:demo` — Kunden-/Privatperson-Anlage manuell im Browser geprüft
 
+Bei Kontakt-Speichern / Hauptansprechpartner (ab Atomic Contact Primary Intent, RC 2026-09-08) zusätzlich:
+
+- [ ] Kein neuer Schreibpfad setzt `contacts.is_primary` als rohe Spalte; jede Rollenverschiebung läuft über `create_contact`/`update_contact` (Absicht + beobachteter Halter) oder `set_primary_contact`, alle auf `nora_private.prepare_primary_contact_slot` (Falle 40)
+- [ ] Kundenlock vor Kontaktzeile, bei zwei Kunden aufsteigend nach Id — nie „Kontakt zuerst"
+- [ ] Neue Formularvariante nutzt `ContactPrimaryContactField` + `attachContactSaveIntent` (Transform), keine eigene „finde den Halter"-Regel
+- [ ] `supabase/tests/contact_primary_intent_verification.sql` nach `db reset` (leere DB **und** mit Fixtures; rollt sich selbst zurück) — enthält Privilegienmatrix, Incident-Regression, Update-Matrix A–I, Idempotenz, Audit, Failure-Injection
+- [ ] Vor einem Release die Real-Session-Matrix `supabase/tests/contact_primary_intent_concurrency_runner.ps1` lokal ausführen (nie gegen Production; hinterlässt zwei Fixture-`sales`-Zeilen)
+- [ ] Neue public RPC: eigener `revoke all … from public, anon, authenticated, service_role` + einziger Grant an `authenticated`; `service_role` nur mit belegtem Aufrufer
+
 Bei Error-Contract-Änderungen (ab Error Contract Wave, 2026-08-28) zusätzlich:
 
 - [ ] Neuer Business-Fehler bekommt einen `NoraErrorCode` in `domain/noraErrorCodes.ts` UND serverseitig `USING DETAIL = 'NORA_<CODE>'` — nicht nur ein neues Regex-Pattern

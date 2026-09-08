@@ -150,6 +150,14 @@ Beobachtet, bewusst nicht in dieser Wave behoben:
 5. **Leerer rechter Rand auf `/kunden/create`** (LOW, Layout): `lg:mr-72` reserviert Platz für ein nicht vorhandenes Aside; bewusste `max-w`-Regel im Design System nötig.
 6. **E-Mail/Telefon erfordern erst einen ⊕-Klick** (LOW, UX, geteiltes `ArrayInput`-Muster von Kunden und Kontakten) — nicht isoliert ändern.
 
+### G.3 Dashboard sendet eine fehlerhafte Kontakt-Id-Abfrage (`contacts?id=in.(1,1,,29,)`)
+
+**Status: `OPEN`** (beobachtet 2026-09-07 während der Untersuchung des Hauptansprechpartner-Zwischenfalls; bewusst **nicht** Teil der Atomic-Contact-Primary-Intent-RC). Die Startseite fragt Kontakte mit einer `id=in.(…)`-Liste ab, die Duplikate und leere Elemente enthält (`1,1,,29,`). PostgREST verweigert die leere Elemente; die Ursache liegt in der Zusammensetzung der Kontakt-Id-Liste im Dashboard, nicht im Kontakt-Speicherpfad. Eigene, kleine Korrektur mit Regressionstest — vorher nicht im Kontakt-Kontext „mitfixen".
+
+### G.4 Atomic Contact Primary Intent — offen nach der RC (2026-09-08)
+
+**Status: RC gebaut, nicht in Production** (`06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent"). Restpunkte: `contacts.import` (CSV) und die Notiz-/Aufgaben-Pfade schreiben Kontakte weiterhin roh und additiv (`is_primary` nie `true`) — beabsichtigt, kein Risiko für den Index, aber ohne Operation-Korrelation. Die Markierungen-RC (`74a67659`, älterer `main`) berührt `noraErrorCodes`, `normalizeCrmError` und die Kataloge und muss auf **diesen** Stand portiert werden (rein textuelle Konflikte erwartet). `set_primary_contact` hat weiterhin kein UI und behält seinen `service_role`-Grant aus 2026-08-25.
+
 ### G.2 Geplante Domain-Waves
 
 - **Privatperson/Firma-Unterscheidung in Quick Capture** — `PLANNED FOLLOW-UP`: die Schnellerfassung erzeugt Kunden ohne `customer_kind`-Auswahl (Default `business`); die „Diese Person ist selbst Ansprechpartner"-Option fehlt dort bewusst (Self Contact Wave).
