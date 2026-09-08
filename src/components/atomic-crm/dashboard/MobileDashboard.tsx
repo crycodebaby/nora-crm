@@ -1,4 +1,4 @@
-import { useGetList, useTimeout } from "ra-core";
+import { useGetList } from "ra-core";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type { Contact, ContactNote } from "../types";
@@ -55,12 +55,12 @@ export const MobileDashboard = () => {
     useGetList<ContactNote>("contact_notes", {
       pagination: { page: 1, perPage: 1 },
     });
-  const oneSecondHasPassed = useTimeout(1000);
-
   const isPending = isPendingContact || isPendingContactNotes;
 
+  // Der bisherige Ein-Sekunden-Vorlauf zeigte genau während des üblichen
+  // Ladevorgangs eine leere Seite. Der Ladezustand erscheint jetzt sofort.
   if (isPending) {
-    return oneSecondHasPassed ? <Loading /> : null;
+    return <Loading />;
   }
 
   if (!totalContact) {

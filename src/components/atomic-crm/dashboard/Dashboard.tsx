@@ -8,6 +8,8 @@ import { DashboardStepper } from "./DashboardStepper";
 
 import { DealsChart } from "./DealsChart";
 
+import { NoraPageLoading } from "../misc/NoraPageLoading";
+
 import { Hotboard } from "./Hotboard";
 
 import { HotContacts } from "./HotContacts";
@@ -40,8 +42,24 @@ export const Dashboard = () => {
 
   const isPending = isPendingContact || isPendingContactNotes || isPendingDeal;
 
+  // Eine leere Seite liest sich wie ein Fehler. Solange die Startseite lädt,
+  // zeigt Nora dieselbe Grobstruktur wie im geladenen Zustand.
   if (isPending) {
-    return null;
+    return (
+      <div className="flex flex-col gap-8 mt-1">
+        <NoraPageLoading variant="cards" className="min-h-[24rem]" />
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8">
+            <NoraPageLoading rows={3} />
+          </div>
+
+          <div className="lg:col-span-4">
+            <NoraPageLoading rows={3} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!totalContact) {

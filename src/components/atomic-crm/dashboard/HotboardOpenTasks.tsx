@@ -15,8 +15,11 @@ import { cn } from "@/lib/utils";
 import { AddTask } from "../tasks/AddTask";
 import { noraCreatePath } from "../routing/noraRoutes";
 import { useConfigurationContext } from "../root/ConfigurationContext";
-import type { Task } from "../types";
-import { HOTBOARD_DEAL_LIMIT } from "./hotboardUtils";
+import type { Contact, Task } from "../types";
+import {
+  HOTBOARD_DEAL_LIMIT,
+  resolveHotboardContactIds,
+} from "./hotboardUtils";
 
 export const HotboardOpenTasks = ({ className }: { className?: string }) => {
   const translate = useTranslate();
@@ -38,11 +41,11 @@ export const HotboardOpenTasks = ({ className }: { className?: string }) => {
   );
 
   const contactIds = useMemo(
-    () => openTasks.map((task) => task.contact_id),
+    () => resolveHotboardContactIds(openTasks),
     [openTasks],
   );
 
-  const { data: contacts } = useGetMany(
+  const { data: contacts } = useGetMany<Contact>(
     "contacts",
     { ids: contactIds },
     { enabled: contactIds.length > 0 },

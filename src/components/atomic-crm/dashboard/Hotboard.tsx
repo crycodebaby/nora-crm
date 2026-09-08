@@ -25,6 +25,7 @@ import {
   sortDealsByCreatedDesc,
   sortDealsByFollowUpDate,
   prepareFocusColumnDeals,
+  resolveHotboardCompanyIds,
 } from "./hotboardUtils";
 
 export const Hotboard = () => {
@@ -78,13 +79,10 @@ export const Hotboard = () => {
   const focusBoardCompanyIds = useMemo(() => {
     const newInquiry = prepareFocusColumnDeals(deals ?? [], "neue-anfrage");
     const nachfassen = prepareFocusColumnDeals(deals ?? [], "nachfassen");
-    return [
-      ...new Set(
-        [...newInquiry.deals, ...nachfassen.deals].map(
-          (deal) => deal.company_id,
-        ),
-      ),
-    ];
+    return resolveHotboardCompanyIds([
+      ...newInquiry.deals,
+      ...nachfassen.deals,
+    ]);
   }, [deals]);
 
   const displayedDeals = useMemo(
@@ -105,7 +103,7 @@ export const Hotboard = () => {
   const companyIds = useMemo(
     () => [
       ...new Set([
-        ...displayedDeals.map((deal) => deal.company_id),
+        ...resolveHotboardCompanyIds(displayedDeals),
         ...focusBoardCompanyIds,
       ]),
     ],

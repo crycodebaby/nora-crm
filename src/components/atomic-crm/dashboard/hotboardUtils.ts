@@ -6,9 +6,63 @@ import {
   isFollowUpOverdue,
   getFollowUpStatus,
 } from "../deals/dealUtils";
-import type { Deal } from "../types";
+import type { Deal, Task } from "../types";
 
 export const HOTBOARD_DEAL_LIMIT = 5;
+
+/**
+ * Ansprechpartner-Ids für die Startseite aus offenen Aufgaben ableiten.
+ *
+ * Aufgaben sind fachlich entweder kundenbezogen (`contact_id` null) oder
+ * kontaktbezogen, und mehrere Aufgaben zeigen häufig auf denselben Kontakt.
+ * Beides darf nie ungefiltert in eine `getMany`-Abfrage laufen: leere Elemente
+ * erzeugen ein ungültiges `id=in.(1,1,,29,)` und lassen die gesamte
+ * Ansprechpartner-Auflösung fehlschlagen, Duplikate blähen sie nur auf.
+ *
+ * Reihenfolge des ersten Vorkommens bleibt erhalten, Ids werden nicht
+ * umgewandelt und die Aufgaben nicht verändert.
+ */
+export function resolveHotboardContactIds(
+  tasks: readonly Task[],
+): Identifier[] {
+  const seen = new Set<Identifier>();
+  const contactIds: Identifier[] = [];
+
+  for (const task of tasks) {
+    const contactId = task.contact_id;
+    if (contactId == null || contactId === "") continue;
+    if (seen.has(contactId)) continue;
+    seen.add(contactId);
+    contactIds.push(contactId);
+  }
+
+  return contactIds;
+}
+
+/**
+ * Kunden-Ids für die Startseite aus Vorgängen ableiten.
+ *
+ * `deals.company_id` ist in der Datenbank nullable (ein Vorgang kann ohne
+ * zugeordneten Kunden existieren), auch wenn der TypeScript-Typ das derzeit
+ * nicht abbildet. Dieselbe Regel wie bei [resolveHotboardContactIds] gilt: ein
+ * leeres Element würde die Kundenauflösung der gesamten Startseite kippen.
+ */
+export function resolveHotboardCompanyIds(
+  deals: readonly Deal[],
+): Identifier[] {
+  const seen = new Set<Identifier>();
+  const companyIds: Identifier[] = [];
+
+  for (const deal of deals) {
+    const companyId = deal.company_id as Identifier | null | undefined;
+    if (companyId == null || companyId === "") continue;
+    if (seen.has(companyId)) continue;
+    seen.add(companyId);
+    companyIds.push(companyId);
+  }
+
+  return companyIds;
+}
 
 export const OFFER_FOLLOW_UP_STAGES = [
   "angebot-gesendet",
