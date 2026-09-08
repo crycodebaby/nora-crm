@@ -77,6 +77,7 @@ import {
 } from "./internal/taskContextCheck";
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 import {
+  contactCreateFingerprintPayload,
   derivePrimaryIntentFromLegacyData,
   readContactSaveIntent,
   type PrimaryContactIntent,
@@ -817,13 +818,13 @@ export const createDataProvider = ({
               const { is_primary: _ignored, ...contactData } =
                 payload as Record<string, unknown> & { is_primary?: unknown };
               void _ignored;
-              const {
-                first_seen: _firstSeen,
-                last_seen: _lastSeen,
-                ...stableFingerprint
-              } = contactData as Record<string, unknown>;
-              void _firstSeen;
-              void _lastSeen;
+              // Same canonical business projection the RPC fingerprints
+              // (nora_private.contact_create_fingerprint_payload), so unknown
+              // client keys cannot turn one submit into an idempotency
+              // conflict here but not in Supabase.
+              const stableFingerprint = contactCreateFingerprintPayload(
+                contactData as Record<string, unknown>,
+              );
               const { result, disposition } = await runWithFakeRestIdempotency(
                 "contact.create",
                 intent?.idempotencyKey ?? null,

@@ -275,6 +275,55 @@ describe("FakeRest — contact primary intent parity", () => {
     expect(getDetails(caught)).toBe(NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT);
   });
 
+  it("idempotency fingerprint is the canonical business payload: keys the command ignores replay, a writable field conflicts", async () => {
+    const { dataProvider } = setup();
+    const key = "0f1e2d3c-0000-4000-8000-00000000fp01";
+    const payload = {
+      first_name: "Finger",
+      last_name: "Abdruck",
+      company_id: 20,
+    };
+    const first = await dataProvider.create("contacts", {
+      data: { ...payload, ...intent({ kind: "keep" }, key) },
+    });
+
+    // Same business request, decorated with keys create_contact ignores
+    // (view columns, UI helpers, volatile timestamps) → must replay.
+    const second = await dataProvider.create("contacts", {
+      data: {
+        ...payload,
+        company_name: "wird ignoriert",
+        nb_notes: 7,
+        unknown_ui_helper: true,
+        first_seen: "2026-09-08T11:00:00.000Z",
+        last_seen: "2026-09-08T11:30:00.000Z",
+        ...intent({ kind: "keep" }, key),
+      },
+    });
+    expect(second.data.id).toBe(first.data.id);
+    expect(
+      getDefaultOperationManager()
+        .getOperations()
+        .map((o) => o.execution)
+        .sort(),
+    ).toEqual(["executed", "replayed"]);
+
+    // A real writable field differs → still a conflict.
+    let caught: unknown;
+    try {
+      await dataProvider.create("contacts", {
+        data: {
+          ...payload,
+          title: "Andere Rolle",
+          ...intent({ kind: "keep" }, key),
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(getDetails(caught)).toBe(NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT);
+  });
+
   it("update matrix: B make primary, D clear, G move primary keeps it non-primary, H move + make primary demotes the target's holder", async () => {
     const { dataProvider, freddie, hans, greta } = setup();
 

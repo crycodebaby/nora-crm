@@ -2,6 +2,18 @@
 -- Evaluates public.cpi_conc_results written by the parallel workers of
 -- contact_primary_intent_concurrency_runner.ps1 and asserts the invariants
 -- the design promises. Prints the raw outcome table for the release report.
+--
+-- Assertion principle (RC review 2026-09-08): assert OUTCOME CLASSES and
+-- INVARIANTS, never one arbitrary race winner, and never a wall-clock
+-- duration where a logical proof exists. In scenario A both workers are
+-- symmetric — either B or C may end up holding the slot — so the assertions
+-- below judge "exactly one success + one stale refusal", "the winner reports
+-- the previous holder A as demoted" and "the survivor is one of the two
+-- competitors", all of which hold for either winner.
+--
+-- The cross-command matrix (these commands raced against the pre-existing
+-- Quick Capture / create_customer_with_contact paths, the 2026-09-08 blocker)
+-- lives in contact_primary_cross_command_runner.ps1.
 
 \set ON_ERROR_STOP on
 
@@ -41,14 +53,23 @@ begin
     if v_success <> 1 or v_changed <> 1 or v_error_other <> 0 then
         v_failures := array_append(v_failures, format('A: expected 1 success + 1 stale refusal, got success=%s changed=%s other=%s', v_success, v_changed, v_error_other));
     end if;
-    if (select count(*) from public.contacts where company_id = v_k1 and is_primary) <> 1 then
-        v_failures := array_append(v_failures, 'A: K1 does not have exactly one primary');
+    -- judged on the snapshot taken right after A: scenario F later moves K1's
+    -- primary away, which correctly leaves K1 with ZERO primaries, so the
+    -- FINAL state cannot answer this question (RC review 2026-09-08, LOW).
+    if (select primaries from public.cpi_conc_snapshots where scenario = 'A' and company_id = v_k1) <> 1 then
+        v_failures := array_append(v_failures, 'A: K1 did not have exactly one primary right after A');
     end if;
     -- the winner must report the previous holder A as demoted (scenario F may
     -- legitimately promote A again later, so this is judged from the result)
     if (select (result->>'demoted_contact_id')::bigint from public.cpi_conc_results where scenario = 'A' and outcome = 'SUCCESS' limit 1) is distinct from v_a then
         v_failures := array_append(v_failures, 'A: the winner did not report the previous holder A as demoted');
     end if;
+    -- EITHER competitor may win — the protocol deliberately does not fix an
+    -- order here, and the assertions above (exactly one success, one stale
+    -- refusal, the winner reports A as demoted, K1 keeps exactly one primary)
+    -- hold for both winners. Nothing below may name a specific winner, and
+    -- nothing may judge K1's FINAL primary either: scenario F runs later and
+    -- may legitimately promote A again.
 
     -- B: two create+make_primary on K2 expecting D → exactly one contact created & primary, other refused, nothing half-written
     select count(*) filter (where outcome = 'SUCCESS'),
@@ -73,13 +94,26 @@ begin
     if exists (select 1 from public.contacts where last_name = 'StaleC') then
         v_failures := array_append(v_failures, 'C: the refused stale create left a contact behind');
     end if;
-    if (select id from public.contacts where company_id = v_k3 and is_primary) = v_e then
-        v_failures := array_append(v_failures, 'C: the holder session did not replace E');
+    -- judged on the snapshot taken right after C (D and F write K3 afterwards):
+    -- the holder session's replacement must have taken E's slot, and K3 must
+    -- have held exactly one primary at that moment.
+    if (select primaries from public.cpi_conc_snapshots where scenario = 'C' and company_id = v_k3) <> 1
+       or (select primary_contact_id from public.cpi_conc_snapshots where scenario = 'C' and company_id = v_k3)
+          is not distinct from v_e then
+        v_failures := array_append(v_failures, 'C: right after C, K3 did not hold exactly one primary other than E');
     end if;
-    -- the stale worker must have waited for the holder's commit (recorded after the holder's 4s sleep)
-    if (select min(recorded_at) from public.cpi_conc_results where scenario = 'C')
-       < (select first_seen + interval '3 seconds' from public.contacts where last_name = 'HolderC') then
-        v_failures := array_append(v_failures, 'C: the stale worker did not block on the customer lock');
+    -- The stale worker must have waited for the holder's commit. This is
+    -- proven logically rather than by wall-clock duration (RC review
+    -- 2026-09-08, LOW "timing-dependent assertion"): had it NOT blocked on the
+    -- customer lock it would still have seen E as the actual primary, its
+    -- expected id would have matched, and it would have SUCCEEDED. That it was
+    -- refused with NORA_PRIMARY_CONTACT_CHANGED (asserted above) can only
+    -- happen after the holder's replacement became visible under the lock.
+    -- What remains to assert is that the holder session really committed its
+    -- replacement onto K3 (judged by existence, not by who holds the slot at
+    -- the END of the matrix — scenarios D and F write K3 afterwards).
+    if not exists (select 1 from public.contacts where last_name = 'HolderC' and company_id = v_k3) then
+        v_failures := array_append(v_failures, 'C: the holder session did not commit its replacement onto K3');
     end if;
 
     -- D: three parallel creates with the same key + payload → one executed, two replayed, ONE contact, same contact_id, K1 exactly one primary
@@ -145,4 +179,5 @@ order by c.id;
 delete from public.contacts where company_id in (select id from public.cpi_conc_ctx where key in ('k1', 'k2', 'k3'));
 delete from public.companies where id in (select id from public.cpi_conc_ctx where key in ('k1', 'k2', 'k3'));
 drop table public.cpi_conc_results;
+drop table public.cpi_conc_snapshots;
 drop table public.cpi_conc_ctx;

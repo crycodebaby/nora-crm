@@ -3005,6 +3005,9 @@ declare
     v_self_contact_touched boolean := false;
     v_derived_name text;
     v_constraint_name text;
+    v_source_company_id bigint;
+    v_locked_source_company_id bigint;
+    v_lock_attempt int := 0;
 begin
     <<main>>
     begin
@@ -3067,6 +3070,52 @@ begin
         )
         returning id into v_company_id;
     end if;
+
+    -- Deterministic customer-first lock order (Atomic Contact Primary Intent
+    -- blocker fix, 2026-09-08). Every contact write below either demotes the
+    -- current Hauptansprechpartner (UPDATE public.contacts) or inserts/moves a
+    -- contact whose company_id FK makes Postgres take a KEY SHARE lock on the
+    -- customer row. Before this fix the core ran contact-row-first ->
+    -- customer-row-second, the exact inverse of
+    -- nora_private.prepare_primary_contact_slot, so Quick Capture on an
+    -- EXISTING customer deadlocked (40P01) against a concurrent
+    -- create_contact/update_contact/set_primary_contact on the same customer --
+    -- and its unserialized demote+insert could also leak a raw 23505. The same
+    -- helper and the same ascending id order are used everywhere: one lock
+    -- discipline for every path that writes both public.companies and
+    -- public.contacts. Do not reorder.
+    -- A contact that is MOVED here (p_existing_contact_id) also key-shares its
+    -- CURRENT customer, so that row is locked too. Its customer is read without
+    -- a lock first; if it moved concurrently before we hold the contact row,
+    -- the additional customer is locked and the read repeated (bounded) -- the
+    -- pattern public.update_contact uses.
+    loop
+        v_lock_attempt := v_lock_attempt + 1;
+
+        v_source_company_id := null;
+        if p_existing_contact_id is not null then
+            select c.company_id into v_source_company_id
+            from public.contacts c
+            where c.id = p_existing_contact_id;
+        end if;
+
+        perform nora_private.lock_companies_for_primary_transition(
+            array_remove(array[v_company_id, v_source_company_id], null)
+        );
+
+        exit when p_existing_contact_id is null;
+
+        select c.company_id into v_locked_source_company_id
+        from public.contacts c
+        where c.id = p_existing_contact_id
+        for update;
+
+        exit when v_locked_source_company_id is not distinct from v_source_company_id;
+        if v_lock_attempt >= 3 then
+            raise exception 'contact % moved concurrently; retry', p_existing_contact_id
+                using errcode = '40001';
+        end if;
+    end loop;
 
     if p_self_contact_id is not null then
         if not exists (select 1 from public.contacts where id = p_self_contact_id) then
@@ -3747,6 +3796,49 @@ revoke all on function nora_private.assert_contact_primary_intent(text, boolean)
 -- only the intent moves it. Unknown keys (view columns, UI helpers) are
 -- ignored.
 
+-- Atomic Contact Primary Intent blocker fix (2026-09-08): the idempotency
+-- fingerprint of public.create_contact must describe the BUSINESS request the
+-- RPC actually executes, not the raw client JSON. Two submits that differ only
+-- in keys create_contact ignores anyway (view columns such as company_name, UI
+-- helper fields) are the same request and must replay; a difference in any
+-- writable field must still raise NORA_IDEMPOTENCY_CONFLICT. first_seen and
+-- last_seen stay excluded on purpose (volatile client timestamps that default
+-- to now()). jsonb normalizes key order, so this projection is canonical.
+create or replace function nora_private.contact_create_fingerprint_payload(p_contact jsonb)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+    select jsonb_build_object(
+        'first_name',     p_contact->>'first_name',
+        'last_name',      p_contact->>'last_name',
+        'gender',         p_contact->>'gender',
+        'title',          p_contact->>'title',
+        'background',     p_contact->>'background',
+        'avatar',         nora_private.contact_payload_jsonb(p_contact, 'avatar'),
+        'has_newsletter', nullif(p_contact->>'has_newsletter', '')::boolean,
+        'status',         p_contact->>'status',
+        'tags',           nora_private.contact_payload_tags(p_contact, 'tags'),
+        'company_id',     nullif(p_contact->>'company_id', '')::bigint,
+        'sales_id',       nullif(p_contact->>'sales_id', '')::bigint,
+        'linkedin_url',   p_contact->>'linkedin_url',
+        'email_jsonb',    nora_private.contact_payload_jsonb(p_contact, 'email_jsonb'),
+        'phone_jsonb',    nora_private.contact_payload_jsonb(p_contact, 'phone_jsonb'),
+        'links_jsonb',    coalesce(nora_private.contact_payload_jsonb(p_contact, 'links_jsonb'), '[]'::jsonb)
+    );
+$$;
+
+alter function nora_private.contact_create_fingerprint_payload(jsonb) owner to postgres;
+
+comment on function nora_private.contact_create_fingerprint_payload(jsonb) is
+    'Atomic Contact Primary Intent (2026-09-08): canonical, allowlisted projection of a create_contact payload - exactly the writable fields public.create_contact consumes, minus the volatile first_seen/last_seen. Used for the idempotency fingerprint so unknown/ignored client keys cannot turn one business request into an idempotency conflict.';
+
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from public;
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from anon;
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from authenticated;
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from service_role;
+
 create or replace function public.create_contact(
     p_contact jsonb,
     p_primary_intent text default 'keep',
@@ -3785,7 +3877,7 @@ begin
     end if;
 
     v_fingerprint := md5(jsonb_build_object(
-        'p_contact', (p_contact - 'first_seen' - 'last_seen'),
+        'p_contact', nora_private.contact_create_fingerprint_payload(p_contact),
         'p_primary_intent', p_primary_intent,
         'p_expected_primary_contact_id', p_expected_primary_contact_id
     )::text);

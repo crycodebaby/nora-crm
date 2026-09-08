@@ -604,6 +604,99 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 6b. Idempotency fingerprint describes the BUSINESS request, not client JSON
+--     (RC review 2026-09-08, LOW). public.create_contact ignores unknown keys
+--     (view columns such as company_name/nb_notes, UI helper fields), so two
+--     submits that differ only in those keys are the SAME request and must
+--     replay. A difference in any writable field must still conflict.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+    v_k3 bigint := pg_temp.cpi_id('k3');
+    v_key uuid := gen_random_uuid();
+    v_base jsonb := jsonb_build_object('first_name', 'Fp', 'last_name', 'Basis', 'company_id', v_k3);
+    v_first jsonb; v_second jsonb;
+    v_before bigint;
+    v_caught boolean; v_detail text;
+begin
+    perform pg_temp.cpi_as_office(gen_random_uuid());
+    v_first := public.create_contact(v_base, 'keep', null, v_key);
+    execute 'reset role';
+    if v_first->'_meta'->>'disposition' <> 'executed' then
+        raise exception '6b: first write must report executed';
+    end if;
+    select count(*) into v_before from public.contacts;
+
+    -- same business request, decorated with keys create_contact ignores
+    perform pg_temp.cpi_as_office(gen_random_uuid());
+    v_second := public.create_contact(
+        v_base || jsonb_build_object(
+            'company_name', 'wird ignoriert',
+            'nb_notes', 7,
+            'unknown_ui_helper', true,
+            'first_seen', '2026-09-08T11:00:00Z',
+            'last_seen', '2026-09-08T11:30:00Z'
+        ),
+        'keep', null, v_key
+    );
+    execute 'reset role';
+    if v_second->'_meta'->>'disposition' <> 'replayed' then
+        raise exception '6b: ignored unknown keys must not change the fingerprint, got %', v_second->'_meta';
+    end if;
+    if (v_second->>'contact_id')::bigint <> (v_first->>'contact_id')::bigint then
+        raise exception '6b: replay must return the original contact id';
+    end if;
+    if (select count(*) from public.contacts) <> v_before then
+        raise exception '6b: replay must not insert a second contact';
+    end if;
+
+    -- a real writable field differs → still a conflict
+    v_caught := false;
+    begin
+        perform public.create_contact(v_base || jsonb_build_object('title', 'Andere Rolle'), 'keep', null, v_key);
+        execute 'reset role';
+    exception when others then
+        v_caught := true;
+        get stacked diagnostics v_detail = pg_exception_detail;
+    end;
+    execute 'reset role';
+    if not v_caught or v_detail <> 'NORA_IDEMPOTENCY_CONFLICT' then
+        raise exception '6b: a writable-field difference must still conflict, got %', v_detail;
+    end if;
+
+    -- a different primary intent under the same key is a different request too
+    v_caught := false;
+    begin
+        perform public.create_contact(v_base, 'make_primary', pg_temp.cpi_primary_of(v_k3), v_key);
+        execute 'reset role';
+    exception when others then
+        v_caught := true;
+        get stacked diagnostics v_detail = pg_exception_detail;
+    end;
+    execute 'reset role';
+    if not v_caught or v_detail <> 'NORA_IDEMPOTENCY_CONFLICT' then
+        raise exception '6b: a different primary intent must conflict, got %', v_detail;
+    end if;
+
+    if (select count(*) from public.contacts) <> v_before then
+        raise exception '6b: a conflicting request must not mutate';
+    end if;
+
+    -- the ignored keys really were ignored on the stored row
+    if exists (
+        select 1 from public.contacts
+        where id = (v_first->>'contact_id')::bigint
+          and (title is not null or last_name <> 'Basis')
+    ) then
+        raise exception '6b: an ignored key leaked into the stored contact';
+    end if;
+
+    reset role;
+    raise notice 'OK 6b. idempotency fingerprint = canonical business payload (unknown keys replay, writable diff conflicts)';
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 7. Failure injection — atomicity under real rollback
 --    Test-only triggers, created as postgres inside this (rolled back) txn.
 -- ---------------------------------------------------------------------------

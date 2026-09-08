@@ -34,6 +34,14 @@
 -- authenticated. service_role gets NO EXECUTE — no deployed backend path
 -- calls these commands. Table ACLs are untouched.
 --
+-- Blocker fix (2026-09-08, independent RC review): section 7 additionally
+-- redefines the EXISTING nora_private.create_customer_with_contact_core so the
+-- Quick Capture path takes the SAME customer-row lock, in the SAME ascending
+-- order, BEFORE it demotes a primary — the cross-command lock-order inversion
+-- that deadlocked Quick Capture against these new commands. The same review
+-- also corrected the create_contact idempotency fingerprint to the canonical
+-- allowlisted business payload (section 3).
+--
 -- Additive: no table/column change, no history rewrite. supabase/schemas/
 -- 02_functions.sql is kept in sync in the same commit.
 
@@ -239,6 +247,49 @@ revoke all on function nora_private.assert_contact_primary_intent(text, boolean)
 revoke all on function nora_private.assert_contact_primary_intent(text, boolean) from authenticated;
 revoke all on function nora_private.assert_contact_primary_intent(text, boolean) from service_role;
 
+-- Atomic Contact Primary Intent blocker fix (2026-09-08): the idempotency
+-- fingerprint of public.create_contact must describe the BUSINESS request the
+-- RPC actually executes, not the raw client JSON. Two submits that differ only
+-- in keys create_contact ignores anyway (view columns such as company_name, UI
+-- helper fields) are the same request and must replay; a difference in any
+-- writable field must still raise NORA_IDEMPOTENCY_CONFLICT. first_seen and
+-- last_seen stay excluded on purpose (volatile client timestamps that default
+-- to now()). jsonb normalizes key order, so this projection is canonical.
+create or replace function nora_private.contact_create_fingerprint_payload(p_contact jsonb)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+    select jsonb_build_object(
+        'first_name',     p_contact->>'first_name',
+        'last_name',      p_contact->>'last_name',
+        'gender',         p_contact->>'gender',
+        'title',          p_contact->>'title',
+        'background',     p_contact->>'background',
+        'avatar',         nora_private.contact_payload_jsonb(p_contact, 'avatar'),
+        'has_newsletter', nullif(p_contact->>'has_newsletter', '')::boolean,
+        'status',         p_contact->>'status',
+        'tags',           nora_private.contact_payload_tags(p_contact, 'tags'),
+        'company_id',     nullif(p_contact->>'company_id', '')::bigint,
+        'sales_id',       nullif(p_contact->>'sales_id', '')::bigint,
+        'linkedin_url',   p_contact->>'linkedin_url',
+        'email_jsonb',    nora_private.contact_payload_jsonb(p_contact, 'email_jsonb'),
+        'phone_jsonb',    nora_private.contact_payload_jsonb(p_contact, 'phone_jsonb'),
+        'links_jsonb',    coalesce(nora_private.contact_payload_jsonb(p_contact, 'links_jsonb'), '[]'::jsonb)
+    );
+$$;
+
+alter function nora_private.contact_create_fingerprint_payload(jsonb) owner to postgres;
+
+comment on function nora_private.contact_create_fingerprint_payload(jsonb) is
+    'Atomic Contact Primary Intent (2026-09-08): canonical, allowlisted projection of a create_contact payload - exactly the writable fields public.create_contact consumes, minus the volatile first_seen/last_seen. Used for the idempotency fingerprint so unknown/ignored client keys cannot turn one business request into an idempotency conflict.';
+
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from public;
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from anon;
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from authenticated;
+revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) from service_role;
+
 -- ---------------------------------------------------------------------------
 -- 4. public.create_contact — one atomic CREATE with explicit primary intent
 -- ---------------------------------------------------------------------------
@@ -293,7 +344,7 @@ begin
     end if;
 
     v_fingerprint := md5(jsonb_build_object(
-        'p_contact', (p_contact - 'first_seen' - 'last_seen'),
+        'p_contact', nora_private.contact_create_fingerprint_payload(p_contact),
         'p_primary_intent', p_primary_intent,
         'p_expected_primary_contact_id', p_expected_primary_contact_id
     )::text);
@@ -589,7 +640,269 @@ grant execute on function public.set_primary_contact(bigint) to authenticated;
 grant execute on function public.set_primary_contact(bigint) to service_role;
 
 -- ---------------------------------------------------------------------------
--- 7. Self-check: privilege matrix of the new surface + invariant present
+-- 7. Blocker fix: the EXISTING Quick Capture / create_customer_with_contact
+--    core joins the same customer-first lock discipline
+-- ---------------------------------------------------------------------------
+-- Independent RC review (2026-09-08) found a reproducible cross-command
+-- lock-order inversion, proven here with two real sessions:
+--
+--   nora_private.create_customer_with_contact_core (existing customer,
+--   p_contact_is_primary = true)
+--       UPDATE public.contacts SET is_primary = false   -- locks the contact row
+--       INSERT INTO public.contacts (company_id = C)    -- FK => KEY SHARE on C
+--
+--   nora_private.prepare_primary_contact_slot (every new command)
+--       SELECT ... FROM public.companies WHERE id = C FOR UPDATE
+--       SELECT ... FROM public.contacts ... FOR UPDATE  -- the contact row
+--
+-- contact-row-first vs customer-row-first is a cycle: measured 6/30 deadlocks
+-- (40P01) in real Quick-Capture-vs-update_contact races, plus 13/30 raw,
+-- untranslated 23505 out of Quick Capture, whose demote+insert was not
+-- serialized against a competing promotion at all.
+--
+-- The fix is not to weaken the new commands but to give the existing core the
+-- SAME deterministic order, through the SAME helper: lock the customer (and,
+-- for a contact that is moved in, its current customer) in ascending id order
+-- BEFORE any contact row is touched. No behavior of Quick Capture changes
+-- apart from lock acquisition; no second primary-switch algorithm is created.
+-- Historical migrations stay untouched — this not-yet-released migration
+-- carries the corrected definition.
+
+create or replace function nora_private.create_customer_with_contact_core(
+    p_company jsonb,
+    p_existing_company_id bigint,
+    p_contact jsonb,
+    p_existing_contact_id bigint,
+    p_self_contact_id bigint,
+    p_mark_self boolean,
+    p_contact_is_primary boolean default true
+)
+returns table(company_id bigint, contact_id bigint)
+language plpgsql
+set search_path = ''
+as $$
+declare
+    v_company_id bigint;
+    v_contact_id bigint;
+    v_customer_kind text;
+    v_name text;
+    v_count int;
+    v_self_contact_touched boolean := false;
+    v_derived_name text;
+    v_constraint_name text;
+    v_source_company_id bigint;
+    v_locked_source_company_id bigint;
+    v_lock_attempt int := 0;
+begin
+    <<main>>
+    begin
+    v_count :=
+        (case when p_company is not null then 1 else 0 end) +
+        (case when p_existing_company_id is not null then 1 else 0 end);
+    if v_count <> 1 then
+        raise exception 'exactly one of p_company or p_existing_company_id is required' using errcode = '22023';
+    end if;
+
+    v_count :=
+        (case when p_contact is not null then 1 else 0 end) +
+        (case when p_existing_contact_id is not null then 1 else 0 end) +
+        (case when p_self_contact_id is not null then 1 else 0 end);
+    if v_count > 1 then
+        raise exception 'p_contact, p_existing_contact_id and p_self_contact_id are mutually exclusive' using errcode = '22023';
+    end if;
+
+    if p_existing_company_id is not null then
+        select id, customer_kind into v_company_id, v_customer_kind
+        from public.companies
+        where id = p_existing_company_id;
+
+        if v_company_id is null then
+            raise exception 'existing company not found: %', p_existing_company_id using errcode = 'P0002';
+        end if;
+    else
+        v_name := nullif(btrim(coalesce(p_company->>'name', '')), '');
+        if v_name is null then
+            raise exception 'company name required' using errcode = '22023';
+        end if;
+        v_customer_kind := coalesce(nullif(p_company->>'customer_kind', ''), 'business');
+
+        if v_customer_kind = 'individual'
+           and p_contact is null and p_existing_contact_id is null and p_self_contact_id is null
+        then
+            raise exception 'a Privatkundenakte requires a representing contact' using errcode = '22023';
+        end if;
+
+        insert into public.companies (
+            name, customer_kind, sector, size, address, zipcode, city, state_abbr, country,
+            description, revenue, tax_identifier, sales_id, links_jsonb, email_jsonb, phone_jsonb
+        ) values (
+            v_name,
+            v_customer_kind,
+            nullif(p_company->>'sector', ''),
+            nullif(p_company->>'size', '')::smallint,
+            nullif(p_company->>'address', ''),
+            nullif(p_company->>'zipcode', ''),
+            nullif(p_company->>'city', ''),
+            nullif(p_company->>'state_abbr', ''),
+            nullif(p_company->>'country', ''),
+            nullif(p_company->>'description', ''),
+            nullif(p_company->>'revenue', ''),
+            nullif(p_company->>'tax_identifier', ''),
+            nullif(p_company->>'sales_id', '')::bigint,
+            coalesce(p_company->'links_jsonb', '[]'::jsonb),
+            coalesce(p_company->'email_jsonb', '[]'::jsonb),
+            coalesce(p_company->'phone_jsonb', '[]'::jsonb)
+        )
+        returning id into v_company_id;
+    end if;
+
+    -- Deterministic customer-first lock order (Atomic Contact Primary Intent
+    -- blocker fix, 2026-09-08). Every contact write below either demotes the
+    -- current Hauptansprechpartner (UPDATE public.contacts) or inserts/moves a
+    -- contact whose company_id FK makes Postgres take a KEY SHARE lock on the
+    -- customer row. Before this fix the core ran contact-row-first ->
+    -- customer-row-second, the exact inverse of
+    -- nora_private.prepare_primary_contact_slot, so Quick Capture on an
+    -- EXISTING customer deadlocked (40P01) against a concurrent
+    -- create_contact/update_contact/set_primary_contact on the same customer --
+    -- and its unserialized demote+insert could also leak a raw 23505. The same
+    -- helper and the same ascending id order are used everywhere: one lock
+    -- discipline for every path that writes both public.companies and
+    -- public.contacts. Do not reorder.
+    -- A contact that is MOVED here (p_existing_contact_id) also key-shares its
+    -- CURRENT customer, so that row is locked too. Its customer is read without
+    -- a lock first; if it moved concurrently before we hold the contact row,
+    -- the additional customer is locked and the read repeated (bounded) -- the
+    -- pattern public.update_contact uses.
+    loop
+        v_lock_attempt := v_lock_attempt + 1;
+
+        v_source_company_id := null;
+        if p_existing_contact_id is not null then
+            select c.company_id into v_source_company_id
+            from public.contacts c
+            where c.id = p_existing_contact_id;
+        end if;
+
+        perform nora_private.lock_companies_for_primary_transition(
+            array_remove(array[v_company_id, v_source_company_id], null)
+        );
+
+        exit when p_existing_contact_id is null;
+
+        select c.company_id into v_locked_source_company_id
+        from public.contacts c
+        where c.id = p_existing_contact_id
+        for update;
+
+        exit when v_locked_source_company_id is not distinct from v_source_company_id;
+        if v_lock_attempt >= 3 then
+            raise exception 'contact % moved concurrently; retry', p_existing_contact_id
+                using errcode = '40001';
+        end if;
+    end loop;
+
+    if p_self_contact_id is not null then
+        if not exists (select 1 from public.contacts where id = p_self_contact_id) then
+            raise exception 'contact not found: %', p_self_contact_id using errcode = 'P0002';
+        end if;
+        update public.companies set self_contact_id = p_self_contact_id where id = v_company_id;
+        v_contact_id := p_self_contact_id;
+        v_self_contact_touched := true;
+    elsif p_existing_contact_id is not null then
+        update public.contacts
+        set company_id = v_company_id,
+            is_primary = true
+        where id = p_existing_contact_id
+        returning id into v_contact_id;
+
+        if v_contact_id is null then
+            raise exception 'existing contact not found: %', p_existing_contact_id using errcode = 'P0002';
+        end if;
+
+        if v_customer_kind = 'individual' or p_mark_self then
+            update public.companies set self_contact_id = v_contact_id where id = v_company_id;
+            v_self_contact_touched := true;
+        end if;
+    elsif p_contact is not null then
+        -- A new contact for an EXISTING company may need to coexist with an
+        -- already-primary contact — hardcoding is_primary=true would
+        -- violate uq_contacts_one_primary_per_company in that case (e.g.
+        -- Quick Capture adding a second contact to a customer that already
+        -- has one). p_contact_is_primary defaults to true (matching the
+        -- original always-primary behavior for a brand-new company with no
+        -- prior contacts); any previous primary is explicitly demoted first.
+        if p_contact_is_primary then
+            update public.contacts set is_primary = false
+            where public.contacts.company_id = v_company_id and is_primary = true;
+        end if;
+
+        insert into public.contacts (
+            first_name, last_name, gender, title, background, company_id, sales_id,
+            is_primary, email_jsonb, phone_jsonb, links_jsonb
+        ) values (
+            nullif(p_contact->>'first_name', ''),
+            nullif(p_contact->>'last_name', ''),
+            nullif(p_contact->>'gender', ''),
+            nullif(p_contact->>'title', ''),
+            nullif(p_contact->>'background', ''),
+            v_company_id,
+            nullif(p_contact->>'sales_id', '')::bigint,
+            coalesce(p_contact_is_primary, true),
+            coalesce(p_contact->'email_jsonb', '[]'::jsonb),
+            coalesce(p_contact->'phone_jsonb', '[]'::jsonb),
+            coalesce(p_contact->'links_jsonb', '[]'::jsonb)
+        )
+        returning id into v_contact_id;
+
+        if v_customer_kind = 'individual' or p_mark_self then
+            update public.companies set self_contact_id = v_contact_id where id = v_company_id;
+            v_self_contact_touched := true;
+        end if;
+    end if;
+
+    -- Individual Name Invariant, CREATE-path (Final Release Candidate
+    -- Verification, 2026-08-28): whenever this call establishes the self
+    -- contact of an INDIVIDUAL customer record — regardless of which of the
+    -- three paths above did it, and regardless of an existing vs. brand-new
+    -- company — companies.name must be authoritatively derived from that
+    -- contact's canonical name, never left as an independently-supplied
+    -- p_company.name. A representing contact with no first_name/last_name
+    -- (after trim) is rejected outright rather than producing a nameless
+    -- Privatkundenakte. Mirrors nora_private.sync_individual_company_name()
+    -- (the rename-path guard) so CREATE and rename share the same authority.
+    if v_customer_kind = 'individual' and v_self_contact_touched then
+        select trim(both ' ' from coalesce(first_name, '') || ' ' || coalesce(last_name, ''))
+        into v_derived_name
+        from public.contacts
+        where id = v_contact_id;
+
+        if v_derived_name is null or v_derived_name = '' then
+            raise exception 'Privatkundenakte benoetigt einen Vor- oder Nachnamen des repraesentierenden Kontakts'
+                using errcode = '23514', detail = 'NORA_INDIVIDUAL_NAME_REQUIRED';
+        end if;
+
+        update public.companies set name = v_derived_name where id = v_company_id;
+    end if;
+
+    return query select v_company_id, v_contact_id;
+    exception
+        when unique_violation then
+            get stacked diagnostics v_constraint_name = constraint_name;
+            if v_constraint_name = 'uq_companies_self_contact_individual' then
+                raise exception 'Für diese Person existiert bereits eine Privatkundenakte'
+                    using errcode = '23505', detail = 'NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS';
+            end if;
+            raise;
+    end main;
+end;
+$$;
+
+comment on function nora_private.create_customer_with_contact_core(jsonb, bigint, jsonb, bigint, bigint, boolean, boolean) is
+    'Shared core write used by both public.create_customer_with_contact and public.create_quick_capture_case — do not duplicate this logic. For customer_kind=individual, companies.name is authoritatively derived from the representing contact''s first_name/last_name whenever self_contact_id is established here — a blank/whitespace-only name is rejected (DETAIL=NORA_INDIVIDUAL_NAME_REQUIRED), and any client-supplied p_company.name is overridden (Falle 28, 03-data-model-guardrails.md). A uq_companies_self_contact_individual race is translated to DETAIL=NORA_PRIVATE_CUSTOMER_ALREADY_EXISTS; any other unique violation is re-raised unchanged (Error Contract Wave, 2026-08-28).';
+
+-- ---------------------------------------------------------------------------
+-- 8. Self-check: privilege matrix of the new surface + invariant present
 -- ---------------------------------------------------------------------------
 
 do $$

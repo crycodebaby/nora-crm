@@ -239,6 +239,48 @@ export const isContactSaveIntent = (
  * customer has no primary yet and refuses otherwise; it can never silently
  * replace an existing Hauptansprechpartner.
  */
+/**
+ * The writable contact fields `public.create_contact` actually consumes —
+ * the mirror of `nora_private.contact_create_fingerprint_payload`. Both sides
+ * build the contact.create idempotency fingerprint from THIS projection, not
+ * from raw client JSON, so two submits that differ only in keys the command
+ * ignores anyway (view columns such as `company_name`/`nb_notes`, UI helper
+ * fields) are recognized as the same business request and replay instead of
+ * raising NORA_IDEMPOTENCY_CONFLICT (RC review 2026-09-08).
+ *
+ * `first_seen`/`last_seen` are deliberately absent: they are volatile client
+ * timestamps defaulting to "now", so a genuine retry of one form submit must
+ * still be recognized as a retry.
+ */
+export const CONTACT_CREATE_FINGERPRINT_FIELDS = [
+  "avatar",
+  "background",
+  "company_id",
+  "email_jsonb",
+  "first_name",
+  "gender",
+  "has_newsletter",
+  "last_name",
+  "linkedin_url",
+  "links_jsonb",
+  "phone_jsonb",
+  "sales_id",
+  "status",
+  "tags",
+  "title",
+] as const;
+
+/** Canonical business projection of a contact.create payload (see above). */
+export const contactCreateFingerprintPayload = (
+  contact: Record<string, unknown>,
+): Record<string, unknown> => {
+  const canonical: Record<string, unknown> = {};
+  for (const field of CONTACT_CREATE_FINGERPRINT_FIELDS) {
+    canonical[field] = contact[field] ?? null;
+  }
+  return canonical;
+};
+
 export const derivePrimaryIntentFromLegacyData = (
   data: FormValues,
   mode: ContactSaveMode,

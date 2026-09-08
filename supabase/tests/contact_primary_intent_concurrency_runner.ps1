@@ -20,8 +20,12 @@
 # Never point this at Production. It leaves the two fixture sales rows behind
 # (the W6-B guard forbids deleting sales rows); contacts/companies are removed.
 
+# -Container lets the same matrix be certified against a second local stack
+# (Production runs PG17.6; the default dev stack is PG15).
+param([string]$Container = "supabase_db_atomic-crm-demo")
+
 $ErrorActionPreference = "Stop"
-$container = "supabase_db_atomic-crm-demo"
+$container = $Container
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $tests = Join-Path $root "supabase\tests"
 
@@ -53,6 +57,15 @@ function Start-Worker([string]$scenario, [string]$worker, [double]$fireAt, [hash
     }
 }
 
+# A scenario's own outcome must be judged on the state right AFTER it ran.
+# Later scenarios legitimately change the same customers — F, for instance,
+# moves K1's primary away, which correctly leaves K1 with ZERO primaries — so
+# a final-state assertion about A would depend on who won F's race
+# (RC review 2026-09-08, LOW "timing-dependent assertion").
+function Snapshot([string]$scenario) {
+    & docker exec $container psql -U postgres -d postgres -Atc "insert into public.cpi_conc_snapshots (scenario, company_id, primaries, primary_contact_id) select '$scenario', c.id, (select count(*) from public.contacts co where co.company_id = c.id and co.is_primary), (select min(co.id) from public.contacts co where co.company_id = c.id and co.is_primary) from public.companies c where c.id in (select id from public.cpi_conc_ctx where key in ('k1','k2','k3'));" | Out-Null
+}
+
 function Query([string]$sql) {
     (& docker exec $container psql -U postgres -d postgres -Atc $sql) -join "`n"
 }
@@ -60,6 +73,7 @@ function Query([string]$sql) {
 Write-Host "== setup fixture"
 Invoke-Psql (Join-Path $tests "contact_primary_intent_concurrency_setup.sql") @() | Out-Null
 & docker exec $container psql -U postgres -d postgres -Atc "drop table if exists public.cpi_conc_results; create table public.cpi_conc_results (id bigint generated always as identity, scenario text, worker text, outcome text, detail text, operation_id uuid, result jsonb, recorded_at timestamptz default clock_timestamp()); revoke all on public.cpi_conc_results from anon, authenticated, service_role;" | Out-Null
+& docker exec $container psql -U postgres -d postgres -Atc "drop table if exists public.cpi_conc_snapshots; create table public.cpi_conc_snapshots (scenario text, company_id bigint, primaries int, primary_contact_id bigint, taken_at timestamptz default clock_timestamp()); revoke all on public.cpi_conc_snapshots from anon, authenticated, service_role;" | Out-Null
 
 $ids = @{}
 foreach ($line in (Query "select key || '=' || id from public.cpi_conc_ctx").Split("`n")) {
@@ -89,6 +103,8 @@ Run-Parallel "A" @(
     @{ target = $ids.c; expected = $ids.a }
 )
 
+Snapshot "A"
+
 # ---- B: two concurrent create + make_primary on K2 (both saw D)
 Write-Host "== B: two concurrent create + make_primary on the same customer"
 $payloadB1 = '{"first_name":"Conc","last_name":"NewB1","company_id":' + $ids.k2 + '}'
@@ -97,6 +113,8 @@ Run-Parallel "B" @(
     @{ payload = $payloadB1; expected = $ids.d },
     @{ payload = $payloadB2; expected = $ids.d }
 )
+
+Snapshot "B"
 
 # ---- C: deterministic interleaving — session 1 holds the K3 lock and
 # replaces E by a new primary; session 2 (stale, still expects E) must block
@@ -122,6 +140,7 @@ $staleJob3 = Start-Worker "B" "stale-create" $staleFire @{ payload = ('{"first_n
 @($holderJob, $staleJob, $staleJob3) | Wait-Job -Timeout 60 | Out-Null
 Receive-Job $holderJob | Where-Object { $_ -match "ERROR|FATAL|new_primary" } | ForEach-Object { Write-Host "  holder: $_" }
 @($holderJob, $staleJob, $staleJob3) | Remove-Job -Force
+Snapshot "C"
 
 # ---- D: same create retried with the identical idempotency key, in parallel
 Write-Host "== D: identical idempotency key, identical payload, parallel"
@@ -134,6 +153,8 @@ Run-Parallel "D" @(
     @{ payload = $payloadD; expected = $holderK1; key = $keyD }
 )
 
+Snapshot "D"
+
 # ---- E: same key, different payload, parallel with an identical one
 Write-Host "== E: same idempotency key with a different payload"
 $keyE = [guid]::NewGuid().ToString()
@@ -144,6 +165,8 @@ Run-Parallel "E" @(
     @{ payload = $payloadE1; expected = $holderK2; key = $keyE },
     @{ payload = $payloadE2; expected = $holderK2; key = $keyE }
 )
+
+Snapshot "E"
 
 # ---- F: move contact between customers concurrently with a primary change
 # worker 1 moves K1's current primary to K3 and makes it K3's primary
@@ -157,6 +180,8 @@ Run-Parallel "F" @(
     @{ target = $holderK1; patch = ('{"company_id":' + $ids.k3 + '}'); intent = "make_primary"; expected = $holderK3 },
     @{ target = $otherK1; patch = "{}"; intent = "make_primary"; expected = $holderK1 }
 )
+
+Snapshot "F"
 
 Write-Host "== verify"
 Invoke-Psql (Join-Path $tests "contact_primary_intent_concurrency_verify.sql") @()
