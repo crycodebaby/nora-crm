@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-07 · letzter Laufzeit-Release: User Lifecycle W6-B `PRODUCTION VERIFIED` (Laufzeit-SHA `ffc0183a` — Production-Ledger-Kopf `20260906230000`, `users`-Edge v9, Frontend mit dem Abschnitt „Benutzerkonto endgültig löschen"). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
+Stand: 2026-09-07 · letzter Datenbank-Release: Security Hardening Wave 1 `PRODUCTION VERIFIED` (Laufzeit-RC `8f812f3b`, Release-Paket `59c7dcf3` — Production-Ledger-Kopf `20260907120000`; **DB-only**, ohne Edge- oder Frontend-Änderung). Letzter Release mit sichtbarer Funktionalität bleibt User Lifecycle W6-B (`ffc0183a`, `users`-Edge v9, Frontend mit dem Abschnitt „Benutzerkonto endgültig löschen"). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
 
 Dieses Dokument ist der **Navigations-Einstieg** und eine **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Es enthält bewusst **keine** Release-Evidenz (RC-SHAs, Testzahlen, Live-Beweise) — die liegt im Release-Archiv (`releases/`).
 
@@ -47,18 +47,20 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 - Mitarbeiter-Lifecycle (Einladung, Rolle, Deaktivieren, Anmeldeadresse, Offboarding) läuft ausschließlich über die `users` Edge Function und `service_role`-only Executoren mit verifiziertem Actor — `19-user-lifecycle-architecture.md`.
 - `operation_id` (Header `x-nora-operation-id`) ist **ausschließlich Korrelation**, nie Auth.
 - Audit: `audit_events`, append-only, Trigger + schmale Writer; Actor/Ziel/Operation sind drei Fakten — `13-crm-audit-retention.md`. Error Observatory: `operation_errors`, getrennt vom Audit.
+- **Privilegien in `public` sind explizit, nicht geerbt** (Security Hardening Wave 1, `PRODUCTION VERIFIED` 2026-09-07): von `postgres` neu erzeugte Tabellen in `public` erben **keine** API-Rollen-Rechte mehr; `anon`/`authenticated`/`service_role` halten auf keiner der geprüften `public`-Relationen `TRUNCATE`, `REFERENCES`, `TRIGGER` oder `MAINTAIN`; Laufzeitrechte entstehen ausschließlich aus explizitem `GRANT` plus RLS. `service_role` hat nirgends in `public` `DELETE`; `anon` hat genau `SELECT` auf `init_state`. Vertrag: `03-data-model-guardrails.md`.
 - Öffentliche Selbstregistrierung ist in Production **deaktiviert** (`disable_signup: true`, nachgewiesen 2026-09-04); Nora ist einladungsbasiert.
 - Supabase Security Advisor: Snapshot 2026-08-28 vollständig bewertet (`ASSESSED/KEEP` bzw. `RESOLVED`); jede neue Migration/Function/Grant-Änderung braucht eine eigene Bewertung. Guardrails: `03-data-model-guardrails.md` Falle 34; Bewertungen: `06-decision-log.md` 2026-08-28 und Archiv `releases/2026-08.md`.
-- Bekannte Restrisiken: `17-known-issues-and-planned-waves.md` (Default-Privilegien, JOSE-Wortlaut, Leserecht von `postgres` auf `auth.sessions` als Betriebsvoraussetzung, …).
+- Bekannte Restrisiken: `17-known-issues-and-planned-waves.md` (PostgreSQLs eingebauter `PUBLIC`-EXECUTE-Default für **neue Functions** — von Wave 1 ausdrücklich **nicht** gelöst; Schema `storage` und öffentlicher Attachment-Bucket; die für `postgres` unerreichbare `supabase_admin`-Default-ACL in `public`; JOSE-Wortlaut; Leserecht von `postgres` auf `auth.sessions` als Betriebsvoraussetzung, …).
 
-## 4. Was ist live? (Momentaufnahme 2026-09-06)
+## 4. Was ist live? (Momentaufnahme 2026-09-07)
 
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — bei Bedarf aus Git auflösen, hier bewusst nicht festgeschrieben (Docs-Commits verschieben ihn, ohne die Laufzeit zu ändern) | `git log` |
-| Letzter Laufzeit-Release | User Lifecycle W6-B, Laufzeit-Commit `ffc0183ad557577a64863cc2b4f77d043447a1bd` (2026-09-07; Datenbank + `users`-Edge + Frontend — Migration `20260906230000_nora_lifecycle_account_deletion`) | Archiv `releases/2026-09.md` (Nachtrag Release W6-B) |
+| Letzter Datenbank-Release | Security Hardening Wave 1, Laufzeit-RC `8f812f3bfb6b398382ea448859050a6c3f03d85d`, Release-Paket `59c7dcf3032de1fd1c05b4a6d4da9718a0c22194` (2026-09-07; **nur Datenbank** — Migration `20260907120000_nora_public_privilege_hardening`, kein Edge-Deploy, kein Frontend-Deploy, keine sichtbare Änderung) | Archiv `releases/2026-09.md` (Eintrag Security Hardening Wave 1) |
+| Letzter Release mit sichtbarer Funktionalität | User Lifecycle W6-B, Laufzeit-Commit `ffc0183ad557577a64863cc2b4f77d043447a1bd` (2026-09-07; Datenbank + `users`-Edge + Frontend — Migration `20260906230000_nora_lifecycle_account_deletion`) | Archiv `releases/2026-09.md` (Nachtrag Release W6-B) |
 | Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main`; fachlich Stand W6-B `ffc0183a` (Deployment `dpl_6tNN9619RTvwauXP3iUQhWjWubae`, READY) | Release-Archiv `releases/2026-09.md` |
-| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **56 Einträge, Kopf `20260906230000_nora_lifecycle_account_deletion`**, deckungsgleich mit `supabase/migrations/` (56 Dateien) | `list_migrations` read-only 2026-09-07 |
+| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **57 Einträge, Kopf `20260907120000_nora_public_privilege_hardening`**, deckungsgleich mit `supabase/migrations/` (57 Dateien) | `list_migrations` read-only 2026-09-07 |
 | Edge Function `users` | **Version 9** (`verify_jwt = false`, verifiziert JWTs selbst; Stand W6-B) | `list_edge_functions` read-only 2026-09-07 |
 | Edge Function `brevo-email-events` | **Version 2** (`verify_jwt = false`, Bearer-Token) | dito |
 | Weitere Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht** in Production deployt (nur `users` und `brevo-email-events` sind live) | dito |
@@ -89,6 +91,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | Zugang | Employee Onboarding & Access V1A, V1B | `PRODUCTION VERIFIED`, V1B PO UX accepted (2026-09-04) | `2026-09` |
 | E-Mail | V1C-A Zustellbeobachtung, V1C-B Zustellstatus-UI | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
 | Security | Security Hardening Wave 0 (`audit_events` TRUNCATE) | `PRODUCTION VERIFIED` (2026-09-04) | `2026-09` |
+| Security | Security Hardening Wave 1 (Default-Privilegien `public` + explizite Zielmatrix) | **`PRODUCTION VERIFIED`** (2026-09-07; nur Datenbank, Migration `20260907120000`, keine sichtbare Änderung) | `2026-09` |
 | Lifecycle | User Lifecycle W1, W2, W3, W4, W5 | `PRODUCTION VERIFIED` (2026-09-05/06) | `2026-09` |
 | Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | `PRODUCTION VERIFIED` (2026-09-06; nur Datenbank, Migration `20260906210000`, keine sichtbare Änderung) | `2026-09` |
 | Lifecycle | User Lifecycle W6-B (kontrollierter Hard Delete „Benutzerkonto endgültig löschen") | **`PRODUCTION VERIFIED`** (2026-09-07; Migration `20260906230000`, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`) | `2026-09` |

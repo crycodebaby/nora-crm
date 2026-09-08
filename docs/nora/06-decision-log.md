@@ -29,7 +29,9 @@ Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabell
 
 ## 2026-09-07 – Security Hardening Wave 1: Default-Privilegien des `public`-Schemas und explizite Zielmatrix
 
-**Status:** `RC` — **noch nicht auf Production angewendet.** Migration `20260907120000_nora_public_privilege_hardening`. Guardrails: `03-data-model-guardrails.md` „Privilegien im Schema `public`"; Release-Evidenz und Runbook: `releases/2026-09.md` (Eintrag Security Hardening Wave 1).
+**Status:** `PRODUCTION VERIFIED` (2026-09-07; Migration `20260907120000_nora_public_privilege_hardening` live, **DB-only** — kein Edge-Deploy, kein Frontend-Deploy). Guardrails: `03-data-model-guardrails.md` „Privilegien im Schema `public`"; Release-Evidenz und Runbook: `releases/2026-09.md` (Eintrag Security Hardening Wave 1).
+
+**Durables Ergebnis.** Von `postgres` neu erzeugte Tabellen in `public` erben keine API-Rollen-Rechte mehr; die 27 bestehenden `public`-Relationen tragen eine explizite Zielmatrix; keine API-Rolle hält dort noch `TRUNCATE`, `REFERENCES`, `TRIGGER` oder `MAINTAIN`; `service_role` hat nirgends in `public` direktes `DELETE`; `nora_calendar_linker` hat kein dauerhaftes `CREATE ON SCHEMA public` mehr; alle Capability-Rollen samt Spalten-Grant `sales.email` sind unverändert erhalten. **Nicht** gelöst und ausdrücklich außerhalb dieser Entscheidung: der eingebaute `PUBLIC`-EXECUTE-Default für neue Functions und Schema `storage` (siehe unten sowie `17-known-issues-and-planned-waves.md` A.8/A.9).
 
 **Kontext.** Wave 0 (2026-09-04) entzog `TRUNCATE` auf `audit_events` und benannte dabei die eigentliche Ursache, ohne sie zu beheben: die Default-Tabellen-Privilegien von `public` (Grantor `postgres`) geben jeder **neu erzeugten** Tabelle vor jedem expliziten `GRANT` Rechte an `anon`, `authenticated` und `service_role` — in Production `Dxtm` (`TRUNCATE`, `REFERENCES`, `TRIGGER`, `MAINTAIN`), lokal auf PostgreSQL 15 sogar `arwdDxt`. Eine additiv geschriebene Migration (`grant select`) lässt dieses Erbe stehen.
 
@@ -180,6 +182,8 @@ Unabhängig nachgewiesen (2026-09-07): auf der Basis vor dieser Welle war `set r
 2. **Guardrail: immer `revoke all` vor `grant`** — ein additives `grant` lässt geerbte Rechte stehen.
 3. **Guardrail: ein lokaler `db reset` reproduziert Production nicht** (lokal `grant all` in den Default-Privilegien, live `Dxtm`) — Privilegienaussagen gegen Production prüfen; Migrationen müssen in beiden Umgebungen denselben Endzustand erzwingen.
 4. `service_role` behält `TRUNCATE` (bewusst akzeptiertes Restrisiko; Retention-Pfade); die schemaweiten Default-Privilegien bleiben ein eigener Folgebefund (`17-known-issues-and-planned-waves.md`).
+
+> **Abgelöst am 2026-09-07 durch Security Hardening Wave 1.** Punkt 4 gilt nicht mehr: `service_role` hat auf `audit_events` weder `TRUNCATE` noch `UPDATE` noch `DELETE`, und der als Folgebefund vermerkte Default-Privilegien-Defekt ist behoben. Punkte 1–3 gelten unverändert weiter. Aktueller Vertrag: `03-data-model-guardrails.md` „Privilegien im Schema `public`" und `13-crm-audit-retention.md`.
 
 ## 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht
 

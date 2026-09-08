@@ -8,31 +8,11 @@ Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (g
 
 ## A. Sicherheit und Privilegien
 
-### A.1 Default-Privilegien im Schema `public` vergeben TRUNCATE an API-Rollen
-
-**Status: `RC — NOCH NICHT AUF PRODUCTION ANGEWENDET`** (Befund 2026-09-04; behoben im RC von Security Hardening Wave 1, 2026-09-07). Solange die Migration `20260907120000_nora_public_privilege_hardening` nicht in Production angewendet ist, gilt der Befund **live unverändert**.
-
-Die Default-Tabellen-Privilegien von `public` (Grantor `postgres`) vergeben an `anon`, `authenticated` und `service_role` bei jedem `CREATE TABLE` automatisch `Dxtm` (`TRUNCATE`, `REFERENCES`, `TRIGGER`, `MAINTAIN`) — noch vor jedem expliziten Grant. Eine Migration, die nur additiv `grant select` schreibt, lässt dieses Erbe stehen; so entstand der `audit_events`-Befund. `TRUNCATE` umgeht RLS vollständig und feuert keine Row-Trigger.
-
-**Präzisierung der Reichweite (read-only gemessen 2026-09-07, PG17).** Der ursprüngliche Befund („rund 14 Tabellen für `authenticated`, rund 17 für `service_role`") war zu niedrig. Tatsächlich in Production:
-
-| Rolle | Basistabellen mit `TRUNCATE` (von 21) | Views mit `TRUNCATE` (von 6) |
-|---|---|---|
-| `anon` | 0 | 4 (`activity_log`, `companies_summary`, `contacts_summary`, `init_state`) |
-| `authenticated` | **17** (alle außer `audit_events`, `email_delivery_events`, `operation_errors`, `number_counters`) | 4 |
-| `service_role` | **20** (alle außer `email_delivery_events`) | 4 |
-
-Insgesamt 196 unerwünschte Privilegien-Treffer über `{TRUNCATE, REFERENCES, TRIGGER, MAINTAIN} × {anon, authenticated, service_role} × 27 Objekte`. Lokal (PG15) reproduziert: `set role authenticated; truncate public.sales cascade;` **gelingt** und kaskadiert in neun CRM-Tabellen, während `delete from public.sales` verweigert wird.
-
-**Was der RC tut:** Default-Privilegien auf null für die API-Rollen, explizite Zielmatrix für alle 21 Tabellen und 6 Views, `service_role` verliert `DELETE` in ganz `public`, `nora_calendar_linker` verliert `CREATE ON SCHEMA public`, `06_grants.sql` angeglichen und als nicht-autoritativ gekennzeichnet, plus Regressionssuite `supabase/tests/public_privilege_hardening_verification.sql`. Vertrag: `03-data-model-guardrails.md` „Privilegien im Schema `public`"; Begründung: `06-decision-log.md` 2026-09-07; Runbook und Evidenz: `releases/2026-09.md`.
-
-**Bis zum Production-Apply weiter gültig:** die Repo-/Production-Drift ist im RC aufgelöst (lokal und Production konvergieren auf dieselbe Zielmatrix), aber erst nach dem Apply. Vorher gilt weiterhin: **ein lokaler `db reset` reproduziert Production nicht.**
-
 ### A.8 Neue Functions in `public` sind per PostgreSQL-Default für `PUBLIC` ausführbar
 
 **Status: `ACCEPTED LIMITATION`** (unabhängig verifiziert 2026-09-07; korrigiert eine frühere Einschätzung, die Function-Defaults als „sicher" eingestuft hatte).
 
-Eine neu erzeugte Function in `public` erhält `proacl = NULL`, also PostgreSQLs eingebauten Default `owner + PUBLIC EXECUTE` — `anon`, `authenticated` und `service_role` können sie damit sofort ausführen. Das ist **nicht** der `pg_default_acl`-Defekt aus A.1: es tritt genauso in einem frisch angelegten, unkonfigurierten Schema auf.
+Eine neu erzeugte Function in `public` erhält `proacl = NULL`, also PostgreSQLs eingebauten Default `owner + PUBLIC EXECUTE` — `anon`, `authenticated` und `service_role` können sie damit sofort ausführen. Das ist **nicht** der `pg_default_acl`-Tabellendefekt, den Security Hardening Wave 1 behoben hat (früher A.1, seit dem Production-Apply 2026-09-07 aufgelöst und im Originalwortlaut im Archiv `releases/2026-09.md`): es tritt genauso in einem frisch angelegten, unkonfigurierten Schema auf.
 
 **Korrektur 2026-09-07 (unabhängige Zertifizierung).** Eine frühere Fassung dieses Eintrags behauptete, der `PUBLIC`-EXECUTE-Default sei über `ALTER DEFAULT PRIVILEGES` überhaupt nicht abstellbar. Das ist **falsch**. Richtig ist die Unterscheidung nach Geltungsbereich:
 
@@ -44,6 +24,16 @@ Eine neu erzeugte Function in `public` erhält `proacl = NULL`, also PostgreSQLs
 Wirksame Gegenmaßnahme ist deshalb weiterhin **pro Function**: jede sensible Function trägt ihr eigenes `revoke all on function … from public, anon, authenticated`, so wie es die Migrationen und `06_grants.sql` durchgängig tun. Die Regressionssuite prüft genau das (Abschnitt 6c: kein Browser-Rolle-`EXECUTE` auf Executoren und privilegierte Writer) und protokolliert das Default-Verhalten als NOTICE, statt es zu behaupten. Sequenzen sind davon **nicht** betroffen: ein neues Identity-Sequence-Objekt vergibt an keine API-Rolle etwas (verifiziert), und Identity-Spalten brauchen ohnehin kein Sequenzrecht.
 
 Eigene Folgewelle wäre nötig, falls „neue Function ist standardmäßig unerreichbar" durchgesetzt werden soll. Der naheliegende Weg ist die **creator-scoped globale** Default-Privilegien-Zeile (siehe Korrektur oben); zu bewerten wären dabei: sie gilt für **alle** Schemata, in denen `postgres` Objekte anlegt (nicht nur `public`), sie wirkt nur auf **künftige** Functions und rüstet bestehende nicht nach, und ihre Wechselwirkung mit von der Plattform angelegten Functions ist zu prüfen. Alternativen bleiben ein Event-Trigger oder eine verbindliche Migrationskonvention. Unabhängig davon gilt weiterhin: jede sensible Function bekommt ihr eigenes explizites `revoke`.
+
+### A.9 `pg_default_acl` für Creator `supabase_admin` in `public` bleibt für Nora unerreichbar
+
+**Status: `ACCEPTED LIMITATION`** (read-only bestätigt 2026-09-07, vor und nach dem Wave-1-Apply unverändert).
+
+Neben der von Security Hardening Wave 1 bereinigten Zeile für Creator `postgres` existiert in `pg_default_acl` eine zweite Zeile für Creator `supabase_admin` in Schema `public`, die `anon`, `authenticated` und `service_role` weiterhin `arwdDxtm` zusagt. `postgres` ist **kein** Mitglied von `supabase_admin` (`pg_has_role` = false) und kann sie nicht ändern; sie gehört der Plattform.
+
+**Ruhend, nicht harmlos:** die Zeile greift nur für Objekte, die `supabase_admin` in `public` anlegt. Alle 27 Relationen in `public` gehören `postgres` (die Wave-1-Migration prüft das als harte Vorbedingung und bricht sonst ab), deshalb ist heute keine Tabelle davon betroffen. Legte die Plattform künftig eine Tabelle in `public` an, erbte diese die vollen API-Rollen-Rechte — ohne dass eine Nora-Migration das verhindern könnte.
+
+**Konsequenz für Agenten:** die Vorbedingung „alle `public`-Relationen gehören `postgres`" ist eine Sicherheitsannahme, kein Formalismus. Wer sie bei einem Befund verletzt sieht, behandelt das als Sicherheitsvorfall und nicht als Aufräumarbeit.
 
 ### A.2 Fail-closed Session-Bindung: Leserecht von `postgres` auf `auth.sessions` ist Betriebsvoraussetzung
 
@@ -73,7 +63,7 @@ Eigene Folgewelle wäre nötig, falls „neue Function ist standardmäßig unerr
 
 Aktuelle Architektur: `19-user-lifecycle-architecture.md` (Roadmap in §17, Einschränkungen in §16).
 
-- **W6-B Kontrollierter Hard Delete** („Benutzerkonto endgültig löschen") — `PRODUCTION VERIFIED` (2026-09-07). Migration `20260906230000_nora_lifecycle_account_deletion` live (Ledger 56), `users`-Edge **v9**, Frontend-Abschnitt live; Vertrag in `19-user-lifecycle-architecture.md` §15, Runbook im Archiv. Beim Release erledigt: Production-Apply, Edge-Deploy, Push und der destruktive Live-Smoke nach expliziter PO-Freigabe am benannten Ziel (Kandidat `sales 4`: eingeladen/nie aktiviert, deaktiviert, gebannt, 0 Geschäftsreferenzen, 0 Actor-Audit, 24 Ziel-Audit-Zeilen, 0 Zustellzeilen — read-only am 2026-09-06 erneut bestätigt). Bewusst nicht Teil von W6-B: Orphan-Cleanup einer Auth-Identität ohne `sales`-Zeile (wird verweigert, Runbook-Fall), Retention/Anonymisierung, `GENERATED ALWAYS` (A.7).
+- **W6-B Kontrollierter Hard Delete** („Benutzerkonto endgültig löschen") — `PRODUCTION VERIFIED` (2026-09-07). Migration `20260906230000_nora_lifecycle_account_deletion` live (Ledger beim W6-B-Release 56; aktueller Stand siehe `16-current-state.md`), `users`-Edge **v9**, Frontend-Abschnitt live; Vertrag in `19-user-lifecycle-architecture.md` §15, Runbook im Archiv. Beim Release erledigt: Production-Apply, Edge-Deploy, Push und der destruktive Live-Smoke nach expliziter PO-Freigabe am benannten Ziel (Kandidat `sales 4`: eingeladen/nie aktiviert, deaktiviert, gebannt, 0 Geschäftsreferenzen, 0 Actor-Audit, 24 Ziel-Audit-Zeilen, 0 Zustellzeilen — read-only am 2026-09-06 erneut bestätigt). Bewusst nicht Teil von W6-B: Orphan-Cleanup einer Auth-Identität ohne `sales`-Zeile (wird verweigert, Runbook-Fall), Retention/Anonymisierung, `GENERATED ALWAYS` (A.7).
 - **W6-B Betriebsfolge (live seit 2026-09-07):** Auth-Benutzer mit Nora-`sales`-Zeile lassen sich im Supabase-Dashboard nicht mehr löschen (Guard, gewollt — gleiche Haltung wie W4); direkte `DELETE FROM sales` per SQL sind für alle Rollen verweigert. Test-Fixtures werden per Rollback entfernt. `ACCEPTED LIMITATION`.
 - **W9 SQL-Verifikationssuiten in CI** — `PLANNED FOLLOW-UP`. Die kanonische Sequenz (`07-agent-change-checklist.md`) läuft weiterhin nur lokal; `rbac_rls_first_admin_parallel_runner.ps1` hat einen bekannten Windows-Regex-Bug (Vorbedingung „sales must be empty" wird falsch geparst) — Workaround: die enthaltene SQL manuell mit zwei parallelen `psql`-Sessions nachbilden, das Skript nicht nebenbei patchen.
 - **Dialog „Zugang beenden" nennt das Ziel nur über Anmeldeadresse und Status** — `OPEN (UX)`. Im Live-Beweis 2026-09-06 traf der Product Owner damit einen echten Administrator statt des Testkontos (sofort reaktiviert; Sitzungen blieben gelöscht → Neuanmeldung). Kein Codefehler. Härtung: Name im Dialogkopf, zusätzliche Bestätigung bei Admin-Zielen.
@@ -174,7 +164,7 @@ Beobachtet, bewusst nicht in dieser Wave behoben:
 
 Aus einer frühen Analyse benannt, seither **nicht** in einer Session verifiziert oder detailliert — vor Bearbeitung gegen aktuellen Code/Produktion prüfen:
 
-- **Schema `storage` / Attachment-Bucket** — `OPEN`, **ausdrücklich nicht** Teil von Security Hardening Wave 1. Öffentlicher Bucket laut Lifecycle-Reconnaissance 2026-09-04; zusätzlich read-only bestätigt (2026-09-07): `pg_default_acl` für Creator `postgres` in Schema `storage` vergibt `arwdDxtm` an `anon`, `authenticated` und `service_role` — dieselbe Form wie der A.1-Befund, aber mit anderem Owner, anderer Plattformmechanik und anderem Rollback-Pfad (`storage.objects`/`storage.buckets` gehören `supabase_storage_admin`). Braucht eine eigene Security-/Produktwelle mit eigener Abnahme; Wave 1 hat `storage` **nicht** angefasst und behauptet keine Härtung dort.
+- **Schema `storage` / Attachment-Bucket** — `OPEN`, **ausdrücklich nicht** Teil von Security Hardening Wave 1. Öffentlicher Bucket laut Lifecycle-Reconnaissance 2026-09-04; zusätzlich read-only bestätigt (2026-09-07): `pg_default_acl` für Creator `postgres` in Schema `storage` vergibt `arwdDxtm` an `anon`, `authenticated` und `service_role` — dieselbe Form wie der in `public` behobene Tabellendefekt (früher A.1, Archiv `releases/2026-09.md`), aber mit anderem Owner, anderer Plattformmechanik und anderem Rollback-Pfad (`storage.objects`/`storage.buckets` gehören `supabase_storage_admin`). Braucht eine eigene Security-/Produktwelle mit eigener Abnahme; Wave 1 hat `storage` **nicht** angefasst und behauptet keine Härtung dort.
 - **`mcp` Edge Function** — `PARKED`, nicht deployt. Sie kann eine direkte PostgreSQL-Verbindung aufbauen und `set role authenticated` setzen. Wave 1 reduziert den Schaden eines solchen Kanals (`authenticated` hat kein `TRUNCATE`/`DELETE` mehr, wo es nichts zu suchen hat), ersetzt aber keine eigene Bewertung dieser Funktion vor einem etwaigen Deploy.
 - Rollen-Cache-Verhalten im Frontend
 - Audit-Retention-/Löschstrategie (`13-crm-audit-retention.md` beschreibt das Modell; kein automatischer Purge)
