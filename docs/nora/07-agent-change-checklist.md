@@ -256,10 +256,13 @@ Bei Customer & Contact Workflow Wave (2026-08-25) zusätzlich:
 Bei Kontakt-Speichern / Hauptansprechpartner (ab Atomic Contact Primary Intent, RC 2026-09-08) zusätzlich:
 
 - [ ] Kein neuer Schreibpfad setzt `contacts.is_primary` als rohe Spalte; jede Rollenverschiebung läuft über `create_contact`/`update_contact` (Absicht + beobachteter Halter) oder `set_primary_contact`, alle auf `nora_private.prepare_primary_contact_slot` (Falle 40)
+- [ ] Kundenlock immer über `nora_private.lock_companies_for_primary_transition` (nie eigene Lock-SQL), auch in Pfaden, die die Rolle gar nicht verschieben, aber beide Tabellen schreiben — ein Kontakt-`INSERT`/Kundenwechsel nimmt über den FK `KEY SHARE` auf die Kundenzeile
 - [ ] Kundenlock vor Kontaktzeile, bei zwei Kunden aufsteigend nach Id — nie „Kontakt zuerst"
 - [ ] Neue Formularvariante nutzt `ContactPrimaryContactField` + `attachContactSaveIntent` (Transform), keine eigene „finde den Halter"-Regel
 - [ ] `supabase/tests/contact_primary_intent_verification.sql` nach `db reset` (leere DB **und** mit Fixtures; rollt sich selbst zurück) — enthält Privilegienmatrix, Incident-Regression, Update-Matrix A–I, Idempotenz, Audit, Failure-Injection
-- [ ] Vor einem Release die Real-Session-Matrix `supabase/tests/contact_primary_intent_concurrency_runner.ps1` lokal ausführen (nie gegen Production; hinterlässt zwei Fixture-`sales`-Zeilen)
+- [ ] Vor einem Release **beide** Real-Session-Matrizen lokal ausführen (nie gegen Production; hinterlassen zwei Fixture-`sales`-Zeilen): `supabase/tests/contact_primary_intent_concurrency_runner.ps1` (neu gegen neu, A–F) **und** `supabase/tests/contact_primary_cross_command_runner.ps1` (neu gegen bestehend — Schnellerfassung / `create_customer_with_contact` / Kontaktumzug gegen die Primary-Befehle, X-A..X-F, über mehrere Runden). Die 2026-09-08-Review zeigte, dass eine Matrix, die nur neu gegen neu rennt, einen echten Deadlock übersieht
+- [ ] Beide Runner nehmen `-Container`: die entscheidenden Concurrency-Läufe zusätzlich gegen einen lokalen **PostgreSQL 17.6**-Stack (Production-Version) zertifizieren, nicht nur gegen den PG15-Entwicklungsstack
+- [ ] Concurrency-Assertions prüfen **Ergebnisklassen und Invarianten**, nie einen bestimmten Rennsieger und nie eine Wanduhr-Dauer; wo eine spätere Stufe denselben Kunden legitim verändert, wird gegen einen Schnappschuss direkt nach der Stufe geprüft, nicht gegen den Endzustand
 - [ ] Neue public RPC: eigener `revoke all … from public, anon, authenticated, service_role` + einziger Grant an `authenticated`; `service_role` nur mit belegtem Aufrufer
 
 Bei Error-Contract-Änderungen (ab Error Contract Wave, 2026-08-28) zusätzlich:

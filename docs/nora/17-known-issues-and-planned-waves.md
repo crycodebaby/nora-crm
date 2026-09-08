@@ -158,6 +158,12 @@ Beobachtet, bewusst nicht in dieser Wave behoben:
 
 **Status: RC gebaut, nicht in Production** (`06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent"). Restpunkte: `contacts.import` (CSV) und die Notiz-/Aufgaben-Pfade schreiben Kontakte weiterhin roh und additiv (`is_primary` nie `true`) — beabsichtigt, kein Risiko für den Index, aber ohne Operation-Korrelation. Die Markierungen-RC (`74a67659`, älterer `main`) berührt `noraErrorCodes`, `normalizeCrmError` und die Kataloge und muss auf **diesen** Stand portiert werden (rein textuelle Konflikte erwartet). `set_primary_contact` hat weiterhin kein UI und behält seinen `service_role`-Grant aus 2026-08-25.
 
+Nach dem Blocker-Fix (RC `b161a4f9`, unabhängige Review 2026-09-08) zusätzlich bewusst **offen und ausserhalb dieser Welle**:
+
+- **Selbstkontakt eines Privatkunden ist weiterhin auf einen anderen Kunden verschiebbar** (INFO, vorbestehend, nicht durch diese Welle entstanden): `public.update_contact` mit `company_id`-Patch erlaubt es, den in `companies.self_contact_id` referenzierten Kontakt einer Privatkundenakte wegzubewegen. Der Lock-Fix ändert daran nichts (bewusst geprüft: Abschnitt 9 der Suite bleibt grün). Eigene, kleine Welle mit einem Guard — nicht im Kontakt-Speicherpfad „mitfixen".
+- **`set_primary_contact` behält seinen `service_role`-Grant** aus 2026-08-25, obwohl kein deployter Backend-Pfad ihn nutzt. Die Review nannte das als Aufräumpunkt; er war nicht der gemeldete Defekt und wurde im Blocker-Fix bewusst nicht angefasst (eigene Grant-Welle, zusammen mit A.8).
+- **Der bestehende Kern kann bei einem konkurrierenden Kontaktumzug `40001` („contact moved concurrently; retry") werfen** — dieselbe beschränkte Schleife wie `public.update_contact`, drei Versuche. Erreichbar nur über `create_customer_with_contact` mit `p_existing_contact_id`, wenn derselbe Kontakt gleichzeitig anderswo verschoben wird; in 120 Cross-Command-Rennen nie beobachtet. Falls dieser Fall je im Feld auftritt, gehört er in den Fehlerkontrakt (`NORA_*`-DETAIL), nicht in einen stillen Retry.
+
 ### G.2 Geplante Domain-Waves
 
 - **Privatperson/Firma-Unterscheidung in Quick Capture** — `PLANNED FOLLOW-UP`: die Schnellerfassung erzeugt Kunden ohne `customer_kind`-Auswahl (Default `business`); die „Diese Person ist selbst Ansprechpartner"-Option fehlt dort bewusst (Self Contact Wave).
