@@ -14,6 +14,7 @@
 #   X-D  create_customer_with_contact (moves an existing contact) vs primary transition on the SOURCE customer
 #   X-E  update_contact move source->target                  vs  primary transition on the SOURCE customer
 #   X-F  update_contact move source->target                  vs  primary transition on the TARGET customer
+#   X-G  move C1->C2                                       vs  move C2->C1 (opposite-direction pair)
 #
 # Every scenario runs -Rounds times against its OWN fresh pair of customers, so
 # repeated races are independent and a single lucky execution proves nothing.
@@ -32,7 +33,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $tests = $PSScriptRoot
-$scenarios = @("X-A", "X-B", "X-C", "X-D", "X-E", "X-F")
+$scenarios = @("X-A", "X-B", "X-C", "X-D", "X-E", "X-F", "X-G")
 
 function Invoke-Psql([string]$file, [string[]]$vars) {
     $a = @("exec", "-i", $Container, "psql", "-U", "postgres", "-d", "postgres", "-q")

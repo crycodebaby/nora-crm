@@ -15,13 +15,14 @@
 --   public.update_contact(p_contact_id, p_patch, p_primary_intent, p_expected_primary_contact_id)
 --
 -- Both run the contact write AND the primary-contact transition in ONE
--- transaction, serialize the transition per customer with a row lock on
--- public.companies (deterministic id order when two customers are involved),
+-- transaction, serialize the transition per customer with a transaction-scoped
+-- advisory lock (deterministic ascending id order when two customers are
+-- involved),
 -- verify the primary the user actually observed (stale-UI protection,
 -- DETAIL = NORA_PRIMARY_CONTACT_CHANGED), and translate a residual
 -- uq_contacts_one_primary_per_company hit into
 -- DETAIL = NORA_PRIMARY_CONTACT_ALREADY_EXISTS. The unique index stays the
--- final defense; the lock is the normal coordination mechanism.
+-- final defense; the transition lock is the normal coordination mechanism.
 --
 -- One private helper owns the "demote previous primary" step for every
 -- caller — nora_private.prepare_primary_contact_slot — and the existing
@@ -34,22 +35,44 @@
 -- authenticated. service_role gets NO EXECUTE — no deployed backend path
 -- calls these commands. Table ACLs are untouched.
 --
--- Blocker fix (2026-09-08, independent RC review): section 7 additionally
--- redefines the EXISTING nora_private.create_customer_with_contact_core so the
--- Quick Capture path takes the SAME customer-row lock, in the SAME ascending
--- order, BEFORE it demotes a primary — the cross-command lock-order inversion
--- that deadlocked Quick Capture against these new commands. The same review
--- also corrected the create_contact idempotency fingerprint to the canonical
--- allowlisted business payload (section 3).
+-- Two blocker fixes (2026-09-08, independent RC reviews) shaped the locking:
+--
+--   #1 The EXISTING nora_private.create_customer_with_contact_core (Quick
+--      Capture) demoted a primary contact BEFORE its INSERT key-shared the
+--      customer row, i.e. contact-row-first, while the new commands were
+--      customer-row-first. Section 7 makes the core take the same per-customer
+--      transition lock first.
+--
+--   #2 A customer ROW lock cannot be the transition mutex at all. The customer
+--      row is ALSO locked contact-row-first by paths that cannot be reordered:
+--      nora_private.sync_individual_company_name (AFTER UPDATE OF first_name,
+--      last_name ON public.contacts -> UPDATE public.companies) fires inside a
+--      raw contact UPDATE that already holds the contact row, and
+--      contacts.company_id foreign-key probes take KEY SHARE the same way.
+--      Renaming the self contact of a Privatkundenakte (live path: Contact
+--      Merge) therefore deadlocked every primary transition on that customer
+--      (30/30 in real races). Section 1 replaces the customer ROW lock with a
+--      transaction-scoped ADVISORY lock per customer, so a transition never
+--      holds a public.companies row lock while waiting for a contact row and
+--      the cycle cannot form.
+--
+-- The durable rule is therefore NOT "customer row first" but:
+--   every primary-contact transition takes its customers' advisory transition
+--   locks, in ascending customer id order, BEFORE it locks or writes any
+--   contact or customer ROW; contact-row waits always precede any company-row
+--   acquisition.
+--
+-- The same reviews corrected the create_contact idempotency fingerprint to the
+-- canonical allowlisted business payload (section 3).
 --
 -- Additive: no table/column change, no history rewrite. supabase/schemas/
 -- 02_functions.sql is kept in sync in the same commit.
 
 -- ---------------------------------------------------------------------------
--- 1. Deterministic customer row locking
+-- 1. The primary-contact transition lock (per customer, advisory)
 -- ---------------------------------------------------------------------------
 
-create or replace function nora_private.lock_companies_for_primary_transition(
+create or replace function nora_private.lock_customers_for_primary_transition(
     p_company_ids bigint[]
 )
 returns void
@@ -58,7 +81,8 @@ set search_path = ''
 as $$
 declare
     v_expected int;
-    v_locked int;
+    v_found int;
+    r record;
 begin
     if p_company_ids is null then
         return;
@@ -72,39 +96,54 @@ begin
         return;
     end if;
 
-    -- Ascending id order for every caller => no lock-order inversion between
-    -- two transactions that touch the same pair of customers.
-    select count(*) into v_locked
-    from (
-        select c.id
-        from public.companies c
-        where c.id = any(p_company_ids)
-        order by c.id
-        for update
-    ) locked;
+    -- Ascending customer-id order for every caller => two transactions that
+    -- touch the same pair of customers can never take the pair in opposite
+    -- order.
+    for r in
+        select distinct id
+        from unnest(p_company_ids) as t(id)
+        where id is not null
+        order by id
+    loop
+        perform pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtext('nora_primary_contact'),
+            pg_catalog.hashtext(r.id::text)
+        );
+    end loop;
 
-    if v_locked <> v_expected then
+    -- The customer must exist. This is a plain read: the serialization above
+    -- is the mutex, and public.contacts.company_id's foreign key remains the
+    -- integrity guarantee.
+    select count(distinct c.id) into v_found
+    from public.companies c
+    where c.id = any(p_company_ids);
+
+    if v_found <> v_expected then
         raise exception 'customer not found for primary-contact transition'
             using errcode = 'P0002';
     end if;
 end;
 $$;
 
-alter function nora_private.lock_companies_for_primary_transition(bigint[]) owner to postgres;
+alter function nora_private.lock_customers_for_primary_transition(bigint[]) owner to postgres;
 
-comment on function nora_private.lock_companies_for_primary_transition(bigint[]) is
-    'Atomic Contact Primary Intent (2026-09-08): takes FOR UPDATE row locks on the given customers in ascending id order so every primary-contact transition on a customer is serialized and two-customer moves never deadlock. Raises P0002 when a customer id does not exist. Internal — callers are the SECURITY DEFINER contact commands.';
+comment on function nora_private.lock_customers_for_primary_transition(bigint[]) is
+    'Atomic Contact Primary Intent (2026-09-08, second blocker fix): serializes primary-contact transitions PER CUSTOMER with a transaction-scoped advisory lock (namespace nora_primary_contact), taken in ascending customer-id order so two-customer moves cannot invert. Deliberately NOT a public.companies row lock: the customer row is also locked, unavoidably contact-row-FIRST, by the sync_individual_company_name trigger and by contacts.company_id foreign-key KEY SHARE probes, so a row-lock mutex here is a lock-order cycle by construction. Callers must take these locks BEFORE locking or writing any contact row. Raises P0002 when a customer id does not exist. Internal - callers are the SECURITY DEFINER contact commands.';
 
-revoke all on function nora_private.lock_companies_for_primary_transition(bigint[]) from public;
-revoke all on function nora_private.lock_companies_for_primary_transition(bigint[]) from anon;
-revoke all on function nora_private.lock_companies_for_primary_transition(bigint[]) from authenticated;
-revoke all on function nora_private.lock_companies_for_primary_transition(bigint[]) from service_role;
+revoke all on function nora_private.lock_customers_for_primary_transition(bigint[]) from public;
+revoke all on function nora_private.lock_customers_for_primary_transition(bigint[]) from anon;
+revoke all on function nora_private.lock_customers_for_primary_transition(bigint[]) from authenticated;
+revoke all on function nora_private.lock_customers_for_primary_transition(bigint[]) from service_role;
+
+-- The row-lock helper of the first blocker fix is superseded and removed so no
+-- caller can accidentally reintroduce the customer-row-lock mutex.
+drop function if exists nora_private.lock_companies_for_primary_transition(bigint[]);
 
 -- ---------------------------------------------------------------------------
 -- 2. The one authoritative primary-contact transition core
 -- ---------------------------------------------------------------------------
 -- Prepares the "primary slot" of one customer for p_target_contact_id:
---   * (re)locks the customer row (idempotent within the transaction),
+--   * takes the customer's transition lock (idempotent within the txn),
 --   * reads the ACTUAL current primary under that lock,
 --   * returns NULL without touching anything when the target already holds it,
 --   * with p_verify_expected: refuses (NORA_PRIMARY_CONTACT_CHANGED) when the
@@ -132,7 +171,7 @@ begin
         raise exception 'a primary contact requires a customer' using errcode = '22023';
     end if;
 
-    perform nora_private.lock_companies_for_primary_transition(array[p_company_id]);
+    perform nora_private.lock_customers_for_primary_transition(array[p_company_id]);
 
     select c.id into v_actual_primary_id
     from public.contacts c
@@ -296,7 +335,7 @@ revoke all on function nora_private.contact_create_fingerprint_payload(jsonb) fr
 -- p_primary_intent: 'keep' (ordinary, non-primary contact) | 'make_primary'.
 -- p_expected_primary_contact_id: the current Hauptansprechpartner the user
 --   saw in the form for the target customer (NULL = "none"). Verified under
---   the customer lock for 'make_primary'; ignored for 'keep'.
+--   the customer's transition lock for 'make_primary'; ignored for 'keep'.
 -- p_idempotency_key: same key + same request replays the stored result (no
 --   second INSERT, _meta.disposition = "replayed"); same key + different
 --   request raises DETAIL = NORA_IDEMPOTENCY_CONFLICT. The volatile
@@ -364,7 +403,7 @@ begin
         elsif v_company_id is not null then
             -- Ordinary contact: still lock the customer so a concurrent
             -- make_primary cannot interleave with this insert.
-            perform nora_private.lock_companies_for_primary_transition(array[v_company_id]);
+            perform nora_private.lock_customers_for_primary_transition(array[v_company_id]);
         end if;
 
         insert into public.contacts (
@@ -418,7 +457,7 @@ $$;
 alter function public.create_contact(jsonb, text, bigint, uuid) owner to postgres;
 
 comment on function public.create_contact(jsonb, text, bigint, uuid) is
-    'Atomic Contact Primary Intent (2026-09-08): creates one contact and applies the explicit Hauptansprechpartner intent (keep | make_primary) in ONE transaction. make_primary locks the customer, verifies the primary the user observed (p_expected_primary_contact_id, NULL = none; mismatch → DETAIL = NORA_PRIMARY_CONTACT_CHANGED), demotes the previous holder and inserts the new contact in its final is_primary = true state (audit: one contact.updated for the demoted holder, one contact.created with is_primary = true). Writable fields are allowlisted; is_primary is never read from p_contact. Residual uq_contacts_one_primary_per_company hit → DETAIL = NORA_PRIMARY_CONTACT_ALREADY_EXISTS. Optional p_idempotency_key (scope contact.create, first_seen/last_seen excluded from the fingerprint): replay returns the stored result with _meta.disposition = "replayed", a different request under the same key raises DETAIL = NORA_IDEMPOTENCY_CONFLICT. Actor from safe_auth_uid(); requires can_write() (DETAIL = NORA_PERMISSION_DENIED). Returns {contact_id, contact, demoted_contact_id, _meta?}.';
+    'Atomic Contact Primary Intent (2026-09-08): creates one contact and applies the explicit Hauptansprechpartner intent (keep | make_primary) in ONE transaction. make_primary takes the per-customer transition lock, verifies the primary the user observed (p_expected_primary_contact_id, NULL = none; mismatch → DETAIL = NORA_PRIMARY_CONTACT_CHANGED), demotes the previous holder and inserts the new contact in its final is_primary = true state (audit: one contact.updated for the demoted holder, one contact.created with is_primary = true). Writable fields are allowlisted; is_primary is never read from p_contact. Residual uq_contacts_one_primary_per_company hit → DETAIL = NORA_PRIMARY_CONTACT_ALREADY_EXISTS. Optional p_idempotency_key (scope contact.create, first_seen/last_seen excluded from the fingerprint): replay returns the stored result with _meta.disposition = "replayed", a different request under the same key raises DETAIL = NORA_IDEMPOTENCY_CONFLICT. Actor from safe_auth_uid(); requires can_write() (DETAIL = NORA_PERMISSION_DENIED). Returns {contact_id, contact, demoted_contact_id, _meta?}.';
 
 revoke all on function public.create_contact(jsonb, text, bigint, uuid) from public;
 revoke all on function public.create_contact(jsonb, text, bigint, uuid) from anon;
@@ -487,7 +526,8 @@ begin
 
     <<main>>
     begin
-        -- Lock order: customers (ascending) first, then the contact row. The
+        -- Order: the customers' transition locks (ascending id) first, then
+        -- the contact row. The
         -- contact's current customer is read without a lock first; if it
         -- moved concurrently before we hold its row, the additional customer
         -- is locked and the read repeated (bounded).
@@ -504,7 +544,7 @@ begin
             end;
 
             v_lock_ids := array_remove(array[v_pre_company_id, v_target_company_id], null);
-            perform nora_private.lock_companies_for_primary_transition(v_lock_ids);
+            perform nora_private.lock_customers_for_primary_transition(v_lock_ids);
 
             select * into v_old from public.contacts c where c.id = p_contact_id for update;
             if not found then
@@ -630,7 +670,7 @@ $$;
 alter function public.set_primary_contact(bigint) owner to postgres;
 
 comment on function public.set_primary_contact(bigint) is
-    'Atomically makes p_contact_id the sole Hauptansprechpartner of its company (no observed-holder verification — callers that know which holder the user saw use create_contact/update_contact with make_primary). Since 2026-09-08 implemented on nora_private.prepare_primary_contact_slot (customer row lock + single demote rule). Requires can_write() (office/admin) — rejection carries DETAIL = NORA_PERMISSION_DENIED.';
+    'Atomically makes p_contact_id the sole Hauptansprechpartner of its company (no observed-holder verification — callers that know which holder the user saw use create_contact/update_contact with make_primary). Since 2026-09-08 implemented on nora_private.prepare_primary_contact_slot (per-customer transition lock + single demote rule). Requires can_write() (office/admin) — rejection carries DETAIL = NORA_PERMISSION_DENIED.';
 
 -- Grants intentionally unchanged (authenticated + service_role, as released
 -- 2026-08-25) — re-stated explicitly so this migration is self-describing.
@@ -641,7 +681,7 @@ grant execute on function public.set_primary_contact(bigint) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 7. Blocker fix: the EXISTING Quick Capture / create_customer_with_contact
---    core joins the same customer-first lock discipline
+--    core joins the same per-customer transition lock
 -- ---------------------------------------------------------------------------
 -- Independent RC review (2026-09-08) found a reproducible cross-command
 -- lock-order inversion, proven here with two real sessions:
@@ -652,21 +692,21 @@ grant execute on function public.set_primary_contact(bigint) to service_role;
 --       INSERT INTO public.contacts (company_id = C)    -- FK => KEY SHARE on C
 --
 --   nora_private.prepare_primary_contact_slot (every new command)
---       SELECT ... FROM public.companies WHERE id = C FOR UPDATE
+--       the customer's transition lock (section 1)
 --       SELECT ... FROM public.contacts ... FOR UPDATE  -- the contact row
 --
--- contact-row-first vs customer-row-first is a cycle: measured 6/30 deadlocks
--- (40P01) in real Quick-Capture-vs-update_contact races, plus 13/30 raw,
--- untranslated 23505 out of Quick Capture, whose demote+insert was not
--- serialized against a competing promotion at all.
+-- Measured on the first RC: 6/30 deadlocks (40P01) in real
+-- Quick-Capture-vs-update_contact races, plus 13/30 raw, untranslated 23505
+-- out of Quick Capture, whose demote+insert was not serialized against a
+-- competing promotion at all.
 --
--- The fix is not to weaken the new commands but to give the existing core the
--- SAME deterministic order, through the SAME helper: lock the customer (and,
--- for a contact that is moved in, its current customer) in ascending id order
--- BEFORE any contact row is touched. No behavior of Quick Capture changes
--- apart from lock acquisition; no second primary-switch algorithm is created.
--- Historical migrations stay untouched — this not-yet-released migration
--- carries the corrected definition.
+-- The fix is not to weaken the new commands but to make the existing core
+-- take the SAME per-customer transition lock (and, for a contact that is
+-- moved in, its current customer's) in ascending id order BEFORE any contact
+-- row is touched. No behavior of Quick Capture changes apart from lock
+-- acquisition; no second primary-switch algorithm is created. Historical
+-- migrations stay untouched — this not-yet-released migration carries the
+-- corrected definition.
 
 create or replace function nora_private.create_customer_with_contact_core(
     p_company jsonb,
@@ -756,7 +796,7 @@ begin
         returning id into v_company_id;
     end if;
 
-    -- Deterministic customer-first lock order (Atomic Contact Primary Intent
+    -- Transition lock before any contact row (Atomic Contact Primary Intent
     -- blocker fix, 2026-09-08). Every contact write below either demotes the
     -- current Hauptansprechpartner (UPDATE public.contacts) or inserts/moves a
     -- contact whose company_id FK makes Postgres take a KEY SHARE lock on the
@@ -784,7 +824,7 @@ begin
             where c.id = p_existing_contact_id;
         end if;
 
-        perform nora_private.lock_companies_for_primary_transition(
+        perform nora_private.lock_customers_for_primary_transition(
             array_remove(array[v_company_id, v_source_company_id], null)
         );
 
@@ -927,7 +967,8 @@ begin
             ('nora_private.prepare_primary_contact_slot(bigint, bigint, bigint, boolean)', 'anon', false),
             ('nora_private.prepare_primary_contact_slot(bigint, bigint, bigint, boolean)', 'authenticated', false),
             ('nora_private.prepare_primary_contact_slot(bigint, bigint, bigint, boolean)', 'service_role', false),
-            ('nora_private.lock_companies_for_primary_transition(bigint[])', 'authenticated', false)
+            ('nora_private.lock_customers_for_primary_transition(bigint[])', 'authenticated', false),
+            ('nora_private.lock_customers_for_primary_transition(bigint[])', 'service_role', false)
         ) as t(fn, role_name, expected)
     loop
         if has_function_privilege(r.role_name, r.fn, 'EXECUTE') <> r.expected then

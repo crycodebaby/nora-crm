@@ -64,7 +64,7 @@ begin
 
     -- 4. coverage: every scenario really ran both roles in every one of its
     --    rounds (rounds are numbered globally, each scenario owns its own set)
-    for r in select unnest(array['X-A', 'X-B', 'X-C', 'X-D', 'X-E', 'X-F']) as scenario loop
+    for r in select unnest(array['X-A', 'X-B', 'X-C', 'X-D', 'X-E', 'X-F', 'X-G']) as scenario loop
         select count(*) into v_n
         from public.cpi_x_results s
         where s.scenario = r.scenario;
@@ -105,6 +105,32 @@ begin
     if v_n <> 0 then
         v_failures := v_failures || format('X-B/w2: set_primary_contact failed %s time(s)', v_n);
     end if;
+
+    -- X-G: two moves that want the same customer pair in opposite order. Both
+    -- must commit; only ascending acquisition order makes that possible.
+    for r in
+        select scenario, role, sqlstate, detail
+        from public.cpi_x_results
+        where scenario = 'X-G' and outcome <> 'SUCCESS'
+    loop
+        v_failures := v_failures || format('X-G/%s: opposite-direction move failed [%s] %s',
+            r.role, r.sqlstate, left(r.detail, 120));
+    end loop;
+    for r in
+        select x.round, m.id as m_id, q2.id as q2_id, c1.id as c1_id, c2.id as c2_id
+        from public.cpi_x_ctx x
+        join public.cpi_x_ctx m  on m.round  = x.round and m.key  = 'm'
+        join public.cpi_x_ctx q2 on q2.round = x.round and q2.key = 'q2'
+        join public.cpi_x_ctx c1 on c1.round = x.round and c1.key = 'c1'
+        join public.cpi_x_ctx c2 on c2.round = x.round and c2.key = 'c2'
+        where x.key = 'c1'
+          and exists (select 1 from public.cpi_x_results s where s.round = x.round and s.scenario = 'X-G')
+    loop
+        if not exists (select 1 from public.contacts where id = r.m_id  and company_id = r.c2_id)
+           or not exists (select 1 from public.contacts where id = r.q2_id and company_id = r.c1_id) then
+            v_failures := v_failures || format('X-G round %s: the two contacts did not both reach the other customer', r.round);
+        end if;
+    end loop;
 
     -- X-D / X-E / X-F: a move never changes the primary of either customer, so
     -- the concurrent primary transition's observed holder stays valid and the

@@ -10,7 +10,7 @@
 --
 -- Invoked in parallel by contact_primary_cross_command_runner.ps1 with psql
 -- variables:
---   scenario  X-A|X-B|X-C|X-D|X-E|X-F
+--   scenario  X-A|X-B|X-C|X-D|X-E|X-F|X-G
 --   role      w1 (the pre-existing path) | w2 (the new primary command)
 --   round     round number — selects the fixture set in public.cpi_x_ctx
 --   fire_at   unix epoch (float); every worker sleeps until this instant so
@@ -72,7 +72,7 @@ begin
                     jsonb_build_object('name', 'X Neu R' || v_round, 'customer_kind', 'business'),
                     null, v_m, null, false, null);
             else
-                -- X-E / X-F: an explicit move of M from C1 to C2 (intent keep)
+                -- X-E / X-F / X-G: an explicit move of M from C1 to C2 (intent keep)
                 perform public.update_contact(v_m, jsonb_build_object('company_id', v_c2), 'keep', null);
             end if;
         else
@@ -89,9 +89,15 @@ begin
             elsif v_scenario in ('X-D', 'X-E') then
                 -- primary transition on the SOURCE customer of the move
                 perform public.update_contact(v_p2, '{}'::jsonb, 'make_primary', v_p1);
-            else
-                -- X-F: primary transition on the TARGET customer of the move
+            elsif v_scenario = 'X-F' then
+                -- primary transition on the TARGET customer of the move
                 perform public.update_contact(v_q2, '{}'::jsonb, 'make_primary', v_q1);
+            else
+                -- X-G: the OPPOSITE-direction move. w1 moves C1 -> C2 while
+                -- this session moves C2 -> C1, so the two transactions want the
+                -- same pair of customers in opposite order. Only a deterministic
+                -- ascending acquisition order keeps this deadlock-free.
+                perform public.update_contact(v_q2, jsonb_build_object('company_id', v_c1), 'keep', null);
             end if;
         end if;
 

@@ -47,9 +47,9 @@ begin
             ('nora_private.prepare_primary_contact_slot(bigint, bigint, bigint, boolean)', 'anon', false),
             ('nora_private.prepare_primary_contact_slot(bigint, bigint, bigint, boolean)', 'authenticated', false),
             ('nora_private.prepare_primary_contact_slot(bigint, bigint, bigint, boolean)', 'service_role', false),
-            ('nora_private.lock_companies_for_primary_transition(bigint[])', 'anon', false),
-            ('nora_private.lock_companies_for_primary_transition(bigint[])', 'authenticated', false),
-            ('nora_private.lock_companies_for_primary_transition(bigint[])', 'service_role', false)
+            ('nora_private.lock_customers_for_primary_transition(bigint[])', 'anon', false),
+            ('nora_private.lock_customers_for_primary_transition(bigint[])', 'authenticated', false),
+            ('nora_private.lock_customers_for_primary_transition(bigint[])', 'service_role', false)
         ) as t(fn, role_name, expected)
     loop
         if has_function_privilege(r.role_name, r.fn, 'EXECUTE') <> r.expected then
