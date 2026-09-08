@@ -1,11 +1,13 @@
 import { useGetIdentity, useTranslate } from "ra-core";
+import { useMemo } from "react";
 import { CreateSheet } from "../misc/CreateSheet";
 import { ContactInputs } from "./ContactInputs";
 import {
-  cleanupContactForCreate,
+  buildContactCreateTransform,
   defaultEmailJsonb,
   defaultPhoneJsonb,
 } from "./contactModel";
+import { createOperationId } from "../operations/operationContext";
 
 export interface ContactCreateSheetProps {
   open: boolean;
@@ -18,6 +20,12 @@ export const ContactCreateSheet = ({
 }: ContactCreateSheetProps) => {
   const { identity } = useGetIdentity();
   const translate = useTranslate();
+  // The sheet unmounts when closed, so a fresh key per opened sheet session.
+  const idempotencyKey = useMemo(() => createOperationId(), []);
+  const transform = useMemo(
+    () => buildContactCreateTransform({ idempotencyKey }),
+    [idempotencyKey],
+  );
   return (
     <CreateSheet
       resource="contacts"
@@ -31,7 +39,7 @@ export const ContactCreateSheet = ({
         email_jsonb: defaultEmailJsonb,
         phone_jsonb: defaultPhoneJsonb,
       }}
-      transform={cleanupContactForCreate}
+      transform={transform}
       open={open}
       onOpenChange={onOpenChange}
     >

@@ -154,6 +154,13 @@ export const englishCrmMessages = {
       helper: {
         is_primary: "Contacted first for calls/emails. Only one per customer.",
       },
+      primary: {
+        current: "Currently: %{name}",
+        none: "No primary contact set yet.",
+        self: "This person is currently the primary contact.",
+        replace: "%{name} will be replaced as primary contact when you save.",
+        loading: "Checking primary contact …",
+      },
       action: {
         add: "Add contact",
         add_first: "Add your first contact",
@@ -1047,6 +1054,10 @@ export const englishCrmMessages = {
         "This submission was already started with different data. Please reload the page and try again.",
       employee_not_assignable:
         "This employee is deactivated and cannot be newly assigned.",
+      primary_contact_already_exists:
+        "This customer already has a primary contact.",
+      primary_contact_changed:
+        "The primary contact has changed in the meantime. Please review your selection.",
     },
     pwa: {
       available_title: "New Nora version available",

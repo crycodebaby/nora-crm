@@ -3,6 +3,7 @@ import { Mars, NonBinary, Venus } from "lucide-react";
 import type { Company, Contact, ContactGender } from "../types";
 import { translateContactMethodTypeLabel } from "../misc/contactMethodTypes";
 import { cleanLinksJsonb } from "../misc/linksModel";
+import { attachContactSaveIntent } from "../domain/contactPrimaryIntent";
 
 export const defaultEmailJsonb = [{ email: null, type: null }];
 export const defaultPhoneJsonb = [{ number: null, type: null }];
@@ -20,16 +21,32 @@ const cleanContactArrayFields = (data: Contact) => {
   };
 };
 
-export const cleanupContactForCreate = (data: Contact) => {
-  return cleanContactArrayFields({
-    ...data,
-    first_seen: new Date().toISOString(),
-    last_seen: new Date().toISOString(),
-    tags: [],
-  });
-};
+/**
+ * Atomic Contact Primary Intent (2026-09-08): every contact form save carries
+ * an explicit Hauptansprechpartner intent (keep / make_primary with the
+ * observed holder / clear) instead of a raw is_primary write. The data
+ * provider turns it into ONE atomic backend operation. `idempotencyKey` is
+ * minted once per create-form session so a retried submit never creates a
+ * second contact.
+ */
+export const buildContactCreateTransform =
+  (options: { idempotencyKey?: string | null } = {}) =>
+  (data: Contact) =>
+    attachContactSaveIntent(
+      cleanContactArrayFields({
+        ...data,
+        first_seen: new Date().toISOString(),
+        last_seen: new Date().toISOString(),
+        tags: [],
+      }),
+      { mode: "create", idempotencyKey: options.idempotencyKey ?? null },
+    );
 
-export const cleanupContactForEdit = cleanContactArrayFields;
+/** Legacy alias without idempotency key — prefer buildContactCreateTransform. */
+export const cleanupContactForCreate = buildContactCreateTransform();
+
+export const cleanupContactForEdit = (data: Contact) =>
+  attachContactSaveIntent(cleanContactArrayFields(data), { mode: "edit" });
 
 type TranslateFn = (key: string, options?: { [key: string]: any }) => string;
 

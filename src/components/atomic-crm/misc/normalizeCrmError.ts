@@ -90,6 +90,16 @@ const PRIVATE_CUSTOMER_ALREADY_EXISTS_PATTERNS = [
   /uq_companies_self_contact_individual/i,
 ];
 
+// Atomic Contact Primary Intent (2026-09-08): a raw contacts.is_primary write
+// from an older client / direct PostgREST call that collides with the partial
+// unique index. Anchored narrowly on the constraint name — never on a broad
+// "duplicate key" match, so unrelated unique violations keep their own
+// classification. The authoritative commands (create_contact/update_contact)
+// carry DETAIL = NORA_PRIMARY_CONTACT_ALREADY_EXISTS and never reach this.
+const PRIMARY_CONTACT_ALREADY_EXISTS_PATTERNS = [
+  /uq_contacts_one_primary_per_company/i,
+];
+
 const DISABLED_PATTERNS = [/disabled/i, /deactivated/i, /inactive user/i];
 
 const NETWORK_PATTERNS = [
@@ -248,6 +258,16 @@ export const normalizeCrmError = (error: unknown): NormalizedCrmError => {
       messageKey: "crm.errors.private_customer_already_exists",
       status,
       code: NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS,
+      technicalMessage,
+    };
+  }
+
+  if (matchesAny(message, PRIMARY_CONTACT_ALREADY_EXISTS_PATTERNS)) {
+    return {
+      kind: "unknown",
+      messageKey: "crm.errors.primary_contact_already_exists",
+      status,
+      code: NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS,
       technicalMessage,
     };
   }

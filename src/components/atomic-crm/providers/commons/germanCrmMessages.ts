@@ -158,6 +158,14 @@ export const germanCrmMessages = {
         is_primary:
           "Wird bei Telefon/E-Mail zuerst kontaktiert. Nur einer je Kunde.",
       },
+      primary: {
+        current: "Aktuell: %{name}",
+        none: "Noch kein Hauptansprechpartner festgelegt.",
+        self: "Diese Person ist aktuell Hauptansprechpartner.",
+        replace:
+          "%{name} wird beim Speichern als Hauptansprechpartner abgelöst.",
+        loading: "Hauptansprechpartner wird geprüft …",
+      },
       action: {
         add: "Kontakt hinzufügen",
         add_first: "Ersten Kontakt hinzufügen",
@@ -1061,6 +1069,10 @@ export const germanCrmMessages = {
         "Dieser Vorgang wurde bereits mit anderen Daten gestartet. Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
       employee_not_assignable:
         "Dieser Mitarbeiter ist deaktiviert und kann nicht neu zugewiesen werden.",
+      primary_contact_already_exists:
+        "Dieser Kunde hat bereits einen Hauptansprechpartner.",
+      primary_contact_changed:
+        "Der Hauptansprechpartner wurde inzwischen geändert. Bitte prüfen Sie die Auswahl erneut.",
     },
     pwa: {
       // Presentation Contract V2: ein Titel, hoechstens eine ruhige Zeile,

@@ -48,6 +48,15 @@ import {
 } from "../../operations/operationContext";
 import { executeDealUpdate } from "../../operations/executeDealUpdate";
 import {
+  executeCreateContact,
+  type ContactCommandRpcFn,
+} from "../../operations/executeCreateContact";
+import { executeUpdateContact } from "../../operations/executeUpdateContact";
+import {
+  derivePrimaryIntentFromLegacyData,
+  readContactSaveIntent,
+} from "../../domain/contactPrimaryIntent";
+import {
   executeCreateCustomerWithContact,
   type CreateCustomerWithContactParams,
   type CreateCustomerWithContactResult,
@@ -109,6 +118,12 @@ const processCompanyLogo = async (params: any) => {
   };
 };
 
+const contactCommandRpc: ContactCommandRpcFn = (fn, args) =>
+  getSupabaseClient().rpc(
+    fn,
+    args as any,
+  ) as unknown as ReturnType<ContactCommandRpcFn>;
+
 const getDataProviderWithCustomMethods = () => {
   const baseDataProvider = getBaseDataProvider();
 
@@ -156,11 +171,67 @@ const getDataProviderWithCustomMethods = () => {
     },
 
     /**
+     * Atomic Contact Primary Intent (2026-09-08): a contact CREATE that
+     * carries a save intent (every Nora contact form) or an is_primary value
+     * (older call sites) is ONE authoritative business operation —
+     * contact.create → public.create_contact — never a raw INSERT followed by
+     * a second set_primary_contact request. Writes without either (imports,
+     * additive paths that never touch the primary) keep the plain insert.
+     */
+    async create(resource: string, params: any) {
+      if (resource === "contacts") {
+        const { payload, intent } = readContactSaveIntent(
+          (params?.data ?? {}) as Record<string, unknown>,
+        );
+        const primary =
+          intent?.primary ??
+          derivePrimaryIntentFromLegacyData(payload, "create");
+        if (primary) {
+          const result = await executeCreateContact(
+            {
+              contact: payload,
+              primary,
+              idempotencyKey: intent?.idempotencyKey ?? null,
+            },
+            contactCommandRpc,
+          );
+          return { data: result.contact as any };
+        }
+      }
+      return baseDataProvider.create(resource, params);
+    },
+
+    /**
      * Foundation Wave 2: deal.update enters Operation Manager (owns operation_id),
      * then Wave 1 transport attaches x-nora-operation-id for audit correlation.
      * If meta already carries a valid operation id, transport-only (no nested op).
+     *
+     * Atomic Contact Primary Intent (2026-09-08): a contact UPDATE carrying a
+     * save intent or an is_primary value goes through contact.update →
+     * public.update_contact (field patch + primary transition + customer move
+     * in one transaction). Partial updates that never mention the primary
+     * (status, tags, last_seen …) keep the plain PATCH.
      */
     async update(resource: string, params: any) {
+      if (resource === "contacts") {
+        const { payload, intent } = readContactSaveIntent(
+          (params?.data ?? {}) as Record<string, unknown>,
+        );
+        const primary =
+          intent?.primary ?? derivePrimaryIntentFromLegacyData(payload, "edit");
+        if (primary) {
+          const { id: _ignoredId, ...patch } = payload as Record<
+            string,
+            unknown
+          >;
+          void _ignoredId;
+          const result = await executeUpdateContact(
+            { contactId: params.id, patch, primary },
+            contactCommandRpc,
+          );
+          return { data: result.contact as any };
+        }
+      }
       if (resource === "deals") {
         const existingId = readOperationIdFromMeta(params?.meta);
         if (existingId) {

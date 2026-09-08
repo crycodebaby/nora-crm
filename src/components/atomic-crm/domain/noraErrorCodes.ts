@@ -27,6 +27,20 @@ export const NORA_ERROR_CODES = {
   IDEMPOTENCY_CONFLICT: "NORA_IDEMPOTENCY_CONFLICT",
   /** User Lifecycle W2: a disabled employee cannot be newly assigned as responsible. */
   EMPLOYEE_NOT_ASSIGNABLE: "NORA_EMPLOYEE_NOT_ASSIGNABLE",
+  /**
+   * Atomic Contact Primary Intent (2026-09-08): the customer already has a
+   * Hauptansprechpartner and the write tried to add a second one without
+   * going through the primary transition (legacy raw write hitting
+   * uq_contacts_one_primary_per_company, or the residual translation inside
+   * create_contact/update_contact).
+   */
+  PRIMARY_CONTACT_ALREADY_EXISTS: "NORA_PRIMARY_CONTACT_ALREADY_EXISTS",
+  /**
+   * Atomic Contact Primary Intent (2026-09-08): the Hauptansprechpartner the
+   * user observed in the form is no longer the current one — the transition
+   * was refused and rolled back so a newer primary is never replaced silently.
+   */
+  PRIMARY_CONTACT_CHANGED: "NORA_PRIMARY_CONTACT_CHANGED",
 } as const;
 
 export type NoraErrorCode =
@@ -82,6 +96,14 @@ export const NORA_ERROR_DEFINITIONS: Record<
   [NORA_ERROR_CODES.EMPLOYEE_NOT_ASSIGNABLE]: {
     category: "domain",
     messageKey: "crm.errors.employee_not_assignable",
+  },
+  [NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS]: {
+    category: "conflict",
+    messageKey: "crm.errors.primary_contact_already_exists",
+  },
+  [NORA_ERROR_CODES.PRIMARY_CONTACT_CHANGED]: {
+    category: "conflict",
+    messageKey: "crm.errors.primary_contact_changed",
   },
 };
 

@@ -113,3 +113,92 @@ describe("normalizeCrmError — Error Contract Wave", () => {
     expect(normalized.kind).toBe("permission_denied");
   });
 });
+
+/**
+ * Atomic Contact Primary Intent (2026-09-08): two distinct, stable codes —
+ * "another primary currently exists" (legacy raw write / residual constraint
+ * hit) vs. "the primary changed since the form was loaded" (stale-UI
+ * protection of the atomic command). Neither may fall through to the
+ * generic load_failed, and the legacy constraint anchor must stay narrow.
+ */
+describe("normalizeCrmError — Atomic Contact Primary Intent", () => {
+  it("maps a raw 23505 on uq_contacts_one_primary_per_company to PRIMARY_CONTACT_ALREADY_EXISTS (never load_failed)", () => {
+    const normalized = normalizeCrmError({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "uq_contacts_one_primary_per_company"',
+      details: "Key (company_id)=(20) already exists.",
+      hint: null,
+      status: 409,
+    });
+    expect(normalized.code).toBe(
+      NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS,
+    );
+    expect(normalized.messageKey).toBe(
+      "crm.errors.primary_contact_already_exists",
+    );
+    expect(normalized.messageKey).not.toBe("crm.errors.load_failed");
+  });
+
+  it("maps DETAIL = NORA_PRIMARY_CONTACT_ALREADY_EXISTS from the atomic command regardless of wording", () => {
+    const normalized = normalizeCrmError({
+      code: "23505",
+      message: "customer 20 already has a primary contact",
+      details: NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS,
+    });
+    expect(normalized.code).toBe(
+      NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS,
+    );
+    expect(normalized.messageKey).toBe(
+      "crm.errors.primary_contact_already_exists",
+    );
+  });
+
+  it("maps DETAIL = NORA_PRIMARY_CONTACT_CHANGED to its own stable key — never conflated with 'already exists'", () => {
+    const normalized = normalizeCrmError({
+      code: "P0001",
+      message:
+        "primary contact of customer 20 changed since the form was loaded",
+      details: NORA_ERROR_CODES.PRIMARY_CONTACT_CHANGED,
+      status: 400,
+    });
+    expect(normalized.code).toBe(NORA_ERROR_CODES.PRIMARY_CONTACT_CHANGED);
+    expect(normalized.messageKey).toBe("crm.errors.primary_contact_changed");
+    expect(normalized.messageKey).not.toBe(
+      "crm.errors.primary_contact_already_exists",
+    );
+  });
+
+  it("keeps permission denied as permission denied on the contact commands", () => {
+    const normalized = normalizeCrmError({
+      code: "42501",
+      message: "insufficient privileges",
+      details: NORA_ERROR_CODES.PERMISSION_DENIED,
+      status: 403,
+    });
+    expect(normalized.code).toBe(NORA_ERROR_CODES.PERMISSION_DENIED);
+    expect(normalized.messageKey).toBe("crm.errors.permission_denied");
+  });
+
+  it("does not map an unrelated unique violation to the primary-contact code (no broad duplicate-key matching)", () => {
+    const other = normalizeCrmError({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "uq__sales__email"',
+      details: "Key (email)=(x@y.de) already exists.",
+    });
+    expect(other.code).not.toBe(
+      NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS,
+    );
+    expect(other.messageKey).not.toBe(
+      "crm.errors.primary_contact_already_exists",
+    );
+
+    const privat = normalizeCrmError({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "uq_companies_self_contact_individual"',
+    });
+    expect(privat.code).toBe(NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS);
+  });
+});

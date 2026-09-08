@@ -38,6 +38,7 @@ export type OperationType =
   | "customer.archive"
   | "customer.restore"
   | "customer.createWithContact"
+  | "contact.create"
   | "contact.update"
   | "contact.archive"
   | "contact.restore"

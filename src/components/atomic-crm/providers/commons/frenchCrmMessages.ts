@@ -160,6 +160,14 @@ export const frenchCrmMessages = {
         is_primary:
           "Contacté en premier par téléphone/e-mail. Un seul par client.",
       },
+      primary: {
+        current: "Actuellement : %{name}",
+        none: "Aucun contact principal défini pour l'instant.",
+        self: "Cette personne est actuellement le contact principal.",
+        replace:
+          "%{name} sera remplacé(e) comme contact principal lors de l'enregistrement.",
+        loading: "Vérification du contact principal …",
+      },
       action: {
         add: "Ajouter un contact",
         add_first: "Ajoutez votre premier contact",
@@ -1066,6 +1074,9 @@ export const frenchCrmMessages = {
         "Cette saisie a déjà été démarrée avec des données différentes. Veuillez recharger la page et réessayer.",
       employee_not_assignable:
         "Cet employé est désactivé et ne peut pas être nouvellement assigné.",
+      primary_contact_already_exists: "Ce client a déjà un contact principal.",
+      primary_contact_changed:
+        "Le contact principal a changé entre-temps. Veuillez vérifier votre sélection.",
     },
     pwa: {
       available_title: "Nouvelle version de Nora disponible",

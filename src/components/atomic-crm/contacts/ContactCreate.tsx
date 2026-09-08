@@ -5,15 +5,17 @@ import {
   useTranslate,
   type MutationMode,
 } from "ra-core";
+import { useMemo } from "react";
 
 import { ContactInputs } from "./ContactInputs";
 import { FormToolbar } from "../layout/FormToolbar";
 import { NoraAccessGuard } from "../misc/NoraEditGuard";
 import {
-  cleanupContactForCreate,
+  buildContactCreateTransform,
   defaultEmailJsonb,
   defaultPhoneJsonb,
 } from "./contactModel";
+import { createOperationId } from "../operations/operationContext";
 
 export const ContactCreate = ({
   mutationMode,
@@ -22,11 +24,18 @@ export const ContactCreate = ({
 }) => {
   const { identity } = useGetIdentity();
   const translate = useTranslate();
+  // One write-intent id per form session (Idempotency Wave contract): a
+  // retried submit of the same form replays instead of creating a duplicate.
+  const idempotencyKey = useMemo(() => createOperationId(), []);
+  const transform = useMemo(
+    () => buildContactCreateTransform({ idempotencyKey }),
+    [idempotencyKey],
+  );
 
   return (
     <CreateBase
       redirect="show"
-      transform={cleanupContactForCreate}
+      transform={transform}
       mutationMode={mutationMode}
     >
       <NoraAccessGuard

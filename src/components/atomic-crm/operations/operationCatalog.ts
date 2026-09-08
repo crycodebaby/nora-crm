@@ -25,6 +25,7 @@ export type CatalogOperationType =
   | "deal.assign"
   | "customer.update"
   | "customer.createWithContact"
+  | "contact.create"
   | "contact.update"
   | "contact.setPrimary"
   | "contact.convertToCustomer"
@@ -59,6 +60,13 @@ export const OPERATION_CATALOG: {
     pendingMessage: "Kunde wird gespeichert …",
     successMessage: "Kunde wurde gespeichert.",
     errorMessage: "Kunde konnte nicht gespeichert werden.",
+  },
+  "contact.create": {
+    operationType: "contact.create",
+    resourceType: "contacts",
+    pendingMessage: "Kontakt wird angelegt …",
+    successMessage: "Kontakt wurde angelegt.",
+    errorMessage: "Kontakt konnte nicht angelegt werden.",
   },
   "contact.update": {
     operationType: "contact.update",

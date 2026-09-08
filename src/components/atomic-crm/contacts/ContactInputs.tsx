@@ -9,7 +9,7 @@ import {
 } from "ra-core";
 import type { ClipboardEventHandler, FocusEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { useFormContext, useFormState, useWatch } from "react-hook-form";
+import { useFormContext, useFormState } from "react-hook-form";
 import type { LucideIcon } from "lucide-react";
 import { Building2, Ellipsis, Mail, Plus, UserRound } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -41,6 +41,7 @@ import { Avatar } from "./Avatar";
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
 import { SalesAssignmentInput } from "../sales/SalesAssignmentInput";
 import { contactGender, translateContactGenderLabel } from "./contactModel.ts";
+import { ContactPrimaryContactField } from "./ContactPrimaryContactField";
 
 export const ContactInputs = ({
   variant = "default",
@@ -48,6 +49,8 @@ export const ContactInputs = ({
   variant?: "default" | "create";
 }) =>
   variant === "create" ? <ContactCreateInputs /> : <ContactDefaultInputs />;
+
+type ContactFormMode = "create" | "edit";
 
 const ContactCreateInputs = () => {
   const { errors, submitCount } = useFormState();
@@ -80,7 +83,7 @@ const ContactCreateInputs = () => {
           title="resources.contacts.create_form.customer"
           description="resources.contacts.create_form.customer_help"
         >
-          <ContactPositionInputs />
+          <ContactPositionInputs mode="create" />
         </CreateFormSection>
       </div>
 
@@ -136,7 +139,7 @@ const ContactDefaultInputs = () => {
       <div className="flex gap-8 md:gap-10 flex-col md:flex-row">
         <div className="flex flex-col gap-8 flex-1">
           <ContactIdentityInputs />
-          <ContactPositionInputs />
+          <ContactPositionInputs mode="edit" />
         </div>
         {isMobile ? null : (
           <Separator orientation="vertical" className="flex-shrink-0" />
@@ -219,8 +222,7 @@ const ContactIdentityInputs = ({ showHeading = true }) => {
   );
 };
 
-const ContactPositionInputs = () => {
-  const companyId = useWatch({ name: "company_id" });
+const ContactPositionInputs = ({ mode }: { mode: ContactFormMode }) => {
   return (
     // Keine Sektionsüberschrift hier: "Position" wäre nur eine Wiederholung
     // des title-Feld-Labels selbst (Root Cause der doppelten "Position"-
@@ -232,12 +234,7 @@ const ContactPositionInputs = () => {
       <ReferenceInput source="company_id" reference="companies" perPage={10}>
         <AutocompleteCompanyInput label="resources.contacts.fields.company_id" />
       </ReferenceInput>
-      {companyId !== undefined && companyId !== null && companyId !== "" ? (
-        <BooleanInput
-          source="is_primary"
-          helperText="resources.contacts.helper.is_primary"
-        />
-      ) : null}
+      <ContactPrimaryContactField mode={mode} />
     </div>
   );
 };

@@ -76,6 +76,11 @@ import {
   isEffectiveContactOfCompany,
 } from "./internal/taskContextCheck";
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
+import {
+  derivePrimaryIntentFromLegacyData,
+  readContactSaveIntent,
+  type PrimaryContactIntent,
+} from "../../domain/contactPrimaryIntent";
 
 import type {
   EmployeeAccessRecord,
@@ -375,6 +380,88 @@ const createCustomerWithContactCore = async (
   return { company_id: companyId, contact_id: contactId };
 };
 
+/**
+ * FakeRest mirror of nora_private.prepare_primary_contact_slot() (Atomic
+ * Contact Primary Intent, 2026-09-08): the ONE demote rule for every path
+ * that makes a contact the Hauptansprechpartner. Reads the actual holder,
+ * is a no-op when the target already holds the slot, verifies the holder the
+ * user observed (NORA_PRIMARY_CONTACT_CHANGED on mismatch) and demotes the
+ * previous holder. Single-threaded JS — no row locks needed, but the same
+ * business decisions as Production.
+ */
+const prepareFakeRestPrimarySlot = async (
+  dataProvider: DataProvider,
+  /** Raw store writer — the demotion must NOT re-enter the intercepting provider (one business operation, no nested contact.update). */
+  writeProvider: DataProvider,
+  companyId: Identifier,
+  targetContactId: Identifier | null,
+  expectedPrimaryContactId: Identifier | null,
+  verifyExpected: boolean,
+): Promise<Identifier | null> => {
+  const { data: siblings } = await dataProvider.getList<Contact>("contacts", {
+    filter: { company_id: companyId },
+    pagination: { page: 1, perPage: 1000 },
+    sort: { field: "id", order: "ASC" },
+  });
+  const actual = siblings.find((c) => c.is_primary === true) ?? null;
+  if (
+    actual &&
+    targetContactId != null &&
+    String(actual.id) === String(targetContactId)
+  ) {
+    return null;
+  }
+  const actualId = actual ? actual.id : null;
+  const sameHolder =
+    (actualId == null && expectedPrimaryContactId == null) ||
+    (actualId != null &&
+      expectedPrimaryContactId != null &&
+      String(actualId) === String(expectedPrimaryContactId));
+  if (verifyExpected && !sameHolder) {
+    throwNoraError(
+      "Der Hauptansprechpartner von Kunde " +
+        String(companyId) +
+        " wurde inzwischen geändert.",
+      NORA_ERROR_CODES.PRIMARY_CONTACT_CHANGED,
+    );
+  }
+  if (actual) {
+    await writeProvider.update("contacts", {
+      id: actual.id,
+      data: { is_primary: false },
+      previousData: actual,
+    });
+    return actual.id;
+  }
+  return null;
+};
+
+/** FakeRest mirror of the uq_contacts_one_primary_per_company backstop. */
+const assertFakeRestSinglePrimary = async (
+  dataProvider: DataProvider,
+  companyId: Identifier | null | undefined,
+  excludeContactId: Identifier | null,
+) => {
+  if (companyId == null) return;
+  const { data: siblings } = await dataProvider.getList<Contact>("contacts", {
+    filter: { company_id: companyId },
+    pagination: { page: 1, perPage: 1000 },
+    sort: { field: "id", order: "ASC" },
+  });
+  if (
+    siblings.some(
+      (c) =>
+        c.is_primary === true &&
+        (excludeContactId == null || String(c.id) !== String(excludeContactId)),
+    )
+  ) {
+    throwNoraError(
+      "Kunde " + String(companyId) + " hat bereits einen Hauptansprechpartner.",
+      NORA_ERROR_CODES.PRIMARY_CONTACT_ALREADY_EXISTS,
+    );
+  }
+};
+
 const TASK_MARKED_AS_DONE = "TASK_MARKED_AS_DONE";
 const TASK_MARKED_AS_UNDONE = "TASK_MARKED_AS_UNDONE";
 const TASK_DONE_NOT_CHANGED = "TASK_DONE_NOT_CHANGED";
@@ -565,6 +652,99 @@ export const createDataProvider = ({
     });
   };
 
+  /**
+   * FakeRest mirror of public.create_contact — same decision order as the
+   * RPC: intent validation, demote (with observed-holder check), then the
+   * contact is written in its FINAL state. The target row goes to the base
+   * provider (the outer lifecycle callbacks already ran for this create);
+   * the demoted sibling goes through the lifecycle-wrapped provider.
+   */
+  const applyFakeRestContactCreate = async (
+    contactData: Record<string, unknown>,
+    primary: PrimaryContactIntent,
+  ): Promise<{ data: Contact; demotedContactId: Identifier | null }> => {
+    const companyId = (contactData.company_id ?? null) as Identifier | null;
+    if (primary.kind === "clear") {
+      throw new Error("a new contact cannot clear a primary it never held");
+    }
+    let demotedContactId: Identifier | null = null;
+    let isPrimary = false;
+    if (primary.kind === "make_primary") {
+      if (companyId == null) {
+        throw new Error("a primary contact requires a customer");
+      }
+      demotedContactId = await prepareFakeRestPrimarySlot(
+        dataProvider,
+        baseDataProvider,
+        companyId,
+        null,
+        primary.expectedCurrentPrimaryContactId,
+        true,
+      );
+      isPrimary = true;
+    }
+    if (isPrimary) {
+      await assertFakeRestSinglePrimary(dataProvider, companyId, null);
+    }
+    const { data } = await baseDataProvider.create<Contact>("contacts", {
+      data: { ...contactData, is_primary: isPrimary } as Contact,
+    });
+    return { data, demotedContactId };
+  };
+
+  /** FakeRest mirror of public.update_contact (intent resolved against the TARGET customer). */
+  const applyFakeRestContactUpdate = async (
+    contactId: Identifier,
+    patch: Record<string, unknown>,
+    primary: PrimaryContactIntent,
+  ): Promise<{ data: Contact; demotedContactId: Identifier | null }> => {
+    const { data: previous } = await dataProvider.getOne<Contact>("contacts", {
+      id: contactId,
+    });
+    const targetCompanyId = (
+      "company_id" in patch
+        ? (patch.company_id ?? null)
+        : (previous.company_id ?? null)
+    ) as Identifier | null;
+    const companyChanged =
+      String(targetCompanyId ?? "") !== String(previous.company_id ?? "");
+    let demotedContactId: Identifier | null = null;
+    let isPrimary: boolean;
+    if (targetCompanyId == null) {
+      if (primary.kind === "make_primary") {
+        throw new Error("a primary contact requires a customer");
+      }
+      isPrimary = false;
+    } else if (primary.kind === "make_primary") {
+      demotedContactId = await prepareFakeRestPrimarySlot(
+        dataProvider,
+        baseDataProvider,
+        targetCompanyId,
+        contactId,
+        primary.expectedCurrentPrimaryContactId,
+        true,
+      );
+      isPrimary = true;
+    } else if (primary.kind === "clear") {
+      isPrimary = false;
+    } else {
+      isPrimary = companyChanged ? false : previous.is_primary === true;
+    }
+    if (isPrimary) {
+      await assertFakeRestSinglePrimary(
+        dataProvider,
+        targetCompanyId,
+        contactId,
+      );
+    }
+    const { data } = await baseDataProvider.update<Contact>("contacts", {
+      id: contactId,
+      data: { ...patch, company_id: targetCompanyId, is_primary: isPrimary },
+      previousData: previous,
+    });
+    return { data, demotedContactId };
+  };
+
   /** W5 demo parity: real counts from the demo store, notes separate. */
   const countDemoDependencies = async (
     salesId: Identifier,
@@ -611,8 +791,101 @@ export const createDataProvider = ({
       }
       return baseDataProvider.getList(resource, params);
     },
+    /**
+     * Atomic Contact Primary Intent (2026-09-08) — parity with the Supabase
+     * path: a contact create carrying a save intent (or an is_primary value)
+     * is ONE contact.create operation with the same semantics as
+     * public.create_contact — expected-holder verification, demotion, final
+     * state, idempotent replay under the client key, same NoraErrorCodes.
+     * The lifecycle callbacks (avatar, first_seen defaults, nb_contacts,
+     * assignment guard) already ran on the way in / run on the way out.
+     */
+    async create(resource: string, params: any) {
+      if (resource === "contacts") {
+        const { payload, intent } = readContactSaveIntent(
+          (params?.data ?? {}) as Record<string, unknown>,
+        );
+        const primary =
+          intent?.primary ??
+          derivePrimaryIntentFromLegacyData(payload, "create");
+        if (primary) {
+          return getDefaultOperationManager().execute(
+            OPERATION_CATALOG["contact.create"],
+            {},
+            async (context) => {
+              const identity = await getIdentity();
+              const { is_primary: _ignored, ...contactData } =
+                payload as Record<string, unknown> & { is_primary?: unknown };
+              void _ignored;
+              const {
+                first_seen: _firstSeen,
+                last_seen: _lastSeen,
+                ...stableFingerprint
+              } = contactData as Record<string, unknown>;
+              void _firstSeen;
+              void _lastSeen;
+              const { result, disposition } = await runWithFakeRestIdempotency(
+                "contact.create",
+                intent?.idempotencyKey ?? null,
+                identity?.id,
+                { contact: stableFingerprint, primary },
+                async () => applyFakeRestContactCreate(contactData, primary),
+              );
+              if (disposition) {
+                context.reportOutcome({
+                  execution: disposition,
+                  result: {
+                    contactId: result.data.id,
+                    demotedContactId: result.demotedContactId,
+                  },
+                });
+              }
+              return { data: result.data as any };
+            },
+          );
+        }
+      }
+      return baseDataProvider.create(resource, params);
+    },
     // Wave 2: deal.update via Operation Manager; Wave 1 header transport unchanged.
     async update(resource: string, params: any) {
+      if (resource === "contacts") {
+        const { payload, intent } = readContactSaveIntent(
+          (params?.data ?? {}) as Record<string, unknown>,
+        );
+        const primary =
+          intent?.primary ?? derivePrimaryIntentFromLegacyData(payload, "edit");
+        if (primary) {
+          return getDefaultOperationManager().execute(
+            OPERATION_CATALOG["contact.update"],
+            { resourceId: params?.id },
+            async (context) => {
+              const {
+                is_primary: _ignored,
+                id: _id,
+                ...patch
+              } = payload as Record<string, unknown> & {
+                is_primary?: unknown;
+                id?: unknown;
+              };
+              void _ignored;
+              void _id;
+              const result = await applyFakeRestContactUpdate(
+                params.id,
+                patch,
+                primary,
+              );
+              context.reportOutcome({
+                result: {
+                  contactId: result.data.id,
+                  demotedContactId: result.demotedContactId,
+                },
+              });
+              return { data: result.data as any };
+            },
+          );
+        }
+      }
       if (resource === "deals") {
         const existingId = readOperationIdFromMeta(params?.meta);
         if (existingId) {
@@ -1110,29 +1383,21 @@ export const createDataProvider = ({
           if (contact.company_id == null) {
             throw new Error("contact has no company");
           }
-          const { data: siblings } = await dataProvider.getList("contacts", {
-            filter: { company_id: contact.company_id },
-            pagination: { page: 1, perPage: 1000 },
-            sort: { field: "id", order: "ASC" },
-          });
-          await Promise.all(
-            siblings
-              .filter(
-                (c: Contact) => c.id !== contact.id && (c as any).is_primary,
-              )
-              .map((c: Contact) =>
-                dataProvider.update("contacts", {
-                  id: c.id,
-                  data: { is_primary: false },
-                  previousData: c,
-                }),
-              ),
+          await prepareFakeRestPrimarySlot(
+            dataProvider,
+            baseDataProvider,
+            contact.company_id,
+            contact.id,
+            null,
+            false,
           );
-          await dataProvider.update("contacts", {
-            id: contact.id,
-            data: { is_primary: true },
-            previousData: contact,
-          });
+          if (contact.is_primary !== true) {
+            await baseDataProvider.update("contacts", {
+              id: contact.id,
+              data: { is_primary: true },
+              previousData: contact,
+            });
+          }
         },
       );
     },
