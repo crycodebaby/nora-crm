@@ -415,6 +415,7 @@ Lesende Darstellung von `audit_events` — fachlich formatiert, kein technisches
 - Nicht erlaubte Aktionen **ausblenden**; erklärungsbedürftige Admin-Aktionen dürfen deaktiviert + Tooltip sein.
 - **Office:** Archivieren statt Löschen sichtbar; Delete-Buttons nur für Admin.
 - **Ladezustände:** Skeletons (`NoraPageLoading`) statt leerer Flächen.
+- **Globale Ladeaktivität (2026-09-03):** `NoraRouteProgress` — 2-px-Hairline in Brandfarbe am oberen Viewport-Rand (Desktop- und Mobile-Layout), gespeist aus `useIsFetching()`/`useIsMutating()` (derselbe QueryClient wie ra-core). Anti-Flacker per CSS-`transition-delay` (250 ms Einblenden, sofortiges Ausblenden), Slide-Animation nur bei Aktivität, `prefers-reduced-motion` → statischer Balken. `z-index: 55` (unter Statusmeldungen 60 und Systemereignis 70), `aria-hidden` — Loading-Semantik bleibt bei den `aria-busy`-Skeletons.
 - **Leerzustände:** `NoraEmptyState`; Viewer ohne „Jetzt anlegen“-Aktion.
 - **Fehler:** `NoraQueryError` mit „Erneut versuchen“ — kein FakeRest-Fallback, keine Retry-Schleife.
 - **Ungespeicherte Änderungen:** Bestätigung beim Abbrechen (`NoraCancelButton`).

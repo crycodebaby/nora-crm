@@ -9,6 +9,7 @@ import { useConfigurationLoader } from "../root/useConfigurationLoader";
 import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
 import { NoraReadOnlyBanner } from "../misc/NoraReadOnlyBanner";
 import { NoraPageLoading } from "../misc/NoraPageLoading";
+import { NoraRouteProgress } from "../misc/NoraRouteProgress";
 import { NoraNotificationOutlet } from "../notifications/NoraNotificationOutlet";
 import { NoraUpdateEvent } from "../pwa/NoraUpdateEvent";
 import Header from "./Header";
@@ -24,6 +25,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   return (
     <QuickCaptureProvider>
       <div data-testid="authenticated-app-shell">
+        <NoraRouteProgress />
         <Header />
         <main
           className={cn(

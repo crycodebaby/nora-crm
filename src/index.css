@@ -1121,6 +1121,39 @@ input[type="time"] {
     bottom: calc(4rem + 0.75rem + env(safe-area-inset-bottom));
   }
 
+  /* ---------------------------------------------------------------------
+     Global route/query activity hairline (NoraRouteProgress).
+     Sits above all page content but deliberately below the status
+     notifications (z-60) and the system event layer (z-70) — it is ambient
+     information, never a surface. The show-delay is pure CSS: opacity waits
+     250ms before fading in, so fast responses never flash; hiding is
+     instant. The slide animation only runs while active.
+     --------------------------------------------------------------------- */
+  .nora-route-progress {
+    @apply pointer-events-none fixed top-0 right-0 left-0 overflow-hidden;
+    height: 2px;
+    z-index: 55;
+    opacity: 0;
+    transition: opacity 100ms ease-out;
+  }
+
+  .nora-route-progress[data-active="true"] {
+    opacity: 1;
+    transition: opacity 150ms ease-in 250ms;
+  }
+
+  .nora-route-progress-bar {
+    height: 100%;
+    width: 40%;
+    border-radius: 9999px;
+    background: var(--nora-brand);
+    transform: translateX(-110%);
+  }
+
+  .nora-route-progress[data-active="true"] .nora-route-progress-bar {
+    animation: nora-route-progress-slide 1.2s ease-in-out infinite;
+  }
+
   /* -----------------------------------------------------------------------
      Modal-aware placement (Phase 7B.4c)
 
@@ -1335,6 +1368,17 @@ input[type="time"] {
   }
 }
 
+/* Bar is 40% wide: -110% starts fully off-screen left, 260% of its own
+   width (= 104% viewport) ends fully off-screen right. */
+@keyframes nora-route-progress-slide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
 /* Respect the OS setting globally — Nora had no such guard before 7B.2. */
 @media (prefers-reduced-motion: reduce) {
   .nora-notification-card,
@@ -1347,6 +1391,15 @@ input[type="time"] {
 
   .nora-notification-spin {
     animation: none !important;
+  }
+
+  /* Route progress: no sliding — a calm, static, slightly translucent bar
+     still says "loading" without motion. */
+  .nora-route-progress-bar {
+    animation: none !important;
+    width: 100% !important;
+    transform: none !important;
+    opacity: 0.55;
   }
 
   .nora-kanban-edge,

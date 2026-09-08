@@ -7,6 +7,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { useConfigurationLoader } from "../root/useConfigurationLoader";
 import { QuickCaptureProvider } from "../quickCapture/QuickCaptureContext";
 import { NoraNotificationOutlet } from "../notifications/NoraNotificationOutlet";
+import { NoraRouteProgress } from "../misc/NoraRouteProgress";
 import { NoraUpdateEvent } from "../pwa/NoraUpdateEvent";
 import { MobileNavigation } from "./MobileNavigation";
 
@@ -15,6 +16,7 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
   return (
     <QuickCaptureProvider>
       <div data-testid="authenticated-app-shell">
+        <NoraRouteProgress />
         <ErrorBoundary FallbackComponent={Error}>
           <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
             {children}
