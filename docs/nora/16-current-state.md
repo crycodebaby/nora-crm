@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-07 · letzter Datenbank-Release: Security Hardening Wave 1 `PRODUCTION VERIFIED` (Laufzeit-RC `8f812f3b`, Release-Paket `59c7dcf3` — Production-Ledger-Kopf `20260907120000`; **DB-only**, ohne Edge- oder Frontend-Änderung). Letzter Release mit sichtbarer Funktionalität bleibt User Lifecycle W6-B (`ffc0183a`, `users`-Edge v9, Frontend mit dem Abschnitt „Benutzerkonto endgültig löschen"). Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
+Stand: 2026-09-08 · letzter Datenbank-Release **und** letzter Release mit sichtbarer Funktionalität: Atomic Contact Primary Intent `PRODUCTION VERIFIED` (Laufzeit-RC `0fb3d6ba`, Release-Kopf `5d526231` — Production-Ledger-Kopf `20260908120000`; Datenbank + Frontend, kein Edge-Deploy). Kontakt-Speichern und „Hauptansprechpartner" sind seitdem **eine** Transaktion. Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
 
 Dieses Dokument ist der **Navigations-Einstieg** und eine **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Es enthält bewusst **keine** Release-Evidenz (RC-SHAs, Testzahlen, Live-Beweise) — die liegt im Release-Archiv (`releases/`).
 
@@ -52,15 +52,15 @@ Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
 - Supabase Security Advisor: Snapshot 2026-08-28 vollständig bewertet (`ASSESSED/KEEP` bzw. `RESOLVED`); jede neue Migration/Function/Grant-Änderung braucht eine eigene Bewertung. Guardrails: `03-data-model-guardrails.md` Falle 34; Bewertungen: `06-decision-log.md` 2026-08-28 und Archiv `releases/2026-08.md`.
 - Bekannte Restrisiken: `17-known-issues-and-planned-waves.md` (PostgreSQLs eingebauter `PUBLIC`-EXECUTE-Default für **neue Functions** — von Wave 1 ausdrücklich **nicht** gelöst; Schema `storage` und öffentlicher Attachment-Bucket; die für `postgres` unerreichbare `supabase_admin`-Default-ACL in `public`; JOSE-Wortlaut; Leserecht von `postgres` auf `auth.sessions` als Betriebsvoraussetzung, …).
 
-## 4. Was ist live? (Momentaufnahme 2026-09-07)
+## 4. Was ist live? (Momentaufnahme 2026-09-08)
 
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — bei Bedarf aus Git auflösen, hier bewusst nicht festgeschrieben (Docs-Commits verschieben ihn, ohne die Laufzeit zu ändern) | `git log` |
-| Letzter Datenbank-Release | Security Hardening Wave 1, Laufzeit-RC `8f812f3bfb6b398382ea448859050a6c3f03d85d`, Release-Paket `59c7dcf3032de1fd1c05b4a6d4da9718a0c22194` (2026-09-07; **nur Datenbank** — Migration `20260907120000_nora_public_privilege_hardening`, kein Edge-Deploy, kein Frontend-Deploy, keine sichtbare Änderung) | Archiv `releases/2026-09.md` (Eintrag Security Hardening Wave 1) |
-| Letzter Release mit sichtbarer Funktionalität | User Lifecycle W6-B, Laufzeit-Commit `ffc0183ad557577a64863cc2b4f77d043447a1bd` (2026-09-07; Datenbank + `users`-Edge + Frontend — Migration `20260906230000_nora_lifecycle_account_deletion`) | Archiv `releases/2026-09.md` (Nachtrag Release W6-B) |
-| Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main`; fachlich Stand W6-B `ffc0183a` (Deployment `dpl_6tNN9619RTvwauXP3iUQhWjWubae`, READY) | Release-Archiv `releases/2026-09.md` |
-| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **57 Einträge, Kopf `20260907120000_nora_public_privilege_hardening`**, deckungsgleich mit `supabase/migrations/` (57 Dateien) | `list_migrations` read-only 2026-09-07 |
+| Letzter Datenbank-Release **und** letzter Release mit sichtbarer Funktionalität | Atomic Contact Primary Intent, Laufzeit-RC `0fb3d6ba6a52613e366c780586c4988d264c61eb`, Release-Kopf `5d526231b21848a2720629a12bd55ac902e6cb43` (2026-09-08; Datenbank + Frontend — Migration `20260908120000_nora_atomic_contact_primary_intent`, kein Edge-Deploy) | Archiv `releases/2026-09.md` (Nachtrag Release Atomic Contact Primary Intent) |
+| Vorheriger Datenbank-Release | Security Hardening Wave 1, Laufzeit-RC `8f812f3bfb6b398382ea448859050a6c3f03d85d`, Release-Paket `59c7dcf3032de1fd1c05b4a6d4da9718a0c22194` (2026-09-07; **nur Datenbank**, keine sichtbare Änderung) | Archiv `releases/2026-09.md` (Eintrag Security Hardening Wave 1) |
+| Frontend | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`, automatisches Production-Deployment pro Push auf `main`; fachlich Stand Atomic Contact Primary Intent `5d526231` (Deployment `dpl_4kErbQLV9e2SsH1FJe2kjMEY5Mgw`, READY) | Release-Archiv `releases/2026-09.md` |
+| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **58 Einträge, Kopf `20260908120000_nora_atomic_contact_primary_intent`**, deckungsgleich mit `supabase/migrations/` (58 Dateien) | `list_migrations` read-only 2026-09-08 |
 | Edge Function `users` | **Version 9** (`verify_jwt = false`, verifiziert JWTs selbst; Stand W6-B) | `list_edge_functions` read-only 2026-09-07 |
 | Edge Function `brevo-email-events` | **Version 2** (`verify_jwt = false`, Bearer-Token) | dito |
 | Weitere Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht** in Production deployt (nur `users` und `brevo-email-events` sind live) | dito |
@@ -95,10 +95,11 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | Lifecycle | User Lifecycle W1, W2, W3, W4, W5 | `PRODUCTION VERIFIED` (2026-09-05/06) | `2026-09` |
 | Lifecycle | User Lifecycle W6-A (Session-Autorisierung fail-closed/Owner-gebunden) | `PRODUCTION VERIFIED` (2026-09-06; nur Datenbank, Migration `20260906210000`, keine sichtbare Änderung) | `2026-09` |
 | Lifecycle | User Lifecycle W6-B (kontrollierter Hard Delete „Benutzerkonto endgültig löschen") | **`PRODUCTION VERIFIED`** (2026-09-07; Migration `20260906230000`, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`) | `2026-09` |
+| Kunden/Kontakte | Atomic Contact Primary Intent (Kontakt-Speichern + „Hauptansprechpartner" als eine Transaktion) | **`PRODUCTION VERIFIED`** (2026-09-08; Migration `20260908120000`, Frontend, kein Edge-Deploy; PO-Live-Smoke am Testkunden `companies.id = 20`) | `2026-09` |
 
 **Was heute gilt (Kurzfassungen der Subsysteme):**
 
-- **Kunden/Kontakte:** `customer_kind`, Hauptansprechpartner, `links_jsonb`/`email_jsonb`/`phone_jsonb`, atomare Anlage-RPCs, `self_contact_id`, Effective Contact Context, Quick Capture atomar mit Idempotency — `01-domain-model.md`.
+- **Kunden/Kontakte:** `customer_kind`, Hauptansprechpartner, `links_jsonb`/`email_jsonb`/`phone_jsonb`, atomare Anlage-RPCs, `self_contact_id`, Effective Contact Context, Quick Capture atomar mit Idempotency — `01-domain-model.md`. **„Hauptansprechpartner" ist eine Geschäftstransition, kein Spaltenschreibvorgang** (`PRODUCTION VERIFIED` 2026-09-08): `public.create_contact` / `public.update_contact` führen Kontaktschreibung und Rollenwechsel in **einer** Transaktion aus, serialisiert je Kunde über einen Advisory-Lock; das Formular schreibt `is_primary` nie mehr roh — `06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent", `03-data-model-guardrails.md` Falle 40.
 - **Aufgaben:** `tasks.company_id` historisch stabil, Aufgaben-Tab auf der Kundenakte (Desktop) — `01-domain-model.md`, Fallen 7/7a.
 - **Fehler/Operationen:** `NoraErrorCode` über `DETAIL`, Operation Manager mit `execution`/`errorCode`/`result`, Idempotency-Records — `06-decision-log.md` 2026-08-28/29, `domain/noraErrorCodes.ts`, `operations/*`.
 - **Feedback:** eine Statuskarte pro Intent, über Dialogen, click-through; nur Quick Capture migriert, sonner für alle anderen Flows — `notifications/*`, `02-design-system.md`.

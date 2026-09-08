@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-07
+Stand: 2026-09-08
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,14 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-09-08 — Hauptansprechpartner wechseln funktioniert jetzt in einem Schritt
+
+**Was ändert sich für Sie:** Wenn Sie einen neuen Ansprechpartner anlegen oder bearbeiten und ihn dabei als **Hauptansprechpartner** markieren, übernimmt Nora das jetzt in einem einzigen Arbeitsschritt: Der bisherige Hauptansprechpartner verliert die Rolle, der neue erhält sie, und beides wird gemeinsam gespeichert. Vorher konnte das Speichern in dieser Situation mit der unverständlichen Meldung „Die Daten konnten gerade nicht geladen werden." abbrechen — der Kunde hatte dann weiterhin nur den alten Hauptansprechpartner. Das passiert nicht mehr.
+
+Falls jemand anderes den Hauptansprechpartner desselben Kunden ändert, während Sie das Formular offen haben, speichert Nora nicht stillschweigend über die fremde Änderung hinweg, sondern sagt Ihnen verständlich, dass sich der Hauptansprechpartner inzwischen geändert hat. Ein Kunde hat weiterhin höchstens einen Hauptansprechpartner.
+
+**Technischer Hinweis:** Kontaktschreibung und Rollenwechsel laufen in einer Datenbanktransaktion, die je Kunde serialisiert wird; die Oberfläche setzt die Markierung nicht mehr direkt als Feld. Details: `06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent".
 
 ## 2026-09-07 — Benutzerkonto endgültig löschen
 

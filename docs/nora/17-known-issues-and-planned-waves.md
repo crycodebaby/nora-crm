@@ -154,9 +154,9 @@ Beobachtet, bewusst nicht in dieser Wave behoben:
 
 **Status: `OPEN`** (beobachtet 2026-09-07 während der Untersuchung des Hauptansprechpartner-Zwischenfalls; bewusst **nicht** Teil der Atomic-Contact-Primary-Intent-RC). Die Startseite fragt Kontakte mit einer `id=in.(…)`-Liste ab, die Duplikate und leere Elemente enthält (`1,1,,29,`). PostgREST verweigert die leere Elemente; die Ursache liegt in der Zusammensetzung der Kontakt-Id-Liste im Dashboard, nicht im Kontakt-Speicherpfad. Eigene, kleine Korrektur mit Regressionstest — vorher nicht im Kontakt-Kontext „mitfixen".
 
-### G.4 Atomic Contact Primary Intent — offen nach der RC (2026-09-08)
+### G.4 Atomic Contact Primary Intent — offen nach dem Release (2026-09-08)
 
-**Status: RC gebaut, nicht in Production** (`06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent"). Restpunkte: `contacts.import` (CSV) und die Notiz-/Aufgaben-Pfade schreiben Kontakte weiterhin roh und additiv (`is_primary` nie `true`) — beabsichtigt, kein Risiko für den Index, aber ohne Operation-Korrelation. Die Markierungen-RC (`74a67659`, älterer `main`) berührt `noraErrorCodes`, `normalizeCrmError` und die Kataloge und muss auf **diesen** Stand portiert werden (rein textuelle Konflikte erwartet). `set_primary_contact` hat weiterhin kein UI und behält seinen `service_role`-Grant aus 2026-08-25.
+**Status: die Welle selbst ist `PRODUCTION VERIFIED`** (2026-09-08, Migration `20260908120000`, Ledger 58, PO-Live-Smoke akzeptiert — `06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent", Evidenz `releases/2026-09.md`). Hier stehen nur die **bewusst offen gebliebenen** Restpunkte. Restpunkte: `contacts.import` (CSV) und die Notiz-/Aufgaben-Pfade schreiben Kontakte weiterhin roh und additiv (`is_primary` nie `true`) — beabsichtigt, kein Risiko für den Index, aber ohne Operation-Korrelation. Die Markierungen-RC (`74a67659`, älterer `main`) berührt `noraErrorCodes`, `normalizeCrmError` und die Kataloge und muss auf **diesen** Stand portiert werden (rein textuelle Konflikte erwartet). `set_primary_contact` hat weiterhin kein UI und behält seinen `service_role`-Grant aus 2026-08-25.
 
 Nach den beiden Blocker-Fixes (RC `0fb3d6ba`, zwei unabhängige Reviews 2026-09-08) zusätzlich bewusst **offen und ausserhalb dieser Welle**:
 
