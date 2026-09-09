@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-08. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-09. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -183,3 +183,42 @@ Aus einer frühen Analyse benannt, seither **nicht** in einer Session verifizier
 - Rollen-Cache-Verhalten im Frontend
 - Audit-Retention-/Löschstrategie (`13-crm-audit-retention.md` beschreibt das Modell; kein automatischer Purge)
 - `supabase/config.toml` enthält lokal weiterhin `enable_signup = true` (steuert Produktion nicht; dort ist die Selbstregistrierung seit 2026-09-04 deaktiviert) — in einer kleinen Welle nachziehen.
+
+## I. Build, Bundle und CI
+
+Der Gesamt-CI-Zustand ist **nicht** vollständig grün. Die folgenden Punkte sind vorbestehend und unabhängig
+voneinander; sie wurden vom Release Visualizer Production Exclusion H1 (`PRODUCTION VERIFIED` 2026-09-09) weder
+verursacht noch verändert. **H1 selbst ist abgeschlossen** — Evidenz: `releases/2026-09.md` „Visualizer
+Production Exclusion H1", Entscheidung: `06-decision-log.md` „2026-09-09 – Visualizer Production Exclusion".
+
+### I.1 Entry-Chunk überschreitet das Bundle-Budget (H2)
+
+**Status: `OPEN`**, vorbestehend, eigene Welle (H2). Der Entry-Chunk misst 1092 kB gegen ein Budget von
+1050 kB — der Bundle-Budget-Step in CI ist dadurch rot. H1 ändert keinen JS-Chunk und keine Budgetzahl (die
+Artefakt-Parität des H1-Builds zeigt alle Chunknamen und -Hashes unverändert). Zu entscheiden ist in H2, ob der
+Entry-Chunk aufgeteilt (Code-Splitting per `React.lazy` ist seit 2026-08-15 bewusst zurückgestellt, bis die
+Pfadkonstanten aus `Header.tsx` gelöst sind) oder das Budget begründet angehoben wird — **nicht** im Rahmen einer
+Hygiene-Änderung. Hintergrund: `06-decision-log.md` „2026-08-15 – Kernindizes und Bundle-Budget".
+
+### I.2 E2E-Bootstrap schlägt fehl
+
+**Status: `OPEN`**, vorbestehend, eigene Baseline — **nicht** H1 zuzurechnen. Der E2E-Bootstrap meldet
+`First E2E auth user was not bootstrapped as an active admin` und
+`A user with this email address has already been registered`: der erste E2E-Auth-Benutzer existiert bereits, wird
+aber nicht als aktiver Administrator eingerichtet. Nicht untersucht; vor Bearbeitung gegen den aktuellen
+Bootstrap-Pfad und den tatsächlichen Zustand des E2E-Projekts prüfen.
+
+### I.3 `vite.demo.config.ts` aktiviert den Visualizer weiterhin unabhängig
+
+**Status: `PLANNED FOLLOW-UP` (LOW)**, kein Zeitdruck. Nach H1 läuft der Bundle-Visualizer in `vite.config.ts`
+nur noch bei `ANALYZE=true`; `vite.demo.config.ts` bindet ihn weiterhin unbedingt ein. Das betrifft **keinen**
+Production-PWA-Precache und **keinen** Production-Build (`npm run build` nutzt `vite.config.ts`; die
+Demo-Konfiguration enthält kein `VitePWA`) — es ist eine reine Konsistenzbereinigung und **kein** Grund, H1
+wieder zu öffnen.
+
+### I.4 Budget-Hinweis verweist auf `dist/stats.html`
+
+**Status: `PLANNED FOLLOW-UP` (LOW)**. `scripts/check-bundle-budget.mjs` nennt im Hinweistext bei Budget-
+Überschreitung `dist/stats.html`. Nach H1 entsteht diese Datei lokal nur noch bei `ANALYZE=true`; in CI bleibt
+der Hinweis korrekt, weil der Build-Step die Variable setzt. Kleiner Textnachzug, sinnvollerweise zusammen mit
+H2 (I.1).
