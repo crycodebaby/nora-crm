@@ -187,7 +187,12 @@ jobs:
               run: npm ci
 
             - name: 🔨 Build
+              # ANALYZE aktiviert den Bundle-Visualizer ausschliesslich hier:
+              # der Schritt "Bundle-Statistik sichern" unten braucht
+              # dist/stats.html, normale und Vercel-Builds nicht.
               run: npm run build
+              env:
+                  ANALYZE: "true"
 
             - name: 📦 Bundle-Budget
               run: node ./scripts/check-bundle-budget.mjs

@@ -6,17 +6,31 @@ import { visualizer } from "rollup-plugin-visualizer";
 import createHtmlPlugin from "vite-plugin-simple-html";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Der Bundle-Visualizer ist ein Entwickler-/CI-Diagnosewerkzeug, kein
+// Auslieferungsartefakt. dist/stats.html wird von der Workbox-Glob
+// "**/*.html" mit-precached und landete so bei jedem Client im PWA-Update.
+// Er laeuft deshalb nur noch bei ANALYZE=true: lokal bewusst angefordert, in
+// CI am Build-Job gesetzt (.github/workflows/check.yml), damit die
+// Bundle-Statistik weiterhin als Artefakt hochgeladen wird und der Hinweis in
+// scripts/check-bundle-budget.mjs auf ein real vorhandenes stats.html zeigt.
+// Bewusst strikt ANALYZE === "true", nicht beliebige Truthiness.
+const analyzeBundle = process.env.ANALYZE === "true";
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    visualizer({
-      // GitHub Actions setzt CI=true, nicht NODE_ENV=CI — sonst versucht
-      // der Visualizer im Headless-Runner einen Browser zu oeffnen.
-      open: !process.env.CI,
-      filename: "./dist/stats.html",
-    }),
+    ...(analyzeBundle
+      ? [
+          visualizer({
+            // GitHub Actions setzt CI=true, nicht NODE_ENV=CI — sonst versucht
+            // der Visualizer im Headless-Runner einen Browser zu oeffnen.
+            open: !process.env.CI,
+            filename: "./dist/stats.html",
+          }),
+        ]
+      : []),
     createHtmlPlugin({
       minify: true,
       inject: {
