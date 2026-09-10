@@ -706,7 +706,7 @@ S4a/S4b/S4c bleiben **Checklistenpunkte**, keine `deals.stage`-Werte.
 | `01-domain-model.md` | Domänenbegriffe, Servicebereiche |
 | `03-data-model-guardrails.md` | Fallen, Kandidaten-Tabelle aktualisiert |
 | `06-decision-log.md` | Entscheidung Welle 7b |
-| `07-agent-change-checklist.md` | Checklisten bei DB-Änderungen |
+| `21-agent-runbooks.md` Sektion 3 | operative Checklisten-Schritte bei DB-Änderungen |
 | `08-numbering-and-global-search.md` | KD/VG-Nummern |
 | `09-window-order-workflow.md` | Fensterprozess, UI-Zielorte |
 | `14-google-calendar-readonly-implementation.md` | Kalender-Audit (`calendar.*`, `retention_class = integration`) |

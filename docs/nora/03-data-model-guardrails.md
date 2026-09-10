@@ -806,4 +806,4 @@ Technische Regeln, die sich aus früheren Migrationen ergeben haben (Begründung
 - **Kein `MAINTAIN` im DDL:** das Privileg existiert erst ab PG17, lokal läuft PG15. `revoke all` deckt beide ab; nur Assertions verzweigen über `current_setting('server_version_num')`.
 - **Neue Tabelle in `public` = neue Grant-Zeile.** Sie startet ohne jedes API-Rollen-Recht; ohne expliziten `grant` ist sie über PostgREST unerreichbar. Zielmatrix in `supabase/schemas/06_grants.sql` und Assertion in `supabase/tests/public_privilege_hardening_verification.sql` mit ergänzen.
 - **Kein `CREATE INDEX CONCURRENTLY`** in CLI-Migrationen (Transaktion); bei großen Tabellen eigene nicht-transaktionale Migration.
-- **Bereits angewendete Migrationen nie editieren**; `supabase/schemas/*.sql` synchron nachziehen; nach jedem Production-Apply den Ledger gegen den Dateinamen-Zeitstempel prüfen (`07-agent-change-checklist.md`).
+- **Bereits angewendete Migrationen nie editieren**; `supabase/schemas/*.sql` synchron nachziehen; nach jedem Production-Apply den Ledger gegen den Dateinamen-Zeitstempel prüfen (`21-agent-runbooks.md` Sektion 1).

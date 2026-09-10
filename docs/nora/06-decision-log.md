@@ -340,7 +340,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-29 – Notification Presentation Contract v1 (Phase 7A)
 
-**Status:** Phase 7B `PRODUCTION VERIFIED` (2026-08-30); nur Quick Capture migriert, weitere Intents Phase 7C. Archiv: [Original inkl. Nachträge 7B.3/7B.4/7B.4b/7B.4c/Release](releases/2026-08.md#2026-08-29--notification-presentation-contract-v1-phase-7a). Guardrails: `03-data-model-guardrails.md` Fallen 37/38; Checkliste `07-agent-change-checklist.md`.
+**Status:** Phase 7B `PRODUCTION VERIFIED` (2026-08-30); nur Quick Capture migriert, weitere Intents Phase 7C. Archiv: [Original inkl. Nachträge 7B.3/7B.4/7B.4b/7B.4c/Release](releases/2026-08.md#2026-08-29--notification-presentation-contract-v1-phase-7a). Guardrails: `03-data-model-guardrails.md` Fallen 37/38; Runbook `21-agent-runbooks.md` Sektion 13.
 
 **Entscheidungen.**
 
@@ -372,7 +372,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-28 – Error Contract Wave
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-28--error-contract-wave). Guardrail: `03-data-model-guardrails.md` Falle 33; Checkliste `07-agent-change-checklist.md`.
+**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-28--error-contract-wave). Guardrail: `03-data-model-guardrails.md` Falle 33; Runbook `21-agent-runbooks.md` Sektion 12.
 
 **Entscheidungen.** `MESSAGE` = Mensch/Diagnose, `ERRCODE` = PostgreSQL-Semantik, `DETAIL` = stabiler `NoraErrorCode` (PostgREST transportiert beides unverändert — bewiesen). Zentrale Definition `domain/noraErrorCodes.ts`; `extractNoraErrorCode()` akzeptiert nur kanonische Werte (kein `startsWith("NORA_")`); `normalizeCrmError()` ist **machine-code-first**, Regex nur Legacy-Fallback. `CrmErrorKind` friert ein (Transport-/Infrastrukturfehler); neue Business-Fehler gehen `NoraErrorCode → messageKey` direkt. FakeRest wirft denselben Code über `throwNoraError()`, soweit es den Pfad modelliert (keine Datenebene-Autorisierung in FakeRest — dokumentierter Debt). TOCTOU auf `uq_companies_self_contact_individual` wird in `create_customer_with_contact_core` gezielt übersetzt.
 

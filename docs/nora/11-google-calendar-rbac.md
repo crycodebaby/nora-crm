@@ -559,7 +559,7 @@ Schreiben nur über **SECURITY DEFINER** / Trigger / Edge Function — analog be
 | `01-domain-model.md` | Domänenbegriffe, geplante Kalender-Erweiterung |
 | `03-data-model-guardrails.md` | Falle 17 (Google als Prozesskern), Termin-Guardrails |
 | `06-decision-log.md` | Entscheidung v0.4a |
-| `07-agent-change-checklist.md` | RBAC- und Kalender-Checklisten |
+| `21-agent-runbooks.md` Sektionen 4, 5, 8 | operative RBAC- und Kalender-Schritte |
 | `10-checklists-snippets-audit.md` | Audit-Muster, `is_admin()` |
 | `supabase/schemas/01_tables.sql` | `sales`, `audit_events` |
 | `supabase/schemas/05_policies.sql` | Bestehende RLS |
