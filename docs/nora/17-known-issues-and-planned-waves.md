@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-09. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-10. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -186,23 +186,17 @@ Aus einer frühen Analyse benannt, seither **nicht** in einer Session verifizier
 
 ## I. Build, Bundle und CI
 
-Der Gesamt-CI-Zustand ist **nicht** vollständig grün. Die folgenden Punkte sind vorbestehend und unabhängig
-voneinander; sie wurden vom Release Visualizer Production Exclusion H1 (`PRODUCTION VERIFIED` 2026-09-09) weder
-verursacht noch verändert. **H1 selbst ist abgeschlossen** — Evidenz: `releases/2026-09.md` „Visualizer
-Production Exclusion H1", Entscheidung: `06-decision-log.md` „2026-09-09 – Visualizer Production Exclusion".
-
-### I.1 Entry-Chunk überschreitet das Bundle-Budget (H2)
-
-**Status: `OPEN`**, vorbestehend, eigene Welle (H2). Der Entry-Chunk misst 1092 kB gegen ein Budget von
-1050 kB — der Bundle-Budget-Step in CI ist dadurch rot. H1 ändert keinen JS-Chunk und keine Budgetzahl (die
-Artefakt-Parität des H1-Builds zeigt alle Chunknamen und -Hashes unverändert). Zu entscheiden ist in H2, ob der
-Entry-Chunk aufgeteilt (Code-Splitting per `React.lazy` ist seit 2026-08-15 bewusst zurückgestellt, bis die
-Pfadkonstanten aus `Header.tsx` gelöst sind) oder das Budget begründet angehoben wird — **nicht** im Rahmen einer
-Hygiene-Änderung. Hintergrund: `06-decision-log.md` „2026-08-15 – Kernindizes und Bundle-Budget".
+Das **Build-/Bundle-Gate ist seit H2 (`PRODUCTION VERIFIED` 2026-09-10) wieder grün** — Entry 1009 kB gegen das
+unveränderte Budget von 1050 kB, Gesamt 2392 kB gegen 2600 kB. Der **Gesamt-CI bleibt rot**, ausschließlich
+wegen I.2 (E2E-Bootstrap). Diese beiden Aussagen sind nicht dasselbe. Die folgenden Punkte sind vorbestehend und
+unabhängig voneinander; H2 hat sie weder verursacht noch verändert. **H1 und H2 sind abgeschlossen** — Evidenz:
+`releases/2026-09.md` „Entry-Chunk-Budget H2" und „Visualizer Production Exclusion H1"; der frühere Punkt I.1
+(Entry-Chunk über Budget) ist aufgelöst und liegt im Originalwortlaut im Archiv (`releases/2026-09.md`, Anhang
+zum H2-Eintrag).
 
 ### I.2 E2E-Bootstrap schlägt fehl
 
-**Status: `OPEN`**, vorbestehend, eigene Baseline — **nicht** H1 zuzurechnen. Der E2E-Bootstrap meldet
+**Status: `OPEN`**, vorbestehend, eigene Baseline — weder H1 noch H2 zuzurechnen. Der E2E-Bootstrap meldet
 `First E2E auth user was not bootstrapped as an active admin` und
 `A user with this email address has already been registered`: der erste E2E-Auth-Benutzer existiert bereits, wird
 aber nicht als aktiver Administrator eingerichtet. Nicht untersucht; vor Bearbeitung gegen den aktuellen
@@ -220,5 +214,5 @@ wieder zu öffnen.
 
 **Status: `PLANNED FOLLOW-UP` (LOW)**. `scripts/check-bundle-budget.mjs` nennt im Hinweistext bei Budget-
 Überschreitung `dist/stats.html`. Nach H1 entsteht diese Datei lokal nur noch bei `ANALYZE=true`; in CI bleibt
-der Hinweis korrekt, weil der Build-Step die Variable setzt. Kleiner Textnachzug, sinnvollerweise zusammen mit
-H2 (I.1).
+der Hinweis korrekt, weil der Build-Step die Variable setzt. H2 hat den Text bewusst **nicht** angefasst (der
+Slice berührte nur eine Importzeile); der kleine Textnachzug bleibt offen.
