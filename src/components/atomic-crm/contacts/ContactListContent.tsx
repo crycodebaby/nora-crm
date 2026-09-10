@@ -1,4 +1,9 @@
-import { difference, union } from "lodash";
+// Tiefe Imports statt Root-Import: lodash ist CommonJS ohne "module"-Feld,
+// deshalb zieht `from "lodash"` den kompletten Monolithen (lodash/lodash.js,
+// ~565 kB rendered) untree-shakebar in den Entry-Chunk — fuer genau zwei
+// Funktionen. Die Per-Methode-Module liefern dieselbe Implementierung.
+import difference from "lodash/difference";
+import union from "lodash/union";
 import {
   type Identifier,
   RecordContextProvider,
