@@ -6,6 +6,8 @@ Referenz-Logins: `admin@nora.demo`, `office@nora.demo`, `viewer@nora.demo` (Pass
 
 Legende **Ergebnis**: ✅ OK · ⚠️ Teilweise · ❌ Abweichung · 🔲 Noch manuell zu prüfen
 
+> **Klassifikation.** Dies ist ein **historisches Abnahmeprotokoll** (v0.3k.2, Stand 2026-07-14) — die Ergebnisse beschreiben ihren Tag, nicht den heutigen Zustand, und dieses Dokument ist **kein aktueller Design- oder UX-Contract**. Es wird weiterhin gebraucht: `07-agent-change-checklist.md` und `13-crm-audit-retention.md` referenzieren es als Abnahmevorlage, und der Abschnitt `Technische Referenz` unten ist die **kanonische** Quelle für die Demo-Rollensimulation. Ein eigener, triggerbasierter Acceptance Contract ist vorgesehen, aber noch nicht angelegt; bis dahin bleibt diese Datei unverändert erhalten. Aktueller Design-Stand: `02-design-system.md`; offene Design-/Rollen-UX-Punkte: `17-known-issues-and-planned-waves.md`.
+
 ---
 
 ## A. DemoRoleSwitcher (Fix v0.3k.2)

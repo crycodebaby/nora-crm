@@ -4,6 +4,8 @@
 **Migrationen:** `20260716120000_google_calendar_readonly.sql`, `20260717120000_google_calendar_oauth_sync.sql`  
 **Tests:** `supabase/tests/google_calendar_verification.sql`, `supabase/functions/_shared/googleCalendar/*.test.ts`
 
+> **Deployment-Stand in Production (read-only verifiziert 2026-09-10).** Die **Datenbankseite ist live**: die Migrationen `20260716120000_google_calendar_readonly` und `20260717120000_google_calendar_oauth_sync` stehen im Production-Ledger. Die **drei Edge Functions `calendar-connect-start`, `calendar-connect-callback` und `calendar-sync-manual` sind nicht deployt** — in Production laufen ausschließlich `users` und `brevo-email-events`. Die Google-Kalender-Integration ist damit **in Production nicht nutzbar**: Verbinden und Sync existieren als Code, Schema und Spezifikation, nicht als laufende Funktion. Alles Folgende beschreibt den **beabsichtigten Contract**, nicht einen aktiven Produktionszustand. Offene Punkte: `17-known-issues-and-planned-waves.md`.
+
 > **Kein behaupteter OAuth-Erfolg**, solange der reale E2E-Test mit dem isolierten Testkalender nicht manuell abgeschlossen wurde.
 
 ---

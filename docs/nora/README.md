@@ -1,21 +1,33 @@
 # Nora Documentation
 
-Stand: 2026-09-06. Dies ist der **Navigationsindex** der Nora-Dokumentation: welches Dokument wofür zuständig ist und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
+Stand: 2026-09-10. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
+
+Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md` nennt nur den Always-Kontext und verweist hierher; `16-current-state.md` beschreibt den Zustand und verweist hierher.
+
+## Load-Klassen
+
+| Klasse | Dokumente | Wann |
+|---|---|---|
+| **ALWAYS** | `AGENTS.md` · dieser Router · [`16`](16-current-state.md) · [`01`](01-domain-model.md) · [`03`](03-data-model-guardrails.md) · [`07`](07-agent-change-checklist.md) | jede Aufgabe |
+| **CONDITIONAL CURRENT CONTRACT** | die Subsystemdokumente aus der Tabelle „Architekturbereiche" | wenn das Subsystem betroffen ist |
+| **OPEN STATE** | [`17`](17-known-issues-and-planned-waves.md) | **nur die betroffene Sektion** (A–I, siehe Architekturbereiche); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review |
+| **RATIONALE** | [`06`](06-decision-log.md) | nur bei Entscheidungs-/Begründungsbedarf, und dann **gezielt über den benannten Eintrag** aus der Architekturbereiche-Tabelle bzw. den thematischen Index in `06` — **nie** als ganze Datei |
+| **HISTORY** | [`releases/`](releases/README.md) | nur für historische Evidenz, Regression, Release-Abstammung oder Rekonstruktion |
 
 ## Start here
 
 Für einen neuen Engineering-/KI-Agenten:
 
-1. dieser Index (`README.md`)
-2. [`16-current-state.md`](16-current-state.md) — was ist heute live, Truth Hierarchy, Themen-Tabelle
+1. dieser Router (`README.md`)
+2. [`16-current-state.md`](16-current-state.md) — was ist heute live, Truth Hierarchy
 3. [`01-domain-model.md`](01-domain-model.md) — aktuelles Fach-/Domänenmodell
 4. [`03-data-model-guardrails.md`](03-data-model-guardrails.md) — durable Invarianten und Fallen
 5. das Architekturdokument des betroffenen Subsystems (Tabelle „Architekturbereiche" unten)
-6. [`17-known-issues-and-planned-waves.md`](17-known-issues-and-planned-waves.md) — nur die für die Aufgabe relevanten offenen Punkte
+6. daraus: die zugehörige `17`-Sektion und — nur bei Begründungsbedarf — der benannte `06`-Eintrag
 
 Vor jeder Änderung außerdem: [`07-agent-change-checklist.md`](07-agent-change-checklist.md).
 
-**Nicht standardmäßig lesen:** das vollständige Decision Log ([`06-decision-log.md`](06-decision-log.md)) und das Release-Archiv ([`releases/`](releases/README.md)). Beide werden nur geöffnet, wenn historische Begründung oder Release-Evidenz gebraucht wird (siehe „Kontextdisziplin").
+Bei allen Änderungen an `sales`, der `users` Edge Function, Auth oder Audit-Ereignissen `user.*` ist [`19-user-lifecycle-architecture.md`](19-user-lifecycle-architecture.md) **Pflicht**.
 
 ## Dokument-Zuständigkeiten
 
@@ -23,18 +35,18 @@ Vor jeder Änderung außerdem: [`07-agent-change-checklist.md`](07-agent-change-
 |---|---|
 | [`00-project-context.md`](00-project-context.md) | Betrieb, Produktziel, Nicht-Ziele |
 | [`01-domain-model.md`](01-domain-model.md) | aktuelles Fach-/Domänenmodell (Kunde ≠ Kontakt ≠ Vorgang ≠ Aufgabe, Rollen, Mitarbeiter-Kurzfassung) |
-| [`02-design-system.md`](02-design-system.md) | aktueller UX-/Design-System-Vertrag (Tokens, Systemereignisse, Onboarding-Gestaltung) |
+| [`02-design-system.md`](02-design-system.md) | globale Designgrundlagen (Marke, Brandfarbe, Typografie, Spacing, Utilities) sowie derzeit noch Feature-/Subsystem-UX. **Nora hat kein fertiges visuelles Design-System** — offene projektweite Design-/Accessibility-Punkte stehen in [`17`](17-known-issues-and-planned-waves.md) Abschnitt F |
 | [`03-data-model-guardrails.md`](03-data-model-guardrails.md) | durable technische Invarianten, Datenmodell-Fallen, Grants-/RLS-Guardrails, Migrationsregeln |
 | [`04-routing-i18n.md`](04-routing-i18n.md) | deutsche Routen, i18n-Konventionen |
 | [`05-demo-data-guidelines.md`](05-demo-data-guidelines.md) | FakeRest-/Demo-Daten |
 | [`06-decision-log.md`](06-decision-log.md) | durable Entscheidungen **mit Begründung** (thematischer Index am Anfang) |
 | [`07-agent-change-checklist.md`](07-agent-change-checklist.md) | Checkliste für Implementierung, Release-Reihenfolge, Dokumentations-Abschluss |
 | [`08-numbering-and-global-search.md`](08-numbering-and-global-search.md) · [`09-window-order-workflow.md`](09-window-order-workflow.md) · [`10-checklists-snippets-audit.md`](10-checklists-snippets-audit.md) | Spezifikationen: Nummern/Suche, Fensterauftrag, Checklisten/Textbausteine |
-| [`11-google-calendar-rbac.md`](11-google-calendar-rbac.md) · [`14-google-calendar-readonly-implementation.md`](14-google-calendar-readonly-implementation.md) | Rollenmodell/RBAC-Matrix, Google-Kalender-Integration |
-| [`12-role-ux-acceptance.md`](12-role-ux-acceptance.md) | Rollen-UX-Abnahmeprotokoll |
+| [`11-google-calendar-rbac.md`](11-google-calendar-rbac.md) · [`14-google-calendar-readonly-implementation.md`](14-google-calendar-readonly-implementation.md) | Rollenmodell/RBAC-Matrix (`11` Abschnitt C) und Google-Kalender-Integration — **die `calendar-*` Edge Functions sind nicht deployt** |
+| [`12-role-ux-acceptance.md`](12-role-ux-acceptance.md) | **historisches** Rollen-UX-Abnahmeprotokoll (v0.3k.2, Stand 2026-07-14) — kein aktueller Design-Contract; wird von [`07`](07-agent-change-checklist.md) und [`13`](13-crm-audit-retention.md) als Abnahmevorlage referenziert |
 | [`13-crm-audit-retention.md`](13-crm-audit-retention.md) | aktueller Audit-Vertrag (Ereignisse, Actor-Modell, Retention) |
-| [`16-current-state.md`](16-current-state.md) | aktuelle Live-Momentaufnahme und Navigation |
-| [`17-known-issues-and-planned-waves.md`](17-known-issues-and-planned-waves.md) | **nur genuin offene** Bugs, Restrisiken, geplante Wellen |
+| [`16-current-state.md`](16-current-state.md) | aktuelle Live-Momentaufnahme (was ist live, welche Versionen) und die Truth Hierarchy |
+| [`17-known-issues-and-planned-waves.md`](17-known-issues-and-planned-waves.md) | **nur genuin offene** Bugs, Restrisiken, geplante Wellen, ungelöste Entscheidungen — sektionsweise geladen (A–I) |
 | [`18-email-delivery-observability.md`](18-email-delivery-observability.md) | E-Mail-Zustellbeobachtung (Brevo-Vertrag, Operator-Konfiguration) |
 | [`19-user-lifecycle-architecture.md`](19-user-lifecycle-architecture.md) | aktuelle User-Lifecycle-Architektur, Roadmap W1–W10 |
 | [`20-product-changelog.md`](20-product-changelog.md) | benutzerseitige Nora-Produkthistorie |
@@ -42,25 +54,37 @@ Vor jeder Änderung außerdem: [`07-agent-change-checklist.md`](07-agent-change-
 
 ## Architekturbereiche
 
-| Bereich | Autoritative Dokumente |
-|---|---|
-| Kern-CRM / Domäne (Kunden, Kontakte, Vorgänge, Aufgaben, Notizen) | [`01`](01-domain-model.md) + [`03`](03-data-model-guardrails.md) |
-| Mitarbeiter-/User-Lifecycle (Einladung, Rolle, Zugang, Anmeldeadresse, Offboarding, Session-Bindung) | [`19`](19-user-lifecycle-architecture.md) |
-| Rollen / RBAC / RLS | [`11`](11-google-calendar-rbac.md) Abschnitt C, [`03`](03-data-model-guardrails.md) |
-| Audit | [`13`](13-crm-audit-retention.md) |
-| E-Mail-Zustellung | [`18`](18-email-delivery-observability.md) |
-| Google Kalender | [`11`](11-google-calendar-rbac.md), [`14`](14-google-calendar-readonly-implementation.md) |
-| Fehler-/Operations-/Feedback-Contract | [`06`](06-decision-log.md) (Error Contract, Operation Status, Notification), [`03`](03-data-model-guardrails.md) Fallen 33–38 |
-| PWA / Update-Verhalten | [`02`](02-design-system.md), [`06`](06-decision-log.md) „PWA-Update-Lifecycle" |
-| Routing / i18n | [`04`](04-routing-i18n.md) |
-| Design / UX | [`02`](02-design-system.md), [`12`](12-role-ux-acceptance.md) |
-| Nummern, Suche, Fensterauftrag, Checklisten | [`08`](08-numbering-and-global-search.md), [`09`](09-window-order-workflow.md), [`10`](10-checklists-snippets-audit.md) |
+Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06`-Eintrag für das Warum und die `17`-Sektion für die offenen Punkte. `06` und `17` werden **eintrags- bzw. sektionsweise** geladen, nie als ganze Datei.
+
+| Bereich | Aktueller Contract | Entscheidung: Eintrag in `06` | Offene Punkte: Sektion in `17` |
+|---|---|---|---|
+| Kern-CRM / Domäne (Kunden, Kontakte, Vorgänge, Aufgaben, Notizen) | [`01`](01-domain-model.md) + [`03`](03-data-model-guardrails.md) | Atomic Contact Primary Intent · Self Contact Wave · Unified Tasks Wave · Customer & Contact Workflow Wave | G |
+| Mitarbeiter-/User-Lifecycle (Einladung, Rolle, Zugang, Anmeldeadresse, Offboarding, Session-Bindung, Hard Delete) | [`19`](19-user-lifecycle-architecture.md) | User Lifecycle W1–W6-B · V1A Zugangsstatus · V1B Präsentation | B |
+| Mitarbeiter-Onboarding (Einladung → Passwort → Profil) | [`19`](19-user-lifecycle-architecture.md) Abschnitt 4 · [`02`](02-design-system.md) Abschnitt Mitarbeiter-Onboarding & Zugang · `login/employeeOnboardingFlow.ts` | V1A Zugangsstatus · V1B Präsentation | B |
+| Rollen / RBAC / RLS | [`11`](11-google-calendar-rbac.md) Abschnitt C · [`03`](03-data-model-guardrails.md) Abschnitt RBAC- und RLS-Guardrails | Wave 1 Default-Privilegien & Zielmatrix · Wave 0 TRUNCATE · RBAC/RLS v0.4b · v0.4b.1 · v0.4b.2 · Privilegierte Read-Views | A |
+| Audit | [`13`](13-crm-audit-retention.md) | CRM-Audit v0.3l · Checklisten/Audit-Datenmodell 7b · W3 Audit-Actor | A · B |
+| E-Mail-Zustellung | [`18`](18-email-delivery-observability.md) | V1C-A Best-Effort-Korrelation · V1C-B Zustellstatus-UI | C |
+| Google Kalender | [`14`](14-google-calendar-readonly-implementation.md) (Implementierung) · [`11`](11-google-calendar-rbac.md) (Architektur/Spezifikation) — **die drei `calendar-*` Edge Functions sind nicht deployt; Deployment-Stand im Kopf beider Dokumente** | Architektur & Rollenmodell v0.4a · Read-only-Grundlage v0.4c.1 · OAuth & Sync v0.4c.2 | — |
+| Fehler-/Operations-/Feedback-Contract | [`03`](03-data-model-guardrails.md) Fallen 33 und 35–38 (thematisch verteilt — über die Nummer suchen) · `domain/noraErrorCodes.ts` · `operations/*` · `notifications/*` | Error Contract Wave · Operation Status Contract v1 · Idempotency Wave · Notification Presentation Contract 7A/7B · Error Observatory (FW3) · Operation Manager (FW2) · Operation Correlation (FW1) | D |
+| PWA / Update-Verhalten | [`06`](06-decision-log.md) Eintrag PWA-Update-Lifecycle (die acht durablen Regeln) · [`02`](02-design-system.md) Abschnitt Anwendungs-Systemereignisse (Präsentation) · `pwa/*` | Update-Lifecycle 1B–V2 (konsolidiert) | E |
+| Design / UX | [`02`](02-design-system.md) | Typografie 4 · Kanban Navigation Rail · Kontakterstellung UI-Polish · Customer Create Speed & Clarity | F |
+| Rollen-UX-Abnahme (**historisches Protokoll v0.3k.2, Stand 2026-07-14** — kein aktueller Design-Contract) | [`12`](12-role-ux-acceptance.md) | Rollenbewusste UX v0.3k | G |
+| Routing / i18n | [`04`](04-routing-i18n.md) | — | — |
+| Demo-Daten / Demo-Rollensimulation | [`05`](05-demo-data-guidelines.md) · [`04`](04-routing-i18n.md) Abschnitt Demo-Rollensimulation | Basisentscheidungen 2026-06-28 | — |
+| Nummern, Suche, Fensterauftrag, Checklisten | [`08`](08-numbering-and-global-search.md) · [`09`](09-window-order-workflow.md) · [`10`](10-checklists-snippets-audit.md) | Nummern 6c · Globale Suche 6d · Fensterauftrag 7a · Checklisten/Audit-Datenmodell 7b | G |
+| Build, Bundle-Budget, Visualizer, CI-Baselines | [`06`](06-decision-log.md) Einträge Visualizer Production Exclusion und Kernindizes und Bundle-Budget | Visualizer Production Exclusion · Kernindizes und Bundle-Budget | I |
+| Produkt-Changelog, `/changelog`-Vertrag | [`20`](20-product-changelog.md) | — | — |
+| Projektziel, Nicht-Ziele | [`00`](00-project-context.md) | Basisentscheidungen 2026-06-28 | — |
+
+Sektionen in [`17`](17-known-issues-and-planned-waves.md): **A** Sicherheit und Privilegien · **B** Mitarbeiter-Lifecycle · **C** E-Mail-Zustellbeobachtung · **D** Operationen, Fehler, Feedback · **E** PWA und Motion · **F** Design-System (projektweit) · **G** Kunden, Kontakte, Vorgänge, Aufgaben · **H** Bekannte, nicht untersuchte Themen · **I** Build, Bundle und CI.
+
+Die Nummer `15` ist nicht vergeben (keine `15-*.md` in der Git-Historie) — keine bewusste Reservierung.
 
 ## Source-of-Truth-Prinzip
 
 Wenn aktuelle Dokumentation und historische Release-Evidenz sich widersprechen:
 
-1. **Tatsächlicher Zustand gewinnt:** aktueller Code, Migrationen, verifizierter Production-Zustand (vollständige Truth Hierarchy in [`16`](16-current-state.md) Abschnitt 7).
+1. **Tatsächlicher Zustand gewinnt** — und zwar in dieser Reihenfolge: verifizierter Production-Zustand, dann aktueller Code und aktuelle Migrationen im Repository. Weichen beide materiell voneinander ab, beschreibt Production, was **heute läuft**, und das Repository, was der **nächste Release** enthalten wird. Vollständige Truth Hierarchy in [`16`](16-current-state.md) Abschnitt 7.
 2. **Aktuelle Architektur-/Guardrail-Dokumente** (`01`, `03`, `13`, `16`, `18`, `19`, …) beschreiben den *beabsichtigten aktuellen Vertrag*.
 3. **Das Decision Log** (`06`) erklärt das *Warum*.
 4. **Das Release-Archiv** (`releases/`) erklärt, *was historisch passiert ist* — mit dem Wissensstand des jeweiligen Datums.
@@ -71,9 +95,10 @@ Zwei SHAs sind zwei Fakten: der **Repository-/Dokumentationskopf** (aktueller `m
 
 ## Kontextdisziplin für Agenten
 
-Für normale Arbeit werden **nur die zuständigen aktuellen Dokumente** geladen. Nicht automatisch einlesen:
+Für normale Arbeit werden **nur die zuständigen aktuellen Dokumente** geladen (Load-Klassen oben). Nicht automatisch und nicht als ganze Datei einlesen:
 
-- das vollständige Decision Log,
+- das vollständige Decision Log [`06`](06-decision-log.md) — nur der benannte Eintrag aus der Architekturbereiche-Tabelle bzw. über den thematischen Index in `06`,
+- das vollständige [`17`](17-known-issues-and-planned-waves.md) — nur die betroffene Sektion (A–I); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review,
 - alle Release-Archivdateien,
 - Architekturdokumente nicht betroffener Subsysteme.
 
@@ -99,7 +124,7 @@ Nur bereits dokumentierte und verifizierte Fakten; Details ausschließlich in de
 | Wer war zuständig / hat geschrieben? | `sales_identities` (alle, inkl. deaktivierte) | [`19`](19-user-lifecycle-architecture.md) §7 |
 | Kunden · Ansprechpartner · Vorgänge · Aufgaben | `companies` · `contacts` · `deals` · `tasks` | [`01`](01-domain-model.md) |
 | Änderungsverlauf | `audit_events` (append-only) | [`13`](13-crm-audit-retention.md) |
-| Termine | Google Kalender (Nora liest; System of Record bleibt Google) | [`11`](11-google-calendar-rbac.md) |
+| Termine | Google Kalender ist und bleibt System of Record. **Die Nora-Leseseite ist nicht deployt** (`calendar-*` Edge Functions fehlen in Production) — Nora zeigt derzeit keine Termine | [`11`](11-google-calendar-rbac.md), [`14`](14-google-calendar-readonly-implementation.md) |
 
 ## Produkt-Changelog
 

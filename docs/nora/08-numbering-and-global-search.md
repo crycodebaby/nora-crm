@@ -1,9 +1,10 @@
 # 08 – Kundennummern, Vorgangsnummern und globale Suche
 
 **Welle 6b** — Spezifikation  
-**Welle 6c** — Implementierung (Nummern + UI-Anzeige; globale Suche folgt in v0.2e)
+**Welle 6c** — Implementierung (Nummern + UI-Anzeige)  
+**Welle 6d** — globale Suche im Header implementiert und live (`layout/GlobalSearch.tsx`, `misc/globalSearch.ts`; Entscheidung: `06-decision-log.md` Eintrag Globale Suche 6d)
 
-Dieses Dokument spezifiziert feste Kunden- und Vorgangsnummern sowie eine spätere globale Suche für Nora CRM.
+Dieses Dokument spezifiziert feste Kunden- und Vorgangsnummern sowie die globale Suche für Nora CRM. Beide sind implementiert; die Abschnitte A–J beschreiben den Entwurf, der zu dieser Umsetzung geführt hat.
 
 ## Implementierungsstatus (Welle 6c)
 

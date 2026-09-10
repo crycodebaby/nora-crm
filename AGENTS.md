@@ -4,26 +4,25 @@ Diese Datei ist der verpflichtende Einstiegspunkt für KI-Agenten, die an Nora C
 
 ## Sofortregel
 
-Bevor Code geändert wird, liest der Agent zuerst diese Datei und den Dokumentationsindex `docs/nora/README.md` (Leseeinstieg, Zuständigkeiten, Kontextdisziplin). Danach werden **aufgabenbezogen** die zuständigen Dokumente geladen — nicht pauschal alle. Die folgende Liste ist der Kanon der Nora-Dokumente; Pflicht sind immer `README.md`, 16, 01, 03 und 07, die übrigen je nach betroffenem Bereich:
+Bevor Code geändert wird, liest der Agent zuerst diese Datei und danach `docs/nora/README.md`.
 
-0. `docs/nora/README.md` (Dokumentationsindex — immer zuerst)
-1. `docs/nora/16-current-state.md` (schnelle Orientierung — was ist aktuell live, welche Waves sind abgeschlossen)
-2. `docs/nora/00-project-context.md`
-3. `docs/nora/01-domain-model.md`
-4. `docs/nora/02-design-system.md`
-5. `docs/nora/03-data-model-guardrails.md`
-6. `docs/nora/04-routing-i18n.md`
-7. `docs/nora/05-demo-data-guidelines.md`
-8. `docs/nora/06-decision-log.md`
-9. `docs/nora/07-agent-change-checklist.md`
-10. `docs/nora/11-google-calendar-rbac.md`
-11. `docs/nora/12-role-ux-acceptance.md` (Rollen-UX-Abnahmeprotokoll)
-12. `docs/nora/17-known-issues-and-planned-waves.md` (offene Bugs, geplante Waves)
-13. `docs/nora/19-user-lifecycle-architecture.md` (aktuelle Architektur des Mitarbeiter-/Benutzer-Lifecycle — Pflicht bei allen Änderungen an `sales`, `users` Edge Function, Auth, Audit `user.*`)
+**`docs/nora/README.md` ist der einzige kanonische Router der Nora-Dokumentation.** Leseeinstieg, Dokument-Zuständigkeiten, Load-Klassen und Kontextdisziplin stehen dort — und nur dort. Diese Datei führt bewusst **keine zweite Dokumentenliste**; sie enthält nur die universellen Agentenregeln.
 
-Historische Release-Evidenz (RC-SHAs, Migrationen, Live-Beweise) liegt im Archiv `docs/nora/releases/` und muss für die Orientierung **nicht** gelesen werden. Das Produkt-Changelog (`docs/nora/20-product-changelog.md`) wird bei benutzerspürbaren Änderungen ergänzt. Dokument-Zuständigkeiten: `docs/nora/16-current-state.md` Abschnitt 0; Dokumentations-Abschlusscheck: `docs/nora/07-agent-change-checklist.md`.
+Immer geladen (Always-Kontext):
 
-Wenn eine Änderung fachliche Entscheidungen berührt, muss der Agent `docs/nora/06-decision-log.md` ergänzen oder einen neuen Decision-Eintrag vorschlagen.
+- `docs/nora/README.md` — der Router, immer zuerst
+- `docs/nora/16-current-state.md` — kompakte Momentaufnahme: was ist heute live
+- `docs/nora/01-domain-model.md` — Domain Core
+- `docs/nora/03-data-model-guardrails.md` — globale Daten-Guardrails
+- `docs/nora/07-agent-change-checklist.md` — Change Protocol
+
+Alles Weitere wird **aufgabenbezogen** geladen; welches Dokument für welches Thema zuständig ist, steht im Router. Nicht pauschal als Standardkontext laden:
+
+- `docs/nora/06-decision-log.md` — nur bei Entscheidungs-/Begründungsbedarf, und dann gezielt über den thematischen Index bzw. den benannten Eintrag, nicht als ganze Datei
+- `docs/nora/17-known-issues-and-planned-waves.md` — nur die für die Aufgabe relevante Sektion; vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review
+- `docs/nora/releases/` — historische Release-Evidenz (RC-SHAs, Migrationen, Live-Beweise); für die Orientierung **nicht** nötig, nur für Regression, Release-Abstammung oder Rekonstruktion
+
+Wenn eine Änderung fachliche Entscheidungen berührt, muss der Agent `docs/nora/06-decision-log.md` ergänzen oder einen neuen Decision-Eintrag vorschlagen. Das Produkt-Changelog (`docs/nora/20-product-changelog.md`) wird bei benutzerspürbaren Änderungen ergänzt. Dokumentations-Abschlusscheck: `docs/nora/07-agent-change-checklist.md`.
 
 ## Produktziel
 

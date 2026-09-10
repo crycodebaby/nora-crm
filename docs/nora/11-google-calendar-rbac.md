@@ -1,7 +1,11 @@
 # 11 – Google Kalender-Architektur und Nora-Rollenmodell (RBAC)
 
 **Welle v0.4a** — Spezifikation  
-**Status:** v0.4c.1 Grundlage implementiert — OAuth/Sync folgen v0.4c.2+ (siehe `14-google-calendar-readonly-implementation.md`)
+**Status:** Spezifikation. Datenbankseite implementiert und in Production angewendet; Edge-Functions-Seite **nicht deployt** (siehe Kasten unten und `14-google-calendar-readonly-implementation.md`)
+
+> **Deployment-Stand in Production (read-only verifiziert 2026-09-10).** Die **Datenbankseite ist live**: die Migrationen `20260716120000_google_calendar_readonly` und `20260717120000_google_calendar_oauth_sync` stehen im Production-Ledger. Die **drei Edge Functions `calendar-connect-start`, `calendar-connect-callback` und `calendar-sync-manual` sind nicht deployt** — in Production laufen ausschließlich `users` und `brevo-email-events`. Die Google-Kalender-Integration ist damit **in Production nicht nutzbar**: Verbinden und Sync existieren als Code, Schema und Spezifikation, nicht als laufende Funktion. Alles Folgende beschreibt den **beabsichtigten Contract**, nicht einen aktiven Produktionszustand. Offene Punkte: `17-known-issues-and-planned-waves.md`.
+
+> **Abschnitt C ist kein Kalender-Inhalt.** Er beschreibt das **Nora-weite Rollenmodell** (`admin` · `office` · `viewer`) und die projektweite Berechtigungsmatrix — dieser Teil ist **live** und wird von `README.md`, `16-current-state.md` Abschnitt 3 und `03-data-model-guardrails.md` als autoritativ referenziert. Er ist unabhängig vom Deployment-Stand der Kalender-Integration. Ein eigener globaler Security-Contract ist vorgesehen, aber noch nicht angelegt.
 
 Dieses Dokument spezifiziert die Google-Kalender-Integration und das Nora-Rollenmodell (`admin`, `office`, `viewer`) auf Basis des **bestehenden** Auth-/Benutzermodells. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `10-checklists-snippets-audit.md` und den Decision Log.
 

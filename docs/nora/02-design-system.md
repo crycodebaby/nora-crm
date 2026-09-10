@@ -1,5 +1,7 @@
 # 02 – Designsystem und UI-Regeln
 
+> **Reifegrad.** Nora hat **kein fertiges, durchgängig konsistentes visuelles Design-System.** Global festgelegt und stabil sind der UI-/Styling-Stack, die Brandfarbe, Typografie, Spacing und die zentralen Utility-Klassen — die Abschnitte bis einschließlich `Zentrale Utility-Klassen`. Alles Weitere in diesem Dokument sind über die Zeit gewachsene Feature- und Subsystem-Spezifikationen. Ein umfassendes visuelles Redesign ist **kein abgeschlossener Contract**, sondern offene Arbeit; dieses Dokument soll langfristig zur schlanken Design Foundation werden. Projektweite offene Design- und Accessibility-Punkte: `17-known-issues-and-planned-waves.md` Abschnitt F.
+
 ## Markenrichtung
 
 Nora CRM soll wirken wie:
@@ -32,6 +34,10 @@ Nicht verwenden für:
 - normalen Fließtext
 - lange Listeninhalte
 - Warnungen, wenn es semantisch keine Warnung ist
+
+> **Offener Accessibility-Befund — nicht gelöst.** Weiß auf `--nora-brand` (`#ff3b1f`) misst **3,56:1** und unterschreitet damit WCAG AA (4,5:1), in Hell und Dunkel identisch; zusätzlich unterschreitet `.nora-primary-action` mit gemessenen 40 px das 44-px-Touch-Minimum. Beides ist **projektweit offen** und wird von diesem Dokument **nicht** gelöst — Stand und Messwerte in `17-known-issues-and-planned-waves.md` Abschnitt F.
+>
+> Die Markenfarbe bleibt `#ff3b1f`. Die vorgesehene Lösung ist eine **semantische, kontrastgerechte On-Brand-Farbe für Text und Icons** auf Markenflächen, nicht eine willkürliche Änderung der Markenfarbe. Bis diese Entscheidung getroffen und umgesetzt ist, erfüllt eine neue primäre Aktion mit weißem Text auf der Markenfläche AA **nicht**. Das ist bekannt: es darf nicht als gelöst dokumentiert und nicht als Vorbild für neue Flächen kopiert werden.
 
 ## Button-Hierarchie
 

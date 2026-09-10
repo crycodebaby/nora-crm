@@ -18,7 +18,7 @@ Er dient der **betrieblichen Nachvollziehbarkeit** im Team — nicht der Mitarbe
 | Aufgaben | `task.created`, `task.updated`, `task.completed`, `task.reopened`, `task.deleted` |
 | Kontaktnotizen | `contact_note.created`, `contact_note.updated`, `contact_note.deleted` |
 | Vorgangsnotizen | `deal_note.created`, `deal_note.updated`, `deal_note.deleted` |
-| Benutzer (Mitarbeiter-Lifecycle) | `user.role_changed`, `user.disabled`, `user.enabled` (Trigger `audit_sales_privilege_change` auf `sales`) · `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (`users` Edge Function → `record_employee_admin_event`, W3) · `user.email_changed` (Guard `guard_auth_email_change` in GoTrues Transaktion, W4) · `user.offboarded` (`offboard_employee_by_executor`, nur bei `disposition executed`, W5) · `user.account_deleted` (Guard `guard_auth_user_delete` in GoTrues DELETE-Transaktion, W6-B — RC, nicht live) — vollständiges Modell: `19-user-lifecycle-architecture.md` §10 |
+| Benutzer (Mitarbeiter-Lifecycle) | `user.role_changed`, `user.disabled`, `user.enabled` (Trigger `audit_sales_privilege_change` auf `sales`) · `user.invited`, `user.invitation_resent`, `user.password_setup_requested` (`users` Edge Function → `record_employee_admin_event`, W3) · `user.email_changed` (Guard `guard_auth_email_change` in GoTrues Transaktion, W4) · `user.offboarded` (`offboard_employee_by_executor`, nur bei `disposition executed`, W5) · `user.account_deleted` (Guard `guard_auth_user_delete` in GoTrues DELETE-Transaktion, W6-B — `PRODUCTION VERIFIED` 2026-09-07) — vollständiges Modell: `19-user-lifecycle-architecture.md` §10 |
 | Checklisten | bestehende `checklist.*`-Codes (unverändert) |
 | Google Kalender (v0.4c.1+) | `calendar.event_linked`, `calendar.event_unlinked` (Sync/Connect ab v0.4c.2) |
 
@@ -84,7 +84,7 @@ Bei jedem Ereignis serverseitig:
 }
 ```
 
-**Hauptansprechpartner-Transition (Atomic Contact Primary Intent, RC 2026-09-08):** ein Kontakt-Speichern, das den Hauptansprechpartner wechselt, erzeugt in **einer** Transaktion genau ein `contact.updated` für den abgelösten Halter (`is_primary` `true → false`) und für den neuen Halter entweder ein `contact.created` **im Endzustand** (`is_primary = true`, kein „created, dann updated") oder ein `contact.updated` mit seinen Feld- und Rollenänderungen. Alle Zeilen einer Speicherung tragen denselben `request_id` und den echten Actor; ein idempotenter Replay schreibt keine Audit-Zeile; eine zurückgerollte Operation hinterlässt keine.
+**Hauptansprechpartner-Transition (Atomic Contact Primary Intent, 2026-09-08):** ein Kontakt-Speichern, das den Hauptansprechpartner wechselt, erzeugt in **einer** Transaktion genau ein `contact.updated` für den abgelösten Halter (`is_primary` `true → false`) und für den neuen Halter entweder ein `contact.created` **im Endzustand** (`is_primary = true`, kein „created, dann updated") oder ein `contact.updated` mit seinen Feld- und Rollenänderungen. Alle Zeilen einer Speicherung tragen denselben `request_id` und den echten Actor; ein idempotenter Replay schreibt keine Audit-Zeile; eine zurückgerollte Operation hinterlässt keine.
 
 ### Aufbewahrungsklassen (`retention_class`)
 

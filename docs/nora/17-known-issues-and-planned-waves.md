@@ -93,7 +93,7 @@ Vertrag: `18-email-delivery-observability.md`.
 - **V1C-A.4 / V1C-B.1 Deterministische Sendekorrelation** (Supabase Send Email Hook + Brevo-API-Versand mit eigener Korrelations-ID) — `PARKED`; ersetzt den Auth-Mailversand, eigene Architekturentscheidung. Erst danach dürfte eine UI „**diese** Einladung wurde zugestellt" sagen.
 - **V1C-B.2 Feinere Unterscheidung innerhalb `undeliverable`** (Hard Bounce / Blocked / Invalid) — `PARKED`; nächster Admin-Schritt ist in allen Fällen derselbe.
 - **V1C-A.5 Privilegierte Purge für Test-/Fake-Benutzer** in `email_delivery_events` — im W6-B-RC als **schmale Purge innerhalb der Kontolöschung** umgesetzt (nur `employee_sale_id = sale` **und** Adresse aus der Identitätshistorie; Fremdadressen bleiben und werden gezählt). Allgemeine Aufbewahrungsfristen bleiben nicht entschieden (`PARKED`).
-- **Weitere Edge Functions im Repo sind nicht deployt** (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) — Kontext, kein Bug; nur `users` (v8) und `brevo-email-events` (v2) sind live. Edge Functions werden nie von Vercel ausgeliefert.
+- **Weitere Edge Functions im Repo sind nicht deployt** (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) — Kontext, kein Bug; nur `users` (v9) und `brevo-email-events` (v2) sind live (read-only verifiziert 2026-09-10). Edge Functions werden nie von Vercel ausgeliefert.
 
 ## D. Operationen, Fehler, Feedback
 

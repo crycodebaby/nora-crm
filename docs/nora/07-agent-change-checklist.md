@@ -38,12 +38,13 @@ Nicht jedes Dokument muss bei jeder Änderung angefasst werden — **nur die zus
 | eine durable Invariante oder Guardrail (Falle, Grant-/RLS-Regel, Migrationsregel)? | `03-data-model-guardrails.md` | die Regel selbst, ohne Release-Evidenz |
 | eine durable fachliche/architektonische Entscheidung? | `06-decision-log.md` | Datum, Kontext, Entscheidung, Begründung — knapp; Eintrag in der Index-Tabelle; Link ins Archiv |
 | ein dediziertes Architektur-/Spezifikationsdokument (z. B. `19-user-lifecycle-architecture.md`, `18-…`, `13-…`, `11-…`, `02-…`)? | das jeweilige Dokument | aktueller Zustand des Subsystems |
-| den aktuellen Live-Zustand (Versionen, Ledger-Kopf, Edge-Versionen, abgeschlossene Wellen, Navigation)? | `16-current-state.md` | Momentaufnahme + Themen-Tabelle (sonst findet die nächste Session das Thema nicht) |
+| den aktuellen Live-Zustand (Versionen, Ledger-Kopf, Edge-Versionen, abgeschlossene Wellen)? | `16-current-state.md` | nur die Momentaufnahme — keine Routingtabelle, die gehört in den Router |
 | offene Punkte (neuer Bug, Restrisiko, geplante Welle — oder ein erledigter)? | `17-known-issues-and-planned-waves.md` | nur genuin Offenes; Erledigtes ins Archiv verschieben, nicht löschen |
 | die Release-Historie (RC-SHA, Migration, Ledger, Edge-Deploy, Live-Beweis, Zwischenfall)? | `releases/<jahr-monat>.md` | Chronik-Zeile + Abschnitt mit Evidenz |
+| **die Zuständigkeit selbst** (neues Dokument, verschobenes Thema, geänderter Owner, geänderte Load-Klasse)? | `docs/nora/README.md` | Zeile in `Dokument-Zuständigkeiten` **und** in `Architekturbereiche` (Contract, `06`-Eintrag, `17`-Sektion) — sonst findet die nächste Session das Thema nicht |
 | etwas, das Benutzer merken? | `20-product-changelog.md` | Datum, Titel, „Was ändert sich für Sie", optional technischer Hinweis |
 
-Zusätzlich: interne Links prüfen, wenn Überschriften verschoben oder umbenannt wurden; überholte Zwischenstände als überholt markieren statt löschen; `AGENTS.md` nur ändern, wenn sich der Pflicht-Leseeinstieg ändert.
+Zusätzlich: interne Links prüfen, wenn Überschriften verschoben oder umbenannt wurden; überholte Zwischenstände als überholt markieren statt löschen; `AGENTS.md` nur ändern, wenn sich der Always-Kontext oder eine universelle Agentenregel ändert — Dokumentzuständigkeiten und Load-Klassen gehören ausschließlich in den Router `docs/nora/README.md`, nie in eine zweite Liste.
 
 Bei jedem `apply_migration` gegen eine echte Production-Datenbank (Supabase MCP) zusätzlich:
 
@@ -253,7 +254,7 @@ Bei Customer & Contact Workflow Wave (2026-08-25) zusätzlich:
 - [ ] `npx supabase db reset --local` nach Migration (nicht in diesem Sandbox-Environment ausführbar — siehe Abschlussbericht)
 - [ ] `npm run typecheck` / `npm run build` / `npm run dev:demo` — Kunden-/Privatperson-Anlage manuell im Browser geprüft
 
-Bei Kontakt-Speichern / Hauptansprechpartner (ab Atomic Contact Primary Intent, RC 2026-09-08) zusätzlich:
+Bei Kontakt-Speichern / Hauptansprechpartner (ab Atomic Contact Primary Intent, 2026-09-08) zusätzlich:
 
 - [ ] Kein neuer Schreibpfad setzt `contacts.is_primary` als rohe Spalte; jede Rollenverschiebung läuft über `create_contact`/`update_contact` (Absicht + beobachteter Halter) oder `set_primary_contact`, alle auf `nora_private.prepare_primary_contact_slot` (Falle 40)
 - [ ] Transitionssperre immer über `nora_private.lock_customers_for_primary_transition` (Advisory, nie eigene Lock-SQL, nie wieder eine `public.companies`-Zeilensperre als Mutex), bei zwei Kunden aufsteigend nach Id

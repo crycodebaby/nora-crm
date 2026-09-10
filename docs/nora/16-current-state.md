@@ -2,24 +2,7 @@
 
 Stand: 2026-09-10 · letzter Laufzeit-Release: Entry-Chunk-Budget H2 `PRODUCTION VERIFIED` (Laufzeit-RC **und** Release-Kopf `5cae655f` — **frontend-only Performance-Korrektur**, keine Migration, kein Edge-Deploy, **keine sichtbare Funktionsänderung**: eine Importzeile in `ContactListContent.tsx`, dadurch Entry-Chunk 1092 → 1009 kB und das Bundle-Budget-Gate wieder grün). Letzter Release mit sichtbarer Funktionalität: Startseite-Zuverlässigkeit W7-R1A `PRODUCTION VERIFIED` (Laufzeit-RC **und** Release-Kopf `8fcb603d` — **frontend-only**, keine Migration, kein Edge-Deploy). Die Startseite fragt Ansprechpartner und Kunden nur noch mit gültigen, eindeutigen Ids ab und zeigt beim Laden keine leere Fläche mehr. Letzter **Datenbank**-Release: Atomic Contact Primary Intent `PRODUCTION VERIFIED` (Laufzeit-RC `0fb3d6ba`, Release-Kopf `5d526231` — Production-Ledger-Kopf `20260908120000`; Datenbank + Frontend, kein Edge-Deploy). Kontakt-Speichern und „Hauptansprechpartner" sind seitdem **eine** Transaktion. Der Repository-/Dokumentationskopf ist der jeweils aktuelle `main` (`git log`); er liegt durch reine Docs-Commits **vor** dem Laufzeit-Release — die beiden SHAs sind bewusst zwei verschiedene Fakten.
 
-Dieses Dokument ist der **Navigations-Einstieg** und eine **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Es enthält bewusst **keine** Release-Evidenz (RC-SHAs, Testzahlen, Live-Beweise) — die liegt im Release-Archiv (`releases/`).
-
-## 0. Welches Dokument ist wofür zuständig?
-
-| Dokument | Zuständigkeit | Was hinein gehört |
-|---|---|---|
-| `01-domain-model.md` | **aktuelles Fach-/Domänenmodell** | Begriffe, Entitäten, fachliche Regeln, Rollen — kompakt, mit Links |
-| `03-data-model-guardrails.md` | **durable Invarianten / technische Guardrails** | Fallen, Regeln, Grants-/RLS-Guardrails; keine Release-Evidenz |
-| `06-decision-log.md` | **durable Entscheidungen mit Begründung** | knapp; Release-Details nur als Link ins Archiv |
-| `16-current-state.md` (dieses) | **aktuelle Momentaufnahme / Navigation** | was ist live, welche Versionen, wohin lesen |
-| `17-known-issues-and-planned-waves.md` | **nur genuin offene Punkte** | Bugs, Restrisiken, geplante Wellen; erledigte Punkte wandern ins Archiv |
-| `19-user-lifecycle-architecture.md` | **aktuelle Architektur des Mitarbeiter-Lifecycle-Subsystems** | Zustände, Executoren, Audit-Modell, Session-Bindung, Roadmap |
-| `20-product-changelog.md` | **Produkt-Changelog** (für PO/Büro/IT, kein Git-Log) | was sich für Benutzer geändert hat |
-| `releases/*.md` | **historische Release-Evidenz** | RC-SHAs, Migrationen, Ledger, Edge-Versionen, Testzahlen, Live-Beweise, Zwischenfälle, Originalwortlaut alter Decision-Log-Einträge |
-| `07-agent-change-checklist.md` | Prüfliste vor/während/nach Änderungen inkl. **Dokumentations-Abschlusscheck** | — |
-| übrige `0x`/`1x`-Dokumente | Spezifikationen einzelner Bereiche (Design, Routing, Demo, Nummern, Fenster, Checklisten, Kalender, Rollen-UX, Audit, E-Mail-Zustellung) | — |
-
-Ein neuer Agent liest zuerst dieses Dokument, dann die für sein Thema zuständigen Dokumente (Tabelle in Abschnitt 6). Das Archiv liest er nur, wenn er einen früheren Release rekonstruieren muss.
+Dieses Dokument ist die **kompakte Momentaufnahme** dessen, was heute live ist. Es verlinkt, statt zu duplizieren. Welches Dokument wofür zuständig ist und wann es geladen wird, steht ausschließlich im Router [`README.md`](README.md). Abschnitt 4 nennt die SHAs und Versionen, die zur Identifikation des laufenden Stands nötig sind; die vollständige Release-Evidenz (Migrations-Hashes, Testzahlen, Live-Beweise, Zwischenfälle) liegt im Archiv (`releases/`).
 
 ## 1. Was ist Nora?
 
@@ -74,7 +57,7 @@ Release-Regel (schemaabhängige Wellen): RC einfrieren → Production-Migration 
 
 ## 5. Abgeschlossene Wellen (Überblick)
 
-Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert. Details und Evidenz: Archiv-Monat in Klammern; Entscheidungen: `06-decision-log.md`.
+Alle folgenden Wellen sind auf `main` — **die Spalte `Status` gilt pro Zeile und ist nicht pauschal „live"**: Repository-Stand, DB-Deployment, Edge-Deployment und produktive Nutzbarkeit sind vier verschiedene Fakten (Kalender ist der Fall, in dem sie auseinanderfallen). Status wie zuletzt dokumentiert. Details und Evidenz: Archiv-Monat in Klammern; Entscheidungen: `06-decision-log.md`.
 
 | Bereich | Welle | Status | Archiv |
 |---|---|---|---|
@@ -82,7 +65,7 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 | UX / Rollen | v0.3f–v0.3k.2 (Demo-Daten, Schnellerfassung-UX, Kanban/Akte, rollenbewusste UX, Demo-Rollensimulation) | live | `2026-07` |
 | Security | v0.4a/b/b.1/b.2 (RBAC/RLS, `nora_private`, Capability-Rolle, `sales_directory`) | live | `2026-07` |
 | Audit | v0.3l/v0.3l.1 CRM-Audit | live | `2026-07` |
-| Kalender | v0.4c.1/c.2/c.2c Google-Kalender read-only, OAuth, Sync, Release-Gates | live (OAuth-E2E mit echtem Testkalender nie automatisiert) | `2026-07` |
+| Kalender | v0.4c.1/c.2/c.2c Google-Kalender read-only, OAuth, Sync, Release-Gates | **nicht produktiv nutzbar** — Code vollständig auf `main`; **Datenbankgrundlage deployed** (Migrationen `20260716120000`, `20260717120000` im Ledger; `google_calendar_connections` und `google_calendar_events` existieren, beide **0 Zeilen**); **die drei `calendar-*` Edge Functions sind nicht deployt** (read-only verifiziert 2026-09-10), damit gibt es keinen Verbinde- und keinen Sync-Pfad. Die Route `/google-kalender` existiert und rendert die vollständige Adminfläche — sie zeigt „keine Verbindung"/„keine Termine" und ihre beiden Aktionen laufen ins Leere; **eine vorhandene Route ist kein Beweis einer nutzbaren Integration**. Details: `14-…` und `11-…`, jeweils Kasten im Kopf | `2026-07` |
 | Zugang | Mitarbeiterzugang-Redesign, Einladung (2026-07-23) | live | `2026-07` |
 | Foundation | FW1 Operation Correlation, FW2 Operation Manager, FW3 Error Observatory, Stabilization Gates 1/2/2b, Kernindizes + Bundle-Budget | live | `2026-08` |
 | Kunden/Kontakte | Customer & Contact Workflow, Unified Tasks, Self Contact, Pre-Production Hardening | `PRODUCTION VERIFIED` (2026-08-25/28) | `2026-08` |
@@ -117,43 +100,20 @@ Alle folgenden Wellen sind auf `main` und live; Status wie zuletzt dokumentiert.
 
 ## 6. Welche Dokumente muss ich für welches Thema lesen?
 
-| Thema | Dokument |
-|---|---|
-| Projektziel, Nicht-Ziele | `00-project-context.md` |
-| Domänenmodell, Kundenart, Hauptansprechpartner, Self Contact, Aufgaben-Kontext, Rollen | `01-domain-model.md` (+ Fallen in `03-…`, Begründung in `06-…`) |
-| Design/UI-Regeln, Systemereignisse, Onboarding-Gestaltung | `02-design-system.md` |
-| Datenmodell-Fallen, RBAC-/RLS-Guardrails, Lifecycle-Invarianten | `03-data-model-guardrails.md` |
-| Routing, i18n, deutsche URLs, bekanntes Fehlermuster englische Ur-Code-Pfade | `04-routing-i18n.md` |
-| Demo-Daten (FakeRest) | `05-demo-data-guidelines.md` |
-| Durable Entscheidungen inkl. Begründung (thematischer Index am Anfang) | `06-decision-log.md` |
-| Checkliste vor/während/nach Änderungen, Release-Regeln, Dokumentations-Abschluss | `07-agent-change-checklist.md` |
-| Nummernvergabe, globale Suche | `08-numbering-and-global-search.md` |
-| Fensterauftrag-Workflow | `09-window-order-workflow.md` |
-| Checklisten/Textbausteine/Audit-Datenmodell | `10-checklists-snippets-audit.md` |
-| Google Kalender, Rollenmodell (RBAC-Matrix) | `11-google-calendar-rbac.md`, `14-google-calendar-readonly-implementation.md` |
-| Rollen-UX-Abnahme | `12-role-ux-acceptance.md` |
-| Audit-Ereignisse, Actor-Modell, Retention | `13-crm-audit-retention.md` |
-| Offene Bugs, Restrisiken, geplante Wellen | `17-known-issues-and-planned-waves.md` |
-| Build, Bundle-Budget, Visualizer, CI-Baselines | `06-decision-log.md` („2026-09-09 – Visualizer Production Exclusion", „2026-08-15 – Kernindizes und Bundle-Budget"), `17-known-issues-and-planned-waves.md` Abschnitt I |
-| E-Mail-Zustellbeobachtung (Brevo, Vertrag, Operator-Konfiguration) | `18-email-delivery-observability.md` |
-| **Mitarbeiter-/Benutzer-Lifecycle (Zustände, Executoren, Audit, Session-Bindung, Offboarding, Hard Delete W6-B, Roadmap W1–W10)** | `19-user-lifecycle-architecture.md` |
-| Produkt-Changelog, `/changelog`-Vertrag | `20-product-changelog.md` |
-| Historische Release-Evidenz, alte Decision-Log-Originale | `releases/README.md` → `releases/2026-06.md` … `releases/2026-09.md` |
-| Error Contract | `06-decision-log.md` „Error Contract Wave" + `domain/noraErrorCodes.ts` + `07-…` |
-| Operation Status / Notification Contract | `06-decision-log.md` 2026-08-29 + `operations/*`, `notifications/*` |
-| Mitarbeiter-Onboarding (Einladung → Passwort → Profil) | `19-…` §4, `02-design-system.md` „Mitarbeiter-Onboarding & Zugang", `login/employeeOnboardingFlow.ts` |
-
-Hinweis: die Nummer `15` ist nicht vergeben (keine `15-*.md` in der Git-Historie) — keine bewusste Reservierung.
+Das entscheidet der Router: [`README.md`](README.md), Tabelle `Architekturbereiche`. Sie nennt pro Bereich den aktuellen Contract, den benannten `06`-Eintrag für die Begründung und die `17`-Sektion für die offenen Punkte. Dieses Dokument führt bewusst keine zweite Routingtabelle.
 
 ## 7. Truth Hierarchy
 
-Bei Widersprüchen zwischen Chatwissen, Dokumentation und Code gilt (siehe auch `07-agent-change-checklist.md`):
+Bei Widersprüchen zwischen Chatwissen, Dokumentation, Repository und Production gilt:
 
-1. aktueller Code
-2. aktuelle Migrationen / DB-Zustand
-3. verifizierter Production-Zustand
-4. Git-Historie
-5. Dokumentation
-6. Chatwissen aus vorherigen Sitzungen
+1. **verifizierter tatsächlicher Production-Zustand** — wenn er materiell vom Repository-Sollzustand abweicht
+2. **aktueller Code und aktuelle Migrationen im Repository**
+3. Git-Historie
+4. aktuelle Architektur-/Contract-Dokumente (`16`, `01`, `03`, `13`, `18`, `19`, … — Zuordnung im Router)
+5. durable Entscheidungen mit Begründung (`06`)
+6. historische Release-Evidenz (`releases/`)
+7. Chatwissen aus vorherigen Sitzungen
 
-Dokumentation wird nach bestem Wissen aktuell gehalten, ist aber niemals autoritativer als der tatsächliche Code- oder DB-Zustand. Innerhalb der Dokumentation gilt: **aktuelle Wahrheit** steht in `16`/`01`/`03`/`19`, **durable Entscheidungen** in `06`, **historische Fakten** im Archiv `releases/` — ein historischer Eintrag beschreibt den Wissensstand seines Datums, nicht den heutigen Zustand.
+**Repository-Code ist dadurch nicht zweitrangig — er antwortet auf eine andere Frage.** Das Repository ist autoritativ dafür, was der **nächste Release** enthält; der verifizierte Production-Zustand ist autoritativ dafür, was **heute läuft**. Beide Fakten fallen regelmäßig auseinander: der Repository-/Dokumentationskopf wandert mit jedem Docs-Commit, ohne die Laufzeit zu verändern (Abschnitt 4). Erst wenn eine Aussage über den **heutigen Live-Zustand** getroffen wird und beide materiell widersprechen, gewinnt Production — und dann ist die Abweichung selbst ein Befund, der dokumentiert und nicht stillschweigend übernommen wird.
+
+Dokumentation ist niemals autoritativer als Code, Migrationen oder verifizierter Production-Zustand. Innerhalb der Dokumentation gilt: **aktuelle Wahrheit** steht in `16`/`01`/`03`/`19` und den Subsystem-Contracts, **durable Entscheidungen** in `06`, **historische Fakten** im Archiv `releases/` — ein historischer Eintrag beschreibt den Wissensstand seines Datums, nicht den heutigen Zustand.

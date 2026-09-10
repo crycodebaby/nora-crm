@@ -143,13 +143,17 @@ Nur bei belegtem Bedarf:
 | `companies.links_jsonb` / `contacts.links_jsonb` | generisches Link-Modell (Website, LinkedIn, …) — **implementiert**, ersetzt LinkedIn-only-Validierung |
 | `companies.email_jsonb` / `companies.phone_jsonb` | mehrere Firmen-Kontaktmethoden mit Typ — **implementiert** |
 | `create_customer_with_contact` (RPC) | atomare Kunde+Ansprechpartner-Anlage — **implementiert**, erweitert um `self_contact_id`/`mark_self` (Self Contact Wave) |
-| `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert**; seit Atomic Contact Primary Intent (RC 2026-09-08) auf dem gemeinsamen Transitionskern |
-| `create_contact` / `update_contact` (RPC) | atomares Kontakt-Speichern mit expliziter Hauptansprechpartner-Absicht, Kundenlock, Stale-Schutz, Idempotenz (create) — **RC 2026-09-08, nicht in Production** |
-| `nora_private.prepare_primary_contact_slot` | einziger Transitionskern „bisherigen Halter demotieren" (Lock, No-op bei bereits primär, Verifikation des beobachteten Halters) — **RC 2026-09-08** |
+| `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert**; seit Atomic Contact Primary Intent (2026-09-08) auf dem gemeinsamen Transitionskern |
+| `create_contact` / `update_contact` (RPC) | atomares Kontakt-Speichern mit expliziter Hauptansprechpartner-Absicht, Kundenlock, Stale-Schutz, Idempotenz (create) — **implementiert** (Atomic Contact Primary Intent, 2026-09-08) |
+| `nora_private.prepare_primary_contact_slot` | einziger Transitionskern „bisherigen Halter demotieren" (Lock, No-op bei bereits primär, Verifikation des beobachteten Halters) — **implementiert** (Atomic Contact Primary Intent, 2026-09-08) |
 | `companies.self_contact_id` | Person repräsentiert Kundenakte, entkoppelt von `contacts.company_id` — **implementiert** (Self Contact Wave, 2026-08-26) |
 | `create_quick_capture_case` (RPC) | atomare Kunde+Kontakt+Vorgang-Anlage für Schnellerfassung — **implementiert** |
 | `nora_private.is_effective_contact_of_company` | zentrale „gehört Kontakt zu Kundenakte"-Regel — **implementiert**, FakeRest-Parität in Pre-Production-Hardening-Session (2026-08-27) korrigiert |
 | `nora_private.sync_individual_company_name` Empty-Name-Guard | verhindert `companies.name = ''` bei Privatkundenakte (Whitespace-only Vor-/Nachname) — **implementiert** (Pre-Production Hardening Patch, 2026-08-27) |
+
+## Weitere häufige Fallen (Kunden/Kontakte, Fehler, Checklisten)
+
+Fortsetzung der Fallen-Sammlung oben — **alle folgenden Fallen beschreiben heute gültige Guardrails**, keine Kandidaten. Die Fallen-Nummern bilden einen flachen globalen Namensraum (1–40) und liegen thematisch über dieses Dokument verteilt, nicht fortlaufend sortiert: eine Nummer wird gesucht, nicht erblättert.
 
 ### Falle 29: `self_contact_id` mit `contacts.company_id` verwechseln
 
@@ -188,7 +192,7 @@ is_primary=true bei abweichendem company_id ist für DIESE Kundenakte
 bedeutungslos.
 ```
 
-### Falle 40: `contacts.is_primary` als rohe Spalte schreiben (Atomic Contact Primary Intent, RC 2026-09-08)
+### Falle 40: `contacts.is_primary` als rohe Spalte schreiben (Atomic Contact Primary Intent, 2026-09-08)
 
 Falsch:
 
