@@ -1,6 +1,6 @@
 # 01 – Fachliches Domänenmodell
 
-Stand: 2026-09-06. Dieses Dokument beschreibt das **aktuelle** Fach-/Domänenmodell kompakt; Begründungen stehen in `06-decision-log.md`, Fallen in `03-data-model-guardrails.md`, der Mitarbeiter-Lifecycle im Detail in `19-user-lifecycle-architecture.md`.
+Stand: 2026-09-06. Dieses Dokument beschreibt das **aktuelle** Fach-/Domänenmodell kompakt; Begründungen stehen in `06-decision-log.md`, Daten-/Persistenzinvarianten in `03-data-model-guardrails.md`, Security und Rollen in `22-security-and-access.md`, der Mitarbeiter-Lifecycle im Detail in `19-user-lifecycle-architecture.md`.
 
 ## Zentrale fachliche Unterscheidung
 
@@ -137,32 +137,29 @@ Google Kalender bleibt das **einzige führende Terminsystem** für Zeit, Titel, 
 
 Vollständige Spezifikation: `docs/nora/11-google-calendar-rbac.md`
 
-## Rollenmodell (Welle v0.4a)
+## Rollenmodell
+
+Fachlich gibt es drei Rollen:
 
 | Rolle | Zielnutzer | Kurz |
 |---|---|---|
-| `admin` | Chef / IT | Vollzugriff, Kalender verbinden, Rollen verwalten |
-| `office` | Sekretärin / Büro | Operativer CRM-Alltag, Termine lesen/erstellen |
-| `viewer` | schreibgeschützt | Nur Lesen |
+| `admin` | Chef / IT | Vollzugriff, Rollen und Zugänge verwalten |
+| `office` | Sekretärin / Büro | operativer CRM-Alltag |
+| `viewer` | schreibgeschützt | nur Lesen |
 
-Technisch an **`sales.role`** (nicht separate Benutzertabelle). `sales.administrator` ist nur Kompatibilitätsspiegel (`role = admin` ↔ `true`). Teamlisten nutzen **`sales_directory`** (v0.4b.2).
+Technisch an **`sales.role`** — keine separate Benutzertabelle. **Berechtigungsmatrix, RBAC/RLS und der gesamte Security-Contract: [`22-security-and-access.md`](22-security-and-access.md)**; hier wird nichts davon dupliziert.
 
-**Mitarbeiter-Lebenszyklus (Employee Access V1A–V1C, User Lifecycle W1–W6-B live; Stand 2026-09-07).** Vollständige Architektur: `19-user-lifecycle-architecture.md`.
+## Mitarbeiter (fachliche Kurzfassung)
 
-| Fachlich | Technisch | Hinweis |
-|---|---|---|
-| Zugangsstatus | abgeleitet aus Supabase Auth + `sales.disabled`: `invited` / `active` / `disabled` / `unknown` | nie gespeichert; `unknown` bietet keine Aktion |
-| Mitarbeiter einladen, Einladung erneut senden, Passwort einrichten lassen | `users` Edge Function → GoTrue + Executor | Nora ist einladungsbasiert; keine öffentliche Registrierung |
-| Zugang deaktivieren / reaktivieren / Rolle ändern | `users` Edge Function → `set_sales_access_by_executor` | einziger Schreibpfad; Selbstschutz, mindestens ein aktiver Admin, Auth-Bann wird mitgeführt und verifiziert |
-| Anmeldeadresse ändern | Aktion „E-Mail-Adresse ändern" → `prepare_sales_email_change` → GoTrue → Guard auf `auth.users` | `auth.users.email` ist Master, `sales.email` Spiegel; alte Links werden ungültig; Selbständerung blockiert |
-| Zugang beenden (Offboarding) | Aktion „Zugang beenden" → `offboard_employee_by_executor` | Deaktivieren + alle Sitzungen beenden + `user.offboarded` in einer Transaktion; nichts wird gemailt; Reaktivierung erfordert neue Anmeldung |
-| Offene Zuständigkeiten | `get_employee_dependency_preview` → Block „Offene Zuständigkeiten" in der Mitarbeiterakte | Kunden, Kontakte, offene Vorgänge, offene Aufgaben — blockieren nie, werden gezählt und verlinkt; Notizen sind Urheberschaft, keine offene Arbeit |
-| „Wem darf ich neue Arbeit zuweisen?" | `sales_directory` (nur aktive) + Trigger `guard_active_assignment` | Picker `SalesAssignmentInput`; Neuzuweisung an Deaktivierte wird serverseitig abgelehnt |
-| „Wer war zuständig / wer hat das geschrieben?" | `sales_identities` (alle, inkl. `disabled`) | Namen auf bestehenden Notizen, Vorgängen, Akten, im Aktivitätslog und Export |
-| Wer hat das entschieden? | `audit_events` `user.*` mit echtem Admin-Actor, stabiler Mitarbeiter-Entity, Operation-ID | `13-crm-audit-retention.md` |
-| Benutzerkonto endgültig löschen (W6-B, live seit 2026-09-07) | `users` Edge `delete_account` → Ticket → GoTrue Admin Hard Delete → `auth.users`-Guard löscht `sales` + schreibt `user.account_deleted` in einer Transaktion | Ausnahmeoperation nur für Fake-, Versehens-, Dubletten- und nie genutzte Konten **ohne** jede Geschäftshistorie (all-time) und ohne Provenienz; Ziel muss deaktiviert + gebannt sein; Name tippen, bei Admin-Ziel Extra-Bestätigung; Protokolleinträge bleiben (keine DSGVO-Löschung). In Production bis zum Release: kein Löschpfad |
+Vollständige Architektur und alle Prozesse: [`19-user-lifecycle-architecture.md`](19-user-lifecycle-architecture.md).
 
-Ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**. Domänenregel: **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT** — deaktivierte Mitarbeiter behalten ihren echten Namen auf allem Bestehenden und verschwinden nur aus Auswahllisten für Neues. Identität (Anmeldeadresse), Zugang (aktiv/deaktiviert) und Rolle sind drei getrennte Fakten. Der Datenzugriff eines Mitarbeiters ist an eine lebende Auth-Sitzung gebunden.
+- Nora ist **einladungsbasiert** — keine öffentliche Registrierung. Ein Administrator lädt ein, der Mitarbeiter richtet ein Passwort ein.
+- **Identität** (Anmeldeadresse), **Zugang** (aktiv/deaktiviert) und **Rolle** sind drei getrennte Fakten; der **Zugangsstatus** (`invited` / `active` / `disabled` / `unknown`) wird abgeleitet, nie gespeichert.
+- **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT.** Ein echter Mitarbeiter mit Geschäftshistorie wird **offboarded, nicht gelöscht**: er behält seinen echten Namen auf allem Bestehenden und verschwindet nur aus Auswahllisten für Neues.
+- „Wem darf ich neue Arbeit zuweisen?" → `sales_directory` (nur aktive). „Wer war zuständig / hat das geschrieben?" → `sales_identities` (alle, inkl. deaktivierter).
+- **Zugang beenden** heißt deaktivieren **und** alle Sitzungen beenden; der Datenzugriff eines Mitarbeiters ist an eine lebende Sitzung gebunden, deshalb erfordert eine Reaktivierung eine neue Anmeldung.
+- **Benutzerkonto endgültig löschen** ist eine Ausnahmeoperation für Fake-, Versehens-, Dubletten- und nie genutzte Konten **ohne** jede Geschäftshistorie (all-time) und ohne Provenienz — keine DSGVO-Löschung, Protokolleinträge bleiben.
+- Wer eine Entscheidung getroffen hat, steht im Audit (`audit_events`, `user.*`) — [`13-crm-audit-retention.md`](13-crm-audit-retention.md).
 
 ## Änderungshistorie / Audit (Welle v0.3l)
 

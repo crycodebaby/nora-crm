@@ -109,6 +109,27 @@ Bei jedem Ereignis serverseitig:
 
 **Grenze:** Ein technischer Datenbankeigentümer (`postgres`) kann innerhalb derselben DB weiterhin eingreifen. Für starke Beweissicherung ist später **externer Export / WORM-Speicher** vorgesehen — nicht in v0.3l.
 
+### Zugriff auf Audit-Historie: Read-Models, kein rohes SQL (Falle 36)
+
+Falsch:
+
+```text
+Ein LLM-/Automatisierungs-Consumer generiert eigenständig SELECT-Statements gegen
+public.audit_events (oder andere Rohtabellen), um „die Historie eines Kunden" zu beantworten.
+```
+
+Richtig:
+
+```text
+Künftige KI-/Automatisierungs-Konsumenten von Business-Historie gehen ausschließlich über
+anwendungsseitige Read-Models/Queries (konzeptionell z. B. GetCustomerHistory(customerId)),
+niemals über roh generiertes SQL direkt gegen audit_events oder andere Tabellen.
+```
+
+Das ist eine **Architekturregel für künftige Wellen** — bewusst nicht implementiert, nur als Guardrail festgehalten (Stand: `17-known-issues-and-planned-waves.md` Abschnitt G, „Application Queries / Read Models"). Office liest Audit ohnehin nur über die kontrollierte RPC, nie über die Tabelle.
+
+**`request_id` ist die `operation_id`.** Trotz des historischen Spaltennamens trägt `audit_events.request_id` die Operation-Korrelation (befüllt aus dem Request-Header `x-nora-operation-id` über `nora_private.current_operation_id()`) — es ist **keine** zweite, unabhängige Request-ID. `operation_id` (technische Korrelation über Manager / Audit / Error Observatory hinweg) und `idempotency_key` (fachliche Retry-Absicht) sind zwei verschiedene Konzepte und dürfen nicht verwechselt werden. Die `operation_id` ist **nie** ein Auth-Merkmal (`22-security-and-access.md` Abschnitt 5).
+
 ## Speicherstatistik
 
 Admin-RPC `get_audit_storage_stats()`:

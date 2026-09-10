@@ -4,6 +4,16 @@ Stand: 2026-09-07 — aktueller Zustand nach User Lifecycle **W1–W6-B** (alle 
 
 Dieses Dokument ist die **aktuelle Quelle der Wahrheit** für den Mitarbeiter-/Benutzer-Lebenszyklus in Nora. Es beschreibt, wie das Subsystem heute funktioniert. Historische Release-Evidenz (RC-SHAs, Migrationshashes, Testzahlen, Live-Beweise, Zwischenfälle) steht im Release-Archiv (`releases/2026-09.md`), die knappen Entscheidungen mit Begründung in `06-decision-log.md`.
 
+**Ownership-Abgrenzung.** Dieses Dokument beschreibt die **Lifecycle-Prozesse**. Die globalen Security-Invarianten dahinter gehören `22`:
+
+| Thema | Owner |
+|---|---|
+| Rollen-/Authorization-Contract (`sales.role`, Matrix, Capability-Rollen) | [`22`](22-security-and-access.md) Abschnitt 4 |
+| Session-/Executor-Trust-Contract (Session-Binding, Actor-Verifikation, Migrations-Hard-Gate) | [`22`](22-security-and-access.md) Abschnitt 8 |
+| RLS, Grants, `SECURITY DEFINER`, privilegierte Read-Views | [`22`](22-security-and-access.md) Abschnitte 6–7 |
+| operative Verifikation | [`21`](21-agent-runbooks.md) Sektion 6 |
+| offene Sicherheitsrisiken | [`17`](17-known-issues-and-planned-waves.md) Abschnitt A |
+
 Bei Widersprüchen gilt die Truth Hierarchy aus `16-current-state.md`: Code und Migrationen vor Dokumentation.
 
 ---
@@ -144,26 +154,15 @@ Regeln: kein Audit ohne Änderung, keine Änderung ohne Audit (Trigger/Executor 
 
 ## 11. Session-gebundene RLS-Autorisierung (W5, finalisiert in W6-A)
 
-Ein JWT bleibt bis `exp` kryptografisch gültig; PostgREST prüft nie, ob die im Token genannte Sitzung noch existiert, und GoTrue bietet keinen Admin-Logout. Nora bindet deshalb die Autorisierung an die Sitzung. **Sicherheitsinvariante (W6-A):** ein Browser-Request, der eine Sitzung nennt, ist nur autorisiert, wenn Nora beweisen kann, dass genau diese lebende Sitzung genau diesem authentifizierten Benutzer gehört.
+**Der globale Contract steht in [`22`](22-security-and-access.md) Abschnitt 8.1** — Claim-Klassifikation, Owner-Bindung (`auth.sessions.user_id = sub`), malformed/fehlender Claim → deny, fail-closed, Migrations-Hard-Gate, `session_binding_health()`. Er wird hier nicht wiederholt.
 
-- `nora_private.jwt_session_claim()` klassifiziert den `session_id`-Claim an einer Stelle: `absent` \| `present` \| `malformed`, plus `jwt_transported` (= PostgREST hat ein JWT übergeben, d. h. `request.jwt.claims` ist gesetzt). Quellen in dieser Reihenfolge: `request.jwt.claim.session_id` (Legacy-GUC, nur SQL-Fixtures — PostgREST ≥ 9 setzt sie nie), dann `request.jwt.claims`.
-- `nora_private.jwt_session_is_live()` entscheidet:
+**Was das für den Lifecycle bedeutet:**
 
-  | Claim-Zustand | Ergebnis |
-  |---|---|
-  | `present` (UUID-String) | live **nur** wenn `auth.sessions.id = session_id` **und** `auth.sessions.user_id = JWT-sub`; kein `sub`, keine Zeile, fremder Besitzer oder **jeder** Fehler beim Nachschlagen → verweigert |
-  | `malformed` (Key vorhanden, aber kein UUID-String: ungültiger String, JSON `null`, Zahl, Boolean, Objekt, Array; Claims kein JSON-Objekt) | verweigert |
-  | `absent`, JWT übergeben (`request.jwt.claims` gesetzt) | verweigert — ein von PostgREST transportiertes Benutzer-JWT ohne Sitzung ist nie ein echtes GoTrue-Token |
-  | `absent`, **kein** JWT übergeben (SQL-Fixtures mit Legacy-GUCs, `psql`, Trigger-Kontexte von GoTrue/pg_cron) | Kompatibilität: `true` (Vor-W5-Verhalten); über die API unerreichbar, weil nichts, was ein Client sendet, `request.jwt.claim.*` setzen kann |
-
-- `nora_private.is_active_user()` und `nora_private.current_role()` — und damit `has_role`, `is_admin`, `can_write`, alle Policies, beide Identitäts-Views und alle RPCs darauf — tragen diese Bindung (Blast Radius: 57 von 74 Policies auf 20 Tabellen, 2 Views, 11 RPCs; die übrigen 17 Policies sind rollennamenbasiert für Capability-Rollen bzw. Storage).
-- `service_role` ist unbetroffen (RLS-Bypass; Executoren prüfen `safe_auth_role()` und konsultieren die Sitzung nie); Capability-Rollen (`nora_role_manager`, `nora_identity_manager`, `nora_audit_writer`, Kalender-Rollen) haben rollennamenbasierte Policies ohne Session-Bezug.
-- **Fail-closed:** kann `postgres` `auth.sessions` nicht lesen, antwortet der Helfer `WARNING` „session binding DENIED" und **verweigert** (kein Vor-W5-Fallback mehr). Voraussetzung dafür ist das Leserecht; die W6-A-Migration verweigert die Installation ohne dieses Recht (Hard Gate + Lookup-Probe), und `nora_private.session_binding_health()` (nur `postgres`; keine Sitzungsdaten) beantwortet „ist die Bindung auf dieser Datenbank auswertbar?" für Suites, Runbook und Störungsdiagnose.
-- Effekt: eine widerrufene Sitzung ist sofort tot — auch nach Reaktivierung, auch bei unverfallenem Token; ein Token mit fremder Sitzung, manipuliertem oder fehlendem Claim bekommt keine Daten. Reaktivierung erfordert eine neue Anmeldung.
+- Ein JWT bleibt bis `exp` kryptografisch gültig, und GoTrue bietet keinen Admin-Logout. Deshalb ist **Offboarding erst durch die Session-Revokation wirksam** (§13), nicht durch den Auth-Bann allein.
+- Eine widerrufene Sitzung ist **sofort** tot — auch nach Reaktivierung, auch bei unverfallenem Token. **Reaktivierung erfordert deshalb eine neue Anmeldung** (§14).
+- Blast Radius der Bindung: 57 von 74 Policies auf 20 Tabellen, 2 Views, 11 RPCs; die übrigen 17 Policies sind rollennamenbasiert (Capability-Rollen, Storage). `service_role` ist unbetroffen.
 - Kosten: ein PK-Lookup mit Besitzer-Vergleich pro Policy-Auswertung.
-- Bewiesen lokal gegen GoTrue 2.196 / PostgREST 16 (echte Anmeldungen, mit dem lokalen Schlüssel signierte Claim-Formen); in Production läuft PostgREST 14.5 (setzt ebenfalls nur `request.jwt.claims`).
-
-Wer die RLS-Helfer ändert, erhält die Bindung; neue Helfer, die „aktiver Benutzer" beantworten, binden ebenfalls. Der Kompatibilitätspfad wird nicht verbreitert; wer ihn entfernen will, stellt zuerst alle SQL-Fixtures auf simulierte Sitzungen um.
+- Bewiesen lokal gegen GoTrue 2.196 / PostgREST 16 (echte Anmeldungen, mit dem lokalen Schlüssel signierte Claim-Formen); Production läuft PostgREST 14.5 (setzt ebenfalls nur `request.jwt.claims`).
 
 ## 12. Abhängigkeits-Preview / „Offene Zuständigkeiten"
 
@@ -198,7 +197,7 @@ Unverändert W1: `PATCH {sales_id, disabled: false}` → Executor setzt `sales.d
 
 Seit dem W6-B-Release (2026-09-07) gilt in Production: der kontrollierte Pfad ist der **einzige** unterstützte Löschpfad. Browser-Rollen haben weiterhin kein `DELETE`-Privileg/keine Policy auf `sales`; referenzierte Mitarbeiter bleiben durch die sechs `NO ACTION`-FKs auf jedem Pfad unlöschbar; der früher für `postgres`/`service_role` offene direkte SQL-Pfad ist jetzt durch `guard_sales_delete` geschlossen.
 
-Das vorbestehende `TRUNCATE`-Recht der API-Rollen aus den Default-Privilegien (Zeilentrigger greifen bei `TRUNCATE` nicht) war zum W6-B-Release noch offen und ist seitdem durch eine **eigenständige, spätere** Datenbank-Sicherheitswelle geschlossen: Security Hardening Wave 1 (`PRODUCTION VERIFIED` 2026-09-07, **nicht** Teil von W6-B) entzog den API-Rollen `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` in ganz `public` und `service_role` zusätzlich jedes direkte `DELETE`. Der W6-B-Löschpfad wurde danach erneut geprüft und ist unverändert funktionsfähig: `guard_auth_user_delete` und `guard_sales_delete` gehören weiterhin `postgres`, laufen weiterhin innerhalb der GoTrue-Transaktion und sind für `service_role` nicht ausführbar; die Ticket-RPCs bleiben `service_role`-ausführbar. Vertrag: `03-data-model-guardrails.md` „Privilegien im Schema `public`".
+Das vorbestehende `TRUNCATE`-Recht der API-Rollen aus den Default-Privilegien (Zeilentrigger greifen bei `TRUNCATE` nicht) war zum W6-B-Release noch offen und ist seitdem durch eine **eigenständige, spätere** Datenbank-Sicherheitswelle geschlossen: Security Hardening Wave 1 (`PRODUCTION VERIFIED` 2026-09-07, **nicht** Teil von W6-B) entzog den API-Rollen `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` in ganz `public` und `service_role` zusätzlich jedes direkte `DELETE`. Der W6-B-Löschpfad wurde danach erneut geprüft und ist unverändert funktionsfähig: `guard_auth_user_delete` und `guard_sales_delete` gehören weiterhin `postgres`, laufen weiterhin innerhalb der GoTrue-Transaktion und sind für `service_role` nicht ausführbar; die Ticket-RPCs bleiben `service_role`-ausführbar. Vertrag: `22-security-and-access.md` Abschnitt 6.
 
 **Löschprüfung (`public.get_employee_deletion_preview`, nur `service_role`)** — getrennt von der W5-Preview („Was ist noch offen?"): sie fragt „Ist diese Identität je zu durablem Geschäfts-/Historienzustand geworden?" und liefert nur Zähler.
 
@@ -220,18 +219,16 @@ Das vorbestehende `TRUNCATE`-Recht der API-Rollen aus den Default-Privilegien (Z
 - **Oberfläche:** eigener destruktiver Abschnitt „Benutzerkonto endgültig löschen" am Ende der Mitarbeiterakte, visuell getrennt von Passwort/E-Mail/Rolle/Zugang; für aktive/eingeladene Konten nur der Hinweis „erst nach „Zugang beenden""; für deaktivierte Konten Löschprüfung mit allen sechs Zählern und Blockergrund („Dieser Mitarbeiter ist Teil der Geschäftshistorie und kann nicht endgültig gelöscht werden. Beenden Sie stattdessen den Nora-Zugang.") oder der destruktive Dialog: **Name im Titel**, Anmeldeadresse, Rolle, Zugangsstatus, Zähler, getippter vollständiger Name, bei Admin-Zielen zusätzliche Checkbox, Erfolg erst nach Server-Verifikation, danach Rückkehr zur Benutzerliste. Nur Administratoren sehen die Akte. Demo/FakeRest: `deletion.supported = false`, kein destruktives Element (kein vorgetäuschtes Sicherheitsmodell).
 - **Fehlercontract:** Datenbank `DETAIL = NORA_*` (oben), Edge snake_case (`self_delete_forbidden`, `confirmation_mismatch`, `admin_target_confirmation_required`, `employee_still_active`, `business_history_exists`, `durable_provenance_exists`, `identity_inconsistent`, `account_delete_not_authorized`, `account_delete_provider_failed`, `account_delete_verification_failed`, `not_found`; Dispositionen `executed | already_deleted`), Oberfläche deutscher Nutzertext ohne technisches Vokabular.
 
-## 16. Bekannte Sicherheitseinschränkungen (aktuell)
+## 16. Bekannte Sicherheitseinschränkungen
+
+Die offenen und akzeptierten Sicherheitspunkte werden **nicht hier** geführt, sondern in [`17`](17-known-issues-and-planned-waves.md) Abschnitt A (Bewertung und Status) — insbesondere: fail-closed Session-Bindung als Betriebsvoraussetzung (A.2), Restlaufzeit eines alten JWT (A.3), `insert_audit_event` für `service_role` (A.4), JOSE-Wortlaut in 401-Antworten (A.5), `sales.id` ist `GENERATED BY DEFAULT` (A.7), fehlende Autorisierung auf Datenebene in FakeRest ([`17`](17-known-issues-and-planned-waves.md) D.3).
+
+Genuin **lifecycle-eigene** offene Punkte:
 
 | Einschränkung | Bewertung | Vorgemerkt |
 |---|---|---|
-| Fail-closed macht das Leserecht von `postgres` auf `auth.sessions` zur Betriebsvoraussetzung: fällt es weg, sehen alle Mitarbeiter sofort keine Daten | kein Angriffspfad; Diagnose über Log-Suchbegriff „session binding DENIED" und `nora_private.session_binding_health()`; Migration verweigert Installation ohne das Recht | akzeptiert, dokumentiert (W6-A; `17-known-issues-and-planned-waves.md` A.2) |
-| Restlaufzeit eines alten JWT ist nur durch die RLS gedeckt, nicht durch GoTrue-Entwertung | Autorisierungs-, keine Authentifizierungsentwertung; kein Pfad liefert Daten | akzeptiert, dokumentiert |
-| `public.insert_audit_event` bleibt für `service_role` ausführbar (Kalender-Functions, Actor `System`) | vorbestehend; `users`-Function nutzt sie nicht mehr | spätere Härtung (schmale Writer je Function) |
-| ~~Default-Privilegien in `public` vergeben `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` an API-Rollen~~ | **aufgelöst** durch Security Hardening Wave 1 (`PRODUCTION VERIFIED` 2026-09-07, eigenständige Welle nach W6-B): keine API-Rolle hält diese Rechte mehr in `public`, `service_role` zusätzlich kein `DELETE` | erledigt — Evidenz im Archiv `releases/2026-09.md` |
-| 401-Antworten der Edge Functions tragen JOSE-Wortlaut | keine Daten, technisches Vokabular | Follow-up |
 | Dialog „Zugang beenden" nennt das Ziel nur über Anmeldeadresse und Status (Live-Zwischenfall 2026-09-06: echter Admin statt Testkonto getroffen, sofort reaktiviert) | kein Codefehler; der W6-B-Löschdialog setzt die Lehre bereits um (Name im Titel, Tippbestätigung, Admin-Checkbox) | UX-Härtung des W5-Dialogs bleibt eigener Punkt |
-| FakeRest kennt die Datenbank-Guards nicht (Demo hat keine Autorisierung auf Datenebene) | dokumentierte Demo-Lücke | — |
-| `invitee_email`/`employee_email`/`changes.email` im Audit sind personenbezogen | keine Retention-/Anonymisierungsregel entschieden | `13-crm-audit-retention.md` offene Entscheidung |
+| `invitee_email` / `employee_email` / `changes.email` im Audit sind personenbezogen | keine Retention-/Anonymisierungsregel entschieden | [`13`](13-crm-audit-retention.md) offene Entscheidung |
 
 ## 17. Roadmap W1–W10
 
@@ -248,7 +245,7 @@ Das vorbestehende `TRUNCATE`-Recht der API-Rollen aus den Default-Privilegien (Z
 | **W5** | Offboarding, Session-Revokation, session-gebundene RLS, Abhängigkeits-Preview | `PRODUCTION VERIFIED` (2026-09-06) |
 | **W6-A** | Session-Autorisierung finalisiert: fail-closed, Owner-Bindung (`sessions.user_id = sub`), malformed/fehlender Claim → deny, Migrations-Hard-Gate, `session_binding_health()` | `PRODUCTION VERIFIED` (2026-09-06) — Migration `20260906210000_nora_lifecycle_session_authorization`, nur Datenbank |
 | **W6-B** | Kontrollierter Hard Delete „Benutzerkonto endgültig löschen": Löschprüfung (all-time Geschäftshistorie + Provenienz), Ticket, `auth.users`- und `sales`-DELETE-Guards, GoTrue-Admin-Hard-Delete als Treiber, `user.account_deleted`, schmale Purge `email_delivery_events`, destruktiver Dialog mit Name/Tippbestätigung/Admin-Checkbox | **`PRODUCTION VERIFIED`** (2026-09-07; Migration `20260906230000_nora_lifecycle_account_deletion`, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`) — §15; Release-Evidenz im Archiv |
-| **Wave 1** (keine Lifecycle-Welle) | Default-Privilegien des `public`-Schemas und explizite Zielmatrix: API-Rollen ohne `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN`, `service_role` ohne direktes `DELETE` in `public` | `PRODUCTION VERIFIED` (2026-09-07; Migration `20260907120000`, nur Datenbank) — eigenständige Sicherheitswelle **nach** W6-B, hier nur der Vollständigkeit halber; Vertrag in `03-data-model-guardrails.md` |
+| **Wave 1** (keine Lifecycle-Welle) | Default-Privilegien des `public`-Schemas und explizite Zielmatrix: API-Rollen ohne `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN`, `service_role` ohne direktes `DELETE` in `public` | `PRODUCTION VERIFIED` (2026-09-07; Migration `20260907120000`, nur Datenbank) — eigenständige Sicherheitswelle **nach** W6-B, hier nur der Vollständigkeit halber; Vertrag in [`22`](22-security-and-access.md) Abschnitt 6 |
 | **W7** | — | **geplant / TBD** (nicht entschieden) |
 | **W8** | — | **geplant / TBD** (nicht entschieden) |
 | **W9** | SQL-Verifikationssuiten (kanonische Sequenz) in CI | **geplant / nicht begonnen** |
@@ -258,13 +255,18 @@ Kandidaten ohne Wellen-Zuordnung (nicht entschieden): Dialog-Härtung „Zugang 
 
 ## 18. Agenten-Guardrails
 
-- Kein neuer Schreibpfad für `sales.role`, `sales.disabled`, `sales.email` oder `auth.sessions` außerhalb der Executoren in Abschnitt 6. Keine RPC für Browser-Rollen, kein GUC-/`postgres`-Bypass, keine zweite Lifecycle-Maschine.
-- Jede Änderung an `disabled` bewegt auch den Auth-Bann und wird verifiziert; kein grüner Erfolg ohne `accessConsistency = consistent`.
-- Neue `user.*`-Ereignisse: Allowlist in `record_employee_admin_event` (oder DB-Executor mit `pin_audit_context`), Actor = verifizierte JWT-User-ID, Ziel = `sales.id`, Operation-ID weiterreichen — nie `insert_audit_event` + `crypto.randomUUID()`.
-- Jede neue Referenz auf `sales.id`: `NO ACTION`-FK, W2-Suite ergänzen; jede Spalte mit aktueller Zuständigkeit: zusätzlich `guard_active_assignment_trigger` und Preview-Zähler; Picker über `SalesAssignmentInput`.
+Diese Liste wiederholt **nicht** die Abschnitte 6–15; sie nennt nur, was beim Ändern zusätzlich zu beachten ist.
+
+**Global (nicht hier entscheiden):** Rollen-/Authorization-Contract, Trust Boundaries, RLS/Grants/`SECURITY DEFINER`, Session-Binding und Executor-Integrität → [`22`](22-security-and-access.md). Operative Testsequenz und Verifikationsschritte → [`21`](21-agent-runbooks.md) Sektion 6.
+
+**Lifecycle-spezifisch:**
+
+- **Kein neuer Schreibpfad** für `sales.role`, `sales.disabled`, `sales.email` oder `auth.sessions` außerhalb der Executoren in Abschnitt 6. Keine RPC für Browser-Rollen, keine zweite Lifecycle-Maschine.
+- Jede Änderung an `disabled` bewegt auch den Auth-Bann und wird verifiziert; **kein grüner Erfolg ohne `accessConsistency = consistent`**.
+- Neue `user.*`-Ereignisse: Allowlist in `record_employee_admin_event` (oder DB-Executor mit `pin_audit_context`), Actor = verifizierte JWT-User-ID, Ziel = `sales.id`, Operation-ID weiterreichen — **nie** `insert_audit_event` + `crypto.randomUUID()`.
+- Jede neue Referenz auf `sales.id`: `NO ACTION`-FK und W2-Suite ergänzen ([`03`](03-data-model-guardrails.md) §2.2). Jede Spalte mit **aktueller** Zuständigkeit zusätzlich `guard_active_assignment_trigger` und Preview-Zähler; Picker über `SalesAssignmentInput`.
 - Namen bestehender Datensätze über `sales_identities`, Auswahl für Neues über `sales_directory`; beide Views bleiben `SELECT`-only und ohne Identity-/Security-Metadaten.
-- RLS-Helfer, die „aktiver Benutzer" beantworten, tragen `jwt_session_is_live()`; die Claim-Klassifikation bleibt allein in `jwt_session_claim()` (keine zweite Parser-Stelle, keine Session-Checks in einzelnen Policies). Test-Fixtures: wer nur die Legacy-GUCs `request.jwt.claim.sub`/`role` setzt, läuft im Kompatibilitätspfad (kein JWT übergeben); wer `request.jwt.claims` (JSON, der API-Pfad) setzt, **muss** eine echte `auth.sessions`-Zeile des Users anlegen und deren `id` als `session_id` mitgeben (Konvention der Suites: Fixture-Sitzungs-ID = User-ID). Migrationen, die `auth.sessions` berühren, prüfen vorher `has_table_privilege('postgres', 'auth.sessions', 'SELECT')` und eine echte Lookup-Probe (Vorbild: W6-A-Gate).
-- Keine Testdaten, Fixtures oder Beweise an echten Mitarbeitern in Production; Live-Beweise nur am freigegebenen Testkonto.
-- Kanonische SQL-Sequenz nach `db reset` (W1 → W2 → W3 → W4 → W5 → W6-A → W6-B je zweimal, leer und mit Fixtures) — siehe `21-agent-runbooks.md` Sektion 6.
-- **Hard Delete (W6-B):** kein zweiter Löschpfad für `sales` oder `auth.users` — weder RPC noch Edge-`DELETE` noch Dashboard; jede Löschung läuft über `prepare_employee_account_deletion` → GoTrue Admin Hard Delete → `guard_auth_user_delete`. Die Löschprüfung zählt **all-time** (nie die W5-„offen"-Filter übernehmen); neue Tabellen mit Mitarbeiter-Urheberschaft/-Zuständigkeit werden dort als Blocker ergänzt (und in der W6-B-Suite bewiesen). `guard_sales_delete`/`guard_auth_user_delete` nie deaktivieren, das Ticket nie länger als zwei Minuten leben lassen, keine E-Mail/Namen in `user.account_deleted`-Metadaten, `sales.id` nicht als alleinige Autorisierungsbasis. SQL-Suiten räumen `sales`-Fixtures nur noch per Rollback auf, nie per `DELETE`.
-- Bei Änderungen an diesem Subsystem: dieses Dokument, `01-domain-model.md` (Kurzfassung), `03-data-model-guardrails.md` (Invarianten), `06-decision-log.md` (durable Entscheidung) und `16-current-state.md` nachziehen; Release-Evidenz ins Archiv (`releases/`).
+- **Hard Delete (W6-B):** kein zweiter Löschpfad für `sales` oder `auth.users` — weder RPC noch Edge-`DELETE` noch Dashboard. Die Löschprüfung zählt **all-time** (nie die W5-„offen"-Filter übernehmen); neue Tabellen mit Mitarbeiter-Urheberschaft/-Zuständigkeit werden in `nora_private.employee_deletion_preview` als Blocker ergänzt und in der W6-B-Suite bewiesen. Guards nie deaktivieren, Ticket nie länger als zwei Minuten, keine E-Mail/Namen in `user.account_deleted`-Metadaten, `sales.id` nie als alleinige Autorisierungsbasis.
+- **Test-Fixtures und Session-Bindung:** wer nur die Legacy-GUCs `request.jwt.claim.sub`/`role` setzt, läuft im Kompatibilitätspfad; wer `request.jwt.claims` (der API-Pfad) setzt, **muss** eine echte `auth.sessions`-Zeile des Users anlegen und deren `id` als `session_id` mitgeben (Suite-Konvention: Fixture-Sitzungs-ID = User-ID).
+- **Keine Testdaten, Fixtures oder Beweise an echten Mitarbeitern in Production**; Live-Beweise nur am freigegebenen Testkonto.
+- Bei Änderungen an diesem Subsystem nachziehen: dieses Dokument, [`01`](01-domain-model.md) (Kurzfassung), [`03`](03-data-model-guardrails.md) (Dateninvarianten), [`22`](22-security-and-access.md) (nur wenn sich ein **globaler** Security-Contract ändert), [`06`](06-decision-log.md) (durable Entscheidung), [`16`](16-current-state.md); Release-Evidenz ins Archiv (`releases/`).

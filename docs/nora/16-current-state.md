@@ -20,20 +20,21 @@ Nora CRM ist eine angepasste Kunden- und Vorgangsverwaltung für einen deutschen
 | Markierung | `tags` | |
 | Mitarbeiter | `sales` (1:1 `auth.users`) | `role` ∈ admin/office/viewer, `disabled`, `email` (Spiegel der Login-Identität) |
 
-Domänenmodell: `01-domain-model.md`. Fallen: `03-data-model-guardrails.md`.
+Domänenmodell: `01-domain-model.md`. Daten-/Persistenzinvarianten und Fallen-Index: `03-data-model-guardrails.md`.
 
 ## 3. Wie funktioniert Security (Kurzfassung)?
 
-- Rollen `admin` / `office` / `viewer` an `sales.role`; Matrix in `11-google-calendar-rbac.md` Abschnitt C; UI spiegelt sie (`canAccess.ts`), die Datenbank bleibt autoritativ.
-- RLS auf allen Kern-Tabellen; `SECURITY DEFINER`-RPCs prüfen Rolle/Ownership selbst; interne Helper in `nora_private`.
-- **Datenzugriff ist an eine lebende Auth-Sitzung gebunden** (W5): ein JWT, dessen Sitzung fehlt, bekommt keine Daten. **W6-A** (`PRODUCTION VERIFIED` 2026-09-06): die genannte Sitzung muss dem JWT-`sub` gehören; malformed oder fehlender Claim eines übergebenen JWT → verweigert; nicht prüfbare Sitzung → verweigert (fail-closed) — `19-user-lifecycle-architecture.md` §11.
-- Mitarbeiter-Lifecycle (Einladung, Rolle, Deaktivieren, Anmeldeadresse, Offboarding) läuft ausschließlich über die `users` Edge Function und `service_role`-only Executoren mit verifiziertem Actor — `19-user-lifecycle-architecture.md`.
+Nur die zentralen aktuellen Live-Fakten. **Der vollständige Contract steht in [`22-security-and-access.md`](22-security-and-access.md)** (Rollen, Berechtigungsmatrix, Trust Boundaries, RLS/Grants, `SECURITY DEFINER`, Session-Binding, Executor-Integrität); offene Risiken in [`17`](17-known-issues-and-planned-waves.md) Abschnitt A. Beides wird hier nicht dupliziert — keine Capability-Matrix in diesem Dokument.
+
+- **Die Datenbank ist die maßgebliche Enforcement Boundary für Datenzugriff und Persistenzautorisierung; die UI ist keine Security Boundary** (`canAccess.ts` spiegelt Rechte, erzwingt sie nicht).
+- Rollen `admin` / `office` / `viewer` an **`sales.role`** (einzige führende Rollenquelle); RLS auf allen Kern-Tabellen, interne Helper in `nora_private` (nicht in den PostgREST-Schemas).
+- **Datenzugriff ist an eine lebende, dem Benutzer gehörende Auth-Sitzung gebunden** (W5/W6-A, `PRODUCTION VERIFIED` 2026-09-06, fail-closed).
+- **Privilegien in `public` sind explizit, nicht geerbt** (Security Hardening Wave 1, `PRODUCTION VERIFIED` 2026-09-07) — für neue **Functions** gilt das Gegenteil (PostgreSQL-Default `PUBLIC EXECUTE`).
+- Mitarbeiter-Lifecycle läuft ausschließlich über die `users` Edge Function und `service_role`-only Executoren mit serverseitig verifiziertem Actor — [`19`](19-user-lifecycle-architecture.md).
+- Öffentliche Selbstregistrierung ist in Production **deaktiviert** (`disable_signup: true`, nachgewiesen 2026-09-04).
 - `operation_id` (Header `x-nora-operation-id`) ist **ausschließlich Korrelation**, nie Auth.
-- Audit: `audit_events`, append-only, Trigger + schmale Writer; Actor/Ziel/Operation sind drei Fakten — `13-crm-audit-retention.md`. Error Observatory: `operation_errors`, getrennt vom Audit.
-- **Privilegien in `public` sind explizit, nicht geerbt** (Security Hardening Wave 1, `PRODUCTION VERIFIED` 2026-09-07): von `postgres` neu erzeugte Tabellen in `public` erben **keine** API-Rollen-Rechte mehr; `anon`/`authenticated`/`service_role` halten auf keiner der geprüften `public`-Relationen `TRUNCATE`, `REFERENCES`, `TRIGGER` oder `MAINTAIN`; Laufzeitrechte entstehen ausschließlich aus explizitem `GRANT` plus RLS. `service_role` hat nirgends in `public` `DELETE`; `anon` hat genau `SELECT` auf `init_state`. Vertrag: `03-data-model-guardrails.md`.
-- Öffentliche Selbstregistrierung ist in Production **deaktiviert** (`disable_signup: true`, nachgewiesen 2026-09-04); Nora ist einladungsbasiert.
-- Supabase Security Advisor: Snapshot 2026-08-28 vollständig bewertet (`ASSESSED/KEEP` bzw. `RESOLVED`); jede neue Migration/Function/Grant-Änderung braucht eine eigene Bewertung. Guardrails: `03-data-model-guardrails.md` Falle 34; Bewertungen: `06-decision-log.md` 2026-08-28 und Archiv `releases/2026-08.md`.
-- Bekannte Restrisiken: `17-known-issues-and-planned-waves.md` (PostgreSQLs eingebauter `PUBLIC`-EXECUTE-Default für **neue Functions** — von Wave 1 ausdrücklich **nicht** gelöst; Schema `storage` und öffentlicher Attachment-Bucket; die für `postgres` unerreichbare `supabase_admin`-Default-ACL in `public`; JOSE-Wortlaut; Leserecht von `postgres` auf `auth.sessions` als Betriebsvoraussetzung, …).
+- Audit: `audit_events`, append-only — [`13`](13-crm-audit-retention.md). Error Observatory: `operation_errors`, getrennt davon.
+- Supabase Security Advisor: Snapshot 2026-08-28 vollständig bewertet; **jede** neue Migration/Function/Grant-Änderung braucht eine eigene Bewertung.
 
 ## 4. Was ist live? (Momentaufnahme 2026-09-10)
 
@@ -89,7 +90,7 @@ Alle folgenden Wellen sind auf `main` — **die Spalte `Status` gilt pro Zeile u
 
 **Was heute gilt (Kurzfassungen der Subsysteme):**
 
-- **Kunden/Kontakte:** `customer_kind`, Hauptansprechpartner, `links_jsonb`/`email_jsonb`/`phone_jsonb`, atomare Anlage-RPCs, `self_contact_id`, Effective Contact Context, Quick Capture atomar mit Idempotency — `01-domain-model.md`. **„Hauptansprechpartner" ist eine Geschäftstransition, kein Spaltenschreibvorgang** (`PRODUCTION VERIFIED` 2026-09-08): `public.create_contact` / `public.update_contact` führen Kontaktschreibung und Rollenwechsel in **einer** Transaktion aus, serialisiert je Kunde über einen Advisory-Lock; das Formular schreibt `is_primary` nie mehr roh — `06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent", `03-data-model-guardrails.md` Falle 40.
+- **Kunden/Kontakte:** `customer_kind`, Hauptansprechpartner, `links_jsonb`/`email_jsonb`/`phone_jsonb`, atomare Anlage-RPCs, `self_contact_id`, Effective Contact Context, Quick Capture atomar mit Idempotency — `01-domain-model.md`. **„Hauptansprechpartner" ist eine Geschäftstransition, kein Spaltenschreibvorgang** (`PRODUCTION VERIFIED` 2026-09-08): `public.create_contact` / `public.update_contact` führen Kontaktschreibung und Rollenwechsel in **einer** Transaktion aus, serialisiert je Kunde über einen Advisory-Lock; das Formular schreibt `is_primary` nie mehr roh — `06-decision-log.md` „2026-09-08 – Atomic Contact Primary Intent", `03-data-model-guardrails.md` §3.
 - **Startseite:** Ansprechpartner- und Kunden-Ids werden aus Aufgaben bzw. Vorgängen über `resolveHotboardContactIds` / `resolveHotboardCompanyIds` abgeleitet — leere Ids raus, Duplikate raus, Reihenfolge des ersten Vorkommens bleibt (`tasks.contact_id` und `deals.company_id` sind nullable). Während des Ladens rendert die Startseite ein Skeleton statt einer leeren Fläche. Diese Resolver sind presentation-lokale Read-Normalisierung, **noch keine** Application-Query-Schicht — `dashboard/hotboardUtils.ts`, Evidenz `releases/2026-09.md`.
 - **Aufgaben:** `tasks.company_id` historisch stabil, Aufgaben-Tab auf der Kundenakte (Desktop) — `01-domain-model.md`, Fallen 7/7a.
 - **Fehler/Operationen:** `NoraErrorCode` über `DETAIL`, Operation Manager mit `execution`/`errorCode`/`result`, Idempotency-Records — `06-decision-log.md` 2026-08-28/29, `domain/noraErrorCodes.ts`, `operations/*`.
@@ -109,11 +110,11 @@ Bei Widersprüchen zwischen Chatwissen, Dokumentation, Repository und Production
 1. **verifizierter tatsächlicher Production-Zustand** — wenn er materiell vom Repository-Sollzustand abweicht
 2. **aktueller Code und aktuelle Migrationen im Repository**
 3. Git-Historie
-4. aktuelle Architektur-/Contract-Dokumente (`16`, `01`, `03`, `13`, `18`, `19`, … — Zuordnung im Router)
+4. aktuelle Architektur-/Contract-Dokumente (`16`, `01`, `03`, `13`, `18`, `19`, `22`, … — Zuordnung im Router)
 5. durable Entscheidungen mit Begründung (`06`)
 6. historische Release-Evidenz (`releases/`)
 7. Chatwissen aus vorherigen Sitzungen
 
 **Repository-Code ist dadurch nicht zweitrangig — er antwortet auf eine andere Frage.** Das Repository ist autoritativ dafür, was der **nächste Release** enthält; der verifizierte Production-Zustand ist autoritativ dafür, was **heute läuft**. Beide Fakten fallen regelmäßig auseinander: der Repository-/Dokumentationskopf wandert mit jedem Docs-Commit, ohne die Laufzeit zu verändern (Abschnitt 4). Erst wenn eine Aussage über den **heutigen Live-Zustand** getroffen wird und beide materiell widersprechen, gewinnt Production — und dann ist die Abweichung selbst ein Befund, der dokumentiert und nicht stillschweigend übernommen wird.
 
-Dokumentation ist niemals autoritativer als Code, Migrationen oder verifizierter Production-Zustand. Innerhalb der Dokumentation gilt: **aktuelle Wahrheit** steht in `16`/`01`/`03`/`19` und den Subsystem-Contracts, **durable Entscheidungen** in `06`, **historische Fakten** im Archiv `releases/` — ein historischer Eintrag beschreibt den Wissensstand seines Datums, nicht den heutigen Zustand.
+Dokumentation ist niemals autoritativer als Code, Migrationen oder verifizierter Production-Zustand. Innerhalb der Dokumentation gilt: **aktuelle Wahrheit** steht in `16`/`01`/`03`/`19`/`22` und den Subsystem-Contracts, **durable Entscheidungen** in `06`, **historische Fakten** im Archiv `releases/` — ein historischer Eintrag beschreibt den Wissensstand seines Datums, nicht den heutigen Zustand.

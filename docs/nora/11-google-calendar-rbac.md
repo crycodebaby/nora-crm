@@ -1,58 +1,23 @@
-# 11 – Google Kalender-Architektur und Nora-Rollenmodell (RBAC)
+# 11 – Google-Kalender-Architektur (Spezifikation)
 
 **Welle v0.4a** — Spezifikation  
 **Status:** Spezifikation. Datenbankseite implementiert und in Production angewendet; Edge-Functions-Seite **nicht deployt** (siehe Kasten unten und `14-google-calendar-readonly-implementation.md`)
 
 > **Deployment-Stand in Production (read-only verifiziert 2026-09-10).** Die **Datenbankseite ist live**: die Migrationen `20260716120000_google_calendar_readonly` und `20260717120000_google_calendar_oauth_sync` stehen im Production-Ledger. Die **drei Edge Functions `calendar-connect-start`, `calendar-connect-callback` und `calendar-sync-manual` sind nicht deployt** — in Production laufen ausschließlich `users` und `brevo-email-events`. Die Google-Kalender-Integration ist damit **in Production nicht nutzbar**: Verbinden und Sync existieren als Code, Schema und Spezifikation, nicht als laufende Funktion. Alles Folgende beschreibt den **beabsichtigten Contract**, nicht einen aktiven Produktionszustand. Offene Punkte: `17-known-issues-and-planned-waves.md`.
 
-> **Abschnitt C ist kein Kalender-Inhalt.** Er beschreibt das **Nora-weite Rollenmodell** (`admin` · `office` · `viewer`) und die projektweite Berechtigungsmatrix — dieser Teil ist **live** und wird von `README.md`, `16-current-state.md` Abschnitt 3 und `03-data-model-guardrails.md` als autoritativ referenziert. Er ist unabhängig vom Deployment-Stand der Kalender-Integration. Ein eigener globaler Security-Contract ist vorgesehen, aber noch nicht angelegt.
+> **Dieses Dokument ist nicht der globale Security-Owner.** Das Nora-weite Rollenmodell (`admin` · `office` · `viewer`), die globale Berechtigungsmatrix, RBAC-/RLS-Architektur, Grants und die allgemeinen `SECURITY DEFINER`-Prinzipien stehen seit CR2 in **[`22-security-and-access.md`](22-security-and-access.md)**. Hier bleibt ausschließlich der **kalenderspezifische** Security- und Access-Kontext. Bei Abweichung gewinnt `22`.
 
-Dieses Dokument spezifiziert die Google-Kalender-Integration und das Nora-Rollenmodell (`admin`, `office`, `viewer`) auf Basis des **bestehenden** Auth-/Benutzermodells. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `10-checklists-snippets-audit.md` und den Decision Log.
+Dieses Dokument spezifiziert die Google-Kalender-Integration auf Basis des bestehenden Auth-/Benutzermodells. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `22-security-and-access.md`, `10-checklists-snippets-audit.md` und den Decision Log.
 
-**Zielgruppe:** Implementierungs-Agenten in v0.4b ff. — damit keine parallele Benutzerverwaltung, kein zweites Terminsystem und keine Token-Leaks entstehen.
+**Zielgruppe:** Implementierungs-Agenten — damit kein zweites Terminsystem und keine Token-Leaks entstehen.
 
 ---
 
-## 0. Ausgangslage (Ist-Analyse)
+## 0. Ausgangslage
 
-### 0.1 Kanonischer CRM-Benutzer
+**Benutzer-, Rollen- und RLS-Grundlage:** [`22-security-and-access.md`](22-security-and-access.md) — `public.sales` ist die einzige Benutzertabelle (1:1 zu `auth.users` über `sales.user_id`), `sales.role` die einzige führende Rollenquelle, die Datenbank die letzte Enforcement Boundary. Mitarbeiter-Lifecycle: [`19-user-lifecycle-architecture.md`](19-user-lifecycle-architecture.md). Die frühere v0.4a-Ist-Analyse dieses Abschnitts beschrieb den Stand vor der RBAC-Härtung; ihr Originalwortlaut liegt im Archiv (`releases/2026-07.md`).
 
-| Aspekt | Ist-Zustand |
-|--------|-------------|
-| Auth-Identität | Supabase Auth (`auth.users`, UUID) |
-| CRM-Profil | **`public.sales`** (bigint PK) — **einzige** Benutzertabelle |
-| Verknüpfung | `sales.user_id` → `auth.users.id` (1:1, unique) |
-| App-Identity | React-admin nutzt **`sales.id`** (bigint), nicht `auth.users.id` |
-| Privileg heute | `sales.administrator boolean` → App-Rolle `"admin"` / `"user"` |
-| Admin-Prüfung DB | `public.is_admin()` — EXISTS auf `sales` mit `administrator = true` |
-| Erster Nutzer | Sign-up nur wenn `init_state.is_initialized = 0`; erster `sales`-Datensatz erhält `administrator = TRUE` |
-| Weitere Nutzer | Nur Admin über Edge Function `users` (service role) |
-| Deaktivierung | `sales.disabled` + Auth-Ban über Edge Function — **nicht** in `checkAuth` geprüft |
-
-**Regel v0.4a:** Keine zweite parallele Benutzerverwaltung. Rollen werden an **`sales`** angehängt, nicht in einer separaten User-Tabelle.
-
-### 0.2 Bestehende RLS (Kern-CRM)
-
-| Tabelle | SELECT | INSERT | UPDATE | DELETE |
-|---------|--------|--------|--------|--------|
-| `companies` | authenticated | authenticated | authenticated | authenticated |
-| `contacts` | authenticated | authenticated | authenticated | authenticated |
-| `deals` | authenticated | authenticated | authenticated | authenticated |
-| `tasks` | authenticated | authenticated | authenticated | authenticated |
-| `sales` | authenticated | — (entfernt) | — (entfernt) | — |
-| `checklist_templates` / `_items` | authenticated | **is_admin()** | **is_admin()** | — |
-| `checklist_runs` / `_items` | authenticated | authenticated | authenticated | — |
-| `saved_text_snippets` | authenticated | authenticated | authenticated | — |
-| `audit_events` | **admin only** (direkt); office via RPC | System only | blockiert | blockiert |
-| `configuration` | authenticated | **is_admin()** | **is_admin()** | — |
-
-**Befund:** Kern-CRM ist faktisch **Single-Tenant, alle authenticated = voller CRUD**. UI blockiert Nicht-Admins nur für `sales` und `configuration` (`canAccess.ts`) — **nicht API-sicher**.
-
-### 0.3 Ownership-Felder (ohne RLS-Durchsetzung)
-
-`companies.sales_id`, `contacts.sales_id`, `deals.sales_id`, `tasks.sales_id` werden per Trigger `set_sales_id_default()` auf den aktuellen Benutzer gesetzt — **Attribution**, kein Zugriffsschutz.
-
-Checklisten/Audit nutzen **`auth.uid()`** (UUID) für `started_by`, `checked_by`, `actor_id` — nicht `sales.id`. Bei RBAC-Migration Angleichung dokumentieren (Abschnitt D).
+**Für den Kalender relevant:** `companies.sales_id`, `contacts.sales_id`, `deals.sales_id`, `tasks.sales_id` werden per Trigger `set_sales_id_default()` gesetzt und sind **Attribution, kein Zugriffsschutz**. Checklisten und Audit nutzen `auth.uid()` (UUID) für `started_by`, `checked_by`, `actor_id` — nicht `sales.id`; geplante `calendar.*`-Ereignisse folgen dem Audit-Contract in [`13`](13-crm-audit-retention.md).
 
 ---
 
@@ -94,168 +59,38 @@ Checklisten/Audit nutzen **`auth.uid()`** (UUID) für `started_by`, `checked_by`
 
 ---
 
-## C. Rollenmodell
+## C. Kalender-Zugriff je Rolle
 
-### C.1 Rollen
+Die globalen Rollen (`admin` · `office` · `viewer`), ihre Definition und die **globale Berechtigungsmatrix** stehen in [`22`](22-security-and-access.md) Abschnitt 4. Hier steht nur die **kalenderspezifische Ausprägung** — eine Verfeinerung dieser Matrix, nie ein Widerspruch.
 
-| Rolle | Zielnutzer | Kurzbeschreibung |
-|-------|------------|------------------|
-| `admin` | Chef / IT | Vollzugriff CRM, Kalender verbinden, Rollen verwalten |
-| `office` | Sekretärin / Büro | Operativer CRM-Alltag, Termine lesen/erstellen, Nora-Termine bearbeiten |
-| `viewer` | extern / schreibgeschützt | Nur Lesen — Hotboard, Akten, Termine |
+Legende: ✅ erlaubt · ❌ verboten · ⚙️ nur Admin
 
-**Zielrolle Sekretärin:** `office`.
-
-### C.2 Mapping vom Ist-Zustand
-
-| Heute | Ziel v0.4b |
-|-------|------------|
-| `sales.administrator = true` | `role = admin` |
-| `sales.administrator = false` | `role = viewer` (Least Privilege; **kein** automatisches `office`) |
-| — | `role = office` nur für explizit benannte und geprüfte Nutzer |
-
-`administrator` bleibt in v0.4b **übergangsweise** synchronisiert (`administrator = (role = 'admin')`) — Entfernung erst nach UI/Edge-Function-Migration.
-
-### C.3 Berechtigungsmatrix
-
-Legende: ✅ erlaubt · 🔶 eingeschränkt · ❌ verboten · ⚙️ nur Admin · 🔧 System/Edge Function
-
-| Aktion | admin | office | viewer |
-|--------|:-----:|:------:|:------:|
-| **Kunden** lesen | ✅ | ✅ | ✅ |
-| Kunden anlegen | ✅ | ✅ | ❌ |
-| Kunden bearbeiten | ✅ | ✅ | ❌ |
-| Kunden löschen/archivieren | ✅ | 🔶 | ❌ |
-| **Kontakte** lesen | ✅ | ✅ | ✅ |
-| Kontakte anlegen | ✅ | ✅ | ❌ |
-| Kontakte bearbeiten | ✅ | ✅ | ❌ |
-| Kontakte löschen | ✅ | 🔶 | ❌ |
-| **Vorgänge** lesen | ✅ | ✅ | ✅ |
-| Vorgänge anlegen | ✅ | ✅ | ❌ |
-| Vorgänge bearbeiten (Status, Felder) | ✅ | ✅ | ❌ |
-| Vorgänge archivieren | ✅ | ✅ | ❌ |
-| Vorgänge löschen | ✅ | 🔶 | ❌ |
-| **Aufgaben** lesen | ✅ | ✅ | ✅ |
-| Aufgaben anlegen/erledigen | ✅ | ✅ | ❌ |
-| Aufgaben löschen | ✅ | 🔶 | ❌ |
-| **Checklisten** lesen | ✅ | ✅ | ✅ |
-| Checkliste starten / Punkte haken | ✅ | ✅ | ❌ |
-| Checklisten-**Vorlagen** bearbeiten | ✅ | ❌ | ❌ |
-| **Textbausteine** lesen | ✅ | ✅ | ✅ |
-| Textbausteine anlegen (Plus) | ✅ | ✅ | ❌ |
-| Textbausteine deaktivieren (Minus) | ✅ | 🔶 | ❌ |
-| **Audit** global lesen (`/audit`) | ✅ | ❌ | ❌ |
-| **Audit** in Akte lesen | ✅ | ✅ | ❌ |
-| Audit schreiben/löschen | 🔧 | 🔧 | 🔧 |
-| **Kalender** Termine lesen | ✅ | ✅ | ✅ |
+| Kalender-Aktion | admin | office | viewer |
+|---|:---:|:---:|:---:|
+| Termine lesen | ✅ | ✅ | ✅ |
 | Kalendertermin **erstellen** (Nora → Google) | ✅ | ✅ | ❌ |
 | Termin mit Kunde/Vorgang **verknüpfen** | ✅ | ✅ | ❌ |
-| **Nora-Termin** bearbeiten | ✅ | ✅ | ❌ |
-| **Nora-Termin** löschen | ✅ | ✅ | ❌ |
-| **Google-Termin** bearbeiten (fremd) | ❌* | ❌* | ❌ |
+| **Nora-Termin** (`origin = nora`) bearbeiten / löschen | ✅ | ✅ | ❌ |
+| **Google-Termin** (`origin = google`) bearbeiten | ❌\* | ❌\* | ❌ |
 | **Kalenderverbindung** verwalten (OAuth) | ⚙️ | ❌ | ❌ |
-| **Nutzerrollen** verwalten | ⚙️ | ❌ | ❌ |
-| Nutzer einladen / deaktivieren | ⚙️ | ❌ | ❌ |
-| App-**Konfiguration** | ⚙️ | ❌ | ❌ |
 
-\* v0.4a–f: Google-Termine (`origin = google`) sind **read-only** für alle Rollen in Nora. Spätere Bearbeitung fremder Google-Termine ist **offene Entscheidung** (Abschnitt L).
+\* Google-Termine sind in Nora für **alle** Rollen read-only. Eine spätere Bearbeitung fremder Google-Termine ist eine offene Entscheidung (Abschnitt L).
 
-**🔶 Eingeschränkt (offen, Tendenz):**
-
-- `office` löscht Kunden/Vorgänge nicht physisch — nur **archivieren** / Status „abgeschlossen“
-- `office` deaktiviert nur **eigene** Textbausteine
-- ~~`viewer` sieht Audit nur auf verknüpften Kunden/Vorgängen~~ — **entschieden v0.3l:** Viewer kein Audit-Zugriff
-
-### C.4 Audit-Zugriff (Stand v0.3l)
-
-| Mechanismus | admin | office | viewer |
-|-------------|:-----:|:------:|:------:|
-| Direktes `SELECT` auf `audit_events` | ✅ | ❌ | ❌ |
-| RPC `get_entity_audit_events` | ✅ | ✅ | ❌ |
-| RPC `get_global_audit_events` | ✅ | ❌ | ❌ |
-| UI `/audit` | ✅ | ❌ | ❌ |
-| UI `EntityAuditHistory` in Akte | ✅ | ✅ | ❌ |
-
-Office liest Audit **ausschließlich** über die kontrollierte RPC — kein globales Durchsuchen der Tabelle. Geplante `calendar.*`-Events (Abschnitt J) nutzen dieselbe `audit_events`-Tabelle und dieselben Lese-Regeln.
+Geplante `calendar.*`-Audit-Ereignisse (Abschnitt J) nutzen dieselbe `audit_events`-Tabelle und dieselben Lese-Regeln wie der übrige Audit — Contract: [`13`](13-crm-audit-retention.md), Sichtbarkeit je Rolle: [`22`](22-security-and-access.md) Abschnitt 4.3.
 
 ---
 
-## D. Technische RBAC-Optionen
+## D. RBAC-Umsetzung
 
-### D.1 Vergleich
+Vollständig in [`22`](22-security-and-access.md): Rollenquelle, Capability-Rollen, interne `nora_private`-Helper, `SECURITY DEFINER`-Vertrag, Grants und Default-Privilegien, Session-gebundene Autorisierung.
 
-| Option | Beschreibung | Pro | Contra |
-|--------|--------------|-----|--------|
-| **A) Rolle an `sales`** | `sales.role text` mit CHECK (`admin`,`office`,`viewer`) | Eine Quelle, passt zu 1:1 Auth-Modell, einfache Migration | Jede Policy braucht JOIN/Subquery auf `sales` |
-| **B) `user_roles` + `role_permissions`** | Normalisierte Rollen-Tabellen | Flexibel für viele Rollen/Rechte | Overkill für 3 Rollen; zweite Benutzer-Dimension |
-| **C) JWT Custom Claims** | Supabase Auth Hook setzt `role` im Token | Schnelle RLS ohne JOIN | Keine Live-Änderung ohne Re-Login; zweite Wahrheit wenn nicht synchron |
-| **D) RLS mit DB-Abfrage** | `current_nora_role()` liest `sales.role` per `auth.uid()` | Immer aktuell | JOIN-Kosten pro Policy |
-| **E) Hybrid DB + JWT** | DB = Wahrheit; Hook spiegelt `role` ins JWT für RLS | Performance + Aktualität via Hook bei Rollenänderung | Etwas mehr Infrastruktur |
+Der historische Optionsvergleich A–E (Rolle an `sales` · `user_roles`-Tabellen · JWT-Claims · DB-Abfrage · Hybrid) und die Empfehlung von v0.4b sind **kein aktueller Security-Contract**. Die durable Entscheidung und ihre Begründung stehen in [`06`](06-decision-log.md) („v0.4b – RBAC- und RLS-Härtung", „v0.4b.1", „v0.4b.2 – RBAC-Abschluss"); der Originalwortlaut liegt im Archiv (`releases/2026-07.md`).
 
-### D.2 Empfehlung (v0.4b)
+**Für den Kalender gilt daraus:**
 
-**Option A + D als Primärmodell**, optional **E** ab v0.4c wenn Policy-Performance relevant wird.
-
-```text
-auth.users.id
-    → sales.user_id (unique)
-    → sales.role ∈ { admin, office, viewer }
-    → public.current_nora_role()  -- SECURITY DEFINER, stable
-    → public.has_nora_role(text[])  -- Hilfsfunktion für RLS
-```
-
-**Nicht empfohlen:**
-
-- Separate `profiles`- oder `crm_users`-Tabelle — bricht kanonisches `sales`-Modell
-- `user_roles` für nur 3 statische Rollen
-- JWT allein ohne DB-Rückfall
-
-### D.3 Konkrete Migrationsbausteine (v0.4b → v0.4b.1 implementiert)
-
-| Baustein | Inhalt |
-|----------|--------|
-| Spalte | `sales.role text not null default 'viewer'` + CHECK-Constraint |
-| Backfill | `administrator = true` → `role = 'admin'`; sonst `role = 'viewer'`; `office` nur manuell |
-| Internes Schema | `nora_private` — Helper nicht in PostgREST (`config.toml` schemas) |
-| Funktionen (intern) | `safe_auth_uid()`, `is_active_user()`, `current_role()`, `has_role()`, `can_write()`, `is_admin()` |
-| Öffentliche RPCs | `start_checklist_run_from_template`; `set_sales_access_by_executor` nur service_role (seit W1, 2026-09-05). Die Legacy-RPC `set_sales_role_by_admin` existiert **nicht mehr** — gelöscht in User Lifecycle W2 (2026-09-05); historisch hatte W1 sie zuvor auf service_role verengt |
-| `search_path` | `''` auf SECURITY DEFINER; vollständig schemaqualifiziert |
-| GUC | ~~GUC-Token~~ → **`nora_role_manager`** Capability (v0.4b.2) |
-| View | `sales_directory` — reduzierte Teamliste (v0.4b.2) |
-| RLS Kern-CRM | Tiered policies über `nora_private.*` |
-| Edge Function `users` | einziger Lifecycle-Executor: `set_sales_access_by_executor(p_actor_user_id, …)` + Auth-Bann + Verifikation (W1) |
-| Frontend `canAccess` | Matrix aus Abschnitt C |
-| Testrolle | **nur lokal** — `rbac_rls_setup.sql` / `teardown.sql`, nie in Migration |
-| Actor-ID | Kurzfristig `auth.uid()` in Policies/RPCs |
-
-### D.3.1 SECURITY DEFINER-Inventar (Stand v0.4b.1)
-
-| Funktion | Owner | EXECUTE | Data-API | Grund SECURITY DEFINER |
-|----------|-------|---------|----------|------------------------|
-| `nora_private.safe_auth_uid` | postgres | authenticated, service_role | nein | Safe JWT-sub (invalid → NULL) |
-| `nora_private.is_active_user` | postgres | authenticated, service_role | nein | sales-Lookup für RLS |
-| `nora_private.current_role` | postgres | authenticated, service_role | nein | Rolle für RLS |
-| `nora_private.has_role` | postgres | authenticated, service_role | nein | Matrix-Check für RLS |
-| `nora_private.can_write` | postgres | authenticated, service_role | nein | office/admin für RLS |
-| `nora_private.is_admin` | postgres | authenticated, service_role | nein | admin für RLS |
-| ~~`public.set_sales_role_by_admin`~~ | — | — | — | **gelöscht in User Lifecycle W2 (2026-09-05)**; einziger Lifecycle-Pfad ist `public.set_sales_access_by_executor` (nur `service_role`, siehe `19-user-lifecycle-architecture.md`) |
-| `public.set_sales_access_by_executor` | postgres | **service_role** | ja | W1-Executor: verifizierter Actor, Selbstschutz, delegiert an `apply_sales_role_change` |
-| `nora_private.guard_last_active_admin` | postgres | (Trigger) | nein | W1: nie null aktive Admins |
-| `nora_private.active_admin_count` | postgres | postgres only | nein | W1: die eine Definition von „aktiver Admin" |
-| `nora_private.apply_sales_role_change` | **nora_role_manager** | postgres only | nein | Privileg-UPDATE als Capability-Owner |
-| `nora_private.resolve_first_signup_role` | postgres | (intern) | nein | Advisory lock für ersten Admin |
-| `public.handle_new_user` | postgres | (Trigger) | nein | sales bei Auth-Signup |
-
-`anon` hat kein EXECUTE auf interne Helper und keinen Tabellen-GRANT auf CRM-Tabellen.
-
-### D.4 Keine doppelte Rollenquelle
-
-| Quelle | Status |
-|--------|--------|
-| `sales.role` | ✅ **einzige führende Quelle** |
-| `sales.administrator` | ⚠️ Deprecated-Spiegel bis v0.5 |
-| JWT `app_metadata.role` | optional Spiegel, nie führend |
-| Frontend `canAccess` | UI-Guard, spiegelt DB — kein eigenes Rechtemodell |
+- Kalender-Schreibpfade laufen über die Capability-Rollen `nora_calendar_writer` / `nora_calendar_linker`, nicht über breite Grants.
+- Kalender-Edge-Functions nutzen `service_role`; `public.insert_audit_event` bleibt für sie ausführbar (bekannter Punkt: [`17`](17-known-issues-and-planned-waves.md) A.4).
+- Ein **Inventar** der `SECURITY DEFINER`-Functions wird nicht in diesem Dokument geführt: eine gepflegte Liste veraltet still. Der aktuelle Stand wird gegen die Datenbank ermittelt (`pg_proc.prosecdef`, `pg_proc.proacl`, `has_function_privilege`) — Vorgehen: [`21`](21-agent-runbooks.md) Sektion 4.
 
 ---
 
@@ -518,20 +353,16 @@ Schreiben nur über **SECURITY DEFINER** / Trigger / Edge Function — analog be
 
 ## L. Offene Entscheidungen
 
+Nur **kalenderspezifisch** Offenes. Die früheren Zeilen L.1–L.3 und L.10–L.12 betrafen das globale Rollenmodell (Benutzertabelle, erster Admin, `office`-Löschrecht, `viewer`-Audit, JWT-Claim, `sales.administrator`); sie sind entschieden und stehen in [`22`](22-security-and-access.md) Abschnitt 4 bzw. [`06`](06-decision-log.md). Die Nummern bleiben unverändert, damit alte Verweise auflösbar sind.
+
 | # | Frage | Optionen | Tendenz v0.4a |
 |---|-------|----------|---------------|
-| L.1 | Welche Tabelle repräsentiert einen Benutzer? | `sales` vs. neue Tabelle | **`sales`** (bestätigt) |
-| L.2 | Wer erhält initial `admin`? | Erster Sign-up vs. manuell | **Erster Sign-up** bleibt; Backfill `administrator=true` → `role=admin` |
-| L.3 | Darf `office` Kunden/Vorgänge **löschen**? | Löschen vs. nur archivieren | **Nur archivieren** — kein physisches DELETE |
 | L.4 | Darf `office` **bestehende Google-Termine** später bearbeiten? | Nie / nur Verknüpfung / mit Einschränkung | **Nur Verknüpfung**; Bearbeitung in Google direkt |
 | L.5 | Kalender zusätzlich mit Sekretärin bei **Google** teilen? | Ja (empfohlen) / nur Nora | **Ja** — Google-Sharing unabhängig von Nora; Nora-OAuth bleibt Admin-Konto |
 | L.6 | Welche **Eventtypen** in Nora anzeigen? | Alle / ohne transparente / ohne ganztägig | **Alle bestätigten** im Zeitfenster; `cancelled` ausblenden |
 | L.7 | **Wiederkehrende Termine** darstellen? | Master only / expandierte Instanzen / beides | **Expandierte Instanzen** im Sync-Zeitfenster; `recurring_event_id` für Gruppierung |
 | L.8 | `google_calendar_connections` Singleton | Strikt 1 Zeile vs. Historie mehrerer Zeilen | **Historie** mit max. 1× `status=connected` |
 | L.9 | Gelöschte Google-Events | Zeile löschen vs. `status=cancelled` | **`cancelled` + aus Hotboard filtern** |
-| L.10 | `viewer` Audit-Zugriff | Voller Audit vs. kontextbezogen vs. keiner | **Kein Zugriff** (v0.3l) |
-| L.11 | JWT Custom Claim für Rolle | Ja (Hybrid) vs. nur DB | **Erst DB**; Hybrid optional wenn Performance-Problem |
-| L.12 | `sales.administrator` entfernen | v0.4b / v0.5 / nie | **Deprecated-Spiegel bis v0.5** |
 | L.13 | Demo/FakeRest Kalender | Stub vs. deaktiviert | **Deaktiviert** mit Hinweis (wie Checklisten in Demo) |
 | L.14 | Hotboard-Zeitfenster | Heute / heute+morgen / 7 Tage | **Heute + morgen** (operativer Büro-Alltag) |
 
@@ -545,7 +376,6 @@ Schreiben nur über **SECURITY DEFINER** / Trigger / Edge Function — analog be
 | Private iCal-URL | Google Calendar API mit OAuth |
 | Kalender-ID in React-Komponenten | `google_calendar_connections` / Konfiguration |
 | Tokens in `audit_events` | Nur Event-Metadaten ohne Secrets |
-| Parallele Benutzerverwaltung | `sales.role` |
 | `expected_closing_date` als Terminersatz | Kalender-Cache für Hotboard |
 | Google-Labels/Farben über Nora ändern | Unverändert in Google belassen |
 | Alle Google-Termine editierbar | Nur `origin = nora` |
@@ -557,7 +387,8 @@ Schreiben nur über **SECURITY DEFINER** / Trigger / Edge Function — analog be
 | Dokument / Code | Inhalt |
 |-----------------|--------|
 | `01-domain-model.md` | Domänenbegriffe, geplante Kalender-Erweiterung |
-| `03-data-model-guardrails.md` | Falle 17 (Google als Prozesskern), Termin-Guardrails |
+| `22-security-and-access.md` | **globales** Rollenmodell, Berechtigungsmatrix, RBAC/RLS, Grants, `SECURITY DEFINER` |
+| `03-data-model-guardrails.md` | Daten-/Persistenzinvarianten; Fallen-Index (Fallen 17, 22–24, 26, 27 → dieses Dokument) |
 | `06-decision-log.md` | Entscheidung v0.4a |
 | `21-agent-runbooks.md` Sektionen 4, 5, 8 | operative RBAC- und Kalender-Schritte |
 | `10-checklists-snippets-audit.md` | Audit-Muster, `is_admin()` |

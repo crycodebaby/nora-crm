@@ -14,7 +14,7 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 |---|---|
 | Mitarbeiter-Lifecycle | [W6-B Kontrollierter Hard Delete](#2026-09-07--user-lifecycle-w6-b-kontrollierter-hard-delete-benutzerkonto-endgültig-löschen) · [W6-A Session-Autorisierung fail-closed](#2026-09-06--user-lifecycle-w6-a-session-autorisierung-fail-closed-und-owner-gebunden) · [W5 Offboarding & Sitzungen](#2026-09-06--user-lifecycle-w5-kontrolliertes-offboarding-session-revokation-abhängigkeits-preview) · [W4 Anmeldeadresse](#2026-09-06--user-lifecycle-w4-kontrollierte-änderung-der-anmeldeadresse-login-identität) · [W3 Audit-Actor](#2026-09-05--user-lifecycle-w3-der-echte-administrator-steht-im-audit-der-mitarbeiter-hat-eine-stabile-audit-identität) · [W2 Referenzintegrität](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) · [W1 Executor](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) · [V1B Präsentation](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) · [V1A Zugangsstatus](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) · [Mitarbeiterzugang einladungsbasiert](#2026-07-23--mitarbeiterzugang-öffentliches-redesign-und-einladung) |
 | E-Mail-Zustellung | [V1C-B Zustellstatus-UI](#2026-09-04--employee-access-v1c-b-zustellstatus-wird-gezeigt-die-mailart-nicht) · [V1C-A Best-Effort-Korrelation](#2026-09-04--employee-access-v1c-a-zustellbeobachtung-ist-best-effort-korrelation-kein-öffnungs-tracking) |
-| Security / Privilegien | [Wave 1 Default-Privilegien & Zielmatrix](#2026-09-07--security-hardening-wave-1-default-privilegien-des-public-schemas-und-explizite-zielmatrix) · [Wave 0 TRUNCATE](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) · [Residual Advisor Closure](#2026-08-28--residual-security-advisor-closure) · [Privilegierte Read-Views](#2026-08-28--intentional-privileged-read-views-init_state--sales_directory) · [RBAC-Abschluss v0.4b.2](#2026-07-14--v04b2-rbac-abschluss-capability-parallel-admin-sales_directory) · [RBAC-Hardening v0.4b.1](#2026-07-14--v04b1-rbac-migrations--und-function-hardening) · [RBAC/RLS v0.4b](#2026-07-14--v04b-rbac--und-rls-härtung) · [Rollenbewusste UX v0.3k](#2026-07-14--v03k-rollenbewusste-ux-ladezustände-und-fehlertoleranz) |
+| Security / Privilegien | [Global Security & Access Owner](#2026-09-10--global-security--access-erhält-einen-eigenen-current-contract) · [Wave 1 Default-Privilegien & Zielmatrix](#2026-09-07--security-hardening-wave-1-default-privilegien-des-public-schemas-und-explizite-zielmatrix) · [Wave 0 TRUNCATE](#2026-09-04--security-hardening-wave-0-truncate-auf-audit_events-entzogen) · [Residual Advisor Closure](#2026-08-28--residual-security-advisor-closure) · [Privilegierte Read-Views](#2026-08-28--intentional-privileged-read-views-init_state--sales_directory) · [RBAC-Abschluss v0.4b.2](#2026-07-14--v04b2-rbac-abschluss-capability-parallel-admin-sales_directory) · [RBAC-Hardening v0.4b.1](#2026-07-14--v04b1-rbac-migrations--und-function-hardening) · [RBAC/RLS v0.4b](#2026-07-14--v04b-rbac--und-rls-härtung) · [Rollenbewusste UX v0.3k](#2026-07-14--v03k-rollenbewusste-ux-ladezustände-und-fehlertoleranz) |
 | PWA | [Update-Lifecycle 1B–V2 (konsolidiert)](#2026-08-30--2026-09-01--pwa-update-lifecycle-wartender-worker-browser-fakten-systemereignis) |
 | Kunden / Kontakte / Vorgänge | [Atomic Contact Primary Intent](#2026-09-08--atomic-contact-primary-intent-hauptansprechpartner-ist-eine-geschäftstransition-kein-spaltenschreibvorgang) · [Customer Create Speed & Clarity](#2026-09-01--customer-create-speed--clarity-land-ausgeblendet-bundesland-nrw-weitere-angaben-eingeklappt) · [Kanban Navigation Rail](#2026-08-30--vorgänge-kanban-navigation-rail) · [Kontakterstellung UI-Polish](#2026-08-28--kontakterstellung-ui-polish) · [Pre-Production Hardening](#2026-08-27--pre-production-hardening-patch) · [Self Contact Wave](#2026-08-26--self-contact-wave) · [Unified Tasks Wave](#2026-08-25--unified-tasks-wave) · [Customer & Contact Workflow Wave](#2026-08-25--customer--contact-workflow-wave) |
 | Operationen / Fehler / Feedback | [Notification Presentation Contract 7A/7B](#2026-08-29--notification-presentation-contract-v1-phase-7a) · [Operation Status Contract v1](#2026-08-29--operation-status-contract-wave-v1-createquickcapturecase-slice) · [Idempotency Wave](#2026-08-29--idempotency-wave) · [Error Contract Wave](#2026-08-28--error-contract-wave) · [Error Observatory (FW3)](#2026-08-10--foundation-wave-3-error-observatory-core) · [Operation Manager (FW2)](#2026-08-10--foundation-wave-2-operation-manager--catalog) · [Operation Correlation (FW1)](#2026-08-10--foundation-wave-1-operation-correlation) · [Portal-Form-Owner (Gates 2/2b)](#2026-08-10--stabilization-gates-22b-form-owner-im-radix-portal) |
@@ -26,6 +26,21 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabelle „Nur archivierte Einträge" am Ende.
 
 ---
+
+## 2026-09-10 – Global Security & Access erhält einen eigenen Current Contract
+
+**Status:** `CURRENT` (Dokumentationsentscheidung, 2026-09-10; keine Migration, kein Deploy, keine Laufzeitänderung). Contract: `22-security-and-access.md`.
+
+**Kontext.** Die globale Security- und Access-Wahrheit lag verstreut: das Nora-weite Rollenmodell und die Berechtigungsmatrix in `11-google-calendar-rbac.md` Abschnitt C — einem Dokument über den Google-Kalender, dessen Edge-Seite nicht einmal deployt ist; die Grant-/RLS-/`SECURITY DEFINER`-Guardrails in `03-data-model-guardrails.md`, einem **ALWAYS** geladenen Datenmodell-Dokument; die operativen Prüfschritte in `21-agent-runbooks.md` Sektion 4, die selbst notierte, dass ihr Contract-Owner fehlt. Ein Agent mit einer allgemeinen RBAC-Frage musste drei Dokumente zusammensuchen und trug dabei bei **jeder** Aufgabe den vollen Security-Text im Always-Kontext mit.
+
+**Entscheidungen.**
+
+1. **Global Security & Access erhält einen eigenen Current Contract** (`22-security-and-access.md`, Load-Klasse **CONDITIONAL CURRENT CONTRACT**): Enforcement-Prinzip, Authentication vs. Authorization, Rollen und Capability-Rollen, globale Berechtigungsmatrix, Trust Boundaries, Database Enforcement, Session- und Executor-Integrität.
+2. **Ownership-Grenze.** `03` bleibt Daten/Persistenz und **ALWAYS**; `19` bleibt Lifecycle-Prozesse; `11` behält nur den kalenderspezifischen Access-Kontext; `21` bleibt operative Verifikation; `16` behält nur einen kompakten Security-Kernel; `17` A bleibt der Ort für offene Risiken.
+3. **Das verbindliche Enforcement-Prinzip lautet:** für Datenzugriff und Persistenzautorisierung ist die **Datenbank** die letzte Enforcement Boundary; UI und Client sind niemals Autorität; **Edge Functions ergänzen** serverseitige Authorization und privilegierte Orchestrierung. Authentication (GoTrue/Identity) wird ausdrücklich **nicht** als DB-Verantwortung beschrieben.
+4. **Die Fallen-Nummern 1–40 bleiben dauerhaft stabil.** Eine Falle behält ihre ID auch nach einem Owner-Wechsel (Falle 25 und 34 sind jetzt in `22`); `03` führt einen kompakten **Fallen-Index** (Nummer → kanonischer Owner) als Resolver. Keine Renummerierung, keine Rückschreibung historischer Release-Dokumente.
+
+**Begründung.** Security-Wahrheit, die als Nebenabschnitt eines Subsystemdokuments lebt, wird bei Subsystem-Arbeit gefunden und bei Security-Arbeit übersehen — und Security-Wahrheit im Always-Kontext verteuert jede Label-Änderung. Ein eigener conditional Contract macht sie **auffindbar, wenn sie gebraucht wird**, und **abwesend, wenn nicht**. Die stabilen Fallen-IDs sind der Preis dafür, dass fünfzehn Monate Release-Dokumentation nicht umgeschrieben werden müssen.
 
 ## 2026-09-09 – Visualizer Production Exclusion: Diagnoseartefakte gehören nicht in den Production-Build
 
@@ -44,7 +59,7 @@ Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabell
 
 ## 2026-09-08 – Atomic Contact Primary Intent: Hauptansprechpartner ist eine Geschäftstransition, kein Spaltenschreibvorgang
 
-**Status:** `PRODUCTION VERIFIED` (2026-09-08; Laufzeit-RC `0fb3d6ba6a52613e366c780586c4988d264c61eb`, Release-Kopf `5d526231b21848a2720629a12bd55ac902e6cb43`, Base `7d85acbd`; Migration `20260908120000_nora_atomic_contact_primary_intent`, LF SHA-256 `0354bdec34c527a598529ba4309247154d7ec6838722ac7953c7dc4d56af4f6f` — angewendet, Ledger **58** / Kopf `20260908120000`; PO-Live-Smoke akzeptiert). Zwei frühere RCs wurden von unabhängigen Reviews als **release-blockierend zurückgewiesen** und dürfen nicht releast werden: `cf48560b` (Hash `d3352113fd001d53…`, Cross-Command-Deadlock) und `b161a4f9` (Hash `edf8346fa947cb6c…`, Trigger-Deadlock). Beide Nachträge stehen am Ende dieses Eintrags. Release-Evidenz: `releases/2026-09.md` (Eintrag Atomic Contact Primary Intent). Modell: `01-domain-model.md`; Guardrail: `03-data-model-guardrails.md` Falle 40.
+**Status:** `PRODUCTION VERIFIED` (2026-09-08; Laufzeit-RC `0fb3d6ba6a52613e366c780586c4988d264c61eb`, Release-Kopf `5d526231b21848a2720629a12bd55ac902e6cb43`, Base `7d85acbd`; Migration `20260908120000_nora_atomic_contact_primary_intent`, LF SHA-256 `0354bdec34c527a598529ba4309247154d7ec6838722ac7953c7dc4d56af4f6f` — angewendet, Ledger **58** / Kopf `20260908120000`; PO-Live-Smoke akzeptiert). Zwei frühere RCs wurden von unabhängigen Reviews als **release-blockierend zurückgewiesen** und dürfen nicht releast werden: `cf48560b` (Hash `d3352113fd001d53…`, Cross-Command-Deadlock) und `b161a4f9` (Hash `edf8346fa947cb6c…`, Trigger-Deadlock). Beide Nachträge stehen am Ende dieses Eintrags. Release-Evidenz: `releases/2026-09.md` (Eintrag Atomic Contact Primary Intent). Modell: `01-domain-model.md`; Guardrail: `03-data-model-guardrails.md` §3 (Transaktionen, Sperren, Concurrency).
 
 **Kontext.** Am 2026-09-07 legte der Product Owner in Production einen zweiten Ansprechpartner für den Kunden `companies.id = 20` an und markierte ihn als Hauptansprechpartner, obwohl `contacts.id = 29` diese Rolle bereits hielt. Das Kontaktformular schrieb `is_primary = true` als rohe Spalte; der Partial Unique Index `uq_contacts_one_primary_per_company` verweigerte korrekt (HTTP 409, SQLSTATE 23505); Nora zeigte dem Büro die generische Meldung „Die Daten konnten gerade nicht geladen werden." Die Datenbank-Invariante war richtig — es fehlte die **autoritative Transition** in der Anwendungsschicht. Die zwei Tage zuvor abgeschlossene Privilegien-Härtung war nachweislich nicht ursächlich.
 
@@ -108,7 +123,7 @@ Gemessen auf `b161a4f9`: **30 von 30** realen Rennen endeten im Deadlock — deu
 
 ## 2026-09-07 – Security Hardening Wave 1: Default-Privilegien des `public`-Schemas und explizite Zielmatrix
 
-**Status:** `PRODUCTION VERIFIED` (2026-09-07; Migration `20260907120000_nora_public_privilege_hardening` live, **DB-only** — kein Edge-Deploy, kein Frontend-Deploy). Guardrails: `03-data-model-guardrails.md` „Privilegien im Schema `public`"; Release-Evidenz und Runbook: `releases/2026-09.md` (Eintrag Security Hardening Wave 1).
+**Status:** `PRODUCTION VERIFIED` (2026-09-07; Migration `20260907120000_nora_public_privilege_hardening` live, **DB-only** — kein Edge-Deploy, kein Frontend-Deploy). Guardrails: `22-security-and-access.md` Abschnitt 6 (Database Enforcement); Release-Evidenz und Runbook: `releases/2026-09.md` (Eintrag Security Hardening Wave 1).
 
 **Durables Ergebnis.** Von `postgres` neu erzeugte Tabellen in `public` erben keine API-Rollen-Rechte mehr; die 27 bestehenden `public`-Relationen tragen eine explizite Zielmatrix; keine API-Rolle hält dort noch `TRUNCATE`, `REFERENCES`, `TRIGGER` oder `MAINTAIN`; `service_role` hat nirgends in `public` direktes `DELETE`; `nora_calendar_linker` hat kein dauerhaftes `CREATE ON SCHEMA public` mehr; alle Capability-Rollen samt Spalten-Grant `sales.email` sind unverändert erhalten. **Nicht** gelöst und ausdrücklich außerhalb dieser Entscheidung: der eingebaute `PUBLIC`-EXECUTE-Default für neue Functions und Schema `storage` (siehe unten sowie `17-known-issues-and-planned-waves.md` A.8/A.9).
 
@@ -133,7 +148,7 @@ Unabhängig nachgewiesen (2026-09-07): auf der Basis vor dieser Welle war `set r
 
 ## 2026-09-07 – User Lifecycle W6-B: Kontrollierter Hard Delete („Benutzerkonto endgültig löschen")
 
-**Status:** `PRODUCTION VERIFIED` (2026-09-07; Migration `20260906230000_nora_lifecycle_account_deletion` live, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`, Release-Evidenz im Archiv `releases/2026-09.md`). Aktueller Vertrag: `19-user-lifecycle-architecture.md` §15; Guardrails: `03-data-model-guardrails.md` „Kontrollierter Hard Delete"; Release-Evidenz und Runbook: `releases/2026-09.md` (Eintrag W6-B).
+**Status:** `PRODUCTION VERIFIED` (2026-09-07; Migration `20260906230000_nora_lifecycle_account_deletion` live, `users`-Edge v9, Frontend; Live-Beweis am Testkonto `sales.id = 4`, Release-Evidenz im Archiv `releases/2026-09.md`). Aktueller Vertrag: `19-user-lifecycle-architecture.md` §15; Guardrails: `22-security-and-access.md` Abschnitt 8.2 (Executor-Integrität) und `03-data-model-guardrails.md` §2.2 (Referenzintegrität); Release-Evidenz und Runbook: `releases/2026-09.md` (Eintrag W6-B).
 
 **Kontext.** Seit W2 war ein unreferenzierter Mitarbeiter technisch nur für `postgres`/`service_role` per SQL löschbar; ein unterstützter Produktpfad fehlte, und ein versehentlich angelegtes oder Test-Konto (Production: `sales 4`, eingeladen, nie aktiviert, deaktiviert, gebannt, null Referenzen) konnte nicht entfernt werden. Gegen das reale GoTrue 2.196 wurde erneut bewiesen: der Admin-Hard-Delete läuft mit GoTrues Audit-Insert in **einer** Postgres-Transaktion; solange die `sales`-Zeile existiert, scheitert er am `NO ACTION`-FK (500, nichts verändert); ein `BEFORE DELETE`-Trigger auf `auth.users` läuft in dieser Transaktion, eine Exception rollt alles zurück, ein darin ausgeführtes `DELETE FROM public.sales` committet mit; die sechs W2-FKs brechen die gesamte GoTrue-Transaktion ab (Nora-Audit-Zeile und GoTrue-Audit-Zeile teilen dieselbe `xmin`).
 
@@ -219,7 +234,7 @@ Unabhängig nachgewiesen (2026-09-07): auf der Basis vor dieser Welle war `set r
 
 ## 2026-09-05 – User Lifecycle W2: Referenzintegrität und historische Identität
 
-**Status:** `PRODUCTION VERIFIED` (2026-09-05). Archiv: [Original](releases/2026-09.md#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität). Architektur: `19-user-lifecycle-architecture.md` §7–§8, `03-data-model-guardrails.md` Falle 39.
+**Status:** `PRODUCTION VERIFIED` (2026-09-05). Archiv: [Original](releases/2026-09.md#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität). Architektur: `19-user-lifecycle-architecture.md` §7–§8, `03-data-model-guardrails.md` §2.2.
 
 **Kontext.** `contact_notes.sales_id` war `ON DELETE CASCADE` (Mitarbeiter löschen = Notizen still löschen), `tasks.sales_id` hatte keinen FK, und der einzige Namens-Lookup filterte deaktivierte Mitarbeiter weg (leere Namen, Export-Crash).
 
@@ -262,7 +277,7 @@ Unabhängig nachgewiesen (2026-09-07): auf der Basis vor dieser Welle war `set r
 3. **Guardrail: ein lokaler `db reset` reproduziert Production nicht** (lokal `grant all` in den Default-Privilegien, live `Dxtm`) — Privilegienaussagen gegen Production prüfen; Migrationen müssen in beiden Umgebungen denselben Endzustand erzwingen.
 4. `service_role` behält `TRUNCATE` (bewusst akzeptiertes Restrisiko; Retention-Pfade); die schemaweiten Default-Privilegien bleiben ein eigener Folgebefund (`17-known-issues-and-planned-waves.md`).
 
-> **Abgelöst am 2026-09-07 durch Security Hardening Wave 1.** Punkt 4 gilt nicht mehr: `service_role` hat auf `audit_events` weder `TRUNCATE` noch `UPDATE` noch `DELETE`, und der als Folgebefund vermerkte Default-Privilegien-Defekt ist behoben. Punkte 1–3 gelten unverändert weiter. Aktueller Vertrag: `03-data-model-guardrails.md` „Privilegien im Schema `public`" und `13-crm-audit-retention.md`.
+> **Abgelöst am 2026-09-07 durch Security Hardening Wave 1.** Punkt 4 gilt nicht mehr: `service_role` hat auf `audit_events` weder `TRUNCATE` noch `UPDATE` noch `DELETE`, und der als Folgebefund vermerkte Default-Privilegien-Defekt ist behoben. Punkte 1–3 gelten unverändert weiter. Aktueller Vertrag: `22-security-and-access.md` Abschnitt 6 und `13-crm-audit-retention.md`.
 
 ## 2026-09-04 – Employee Access V1C-B: Zustellstatus wird gezeigt, die Mailart nicht
 
@@ -340,7 +355,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-29 – Notification Presentation Contract v1 (Phase 7A)
 
-**Status:** Phase 7B `PRODUCTION VERIFIED` (2026-08-30); nur Quick Capture migriert, weitere Intents Phase 7C. Archiv: [Original inkl. Nachträge 7B.3/7B.4/7B.4b/7B.4c/Release](releases/2026-08.md#2026-08-29--notification-presentation-contract-v1-phase-7a). Guardrails: `03-data-model-guardrails.md` Fallen 37/38; Runbook `21-agent-runbooks.md` Sektion 13.
+**Status:** Phase 7B `PRODUCTION VERIFIED` (2026-08-30); nur Quick Capture migriert, weitere Intents Phase 7C. Archiv: [Original inkl. Nachträge 7B.3/7B.4/7B.4b/7B.4c/Release](releases/2026-08.md#2026-08-29--notification-presentation-contract-v1-phase-7a). Guardrails: `21-agent-runbooks.md` Sektion 13 (Falle 37) und Sektion 11 (Falle 38) — `Interim-Contract`, solange dieser Bereich keinen eigenen Contract-Owner hat.
 
 **Entscheidungen.**
 
@@ -354,7 +369,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-29). Archiv: [Original inkl. Phasen 6C/6D.1/6E](releases/2026-08.md#2026-08-29--operation-status-contract-wave-v1-createquickcapturecase-slice). Guardrail: `03-data-model-guardrails.md` Falle 35.
+**Status:** `PRODUCTION VERIFIED` (2026-08-29). Archiv: [Original inkl. Phasen 6C/6D.1/6E](releases/2026-08.md#2026-08-29--operation-status-contract-wave-v1-createquickcapturecase-slice). Guardrail: `21-agent-runbooks.md` Sektion 11 (Falle 35, `Interim-Contract`); Persistenz-Invariante: `03-data-model-guardrails.md` §5.
 
 **Entscheidungen.** Lifecycle bleibt `pending | success | error` (keine Werte ohne reale Semantik). `execution?: "executed" | "replayed"` ist ein Zusatzfeld an `success`, `undefined` ohne `idempotencyKey`. RPC-Transport: additives `_meta.disposition` im JSONB-Result der drei idempotenten RPCs (`CREATE OR REPLACE` auf unveränderten Signaturen), nur mit Key gesetzt; `_meta` ist reine Transportmetadata, nie Business-Feld, nie im Fingerprint; der in `idempotency_records` gespeicherte Wert bleibt für immer `executed`, die Replay-Antwort berechnet `replayed` frisch. `OperationRecord` bekommt `errorCode` (aus `normalizeCrmError().code`) und minimale `result`-Referenzen (IDs, nie Domainobjekte). Manager-API additiv über `reportOutcome`; FakeRest-Parität. Offen: pendente Operationen ohne TTL (LOW).
 
@@ -372,7 +387,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-28 – Error Contract Wave
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-28--error-contract-wave). Guardrail: `03-data-model-guardrails.md` Falle 33; Runbook `21-agent-runbooks.md` Sektion 12.
+**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-28--error-contract-wave). Guardrail: `03-data-model-guardrails.md` §6 (universeller DB-Fehlervertrag); Ablauf für einen neuen Code: `21-agent-runbooks.md` Sektion 12.
 
 **Entscheidungen.** `MESSAGE` = Mensch/Diagnose, `ERRCODE` = PostgreSQL-Semantik, `DETAIL` = stabiler `NoraErrorCode` (PostgREST transportiert beides unverändert — bewiesen). Zentrale Definition `domain/noraErrorCodes.ts`; `extractNoraErrorCode()` akzeptiert nur kanonische Werte (kein `startsWith("NORA_")`); `normalizeCrmError()` ist **machine-code-first**, Regex nur Legacy-Fallback. `CrmErrorKind` friert ein (Transport-/Infrastrukturfehler); neue Business-Fehler gehen `NoraErrorCode → messageKey` direkt. FakeRest wirft denselben Code über `throwNoraError()`, soweit es den Pfad modelliert (keine Datenebene-Autorisierung in FakeRest — dokumentierter Debt). TOCTOU auf `uq_companies_self_contact_individual` wird in `create_customer_with_contact_core` gezielt übersetzt.
 
@@ -384,19 +399,19 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-28 – Intentional privileged read views (`init_state` / `sales_directory`)
 
-**Status:** `ASSESSED — LOW — KEEP`. Archiv: [Original](releases/2026-08.md#2026-08-28--intentional-privileged-read-views-init_state--sales_directory). Guardrail: `03-data-model-guardrails.md` Falle 34.
+**Status:** `ASSESSED — LOW — KEEP`. Archiv: [Original](releases/2026-08.md#2026-08-28--intentional-privileged-read-views-init_state--sales_directory). Guardrail: `22-security-and-access.md` Abschnitt 7.1 (Falle 34).
 
 **Entscheidung.** Beide Views bleiben `security_invoker = false`: `init_state` liefert `anon` nur ein 0/1-Bootstrap-Signal (die echte Grenze ist `resolve_first_signup_role()`), `sales_directory` ein minimales Teamverzeichnis (`id`, Name, Avatar) für alle aktiven Rollen. `security_invoker = true` würde beide Use-Cases nachweislich regressieren. **`sales_directory` wird ohne neue Entscheidung nie um `role`, `email`, `user_id`, `administrator` oder andere Identity-/Security-Metadaten erweitert**; Änderungen an Projektion, Grants, `sales`-RLS oder `is_active_user()` erfordern eine neue Bewertung. (Seit W2 sind beide Identity-Views zusätzlich explizit `SELECT`-only.)
 
 ## 2026-08-27 – Pre-Production Hardening Patch
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-28, zusammen mit der Self Contact Wave). Archiv: [Original inkl. Final-RC-Nachträge und Release](releases/2026-08.md#2026-08-27--pre-production-hardening-patch). Guardrails: `03-data-model-guardrails.md` Fallen 31/32/33.
+**Status:** `PRODUCTION VERIFIED` (2026-08-28, zusammen mit der Self Contact Wave). Archiv: [Original inkl. Final-RC-Nachträge und Release](releases/2026-08.md#2026-08-27--pre-production-hardening-patch). Guardrails: `03-data-model-guardrails.md` §1.6, §2.1 und §6.
 
 **Durable Regeln.** Numerische Entity-/Identity-IDs nie per Truthiness prüfen (`identity.id = 0` existiert im Demo) — `== null`. Die Effective-Contact-Regel hat drei Implementierungen (SQL, TS, FakeRest), die über eine gemeinsam benannte Szenario-Matrix (Domain Contract Testing) synchron gehalten werden. Die Individual-Name-Invariante gilt am CREATE-Pfad **und** beim Rename: `companies.name` einer Privatkundenakte wird serverseitig aus dem Kontakt abgeleitet, ein leerer Name lehnt den ganzen Aufruf ab (kein Platzhalter). `error.message` ist nie ein i18n-Key.
 
 ## 2026-08-26 – Self Contact Wave
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original inkl. Alternativen](releases/2026-08.md#2026-08-26--self-contact-wave). Modell: `01-domain-model.md`; Fallen 28–31 in `03-data-model-guardrails.md`.
+**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original inkl. Alternativen](releases/2026-08.md#2026-08-26--self-contact-wave). Modell: `01-domain-model.md`; Invarianten (Fallen 28–31) in `03-data-model-guardrails.md` §1.
 
 **Entscheidungen.**
 
@@ -409,7 +424,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-25 – Unified Tasks Wave
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-25--unified-tasks-wave). Guardrail: `03-data-model-guardrails.md` Falle 7/7a.
+**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-25--unified-tasks-wave). Guardrail: `03-data-model-guardrails.md` §1.3.
 
 **Entscheidungen.** `tasks.company_id` (nullable) neben nullable `tasks.contact_id`, CHECK „mindestens eines"; **kein `deal_id`**, keine `task_links`-Architektur. **Historische Semantik:** `company_id` ist der Kundenkontext zum Zeitpunkt der Erstellung bzw. letzten bewussten Kontextänderung und wird **nie automatisch nachgeführt** (Nora will nachvollziehbare Historie). Durchsetzung per BEFORE-Trigger (nur bei gesetztem/geändertem Kontext). `tasks.contact_id` FK `ON DELETE SET NULL` mit vorgelagertem Trigger, der reine Kontakt-Aufgaben löscht; `merge_contacts` überspringt die Validierung (Identitätskonsolidierung). Audit liest den Kontext aus der Aufgabe, nicht live vom Kontakt.
 
@@ -505,7 +520,7 @@ Archiv: [Original](releases/2026-07.md#2026-07-14--v04b1-rbac-migrations--und-fu
 
 ## 2026-07-14 – v0.4b: RBAC- und RLS-Härtung
 
-Archiv: [Original](releases/2026-07.md#2026-07-14--v04b-rbac--und-rls-härtung). Rollenmatrix: `11-google-calendar-rbac.md` Abschnitt C.
+Archiv: [Original](releases/2026-07.md#2026-07-14--v04b-rbac--und-rls-härtung). Rollenmatrix: `22-security-and-access.md` Abschnitt 4.3 (bis CR2 in `11` Abschnitt C).
 
 **Entscheidungen.** `sales` bleibt die kanonische Benutzertabelle (1:1 zu `auth.users`); `sales.role text not null` mit CHECK (`admin`, `office`, `viewer`); Backfill nach Least Privilege (`administrator = true` → `admin`, sonst `viewer`, `office` nur explizit); `administrator = (role = 'admin')` per Trigger gespiegelt. RLS-Matrix: viewer SELECT; office SELECT/INSERT/UPDATE ohne DELETE; admin inkl. DELETE und Konfiguration. `disabled` blockiert in Rollenfunktionen, RLS und Auth-Provider. Erster Nutzer `admin`, weitere `viewer`.
 
@@ -559,7 +574,7 @@ Archiv: [Original](releases/2026-06.md#2026-06-28--welle-7b-checklisten--textbau
 
 ## 2026-06-28 – Welle 6c: Kundennummern und Vorgangsnummern implementiert
 
-Archiv: [Original](releases/2026-06.md#2026-06-28--welle-6c-kundennummern-und-vorgangsnummern-implementiert), [6c-QA](releases/2026-06.md#2026-06-28--welle-6c-qa-datenbank-audit-nummern), [6c-Hardening](releases/2026-06.md#2026-06-28--welle-6c-hardening-nummern-api-absichern). Details: `08-numbering-and-global-search.md`; Fallen 8–13 in `03-data-model-guardrails.md`.
+Archiv: [Original](releases/2026-06.md#2026-06-28--welle-6c-kundennummern-und-vorgangsnummern-implementiert), [6c-QA](releases/2026-06.md#2026-06-28--welle-6c-qa-datenbank-audit-nummern), [6c-Hardening](releases/2026-06.md#2026-06-28--welle-6c-hardening-nummern-api-absichern). Details: `08-numbering-and-global-search.md`; Fallen-Index 8–13 in `03-data-model-guardrails.md` §7.
 
 **Entscheidungen.** `KD-000001` (global monoton) und `VG-YYYY-000001` (pro Jahr) aus der Tabelle `number_counters` (race-sicher, nicht pro-Jahr-Sequenzen); Vergabe **ausschließlich serverseitig** per BEFORE-INSERT-Trigger (`SECURITY DEFINER`, Client-Werte werden überschrieben, nicht mit Fehler quittiert), Immutability per UPDATE-Trigger, `next_*`/`format_*` für `anon`/`authenticated` nicht ausführbar; UI nur read-only; FakeRest über `misc/numbering.ts`.
 

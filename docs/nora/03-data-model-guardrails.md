@@ -1,6 +1,12 @@
-# 03 – Datenmodell-Guardrails
+# 03 – Datenmodell- und Persistenz-Guardrails
 
-Dieses Dokument hält **durable Invarianten und technische Guardrails** fest — Regeln, die unabhängig von einzelnen Releases gelten. Release-Evidenz (SHAs, Testzahlen, Live-Beweise) gehört nicht hierher, sondern ins Archiv (`releases/`); Begründungen stehen in `06-decision-log.md`; der Mitarbeiter-Lifecycle als Ganzes in `19-user-lifecycle-architecture.md`.
+Stand: 2026-09-10 · Load-Klasse: **ALWAYS**
+
+Dieses Dokument hält die **universellen Daten- und Persistenzinvarianten** von Nora fest: Regeln, die bei praktisch jeder Datenmodell- oder Persistenzänderung gelten, unabhängig von Subsystem und Release.
+
+**Nicht hier:** Security und Access (Rollen, RBAC, RLS, Grants, `SECURITY DEFINER`, Session-Autorisierung) → [`22`](22-security-and-access.md). Subsystemspezifische Guardrails → ihr Owner ([`08`](08-numbering-and-global-search.md) Nummern · [`09`](09-window-order-workflow.md) Fensterauftrag · [`10`](10-checklists-snippets-audit.md) Checklisten · [`11`](11-google-calendar-rbac.md) Kalender · [`13`](13-crm-audit-retention.md) Audit · [`19`](19-user-lifecycle-architecture.md) Lifecycle). Operative Test-/Verifikationsschritte → [`21`](21-agent-runbooks.md) sektionsweise. Begründungen → [`06`](06-decision-log.md). Release-Evidenz → `releases/`.
+
+Der **globale Fallen-Index** (§7) löst jede Fallen-Nummer 1–40 auf ihren heutigen Owner auf; die Nummern sind dauerhaft stabil.
 
 ## Oberstes Ziel
 
@@ -10,800 +16,235 @@ Doppelte Datenhaltung und rekursive Modellfehler vermeiden.
 
 1. Eine Information hat genau einen fachlich führenden Ort.
 2. UI-Labels dürfen geändert werden, technische IDs nur mit Begründung.
-3. Datenbankänderungen erfordern explizite Entscheidung.
+3. Datenbankänderungen erfordern eine explizite Entscheidung.
 4. Demo-Daten dürfen echte Architekturprobleme nicht verstecken.
 5. Kein neues Feld, nur weil ein Formular leer wirkt.
 6. Keine Resource-Namen blind umbenennen.
 
-## Häufige Fallen
+---
 
-### Falle 1: Kunde und Ansprechpartner vermischen
+## 1. Kern-Entitätsinvarianten
 
-Falsch:
+### 1.1 Die vier Entitäten bleiben getrennt
 
-```text
-Firma als Kontakt speichern und zusätzlich als Kunde speichern.
-```
+**Kunde** = Unternehmen/Haushalt/Verwaltung (`companies`) · **Kontakt** = Person beim Kunden (`contacts`) · **Vorgang** = das Anliegen (`deals`) · **Aufgabe** = eine To-do-Zeile (`tasks`).
 
-Richtig:
+Eine Firma wird nie zusätzlich als Kontakt gespeichert. **Vorgangsstatus** (Stand des Vorgangs) und **Aufgabenstatus** (erledigt ja/nein) sind zwei Fakten und werden nicht vermischt. Fachliche Details: [`01`](01-domain-model.md). *(Fallen 1, 4)*
 
-```text
-Kunde = Unternehmen / Haushalt / Verwaltung
-Kontakt = Person beim Kunden
-```
+### 1.2 Ein führender Ort je Information
 
-### Falle 2: Baustellenadresse doppelt pflegen
+- **Kundentyp** liegt in `companies.sector`. Nicht zusätzlich als Tag pflegen — außer der Tag ist bewusst eine eigenständige Markierung. *(Falle 3)*
+- **Nächstes Nachfassdatum** liegt in `deals.expected_closing_date`. Kein Ersatz-Nachfassfeld in Notizen oder Aufgaben, solange kein eigenes DB-Feld beschlossen ist. *(Falle 6)*
+- **Baustellenadressen** sind noch keine eigenen Objekte. Bis dahin Adressen nicht willkürlich in mehrere Textfelder kopieren. *(Falle 2)*
+- **Hersteller/Lieferanten** können als Firmen-Datensatz erscheinen, aber ein echtes Herstellerfeld am Vorgang existiert nicht. Nicht so tun, als sei das gelöst. *(Falle 5)*
+- **Privatpersonen:** `companies.name` wird beim Anlegen aus Vor-/Nachname abgeleitet (`buildCustomerCreatePayload.ts`) und ist im Edit-Formular die einzige führende Quelle — kein zweites Namensfeld, kein virtuelles Vor-/Nachname-Feld im Edit. Ein Empty-Name-Guard verhindert `companies.name = ''` bei Whitespace-only-Namen. *(Falle 28)*
 
-Später muss entschieden werden, ob Baustellenadressen eigene Objekte werden.
+### 1.3 Aufgaben: kein `deal_id`, `company_id` ist historisch
 
-Bis dahin nicht willkürlich Adressen in mehrere Textfelder kopieren.
+`tasks` hat **kein** `deal_id`. Aufgaben aus der Vorgangsansicht laufen über die verknüpften Ansprechpartner (`deal.contact_ids`) — es gibt keine direkte Vorgangs-Aufgaben-Relation in der Datenbank. `deal_id` an `tasks` war und ist explizit **nicht** beschlossen. *(Falle 7)*
 
-### Falle 3: Kundentyp in Tags, Sector und Notes gleichzeitig
+`tasks.contact_id` **und** `tasks.company_id` sind beide nullable, mindestens eines ist gesetzt (Unified Tasks Wave). **`tasks.company_id` ist kein berechnetes Feld** und wird **nicht** nachgeführt, wenn sich `contacts.company_id` später ändert: es ist der historische Kundenkontext zum Zeitpunkt der Erstellung bzw. der letzten bewussten Kontextänderung (serverseitig via `nora_private.enforce_task_company_context()`).
 
-Aktuell wird `sector` als Kundentyp verwendet. Nicht zusätzlich denselben Kundentyp als Tag speichern, außer es ist bewusst als Markierung gedacht.
+> Für den **aktuellen** Kunden eines Kontakts ist `contact.company_id` zuständig, nie `task.company_id`. Eine Abweichung zwischen beiden ist ein normaler, erwarteter Zustand — **kein** Datenfehler. *(Falle 7a)*
 
-### Falle 4: Vorgangsstatus und Aufgabenstatus vermischen
+### 1.4 `self_contact_id` ist nicht `contacts.company_id`
 
-Vorgangsstatus beschreibt den Stand des Vorgangs.
+„Diese Person ist selbst der Kunde" wird über **`companies.self_contact_id`** ausgedrückt — nicht dadurch, dass man `contacts.company_id` auf die neue Kundenakte umhängt. Die Arbeitgeber-/Ansprechpartner-Beziehung in `contacts.company_id` bleibt unangetastet: eine Person kann Ansprechpartner einer Firma bleiben und gleichzeitig `self_contact_id` einer **anderen** Kundenakte sein. *(Falle 29)*
 
-Aufgabenstatus beschreibt, ob eine konkrete Aufgabe erledigt ist.
+### 1.5 `is_primary` gilt nur im Company-Kontext
 
-### Falle 5: Hersteller als Kunde missbrauchen
+`contacts.is_primary` ist **nur** aussagekräftig, wenn zusätzlich `contact.company_id` zu der betrachteten Kundenakte passt (`explicitPrimaryContact` in `domain/customerContactContext.ts`). Ein `is_primary = true` bei abweichendem `company_id` ist für *diese* Kundenakte bedeutungslos. Beim Kundenwechsel reist die Rolle nie mit: `company_id = null` ⇒ `is_primary = false`. *(Falle 30)*
 
-Lieferanten/Hersteller können in v0.1 als Kunden-/Firmen-Datensatz erscheinen, aber ein echtes Herstellerfeld am Vorgang existiert noch nicht. Nicht so tun, als sei das vollständig gelöst.
+### 1.6 Effective-Contact-Semantik: genau drei Implementierungen, eine Wahrheit
 
-### Falle 6: Nachfassdatum doppelt pflegen
+Die Regel „gehört dieser Kontakt zu dieser Kundenakte?" existiert an genau drei Stellen und nirgends sonst:
 
-Aktuell ist **`expected_closing_date`** der führende Ort für „Nächstes Nachfassdatum“. Kein zusätzliches Nachfassfeld in Notizen oder Aufgaben als Ersatz einführen, solange kein DB-Feld beschlossen ist.
-
-### Falle 7: Aufgaben direkt am Vorgang ohne Ansprechpartner
-
-`tasks` haben weiterhin **kein** `deal_id`. Aufgaben aus der Vorgangsansicht (`DealTasksSection.tsx`) laufen weiterhin über verknüpfte Ansprechpartner (`deal.contact_ids`) — nicht so tun, als gäbe es eine direkte Vorgangs-Aufgaben-Relation in der DB. `deal_id` an `tasks` war und ist explizit **nicht** Teil der Unified Tasks Wave (siehe Decision Log „2026-08-25 – Unified Tasks Wave").
-
-Seit der Unified Tasks Wave (2026-08-25) hat `tasks` zusätzlich **`company_id`** (nullable, historisch stabiler Kundenkontext — siehe Falle 7a) — `contact_id` ist jetzt ebenfalls nullable, nicht mehr die einzige Bindung.
-
-### Falle 7a: `tasks.company_id` als live abgeleiteten Wert behandeln
-
-`tasks.company_id` ist **kein** berechnetes Feld und wird **nicht** automatisch nachgeführt, wenn sich `contacts.company_id` später ändert. Es ist der historische Kundenkontext zum Zeitpunkt der Aufgabenerstellung bzw. letzten bewussten Kontextänderung (serverseitig via `nora_private.enforce_task_company_context()` gesetzt). Falsch: `task.company_id` in Code/UI als „aktueller Kunde des verknüpften Kontakts" interpretieren — dafür ist `contact.company_id` (live) zuständig, nicht `task.company_id` (historisch). Eine Abweichung zwischen beiden ist ein normaler, erwarteter Zustand, kein Datenfehler.
-
-### Falle 8: Kundennummer als Tag oder in Notizen
-
-Falsch:
-
-```text
-Tag „KD-000042“ am Kontakt, weil die Kundennummer sonst nirgends steht.
-```
-
-Richtig:
-
-```text
-Führendes Feld companies.customer_number — einmalig, unique, unveränderlich.
-```
-
-### Falle 9: Vorgangsnummer im Titel oder in Freitextnotizen
-
-Falsch:
-
-```text
-deals.name = „VG-2026-000015 Fenstergriff defekt“
-```
-
-Richtig:
-
-```text
-deals.case_number = VG-2026-000015
-deals.name = Fenstergriff defekt
-```
-
-### Falle 10: Telefonnummer als Ersatz für KD/VG-Nummern
-
-Telefonnummern können mehrfach vorkommen, sich ändern oder unvollständig sein. Sie eignen sich für Suche, aber **nicht** als Primärreferenz in Telefonannahme oder Angebotsbezug.
-
-### Falle 11: Nummern nachträglich ändern oder im Frontend vergeben
-
-Nummern werden serverseitig vergeben und dürfen nach Vergabe nicht geändert werden. Kein Eingabefeld im Formular, keine Client-Generierung bei `create`.
-
-### Falle 12: Parallele Nummernsysteme (CSV, Demo, DB)
-
-Nicht gleichzeitig Nummern in CSV-Spalten, Demo-JSON-Kommentaren und Datenbankfeldern pflegen. **`customer_number`** und **`case_number`** sind die einzige führende Quelle — siehe `08-numbering-and-global-search.md`.
-
-### Falle 13: API-Umgehung der Nummernvergabe
-
-**Behoben (6c-Hardening):** `assign_*`-Trigger vergeben immer serverseitig; `next_*`/`format_*` sind für `anon`/`authenticated` nicht per RPC ausführbar. Nora-UI sendet keine Nummern; FakeRest nutzt `misc/numbering.ts` nur im Demo-Modus.
-
-## Datenmodell-Erweiterungen – Kandidaten
-
-Nur bei belegtem Bedarf:
-
-| Feld / Tabelle | Zweck |
+| Ebene | Implementierung |
 |---|---|
-| `companies.customer_number` | feste Kundennummer (`KD-000001`), unique, unveränderlich — **implementiert** (Welle 6c) |
-| `deals.case_number` | feste Vorgangsnummer (`VG-2026-000001`), unique, unveränderlich — **implementiert** (Welle 6c) |
-| `follow_up_date` | dediziertes Nachfassdatum, falls `expected_closing_date` wieder Abschlussdatum werden soll |
-| `deal_id` an `tasks` | direkte Aufgaben am Vorgang ohne Umweg über Kontakt |
-| `priority` | Dringlichkeit am Vorgang |
-| `service_type` | Dienstleistung am Vorgang |
-| `objects` / `sites` | Baustelle / Objekt |
-| `measurements` | Aufmaßdaten |
-| `manufacturer_status` | Wartet auf Hersteller, Lieferant, Ersatzteil |
-| `source_channel` | Google Ads, Website, Telefon, WhatsApp, Empfehlung |
-| `files` / `photos` | Fotos, PDF, Angebot, Aufmaß |
-| ~~`appointments`~~ | **verworfen** — stattdessen `google_calendar_events` (Cache); Google = System of Record — siehe `11-google-calendar-rbac.md` |
-| `google_calendar_connections` | Singleton-Verbindung zum einen Geschäftskalender (keine Tokens) |
-| `google_calendar_events` | Gespiegelte Google-Events + CRM-Verknüpfung (`origin`, `deal_id`, …) |
-| `sales.role` | `admin` \| `office` \| `viewer` — keine parallele Benutzertabelle |
-| `manufacturer_id` / `manufacturer_name` | Herstellerbezug am Vorgang (generisch, nicht Höning-spezifisch) |
-| `service_area_code` | `FENS` / `HAUS` / `IMMO` — Geschäftszweig, **nicht** Kunde — siehe `10-checklists-snippets-audit.md` |
-| `checklist_templates` / `checklist_runs` / `checklist_run_items` | modulare Checklisten — **relational, nicht JSONB-only** — **implementiert** (v0.3d2) |
-| `saved_text_snippets` | wiederverwendbare Textbausteine — **implementiert** (v0.3d2) |
-| `audit_events` | zentrale append-only Audit-Log-Tabelle — **implementiert** (v0.3d2) |
-| `workflow_type` | `general` vs. `window_order` — falls `category` nicht reicht |
-| `companies.customer_kind` | Unternehmen/Selbstständig vs. Privatperson — **implementiert** (Customer & Contact Workflow Wave, 2026-08-25) |
-| `contacts.is_primary` | Hauptansprechpartner, max. 1 pro Kunde (Partial Unique Index) — **implementiert** |
-| `companies.links_jsonb` / `contacts.links_jsonb` | generisches Link-Modell (Website, LinkedIn, …) — **implementiert**, ersetzt LinkedIn-only-Validierung |
-| `companies.email_jsonb` / `companies.phone_jsonb` | mehrere Firmen-Kontaktmethoden mit Typ — **implementiert** |
-| `create_customer_with_contact` (RPC) | atomare Kunde+Ansprechpartner-Anlage — **implementiert**, erweitert um `self_contact_id`/`mark_self` (Self Contact Wave) |
-| `set_primary_contact` (RPC) | atomarer Hauptansprechpartner-Wechsel — **implementiert**; seit Atomic Contact Primary Intent (2026-09-08) auf dem gemeinsamen Transitionskern |
-| `create_contact` / `update_contact` (RPC) | atomares Kontakt-Speichern mit expliziter Hauptansprechpartner-Absicht, Kundenlock, Stale-Schutz, Idempotenz (create) — **implementiert** (Atomic Contact Primary Intent, 2026-09-08) |
-| `nora_private.prepare_primary_contact_slot` | einziger Transitionskern „bisherigen Halter demotieren" (Lock, No-op bei bereits primär, Verifikation des beobachteten Halters) — **implementiert** (Atomic Contact Primary Intent, 2026-09-08) |
-| `companies.self_contact_id` | Person repräsentiert Kundenakte, entkoppelt von `contacts.company_id` — **implementiert** (Self Contact Wave, 2026-08-26) |
-| `create_quick_capture_case` (RPC) | atomare Kunde+Kontakt+Vorgang-Anlage für Schnellerfassung — **implementiert** |
-| `nora_private.is_effective_contact_of_company` | zentrale „gehört Kontakt zu Kundenakte"-Regel — **implementiert**, FakeRest-Parität in Pre-Production-Hardening-Session (2026-08-27) korrigiert |
-| `nora_private.sync_individual_company_name` Empty-Name-Guard | verhindert `companies.name = ''` bei Privatkundenakte (Whitespace-only Vor-/Nachname) — **implementiert** (Pre-Production Hardening Patch, 2026-08-27) |
+| SQL | `nora_private.is_effective_contact_of_company()` |
+| TypeScript | `domain/customerContactContext.ts::resolveCustomerContacts()` |
+| FakeRest | `providers/fakerest/internal/taskContextCheck.ts` |
 
-## Weitere häufige Fallen (Kunden/Kontakte, Fehler, Checklisten)
+Keine Ad-hoc-Logik in `CompanyShow`, in der Aufgaben-Kontaktauswahl oder in Quick Capture. Wer die Regel ändert, ändert **alle drei** Stellen **und** die gemeinsam benannte Szenario-Matrix `domain/effectiveContactContext.contractCases.ts` synchron (Fallnamen identisch in TS und SQL) — Testsequenz: [`21`](21-agent-runbooks.md) §15. *(Falle 31)*
 
-Fortsetzung der Fallen-Sammlung oben — **alle folgenden Fallen beschreiben heute gültige Guardrails**, keine Kandidaten. Die Fallen-Nummern bilden einen flachen globalen Namensraum (1–40) und liegen thematisch über dieses Dokument verteilt, nicht fortlaufend sortiert: eine Nummer wird gesucht, nicht erblättert.
+---
 
-### Falle 29: `self_contact_id` mit `contacts.company_id` verwechseln
+## 2. IDs, Nullability und Referenzintegrität
 
-Falsch:
+### 2.1 Numerische ID `0` ist gültig — Nullish statt Truthiness
 
 ```text
-Beim „Kontakt → Kundenakte"-Flow contacts.company_id auf die neue
-Kundenakte umhängen, um "diese Person ist der Kunde" auszudrücken.
+if (!identity?.id) return;         // FALSCH: identity.id = 0 gilt als „keine Identity"
+if (identity?.id == null) return;  // richtig
 ```
 
-Richtig:
+Nora verwendet reale numerische IDs **einschließlich `0`** (`demoSession.ts`: Default-Demo-Admin hat `identity.id = 0`). Existenzprüfungen für numerische Entity-/Identity-IDs verwenden `== null` (nullish), nie Truthiness, wenn fachlich „nicht vorhanden" gemeint ist. UUID-/String-IDs sind nicht betroffen. *(Falle 32)*
 
-```text
-companies.self_contact_id zeigt auf den Kontakt — contacts.company_id
-(die bestehende Arbeitgeber-/Ansprechpartner-Beziehung) bleibt unangetastet.
-Eine Person kann Ansprechpartner einer Firma bleiben und gleichzeitig
-self_contact_id einer ANDEREN Kundenakte sein (Freddie-Szenario).
-```
+### 2.2 Referenzen auf `sales.id` sind immer `NO ACTION`
 
-### Falle 30: `is_primary` unabhängig vom `company_id`-Kontext lesen
+> **Jede Referenz auf `sales.id` verwendet `NO ACTION`** — nicht `CASCADE`, nicht `SET NULL`, sofern nicht eine neue explizite Architekturentscheidung etwas anderes festlegt.
 
-Falsch:
+Urheberschaft und Zuständigkeit sind Geschäftsgeschichte. Die heute sechs Referenzen sind `companies`, `contacts`, `deals`, `deal_notes`, `contact_notes`, `tasks` (jeweils `sales_id`); `sales.user_id → auth.users` ist in Gegenrichtung ebenfalls `NO ACTION`.
 
-```text
-contact.is_primary === true als "Hauptansprechpartner dieser Kundenakte"
-werten, ohne zu prüfen, ob contact.company_id tatsächlich zu dieser
-Kundenakte passt.
-```
+Folgen:
 
-Richtig:
+- Ein referenzierter Mitarbeiter kann auf **keinem** Pfad gelöscht werden — die Datenbank verweigert (`23503`).
+- **INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT.** Ein deaktivierter Mitarbeiter bleibt Identitätsanker für alles Bestehende: Namen bestehender Datensätze kommen aus `sales_identities` (alle Zeilen), Auswahllisten für Neues aus `sales_directory` (nur aktive). Kein „Unbekannt".
+- **Neue Referenz auf `sales.id`?** Als `NO ACTION`-FK anlegen, die Referenzzählung in `lifecycle_reference_integrity_verification.sql` erhöhen und die Referenzliste in [`19`](19-user-lifecycle-architecture.md) §7 erweitern. Trägt die neue Tabelle Mitarbeiter-Urheberschaft oder -Zuständigkeit, kommt sie zusätzlich als Blocker in `nora_private.employee_deletion_preview`.
+- Test-Datenpurge nie über `CASCADE`; SQL-Suiten räumen `sales`-Fixtures per Rollback auf, nie per `DELETE`.
 
-```text
-is_primary ist nur aussagekräftig, wenn zusätzlich company_id passt
-(explicitPrimaryContact in domain/customerContactContext.ts). Ein
-is_primary=true bei abweichendem company_id ist für DIESE Kundenakte
-bedeutungslos.
-```
+*(Falle 39 · Lösch- und Lifecycle-Modell: [`19`](19-user-lifecycle-architecture.md) §7, §15)*
 
-### Falle 40: `contacts.is_primary` als rohe Spalte schreiben (Atomic Contact Primary Intent, 2026-09-08)
+### 2.3 Server vergibt IDs und Nummern, nie der Client
 
-Falsch:
+Kunden- und Vorgangsnummern werden ausschließlich serverseitig per `BEFORE INSERT`-Trigger vergeben und sind nach Vergabe unveränderlich. Kein Eingabefeld, keine Client-Generierung, keine parallele Nummernquelle in CSV oder Demo-JSON. Vollständiger Contract: [`08`](08-numbering-and-global-search.md). *(Fallen 8–13)*
 
-```text
-dataProvider.create("contacts", { data: { ..., is_primary: true } })      // Formular schreibt die Rolle als Spalte
-await create(contact); await setPrimaryContact(contact.id);               // zwei Requests, Teilzustand bei Netzverlust
-update public.contacts set is_primary = true where id = ...;              // Migration/Skript ohne Transition
-```
+---
 
-Richtig:
+## 3. Transaktionen, Sperren und Concurrency
 
-```text
-Formular → PrimaryContactIntent (keep | make_primary + beobachteter Halter | clear)
-        → executeCreateContact / executeUpdateContact (eine Operation, eine UUID)
-        → public.create_contact / public.update_contact (eine Transaktion, Kundenlock)
-        → nora_private.prepare_primary_contact_slot (der eine Demote-Kern)
-```
+Diese Regeln gelten für **jede** Operation, die mehrere Zeilen konsistent bewegen muss. Sie wurden am Hauptansprechpartner-Wechsel erarbeitet, sind aber nicht auf ihn beschränkt.
 
-`uq_contacts_one_primary_per_company` ist die letzte Verteidigung, nicht der Koordinationsmechanismus. Jede neue Stelle, die die Rolle verschiebt, benutzt den Transitionskern und den Kundenlock; sie erfindet keine zweite Demote-Regel. Die RPCs lesen `is_primary` aus der Nutzlast **nie** — nur die Absicht bewegt die Rolle. Ein `make_primary` trägt immer den Halter, den der Benutzer gesehen hat (`null` = keinen); weicht der tatsächliche Halter ab, wird alles zurückgerollt (`NORA_PRIMARY_CONTACT_CHANGED`) — nie still ersetzt. Beim Kundenwechsel reist die Rolle nie mit; `company_id = null` ⇒ `is_primary = false`. Der Legacy-Constraint-Treffer wird in `normalizeCrmError` **nur** über den Constraint-Namen erkannt (`NORA_PRIMARY_CONTACT_ALREADY_EXISTS`), nie über ein breites `duplicate key`-Muster. Rohe additive Pfade, die die Rolle nicht berühren (Import mit `is_primary = false`, Status-/Markierungs-Updates, `last_seen`), bleiben erlaubt. **Die Serialisierung läuft über einen Advisory Lock je Kunde, nicht über die Kundenzeile.** Jede Hauptansprechpartner-Transition nimmt `nora_private.lock_customers_for_primary_transition` (transaktionsgebundener Advisory Lock, Namespace `nora_primary_contact`, aufsteigende Kunden-Id), **bevor** sie eine Kontakt- oder Kundenzeile sperrt oder schreibt; jedes Warten auf eine Kontaktzeile liegt **vor** jedem Erwerb einer Kundenzeilensperre. Eine Zeilensperre auf `public.companies` darf **nie** wieder als Mutex dienen: dieselbe Zeile wird auch kontaktzeilen-zuerst gesperrt — vom Trigger `nora_private.sync_individual_company_name` (schreibt `companies` aus einem laufenden `update contacts`) und vom FK `KEY SHARE` jedes Kontakt-`INSERT`/Kundenwechsels. Beide 2026-09-08-Blocker waren genau dieser Zyklus (Schnellerfassung 6/30, Trigger 30/30 Deadlocks). Verifikation: `supabase/tests/contact_primary_intent_verification.sql` + drei Real-Session-Matrizen — `contact_primary_intent_concurrency_runner.ps1` (neu gegen neu, A–F), `contact_primary_cross_command_runner.ps1` (neu gegen bestehende Befehle, X-A..X-G) und `contact_primary_trigger_race_runner.ps1` (neu gegen rohe Kontakt-Namensschreibung, T-A..T-F). Eine neue Schreibstelle wird in allen dreien gerennt.
+### 3.1 Ein Transitionskern, kein zweiter Demote-Pfad
 
-### Falle 33: `error.message` als i18n-Key oder Business-Code verwenden
+Eine Rollen- oder Zustandsverschiebung, die eine Datenbank-Invariante wahren muss, läuft über **einen** kontrollierten Kern und nie über einen zweiten, nachgebauten Pfad. Beim Hauptansprechpartner ist dieser Kern `nora_private.prepare_primary_contact_slot` (Lock, No-op bei bereits primär, Verifikation des beobachteten Halters); `create_contact`, `update_contact`, `set_primary_contact` und `create_customer_with_contact_core` laufen alle darauf.
 
-Falsch:
+`contacts.is_primary` wird von der Oberfläche **nie** als rohe Spalte geschrieben. Der Pfad lautet: Formular → **explizite Absicht** (`PrimaryContactIntent`: `keep` | `make_primary` + beobachteter Halter | `clear`) → ein Application Command (eine Operation, eine UUID) → eine RPC-Transaktion → der eine Demote-Kern.
 
-```text
-notify(`crm.quick_capture.errors.${error.message}`)   // error.message = roher Postgres-Exception-Text
-```
+Die RPCs lesen `is_primary` aus der Nutzlast **nie** — nur die Absicht bewegt die Rolle. Ein `make_primary` trägt immer den Halter, den der Benutzer gesehen hat (`null` = keinen); weicht der tatsächliche Halter ab, wird **alles** zurückgerollt (`NORA_PRIMARY_CONTACT_CHANGED`), nie still ersetzt. Rohe additive Pfade, die die Rolle nicht berühren (Import mit `is_primary = false`, Status-/Markierungs-Updates, `last_seen`), bleiben erlaubt. *(Falle 40)*
 
-Richtig:
+Verallgemeinert: **wer eine Invariante über mehrere Zeilen wahren muss, drückt die Absicht explizit aus und lässt genau eine Stelle sie ausführen** — er verteilt die Regel nicht über die Aufrufer.
 
-```text
-const normalized = normalizeCrmError(error);   // -> stabiler messageKey, z. B. "crm.errors.contact_not_in_customer_context"
-notify(normalized.messageKey);
-```
+### 3.2 Ein Unique Index ist die letzte Verteidigung, nicht der Koordinationsmechanismus
 
-`error.message` ist niemals ein stabiler Business-Code — freier DB-/Exception-Text darf nicht direkt an einen i18n-Key angehängt werden (erzeugt nie-übersetzte Keys, die dem Büropersonal als Rohtext angezeigt werden). `normalizeCrmError.ts` (`misc/normalizeCrmError.ts`) ist die einzige Stelle, die technische Fehler auf stabile `messageKey`s abbildet. **Verifizierter, historischer Fall:** `application/commands/createQuickCaptureCase.ts` reichte bei einem RPC-Fehlschlag den rohen `error.message` unverändert als `QuickCaptureSubmitError`-Code durch, den `QuickCaptureDialog.tsx` direkt in einen i18n-Key-Suffix einsetzte — behoben durch `normalizeCrmError()` mit neuem `contact_not_in_customer_context`/`self_contact_delete_blocked`-Mapping (Pre-Production Hardening Patch, 2026-08-27). Diese beiden Werte existieren aus Rückwärtskompatibilitätsgründen weiter, sind aber keine Vorlage für neue Fälle — siehe aktuelle Guardrail unten.
+`uq_contacts_one_primary_per_company` verhindert den Endzustand, koordiniert aber nichts. Wer sich auf einen Constraint-Treffer als Ablaufsteuerung verlässt, baut eine Race Condition mit Fehlermeldung. Ein Legacy-Constraint-Treffer wird in `normalizeCrmError` **nur** über den Constraint-Namen erkannt, nie über ein breites `duplicate key`-Muster.
 
-**Aktuelle Guardrail (Error Contract Wave, 2026-08-28, PRODUCTION VERIFIED — siehe Decision Log):** `normalizeCrmError()` ist machine-code-first. Für eine neue Business-Rejection gilt ausschließlich dieser Ablauf, nicht mehr „neues Regex-Pattern/`CrmErrorKind` ergänzen":
+### 3.3 Advisory Lock vor konfliktträchtiger Zeilensperre
 
-1. Kanonischen `NoraErrorCode` in `domain/noraErrorCodes.ts` definieren (`NORA_ERROR_CODES`/`NORA_ERROR_DEFINITIONS`).
-2. Serverseitig an der RAISE-Stelle `USING DETAIL = 'NORA_<CODE>'` setzen (SQL-Migration additiv, `supabase/schemas/02_functions.sql` synchron nachziehen).
-3. Presentation-Mapping (`messageKey`) in `NORA_ERROR_DEFINITIONS` ergänzen.
-4. FakeRest über `throwNoraError()` denselben Code werfen lassen, soweit FakeRest den Command-Pfad überhaupt modelliert — sonst als Debt dokumentieren, nicht Scope aufblasen.
-5. Die menschliche `MESSAGE` bleibt frei umformulierbar/diagnostisch — nie die Quelle der Business-Identität.
-6. Regex-/Nachrichtentext-Parsing ist ausschließlich ein Legacy-Compatibility-Fallback für nicht migrierte Aufrufer, niemals der primäre oder einzige Mechanismus für einen neuen Code.
+> **Eine DB-Zeile ist kein improvisierter Mutex.**
 
-`error.message` bleibt niemals ein Business-Code — das gilt jetzt auch für `error.details`: nur ein in `NORA_ERROR_CODES` kanonisch gelisteter Wert wird akzeptiert (kein `startsWith("NORA_")`-Raten). Bestehende Regex-Pfade für bereits migrierte oder noch nicht migrierte Aufrufer bleiben bewusst bestehen und wurden **nicht** entfernt — nur der Weg für *neue* Fälle hat sich geändert.
+Jede Hauptansprechpartner-Transition nimmt `nora_private.lock_customers_for_primary_transition` — einen **transaktionsgebundenen Advisory Lock** (Namespace `nora_primary_contact`, bei Kundenwechsel beide Kunden in **aufsteigender Kunden-Id**) — **bevor** sie eine Kontakt- oder Kundenzeile sperrt oder schreibt.
 
-### Falle 32: Numerische Entity-/Demo-IDs per Truthiness prüfen
+Die durable Lock-Reihenfolge als Invariante:
 
-Falsch:
+> Jede Transition nimmt die Advisory-Transitionssperren ihrer Kunden in aufsteigender Kunden-Id, **bevor** sie eine Kontakt- oder Kundenzeile sperrt oder schreibt; und **jedes Warten auf eine Kontaktzeile liegt vor jedem Erwerb einer Kundenzeilensperre.**
 
-```text
-if (!identity?.id) return;          // identity.id = 0 (Default-Demo-Admin) wird fälschlich als "keine Identity" behandelt
-disabled={!winnerId}                // winnerId = 0 wäre ein gültiges Merge-Ziel
-```
+**Warum eine Zeilensperre auf `public.companies` als Mutex unerreichbar ist:** dieselbe Kundenzeile wird unvermeidbar auch *kontaktzeilen-zuerst* gesperrt — vom Trigger `nora_private.sync_individual_company_name` (schreibt `companies` aus einem laufenden `UPDATE public.contacts`) und vom FK-`KEY SHARE` jedes Kontakt-`INSERT`/Kundenwechsels. Diese Pfade lassen sich nicht umsortieren; „Kundenzeile zuerst überall" ist deshalb nicht unvollständig umgesetzt, sondern **unmöglich**. Zwei Release-Blocker waren genau dieser Zyklus.
 
-Richtig:
+**Verallgemeinerung:** wer einen neuen konfliktträchtigen Schreibpfad baut, prüft nicht nur die eigenen Sperren, sondern auch die, die Trigger und Fremdschlüssel *implizit* nehmen — und rennt ihn gegen **bestehende** Befehle und gegen **rohe** Schreibpfade, nicht nur gegen sich selbst. Testmatrizen, Runner, Real-Session-Verifikation: [`21`](21-agent-runbooks.md) §15.
 
-```text
-if (identity?.id == null) return;
-disabled={winnerId == null}
-```
+### 3.4 Atomarität statt Teilzustand
 
-Demo/FakeRest verwendet reale numerische IDs einschließlich `0` (`demoSession.ts`: Default-Demo-Admin hat `identity.id = 0`). Existenzprüfungen für numerische Entity-/Identity-IDs müssen `== null` (nullish) statt Truthiness verwenden, wenn fachlich nur „nicht vorhanden" gemeint ist — sonst wird eine legitime ID `0` fälschlich als „fehlt" behandelt. Betraf verifiziert u. a. `QuickCaptureDialog.tsx` (`identity?.id`), `ContactMergeButton.tsx` (`winnerId`), `CompanyAside.tsx` (`record.sales_id`), `CompanyInputs.tsx`/`CompanyShow.tsx` (`self_contact_id`), `NoteCreateSheet.tsx`/`TaskCreateSheet.tsx` (`referenceRecordId`), `AddTask.tsx` (`resolvedContactId`) — behoben in der Pre-Production-Hardening-Session, siehe Decision Log. UUID-/String-IDs sind von dieser Regel nicht betroffen (leerer String ist dort meist schon fachlich ungültig).
+Eine fachlich zusammengehörige Anlage läuft in **einer** Transaktion (RPC), nicht als zwei Browser-Requests: `create_customer_with_contact`, `create_quick_capture_case`, `create_contact`/`update_contact`. Ein bewusst separater Best-Effort-Schritt danach (z. B. die optionale Aufgabe der Schnellerfassung) ist erlaubt und dokumentiert — er darf den Kern nicht zurückrollen.
 
-### Falle 31: Effective-Contact-Regel mehrfach implementieren
+Idempotenz läuft über die vorhandenen Primitive (`idempotency_check`/`idempotency_persist`) und einen Fingerprint über die **Allowlist der schreibbaren Felder** der Geschäftsanfrage — nicht über die rohe Client-JSON, sonst löst eine View-Spalte oder ein UI-Hilfsfeld einen falschen `NORA_IDEMPOTENCY_CONFLICT` aus. **`operation_id` (Korrelation) und `idempotency_key` (fachliche Retry-Absicht) sind zwei verschiedene Konzepte** und werden nicht vermischt; `audit_events.request_id` trägt trotz des historischen Spaltennamens die `operation_id` — keine zweite, unabhängige Request-ID.
 
-Falsch:
+---
 
-```text
-In CompanyShow, Aufgaben-Kontaktauswahl und Quick Capture jeweils eigene
-Ad-hoc-Logik schreiben, ob ein Kontakt "zu einem Kunden gehört".
-```
+## 4. Migrationsinvarianten
 
-Richtig:
+Vor einer Migration dokumentieren: Warum ist das Feld nötig? Welche bestehenden Workflows belegen den Bedarf? Welche alten Daten müssen migriert werden? Welche UI-Stellen sind betroffen? Gibt es eine rückwärtskompatible Lösung?
 
-```text
-nora_private.is_effective_contact_of_company() (SQL) bzw.
-domain/customerContactContext.ts::resolveCustomerContacts() (TS) sind die
-einzigen Implementierungen dieser Regel.
-```
+Technische Regeln (Begründung jeweils in [`06`](06-decision-log.md)):
 
-**Domain Contract Testing (Pre-Production Hardening Patch, 2026-08-27):** Die drei parallelen Implementierungen (SQL `nora_private.is_effective_contact_of_company`, TS `domain/customerContactContext.ts`, FakeRest `providers/fakerest/internal/taskContextCheck.ts`) werden über eine gemeinsam benannte Szenario-Matrix geprüft: `domain/effectiveContactContext.contractCases.ts` (Fälle `regular_contact` / `self_contact` / `foreign_contact` / `foreign_primary_contact` / `regular_and_self` / `missing_contact` / `missing_company`), genutzt von `customerContactContext.test.ts` und `taskContextCheck.test.ts`; identisch benannte Fälle in `supabase/tests/customer_contact_workflow_verification.sql` Abschnitt 7. **Verifizierter, in dieser Session behobener Bug:** FakeRests `isEffectiveContactOfCompany()` prüfte bisher **nur** `self_contact_id` und nie `contact.company_id = company.id` — ein regulärer Kontakt derselben Firma wurde in FakeRest fälschlich als "nicht effektiv zugehörig" abgelehnt (SQL/TS waren korrekt). Bei künftigen Änderungen an der Regel alle drei Stellen UND die Szenario-Matrix synchron halten.
-
-### Falle 28: Privatperson-Namensfeld doppelt vorhalten
-
-Falsch:
-
-```text
-companies.name als zweites Pflichtfeld neben contact_first_name/contact_last_name
-bei der Privatperson-Anlage abfragen
-```
-
-Richtig:
-
-```text
-companies.name wird beim Anlegen einer Privatperson aus Vor-/Nachname abgeleitet
-(buildCustomerCreatePayload.ts); das Kundenname-Feld ist im Create-Formular für
-customer_kind = individual ausgeblendet. Im Edit-Formular bleibt companies.name
-die einzige führende Quelle (kein virtuelles Vor-/Nachname-Feld dort).
-```
-
-**Veraltet / ersetzt durch 10:**
-
-| Kandidat | Status |
-|---|---|
-| `production_checklist` (jsonb) | ❌ nicht als Hauptmodell — relationale Tabellen stattdessen |
-
-### Falle 18: JSONB-only-Checkliste am Vorgang
-
-Falsch:
-
-```text
-deals.production_checklist jsonb als einzige Quelle für Produktionsfreigabe
-```
-
-Richtig:
-
-```text
-checklist_templates + checklist_runs + checklist_run_items mit label_snapshot
-```
-
-Siehe `10-checklists-snippets-audit.md`.
-
-### Falle 19: Servicebereich über company_id
-
-Falsch:
-
-```text
-company_id oder sector als Ersatz für FENS/HAUS/IMMO
-```
-
-Richtig:
-
-```text
-service_area_code auf Vorlage, Lauf und Snippet — company_id bleibt Kunde
-```
-
-### Falle 20: Audit in Notizen oder Freitext
-
-Falsch:
-
-```text
-„Produktion freigegeben von Max am 12.03.“ nur als Notiz
-```
-
-Richtig:
-
-```text
-checklist_run_items.checked_by + checked_at + audit_events
-```
-
-### Falle 21: Checklisten-ID in Notizen
-
-Falsch:
-
-```text
-Notiz: „Checkliste abc-123-def erledigt“
-```
-
-Richtig:
-
-```text
-FK checklist_run_id in strukturierten Tabellen; Notiz optional als Kommentar am Punkt
-```
-
-## RBAC- und RLS-Guardrails (Welle v0.4b / v0.4b.1)
-
-Details in `11-google-calendar-rbac.md`:
-
-- **`sales.role`** ist die führende Rollenquelle (`admin` | `office` | `viewer`)
-- **Interne Helper** in Schema `nora_private` — nicht in PostgREST-Schemas (`config.toml`: nur `public`)
-- **Öffentliche RPCs** in `public`: `start_checklist_run_from_template` (authenticated); `set_sales_access_by_executor` ist seit User Lifecycle W1 (2026-09-05) **nur service_role** (die deprecated `set_sales_role_by_admin` wurde in W2 gelöscht) — der Browser erreicht Rollen-/Zugangsänderungen ausschließlich über die `users` Edge Function
-- **`nora_private.safe_auth_uid()`** nur intern — `auth.uid()` wirft bei malformed JWT-sub; RLS-Helper nutzen safe reader
-- **Capability-Rolle `nora_role_manager`** (NOLOGIN, NOBYPASSRLS) — einziger Owner von `apply_sales_role_change`; kein GUC-Token-Modell (v0.4b.2)
-- **Testrolle `nora_rls_test`** nur lokal via `rbac_rls_setup.sql` — **nie** in Produktionsmigrationen
-- **`anon`:** kein Tabellen-GRANT auf CRM-Tabellen; RLS + Grants zusammen prüfen
-
-### Privilegien im Schema `public` (Security Hardening Wave 1, `PRODUCTION VERIFIED` 2026-09-07)
-
-Migration `20260907120000_nora_public_privilege_hardening`, seit 2026-09-07 in Production angewendet (Ledger-Kopf). Begründung: `06-decision-log.md` „Security Hardening Wave 1"; Nachweis: `supabase/tests/public_privilege_hardening_verification.sql`; Release-Evidenz: `releases/2026-09.md`.
-
-- **Neue Tabellen starten bei null.** Die Default-Tabellen-Privilegien von `public` (Grantor `postgres`) vergeben an `anon`/`authenticated`/`service_role` **nichts** mehr. Eine von `postgres` in `public` neu erzeugte Tabelle trägt vor jedem expliziten `GRANT` kein einziges API-Rollen-Recht; jeder Laufzeitzugriff ist ein bewusster `GRANT` in einer Migration. Wer die Default-Privilegien wieder aufweitet, bricht die Regressionsprobe (Abschnitt 1 und 6 der Suite).
-- **Sequenzen:** die Default-Sequenz-Privilegien vergeben ebenfalls kein API-Rollen-Recht. Das ist unkritisch, weil Noras `id`-Spalten durchgängig `generated by default as identity` sind und ein Identity-`INSERT` **kein** Sequenzrecht braucht (verifiziert).
-- **Functions: hier gilt das Gegenteil — nicht verallgemeinern.** PostgreSQLs **eingebauter** Default für eine neue Function ist `owner + PUBLIC EXECUTE`, und das schema-scoped `alter default privileges … revoke execute on functions` dieser Migration stellt ihn **nicht** ab (die gespeicherte Zeile wird mit dem eingebauten Default verschmolzen; die neue Function kommt weiterhin mit `proacl = NULL` heraus). Entfernen würde ihn nur eine **creator-scoped globale** Zeile ohne `in schema` — diese Welle setzt sie bewusst nicht. **Jede sensible Function braucht deshalb weiterhin ihr eigenes `revoke all on function … from public, anon, authenticated`** — das ist Pflicht, nicht Redundanz (`17-known-issues-and-planned-waves.md` A.8).
-- **`revoke all` vor jedem `grant`, ausnahmslos.** Additive Grants lassen geerbte Rechte stehen; genau so entstand der `audit_events`-`TRUNCATE`-Befund (Wave 0). Das gilt auch für Views.
-- **`TRUNCATE` ist die gefährlichste Zeile im ACL:** sie umgeht RLS vollständig **und** feuert keine Row-Trigger — Audit, `prevent_*`-Guards und Policies sind gleichzeitig wirkungslos. `TRUNCATE`, `REFERENCES`, `TRIGGER` und `MAINTAIN` gehören **keiner** API-Rolle; PostgREST kann sie ohnehin nicht nutzen.
-- **`authenticated` = genau die Operationen, die seine RLS-Policies ausdrücken.** Eine Policy ohne passendes Objektprivileg ist tot, ein Objektprivileg ohne Policy ist unerreichbar und damit nur Angriffsfläche. Wer eine neue Policy anlegt, prüft beides zusammen.
-- **`anon` hat genau ein Recht:** `SELECT` auf `public.init_state` (Vor-Login-Prüfung in `authProvider.getIsInitialized()`). Nichts auf Basistabellen, nichts auf den anderen Views.
-- **Kein Rolle hält `DELETE` auf `public.sales`** — auch `service_role` nicht (W6-B: die Löschung läuft als `postgres` in `nora_private.guard_auth_user_delete`). Allgemeiner: `service_role` hält nirgends in `public` `DELETE`; es existiert kein `.delete()` gegen eine `public`-Tabelle in `supabase/functions`. Wer einen solchen Pfad **braucht**, begründet ihn und ergänzt Matrix *und* Suite — er fügt nicht still ein `grant` hinzu.
-- **`public.audit_events` ist auch im ACL append-only:** `service_role` hat `SELECT`/`INSERT`, kein `UPDATE`, kein `DELETE`, kein `TRUNCATE`.
-- **Capability-Rollen sind nie Ziel eines Sicherheits-`revoke`.** `nora_audit_writer`, `nora_calendar_writer`, `nora_calendar_linker`, `nora_role_manager`, `nora_identity_manager` (inkl. **Spalten-Grant** `sales.email`) behalten ihre schmalen Rechte; `revoke` richtet sich immer namentlich an `anon, authenticated, service_role`. Positive Assertions sind so wichtig wie negative — eine Sicherheitsbereinigung darf keine Fähigkeit stillschweigend abschalten.
-- **Keine client-facing Rolle hält `CREATE` auf `public`** — Voraussetzung dafür, dass `SECURITY DEFINER`-Functions mit `search_path = public` unkritisch bleiben (Falle 34). Auch `nora_calendar_linker` nicht mehr. Braucht eine künftige Migration `CREATE` für ein `alter function … owner to <capability>`, wird es **innerhalb** dieser Migration gewährt und vor deren Ende wieder entzogen.
-- **PG15 lokal / PG17 Production:** `MAINTAIN` existiert erst ab PG17. Deshalb im DDL **nie** `MAINTAIN` schreiben — `revoke all` deckt beide Versionen ab; nur Assertions verzweigen über `current_setting('server_version_num')`. `has_table_privilege(…, 'MAINTAIN')` wirft auf PG15 „unrecognized privilege type".
-- **Nicht abgedeckt:** `pg_default_acl` für den Creator `supabase_admin` in `public` vergibt weiterhin `arwdDxtm` an die API-Rollen. `postgres` ist kein Mitglied von `supabase_admin` und kann das nicht ändern; die Regel ist ruhend, solange **alle** Objekte in `public` `postgres` gehören (die Migration prüft das als Vorbedingung — `17-known-issues-and-planned-waves.md` A.9). Ebenfalls nicht abgedeckt: Schema `storage` und die von PostgreSQL eingebaute `PUBLIC`-EXECUTE-Vorgabe für neue Functions (`17-known-issues-and-planned-waves.md` A.8) — sensible Functions brauchen weiterhin ihr eigenes `revoke all on function … from public`.
-
-### Falle 34: `SECURITY DEFINER`-Views/Functions blind auf Advisor-Finding umstellen
-
-Falsch:
-
-```text
-Supabase Security Advisor meldet ERROR "Security Definer View" →
-sofort security_invoker=true setzen, weil der Advisor es als Fehler markiert.
-```
-
-Richtig:
-
-```text
-Vor jeder Änderung an einer SECURITY DEFINER-View/-Function oder ihrem
-security_invoker prüfen: konkrete Datenprojektion, Grants (anon/authenticated/
-service_role), zugrunde liegende RLS, tatsächliche Consumer, serverseitige
-Auth-Checks, funktionale Abhängigkeiten. Ein Advisor-Finding ist ein
-automatisiertes Signal (jede SECURITY DEFINER-View ist per Default ein
-ERROR-Lint), kein Beweis für einen Exploit — und kein Beweis für
-Harmlosigkeit. Beide Richtungen müssen belegt werden.
-```
-
-`public.init_state` und `public.sales_directory` sind verifizierte, bewusste Ausnahmen mit geprüfter minimaler Datenprojektion — siehe `06-decision-log.md` „2026-08-28 – Intentional privileged read views" (Einzelbewertungen im Archiv `releases/2026-08.md`, Anhang „Security Advisor Findings — assessed 2026-08-28"). Für diese beiden Views gilt zusätzlich: Änderungen an Projektion, Grants, zugrunde liegender RLS oder `security_invoker` erfordern eine neue Security-Bewertung, keine Wiederverwendung der alten Einstufung.
-
-Die vom Advisor gemeldeten ausführbaren `SECURITY DEFINER`-Functions/RPCs (`anon_security_definer_function_executable` / `authenticated_security_definer_function_executable`) wurden in der Folge-Session „Residual Security Advisor Closure" (2026-08-28) bewertet — siehe `06-decision-log.md` und Archiv `releases/2026-08.md`. Wichtige Unterscheidung für künftige Agenten: eine Function mit Rückgabetyp `trigger` oder `event_trigger` kann **nicht** direkt aufgerufen werden (Postgres-Engine-Restriktion, unabhängig von EXECUTE-Grants; PostgREST exponiert sie ohnehin nicht als RPC) — ein Advisor-Warning dazu ist strukturell ein Falsch-Positiv, kein Nachweis für Exposure. Ein Advisor-Warning zu einer Function mit „echtem" Rückgabetyp (z. B. `jsonb`, `uuid`, `void`) muss dagegen immer einzeln geprüft werden (Grants, serverseitige Auth-Checks, search_path).
-
-Ebenso wurde geprüft: ein gesetzter `search_path = public` (statt `''`) bei `SECURITY DEFINER` ist auf Production nur deshalb unkritisch, weil keine client-facing Rolle (`anon`/`authenticated`/`PUBLIC`) `CREATE` auf `public` besitzt. Diese Grant-Voraussetzung vor jeder neuen `SECURITY DEFINER`-Function mit nicht-leerem `search_path` erneut prüfen — nicht pauschal von der aktuellen Bewertung ausgehen, falls sich Schema-Grants künftig ändern.
-
-### sales-Datenexposition (v0.4b.2)
-
-| Ressource | Wer liest | Felder |
-|-----------|-----------|--------|
-| `public.sales_directory` | alle aktiven Rollen | `id`, `first_name`, `last_name`, `avatar` — Teamlisten, Betreuer-Auswahl |
-| `public.sales_identities` (W2) | alle aktiven Rollen | `id`, `first_name`, `last_name`, `avatar`, `disabled` — **alle** Mitarbeiter inkl. deaktivierter; nur für historische Namen (Notizen, Akten, Aktivitätslog, Export), nie als Auswahlliste |
-| `public.sales` | Admin: alle Zeilen; sonst nur eigene Zeile | vollständiges Profil inkl. `role`, `email`, `disabled` nur für Admin-Verwaltung / eigenes Profil |
-
-Beide Views sind `security_invoker = false` über genau eine Tabelle und damit auto-updatable — deshalb seit W2 explizit `SELECT`-only (`revoke all` + `grant select`), unabhängig von Default-Privilegien. `DELETE` auf `public.sales` ist für `anon`/`authenticated` entzogen (zusätzlich zur fehlenden DELETE-Policy).
-
-Direkte Data-API-Updates auf `role`, `disabled`, `administrator`, `user_id`, `email` bleiben blockiert (Trigger). Rollen-/Zugangsänderung nur über die `users` Edge Function → `set_sales_access_by_executor` (service_role, verifizierter Actor, Selbstschutz) → `nora_private.apply_sales_role_change` (Owner `nora_role_manager`). Zusätzliche Invariante seit W1: `guard_last_active_admin_trigger` lässt nie null Zeilen mit `role = 'admin' AND disabled = false` zurück (`NORA_LAST_ACTIVE_ADMIN_REQUIRED`). Seit W3 (2026-09-05) verankert der Executor den verifizierten Actor und die Operation-ID transaktionslokal für den Audit-Trigger (`nora_private.pin_audit_context`, postgres-intern); Mitarbeiter-Ereignisse aus der Edge Function laufen über `public.record_employee_admin_event` (nur `service_role`, Ereignistyp-Allowlist, Entity = `nora_entity_uuid('sales', id)`). **Neue `user.*`-Ereignisse nie über `insert_audit_event` mit `crypto.randomUUID()` schreiben** — Ereignistyp in `record_employee_admin_event` ergänzen und in `lifecycle_audit_actor_verification.sql` beweisen.
-
-Erster Sign-up: `handle_new_user` nutzt `pg_advisory_xact_lock(89142421, 1)` — exakt ein Admin unter Parallelität.
-
-### Mitarbeiter-Referenzintegrität und historische Identität (User Lifecycle W2, 2026-09-05)
-
-- **Aktive Zuweisung ≠ historische Identität.** `sales_directory` beantwortet „Wem darf ich neue Arbeit zuweisen?" (nur `disabled = false`); `sales_identities` beantwortet „Wer war für diesen bestehenden Datensatz zuständig / wer hat das geschrieben?" (alle Zeilen). Picker → Directory, Anzeige bestehender Daten → Identities (`useGetSalesName`, Export).
-- **Alle sechs Referenzen auf `sales.id` sind `NO ACTION`-FKs:** `companies`, `contacts`, `deals`, `deal_notes`, `contact_notes`, `tasks` (`sales_id`). Nie `CASCADE`, nie `SET NULL` — Urheberschaft und Zuständigkeit sind Geschäftsgeschichte.
-- **Lösch-Modell:** referenzierter Mitarbeiter → `DELETE` wird von der Datenbank auf jedem Pfad verweigert (23503); unreferenzierter Mitarbeiter → nur über den kontrollierten W6-B-Pfad (Abschnitt „Kontrollierter Hard Delete" unten; in Production erst mit dem W6-B-Release, bis dahin technisch nur `postgres`/`service_role` per SQL). Browser-Rollen haben kein `DELETE`-Privileg auf `sales` und keine DELETE-Policy.
-- **Was ein späterer Executor prüfen muss:** Zählung der sechs FK-Referenzen = 0 (Preview „Kann sicher gelöscht werden?"); Snapshots in `audit_events`/`email_delivery_events` bleiben; `sales.user_id → auth.users` ist `NO ACTION` in Gegenrichtung (Auth-Identität separat behandeln). Test-Datenpurge nie über `CASCADE`.
-- **Aktive Zuweisung ist autoritativ (Hardening):** `guard_active_assignment_trigger` (`BEFORE INSERT OR UPDATE OF sales_id`) auf `companies`, `contacts`, `deals`, `tasks` verweigert, einen deaktivierten Mitarbeiter **neu** zuzuweisen (`DETAIL = NORA_EMPLOYEE_NOT_ASSIGNABLE`, `NoraErrorCode` `EMPLOYEE_NOT_ASSIGNABLE`). Bestehende Referenzen, unverwandte Updates und das Wegwechseln bleiben erlaubt. Nie auf `contact_notes`/`deal_notes` (Urheberschaft). Im Formular: `SalesAssignmentInput` — aktuelle deaktivierte Zuständigkeit sichtbar, nicht wählbar.
-- **Archivierungsprinzip:** INAKTIV / ARCHIVIERT ist nicht NICHT-EXISTENT. Gilt perspektivisch für Kontakte, Kunden, Vorgänge — in W2 nur für Mitarbeiter umgesetzt, kein generisches Framework.
-- **Neue Referenz auf `sales.id`?** Immer als `NO ACTION`-FK anlegen, in `lifecycle_reference_integrity_verification.sql` Abschnitt 1 (Anzahl 6 → n) und Abschnitt 5 (Blockade je Tabelle) ergänzen, und die Referenzliste in `19-user-lifecycle-architecture.md` §7 erweitern (Referenzgraph im Original: Archiv `releases/2026-09.md`, Eintrag W2).
-
-### Kontrollierter Hard Delete (User Lifecycle W6-B, `PRODUCTION VERIFIED` 2026-09-07)
-
-- **Zwei Guards, ein Pfad.** `nora_private.guard_auth_user_delete` (`BEFORE DELETE ON auth.users`) verweigert jede Löschung einer Auth-Identität mit `sales`-Zeile ohne lebendes passendes Nora-Ticket (`NORA_ACCOUNT_DELETE_NOT_AUTHORIZED`) — auch aus dem Supabase-Dashboard, per SQL oder durch andere Admin-API-Aufrufer; eine Auth-Löschung kann Nora-Zustand nicht mehr verwaisen lassen. `nora_private.guard_sales_delete` (`BEFORE DELETE ON public.sales`) verweigert jedes direkte `DELETE` (`NORA_SALES_DELETE_NOT_AUTHORIZED`), auch für `service_role`; erlaubt nur innerhalb der autorisierten Auth-Löschung (GUC `nora.account_deletion_ticket` = lebendes Ticket für genau `sale_id` + `user_id`, **und** `pg_trigger_depth() >= 2`). Beide Guards nie deaktivieren, keinen Bypass-RPC anlegen. SQL-Suiten räumen `sales`-Fixtures per Rollback auf, nie per `DELETE`.
-- **Ticket oder Verweigerung, dann alles in GoTrues Transaktion.** `public.prepare_employee_account_deletion` (nur `service_role`, verifizierter Admin-Actor) prüft alles vorab und schreibt ein Zwei-Minuten-Ticket (`nora_private.sales_account_deletion_tickets`, kein FK, keine API-Grants, keine Secrets). Der GoTrue Admin **Hard Delete** ist der einzige Treiber; der Guard löscht `public.sales`, Nora-Technikzustand und schreibt `user.account_deleted` **in derselben Transaktion** wie `auth.users` und die CASCADE-Kinder. Nie „`sales` zuerst, Auth später" (Teilzustand), nie `sales.user_id`-FK schwächen, nie Auth-Interna per SQL löschen.
-- **Löschprüfung zählt all-time.** Blocker: alle sechs W2-Referenzen (archivierte Vorgänge, erledigte Aufgaben, historische Notizen inklusive) und durable Provenienz (`checklist_templates.created_by`, `saved_text_snippets.created_by`, `google_calendar_connections.connected_by`, `audit_events` als **Actor**). Audit-Zeilen als **Ziel** blockieren nie. Zielzustand: `disabled` **und** gebannt, Identität konsistent. Die W5-Preview (`open_*`-Filter) ist **nicht** die Löschprüfung. Neue Tabellen mit Mitarbeiter-Urheberschaft oder -Zuständigkeit: Blocker in `nora_private.employee_deletion_preview` ergänzen **und** in `lifecycle_account_deletion_verification.sql` beweisen.
-- **Id-Wiederverwendung ist eingeplant.** `sales.id` bleibt `GENERATED BY DEFAULT` (eigener Punkt); Ticket und Guard binden Auth-UUID + Entity + E-Mail-/Namens-/Rollen-Snapshot und vergleichen sie beim Löschen erneut — eine Autorisierung für Identität A kann nie Identität B treffen, auch nicht bei gleicher Nummer.
-- **Audit-Wahrheit.** `user.account_deleted` existiert nur, wenn die Löschung committet ist (gleiche Transaktion); Metadaten nur Ids und Zähler, keine Adresse, kein Name; kein Duplikat bei Retry (`already_deleted` aus `get_employee_deletion_evidence`). Historische Audit-Zeilen werden nie gelöscht (kein Retention-Backfill in W6-B).
-- **Schmale Purge.** `email_delivery_events` nur mit `employee_sale_id = sale` **und** Adresse aus der Identitätshistorie des Mitarbeiters; nie allein über den E-Mail-String; Fremdadressen bleiben und werden gezählt. Keine allgemeine Retention-Bereinigung.
-- **Demo.** FakeRest bietet keinen Löschpfad (`deletion.supported = false`); Production-Code wird nie für Demo-Parität geschwächt.
-
-### Anmeldeadresse ist Identität (User Lifecycle W4, 2026-09-06)
-
-- **Ein Master, ein Spiegel, ein Schreiber.** Die Login-E-Mail lebt in `auth.users.email`; `public.sales.email` ist ihr Spiegel und wird ausschließlich von `nora_private.guard_auth_email_change()` (Owner-Capability `nora_identity_manager`) innerhalb von GoTrues eigener `UPDATE`-Transaktion geschrieben. `handle_update_user` synchronisiert nur noch Namen.
-- **Ticket oder Verweigerung.** Jede Änderung von `auth.users.email` ohne lebendes Ticket aus `public.prepare_sales_email_change` (nur `service_role`, verifizierter Admin-Actor) wird von der Datenbank abgelehnt (`NORA_EMAIL_CHANGE_NOT_AUTHORIZED`) — auch über die Admin API mit Service-Key, auch über GoTrue-Selbstbedienung, auch aus dem Dashboard. Mit Ticket geschehen `sales.email`, das Löschen der `auth.one_time_tokens` des Users und `user.email_changed` in derselben Transaktion.
-- **Zugang und Identität sind orthogonal.** Der Identity-Manager darf nur `email` (Spalten-Grant + Trigger-Zweig); Rolle/`disabled`/Bann bleiben beim W1-Executor. Eine E-Mail-Änderung aktiviert nie, deaktiviert nie, sendet einem Deaktivierten nie eine Einladung.
-- **Normalisierung = Provider-Contract.** `lower(btrim(x))`, Format geprüft, `sales.email` citext + `uq__sales__email`; Eindeutigkeit gegen beide Speicher. Nie eine Adresse ungetrimmt an GoTrue geben (400), nie auf `email_exists` hoffen (Admin-Update liefert rohes `23505`).
-- **Alte Links sterben mit der Adresse.** GoTrue prüft Einladungs-/Passwort-Links gegen `auth.one_time_tokens`, nicht gegen die Token-Spalten in `auth.users`. Wer eine Identität bewegt, löscht diese Zeilen; eine neue Einladung wird danach ausdrücklich versendet (nur für Eingeladene, nie für Deaktivierte).
-- **Kein generischer Profil-PATCH für Identität.** Ein PATCH-Body mit `email` wird als Ganzes abgewiesen; „Name gespeichert, E-Mail gescheitert" darf nicht existieren. Das Bearbeiten-Formular zeigt die Anmeldeadresse read-only, die Änderung ist eine eigene Aktion mit Konsequenztext je Zustand.
-- **Selbständerung ist blockiert** (`NORA_SELF_EMAIL_CHANGE_FORBIDDEN`), Erfolg wird erst nach serverseitiger Verifikation beider Speicher gemeldet, ein Retry ist ein typisiertes No-op (`email_unchanged`) ohne zweites Audit und ohne zweite Einladung.
-
-### Zugang beenden und Sitzungen (User Lifecycle W5, 2026-09-06)
-
-- **Offboarding ist Deaktivieren + Sitzungsende + Audit in einer Transaktion** (`public.offboard_employee_by_executor`, nur `service_role`, verifizierter Admin-Actor). Der Zugang endet sofort; Person, Historie und alle sechs Referenzen bleiben (W2). Offene Zuständigkeiten blockieren nie — sie werden gezählt (`public.get_employee_dependency_preview`: Kunden, Kontakte, offene Vorgänge, offene Aufgaben; Notizen getrennt) und anschließend umverteilt.
-- **Sitzungen werden in der Datenbank beendet.** GoTrue bietet keinen Admin-Logout; `nora_private.revoke_auth_sessions` löscht `auth.sessions` (Refresh-Tokens kaskadieren) und Restbestände in `auth.refresh_tokens`. Nur postgres-intern, nur aus dem Executor. Nie aus einer Edge Function oder über einen Browser-Pfad.
-- **Ein JWT ist nur so lange etwas wert wie seine Sitzung — und nur, wenn sie ihm gehört (W6-A).** PostgREST prüft die Sitzung nicht; Nora tut es in `nora_private.is_active_user()`/`current_role()` über `jwt_session_is_live()`. Vertrag: `session_id` vorhanden → nur live, wenn `auth.sessions.id = session_id` **und** `auth.sessions.user_id = sub`; Claim malformed (kein UUID-String, JSON `null`, Zahl, Objekt, Array) → verweigert; Claim fehlt, aber PostgREST hat ein JWT übergeben (`request.jwt.claims` gesetzt) → verweigert; nur ohne jedes übergebene JWT (Legacy-Fixture-GUCs, `psql`, Trigger-Kontexte) gilt der Kompatibilitätspfad. **Fail-closed:** kann `postgres` `auth.sessions` nicht lesen → `WARNING` „session binding DENIED" + verweigert. `service_role` und Capability-Rollen unbetroffen. Wer die RLS-Helfer anfasst, erhält die Bindung; die Claim-Klassifikation lebt nur in `nora_private.jwt_session_claim()`.
-- **Migrationsregel Session-Bindung:** jede Migration, die `jwt_session_is_live()` oder `auth.sessions` berührt, prüft vorab `has_table_privilege('postgres', 'auth.sessions', 'SELECT')` **und** eine echte Lookup-Probe und bricht sonst ab (Vorbild `20260906210000_nora_lifecycle_session_authorization.sql`); `nora_private.session_binding_health()` (nur `postgres`) ist der eine Gesundheitsprimitive dafür — kein Browser-RPC. SQL-Fixtures, die `request.jwt.claims` setzen, brauchen eine echte `auth.sessions`-Zeile (Konvention: Sitzungs-ID = User-ID).
-- **Idempotenz über `disposition`, nicht über neue Spalten.** `executed` (Zugang war aktiv oder es gab Sitzungen) schreibt genau ein `user.offboarded`; `replayed` ändert und schreibt nichts. Kein `offboarded_at`, kein fünfter Zugangsstatus: der Zustand ist aus `sales.disabled` + Bann + Sitzungen abgeleitet.
-- **Reihenfolge und Teilausfall:** Datenbank (Guards, Zustand, Sitzungen, Audit) → Auth-Bann → Verifikation. Scheitert der Bann, ist der Zugang trotzdem aus (RLS + Sitzungen); Antwort `employee_access_sync_incomplete` mit `offboarded: true`, Konvergenz per Retry oder „Zugangsstatus synchronisieren". Nie grün ohne Verifikation.
-- **Audit-Metadaten bleiben gebunden:** Zähler, Flags, Rolle, Adresse — nie Token, Sitzungs-IDs, Provider-Antworten.
-
-## Checklisten- und Audit-Guardrails (Welle 7b)
-
-Details in `10-checklists-snippets-audit.md`:
-
-- relationale Tabellen als Hauptmodell — kein JSONB-only
-- Vorlagenpunkte deaktivieren, nicht löschen
-- Audit append-only — Client darf Events nicht ändern/löschen
-- keine getrennten Audit-Tabellen pro Bereich
-- Textbausteine persistent vor Plus/Minus-UI
-- Checklisten-Start nur über `start_checklist_run_from_template` — nicht manuell Run + Items per Client
-
-## Schnellerfassung (Welle v0.3e)
-
-- **Keine Migration** — nutzt `companies`, `contacts`, `deals`, optional `tasks`
-- **Quelle/Herkunft** vorerst in `deals.description` als Präfix `Quelle: …` — kein `source_channel`-Feld (später empfohlen)
-- **Keine Tags** für Quelle — vermeidet Datenmodell-Duplikate
-- **Dubletten** nur heuristisch (Name, Telefon, E-Mail) — keine KI
-- **Atomar seit Self Contact Wave (2026-08-26)**: Kunde+Kontakt+Vorgang laufen über den Application Command `createQuickCaptureCase` → RPC `create_quick_capture_case` — kein Teilzustand zwischen diesen dreien mehr möglich. Aufgabe bleibt bewusst ein separater Best-Effort-Schritt danach (kann isoliert fehlschlagen, ohne Kunde/Kontakt/Vorgang zurückzurollen).
-- **Draft** pro Benutzer gescoped (`nora-quick-capture-draft:{identity.id}`), Schema-Version + Staleness-Schwelle, Autosave + Lifecycle-Flush — siehe Decision Log „Self Contact Wave"
-- **Keine** Gmail/WhatsApp/Google-Kalender-Integration — nur manuelle Quellen-Auswahl
-
-## Dubletten-Vorschläge (Welle v0.3f)
-
-- **Keine Migration** — nutzt bestehende `companies` / `contacts` über `performGlobalSearch`
-- **Kein Auto-Merge** — Vorschläge sind informativ; Nutzer wählt bewusst
-- **Zentrale Logik** in `duplicateCandidateUtils.ts`:
-  - `DuplicateSearchInput` — Eingabe für Schnellerfassung und später Lexware/CSV
-  - `scoreCompanyAsDuplicate` / `rankDuplicateCandidates` — deterministisches Scoring
-  - Gründe: Kundennummer (100), Telefon/E-Mail (90), ähnlicher Name (50), gleiche Stadt (+20 mit Name)
-  - Mindest-Score 50; max. 5 Kandidaten
-- **Abfrage-Effizienz** (`useDuplicateCandidateSearch`):
-  - Debounce 400 ms
-  - Suche erst ab sinnvoller Eingabe (`canSearchQuery`, ≥3 Zeichen Name, gültige E-Mail/Telefon)
-  - In-Memory-Cache pro Dialog-Session (`buildDuplicateSearchCacheKey`)
-  - Stale-Request-Guard (`latestRequestRef`)
-  - Keine parallele API-Schicht — nur `performGlobalSearch`
-- **Lexware-Import (später):** Import-Assistent liefert `DuplicateSearchInput` (Name, Telefon, E-Mail, PLZ, Stadt) + Kandidatenliste aus DB; gleiche `rankDuplicateCandidates`-Funktion. Grenzen: keine Fuzzy-Adressen, keine Dubletten über Ansprechpartner ohne Firmenbezug, keine phonetische Namenssuche.
-
-## Schnellerfassung UX (Welle v0.3g)
-
-- **Keine Migration** — Entwürfe nur lokal im Browser, pro Benutzer gescoped (`nora-quick-capture-draft:{identity.id}` in `localStorage`, seit Self Contact Wave — der alte globale Key ohne Benutzer-Scope wird beim Upgrade entfernt, nie migriert)
-- **Kein serverseitiger Entwurf** — bewusst weiterhin rein clientseitig (kein echter Nutzen für einen serverseitigen Draft identifiziert)
-- **Freie Tab-Navigation** — keine Blockade durch unvollständige Felder zwischen Schritten
-- **Ein Kundenvorschlags-Bereich** — `mergeCustomerSearchResults` dedupliziert Suche und Scoring
-- **Kein Auto-Merge** — unverändert aus v0.3f
-- **Effiziente Suche** — ein Request über `useDuplicateCandidateSearch` (kein paralleler Fetch im Dialog)
-
-## Fensterauftrag-Guardrails (Welle 7a)
-
-Ergänzung zu den Fallen oben — Details in `09-window-order-workflow.md`:
-
-### Falle 14: Chef-Unterstatus als Kanban-Spalten
-
-Falsch:
-
-```text
-S4a, S4b, S4c, S5 jeweils eigene Pipeline-Spalte
-```
-
-Richtig:
-
-```text
-Hauptstatus „Wartet auf Hersteller“ + Checkliste am Vorgang
-```
-
-### Falle 15: Höning im Datenmodell verdrahten
-
-Falsch:
-
-```text
-stage = hoehning-bestellt
-```
-
-Richtig:
-
-```text
-stage = wartet-auf-hersteller
-Notiz oder manufacturer_name = „Höning“ (oder Lieferant-Datensatz)
-```
-
-### Falle 16: Kunden-Tracking-Link ohne Trennung
-
-Falsch:
-
-```text
-Öffentliche URL zeigt interne Notizen, Einkaufspreise, Checklistenkommentare
-```
-
-Richtig:
-
-```text
-Eigenes Portal-Modul mit Token, vereinfachten Kundenstufen, DSGVO-Löschung
-```
-
-### Falle 17: Google als Prozesskern
-
-Falsch:
-
-```text
-Zapier/Make verbindet Drive, Keep und Gmail als Workflow-Engine
-```
-
-Richtig:
-
-```text
-Nora = System of Record für CRM; Google Kalender = System of Record für Termine
-```
-
-### Falle 22: Zweites Terminsystem in Nora
-
-Falsch:
-
-```text
-appointments-Tabelle als führende Terminquelle parallel zu Google Kalender
-```
-
-Richtig:
-
-```text
-google_calendar_events = Cache + Verknüpfung; Zeit/Titel/Ort führend in Google
-```
-
-### Falle 23: Private iCal-Adresse für Integration
-
-Falsch:
-
-```text
-iCal-URL des Geschäftskalenders in Nora speichern und periodisch abrufen
-```
-
-Richtig:
-
-```text
-Google Calendar API mit OAuth; Kalender-ID in google_calendar_connections
-```
-
-### Falle 24: Kalender-ID in UI-Komponenten
-
-Falsch:
-
-```text
-const CALENDAR_ID = "abc@group.calendar.google.com" in Hotboard.tsx
-```
-
-Richtig:
-
-```text
-Konfiguration aus DB/Edge Function; UI kennt nur Event-Datensätze
-```
-
-### Falle 25: Parallele Benutzerverwaltung für Rollen
-
-Falsch:
-
-```text
-Neue profiles- oder user_roles-Tabelle unabhängig von sales
-```
-
-Richtig:
-
-```text
-sales.role an bestehender CRM-Benutzertabelle; 1:1 zu auth.users
-```
-
-### Falle 26: OAuth-Tokens in CRM-Tabellen oder Audit
-
-Falsch:
-
-```text
-refresh_token in `google_calendar_connections`, `audit_events.metadata` oder Frontend — stattdessen `nora_private.google_calendar_oauth_secrets`
-```
-
-Richtig:
-
-```text
-Tokens nur in Edge Function Secrets / Vault; service_role niemals im Browser
-```
-
-### Falle 27: Google-Termine pauschal editierbar
-
-Falsch:
-
-```text
-Jeder authenticated-Nutzer darf jeden gespiegelten Termin ändern
-```
-
-Richtig:
-
-```text
-origin = google → read-only; origin = nora → office/admin mit Bestätigung beim Löschen
-```
-
-## Operation Status Contract v1 — Guardrails (Welle 2026-08-29, Phase 6C/6D.1)
-
-### Falle 35: Gespeicherten `idempotency_records.result._meta.disposition` als aktuelle externe Ausführungsdisposition lesen
-
-Falsch:
-
-```text
-select result -> '_meta' ->> 'disposition' from nora_private.idempotency_records
-where idempotency_key = ...;
--- und diesen Wert als "was der Client gerade als Disposition sieht" interpretieren
-```
-
-Richtig:
-
-```text
-Die drei idempotenten RPCs (create_customer_with_contact, create_quick_capture_case,
-create_quick_capture_task) schreiben `_meta.disposition = "executed"` beim Erstschreiben
-UNVERÄNDERLICH in die gespeicherte Zeile — dieser Wert bleibt für immer "executed", auch
-nach beliebig vielen Replays. Bei jedem Replay überschreibt die RPC den zurückgegebenen
-Wert frisch per `v_replay || jsonb_build_object('_meta', jsonb_build_object('disposition',
-'replayed'))` (jsonb `||` gewinnt auf der rechten Seite) — die externe Disposition wird
-also bei JEDEM Request serverseitig neu berechnet, nie aus der gespeicherten Zeile
-übernommen. Die Tabelle ist ohnehin nur über die beiden SECURITY DEFINER-Functions
-(`idempotency_check`/`idempotency_persist`) erreichbar, nicht direkt per PostgREST.
-Ein künftiger Agent, der z. B. eine Admin-Ansicht oder ein Reporting auf
-`idempotency_records` aufbaut, darf `result._meta.disposition` NICHT als „letzte bekannte
-Disposition" ausgeben — es ist ein eingefrorener Schreibzeitpunkt-Wert, kein Live-Status.
-Empirisch verifiziert (Decision Log „2026-08-29 – Operation Status Contract Wave",
-Nachtrag Phase 6C und 6D.1): direkte Abfrage der Zeile zeigt weiterhin `"executed"`,
-während der gleichzeitige Replay-Response korrekt `"replayed"` liefert.
-```
-
-### Falle 36: KI/Automatisierung mit rohem SQL direkt gegen `audit_events`
-
-Falsch:
-
-```text
-Ein zukünftiger LLM-/Automatisierungs-Consumer generiert eigenständig
-SELECT-Statements gegen public.audit_events (oder andere Rohtabellen), um
-"die Historie eines Kunden" zu beantworten.
-```
-
-Richtig:
-
-```text
-Zukünftige KI-/Automatisierungs-Konsumenten von Business-Historie gehen ausschließlich
-über anwendungsseitige Read-Models/Queries (konzeptionell z. B. GetCustomerHistory(customerId)),
-niemals über roh generiertes SQL direkt gegen audit_events oder andere Tabellen. Dies ist
-eine Architekturregel für künftige Wellen (Notification-/Status-UI, KI-Assistenz) — in
-dieser Session bewusst NICHT implementiert, nur als Guardrail dokumentiert.
-```
-
-`operation_id` (technische Korrelation über Manager/Audit/Error-Observatory hinweg, wo
-unterstützt) und `idempotency_key` (fachliche Retry-Absicht) sind zwei unterschiedliche
-Konzepte und dürfen nicht verwechselt werden. `audit_events.request_id` ist trotz des
-historischen Spaltennamens die `operation_id`-Korrelation (befüllt aus dem Request-Header
-`x-nora-operation-id`, siehe `nora_private.current_operation_id()` in Migration
-`20260810160000_nora_operation_correlation.sql`) — keine zweite, unabhängige Request-ID.
-
-### Falle 37: Presentation erfindet einen Core-Lifecycle (Welle Phase 7B)
-
-Falsch:
-
-```text
-Die Notification braucht einen Zustand "teilweise erfolgreich", also bekommt
-OperationStatus einen vierten Wert 'partial' — oder ein lange laufendes 'pending'
-wird nach n Sekunden als 'error'/'timeout' dargestellt.
-```
-
-Richtig:
-
-```text
-Der technische OperationStatus bleibt 'pending' | 'success' | 'error'. Ein Presentation-
-Lifecycle darf zusätzliche Werte kennen ('partial' = Core committed, optionaler Folgeschritt
-nicht), diese entstehen aber ausschließlich durch Reduktion mehrerer OperationRecords in der
-Presentation und werden NIE in den Core zurückgeschrieben. Ebenso wird ein lange laufendes
-'pending' von der Presentation niemals zu 'error' umgedeutet — der fehlende Timeout-Lifecycle
-ist ein bekannter Core-Follow-up und darf nicht durch eine Anzeige-Heuristik kaschiert werden.
-Zulässig wäre höchstens ein zusätzlicher Hinweis "dauert länger als erwartet" bei
-unverändertem Lifecycle und Tone.
-```
-
-### Falle 38: Eine vorgegebene `operationId` registrieren, ohne die tatsächlich vergebene zu prüfen (Welle Phase 7B)
-
-Falsch:
-
-```text
-Eine äußere Schicht mintet eine ID, meldet sie irgendwo an (z. B. als Korrelationsziel)
-und übergibt sie an manager.execute() — in der Annahme, dass genau diese ID verwendet wird.
-```
-
-Richtig:
-
-```text
-createOperationContext() normalisiert eine vorgegebene operationId: ungültige Werte werden
-verworfen und durch eine frisch geminte ersetzt, gültige werden lowercased. Wer eine ID
-vorab anmeldet und dann auf manager.getOperation(id) wartet, wartet bei einer ungültigen
-oder uppercase-UUID also auf eine ID, die es nie geben wird — der wartende Zustand löst
-sich nie auf. Vorgegebene IDs müssen daher entweder garantiert gültig und lowercase sein
-(so wie createOperationId() sie liefert) oder die anmeldende Schicht muss sich an die
-tatsächlich vergebene Kontext-ID binden statt an die gewünschte.
-```
-
-### Falle 39: Mitarbeiternamen aus `sales_directory` auflösen oder eine Referenz auf `sales.id` mit `CASCADE`/`SET NULL` anlegen (User Lifecycle W2)
-
-Falsch:
-
-```text
-useGetManyAggregate("sales_directory", …) für den Autor einer alten Notiz
-  → deaktivierter Mitarbeiter: leerer Name / Export-Crash
-contact_notes.sales_id references sales(id) on delete cascade
-  → Mitarbeiter löschen löscht Geschäftshistorie
-tasks.sales_id ohne FK → Waisen, Fantasie-IDs
-```
-
-Richtig:
-
-```text
-Anzeige bestehender Daten: sales_identities (alle Zeilen, disabled-Flag)
-Auswahl für Neues:        sales_directory (nur aktive)
-Jede Referenz auf sales.id: FK NO ACTION; Name bleibt Name, kein „Unbekannt"
-```
-
-Details und Lösch-Modell: Abschnitt „Mitarbeiter-Referenzintegrität und historische Identität (User Lifecycle W2)" oben, Decision Log „2026-09-05 – User Lifecycle W2".
-
-## Migrationsregel
-
-Vor einer Migration dokumentieren:
-
-- Warum ist das Feld nötig?
-- Welche bestehenden Workflows belegen den Bedarf?
-- Welche alten Daten müssen migriert werden?
-- Welche UI-Stellen müssen angepasst werden?
-- Gibt es eine rückwärtskompatible Lösung?
-
-Technische Regeln, die sich aus früheren Migrationen ergeben haben (Begründung jeweils in `06-decision-log.md`):
-
-- **Views nur am Ende erweitern:** neue Spalten in `companies_summary`/`contacts_summary` (oder jeder anderen View) ans Ende der `select`-Liste — `create or replace view` interpretiert eine verschobene Position als Umbenennung (`42P16`).
+- **Bereits angewendete Migrationen werden nie editiert.** `supabase/schemas/*.sql` wird synchron nachgezogen; nach jedem Production-Apply den Ledger gegen den Dateinamen-Zeitstempel prüfen — Ledger-Hazard und Vorgehen: [`21`](21-agent-runbooks.md) Sektion 1.
+- **Deklarative Schemas sind ein Abbild, keine Wahrheit.** `supabase/schemas/*.sql` wird von keinem `db reset` ausgeführt (`config.toml` konfiguriert kein `[db.migrations] schema_paths`). Autoritativ sind `supabase/migrations/` und die laufende Datenbank. Das gilt besonders für `06_grants.sql`: **niemals** als Privilegien-Source-of-Truth verwenden — Privilegien gegen die Datenbank prüfen ([`22`](22-security-and-access.md) Abschnitt 6.2).
+- **View-Spalten nur am Ende erweitern:** neue Spalten in `companies_summary`/`contacts_summary` (oder jeder anderen View) ans **Ende** der `select`-Liste — `create or replace view` interpretiert eine verschobene Position als Umbenennung (`42P16`).
 - **Signaturänderung einer RPC = `DROP FUNCTION` + `CREATE`:** ein zusätzlicher Parameter per `CREATE OR REPLACE` erzeugt eine Überladung, die PostgREST nicht auflösen kann (`PGRST203`).
-- **Grants: immer `revoke all` vor `grant`** — additive Grants lassen geerbte Rechte stehen. Seit Security Hardening Wave 1 (`PRODUCTION VERIFIED` 2026-09-07) vergeben die Default-**Tabellen**-Privilegien von `public` nichts mehr an `anon`/`authenticated`/`service_role`, aber die Regel bleibt: sie hält die Zielmatrix auch dann exakt, wenn ein Objekt aus einer älteren Migration stammt. Privilegienaussagen weiterhin **gegen die Datenbank** prüfen (`has_table_privilege`, `pg_class.relacl`, `pg_default_acl`), nie gegen `06_grants.sql` — diese Datei wird von keinem `db reset` ausgeführt.
-- **Kein `MAINTAIN` im DDL:** das Privileg existiert erst ab PG17, lokal läuft PG15. `revoke all` deckt beide ab; nur Assertions verzweigen über `current_setting('server_version_num')`.
-- **Neue Tabelle in `public` = neue Grant-Zeile.** Sie startet ohne jedes API-Rollen-Recht; ohne expliziten `grant` ist sie über PostgREST unerreichbar. Zielmatrix in `supabase/schemas/06_grants.sql` und Assertion in `supabase/tests/public_privilege_hardening_verification.sql` mit ergänzen.
-- **Kein `CREATE INDEX CONCURRENTLY`** in CLI-Migrationen (Transaktion); bei großen Tabellen eigene nicht-transaktionale Migration.
-- **Bereits angewendete Migrationen nie editieren**; `supabase/schemas/*.sql` synchron nachziehen; nach jedem Production-Apply den Ledger gegen den Dateinamen-Zeitstempel prüfen (`21-agent-runbooks.md` Sektion 1).
+- **Kein `CREATE INDEX CONCURRENTLY`** in CLI-Migrationen (die laufen in einer Transaktion); bei großen Tabellen eine eigene nicht-transaktionale Migration.
+- **Grants: immer `revoke all` vor `grant`.** Neue Tabelle in `public` = neue Grant-Zeile; neue Function = eigenes `revoke`. Die Objekttypen haben **entgegengesetzte** Defaults — vollständiger Contract: [`22`](22-security-and-access.md) Abschnitt 6.3.
+- **Berührt die Migration Session-Bindung oder `auth.sessions`?** Dann gilt das Hard Gate: Leserecht **und** echte Lookup-Probe vorab prüfen, im Fehlerfall abbrechen — [`22`](22-security-and-access.md) Abschnitt 8.1.
+
+---
+
+## 5. Persistenz- und Infrastructure-Boundary
+
+- **`nora_private` ist nicht über die Data API erreichbar** (`config.toml` exponiert nur `public`); interne Helper leben dort. Was in `public` liegt, ist potenziell erreichbar — die Platzierung ist eine Sicherheitsentscheidung ([`22`](22-security-and-access.md) Abschnitt 6.1).
+- **Ein gespeicherter Statuswert ist nicht automatisch der Live-Status.** Beispiel: `idempotency_records.result._meta.disposition` wird beim Erstschreiben unveränderlich als `"executed"` persistiert und bleibt das für immer; die **externe** Disposition (`executed` vs. `replayed`) wird bei jedem Request serverseitig frisch berechnet und nie aus der gespeicherten Zeile übernommen. Wer eine Admin-Ansicht oder ein Reporting auf einer solchen Spalte baut, gibt sie **nicht** als „letzte bekannte Disposition" aus — sie ist ein eingefrorener Schreibzeitpunkt-Wert. *(Falle 35)*
+- **Rohtabellen sind keine Abfrageschnittstelle für Automatisierung.** Künftige KI-/Automatisierungs-Konsumenten von Geschäftshistorie gehen über anwendungsseitige Read-Models/Queries, niemals über roh generiertes SQL gegen `audit_events` oder andere Rohtabellen. Contract: [`13`](13-crm-audit-retention.md). *(Falle 36)*
+- **Demo/FakeRest ist eine Parität, kein Ersatz.** FakeRest kennt die Datenbank-Guards nicht und hat keine Autorisierung auf Datenebene; Production-Code wird nie für Demo-Parität geschwächt, und ein fehlender Demo-Pfad ist kein Beleg für eine Production-Lücke.
+- **Lokaler Zustand ist pro Benutzer gescoped** (`nora-quick-capture-draft:{identity.id}`, mit Schema-Version und Staleness-Schwelle). Ein alter globaler `localStorage`-Key wird beim Upgrade **entfernt**, nie migriert.
+
+---
+
+## 6. Universeller DB-Fehlervertrag
+
+> **`error.message` ist niemals ein stabiler Business-Code.** Das gilt genauso für `error.details`.
+
+```text
+notify(`crm.errors.${error.message}`)          // FALSCH: roher Postgres-Exception-Text
+notify(normalizeCrmError(error).messageKey);   // richtig: stabiler messageKey
+```
+
+Freier DB-/Exception-Text an einen i18n-Key angehängt erzeugt nie-übersetzte Keys, die dem Büropersonal als Rohtext erscheinen. `misc/normalizeCrmError.ts` ist die **einzige** Stelle, die technische Fehler auf stabile `messageKey`s abbildet.
+
+Der Vertrag ist **machine-code-first**:
+
+- Die Business-Identität eines Fehlers ist ein kanonischer `NoraErrorCode` aus `domain/noraErrorCodes.ts`, serverseitig als `DETAIL = 'NORA_<CODE>'` gesetzt.
+- Nur ein in `NORA_ERROR_CODES` **kanonisch gelisteter** Wert wird akzeptiert — kein `startsWith("NORA_")`-Raten.
+- Die menschenlesbare `MESSAGE` bleibt frei umformulierbar und diagnostisch; sie ist **nie** die Quelle der Business-Identität. Zwei Origins mit demselben Code dürfen unterschiedlichen Text tragen.
+- **Regex-/Nachrichtentext-Parsing ist ausschließlich ein Legacy-Compatibility-Fallback** für nicht migrierte Aufrufer — niemals der primäre oder einzige Mechanismus für einen neuen Code. Bestehende Regex-Pfade bleiben bewusst stehen.
+
+Der **operative Ablauf** zur Einführung und Verifikation eines neuen Fehlercodes (Definition, Migration, Presentation-Mapping, FakeRest-Parität, Suiten) steht in [`21`](21-agent-runbooks.md) Sektion 12. *(Falle 33)*
+
+---
+
+## 7. Globaler Fallen-Index
+
+Die Fallen-Nummern bilden einen **flachen, dauerhaft stabilen globalen Namensraum 1–40**. Eine Falle behält ihre Nummer, auch wenn ihr Inhalt in ein anderes Dokument wandert: **Falle 25 bleibt Falle 25.** Es gibt keine Renummerierung, und historische Release-Dokumente werden deshalb nicht umgeschrieben.
+
+Dieser Index ist ein **Resolver für Cross-References**, keine zweite Inhaltsquelle: er nennt Nummer, Kurzname und kanonischen Current Owner. Der Inhalt steht beim Owner.
+
+| # | Kurzname | Kanonischer Current Owner |
+|---|---|---|
+| 1 | Kunde und Ansprechpartner vermischen | `03` §1.1 |
+| 2 | Baustellenadresse doppelt pflegen | `03` §1.2 |
+| 3 | Kundentyp gleichzeitig in Tags, `sector`, Notizen | `03` §1.2 |
+| 4 | Vorgangsstatus und Aufgabenstatus vermischen | `03` §1.1 |
+| 5 | Hersteller als Kunde missbrauchen | `03` §1.2 |
+| 6 | Nachfassdatum doppelt pflegen | `03` §1.2 |
+| 7 | Aufgaben am Vorgang ohne Ansprechpartner | `03` §1.3 |
+| 7a | `tasks.company_id` als live abgeleiteten Wert behandeln | `03` §1.3 |
+| 8 | Kundennummer als Tag oder in Notizen | [`08`](08-numbering-and-global-search.md) |
+| 9 | Vorgangsnummer im Titel oder in Freitext | [`08`](08-numbering-and-global-search.md) |
+| 10 | Telefonnummer als Ersatz für KD-/VG-Nummer | [`08`](08-numbering-and-global-search.md) |
+| 11 | Nummern nachträglich ändern / im Frontend vergeben | [`08`](08-numbering-and-global-search.md) · `03` §2.3 |
+| 12 | Parallele Nummernsysteme (CSV, Demo, DB) | [`08`](08-numbering-and-global-search.md) |
+| 13 | API-Umgehung der Nummernvergabe | [`08`](08-numbering-and-global-search.md) |
+| 14 | Chef-Unterstatus als eigene Kanban-Spalten | [`09`](09-window-order-workflow.md) |
+| 15 | Herstellername im Datenmodell verdrahten | [`09`](09-window-order-workflow.md) |
+| 16 | Kunden-Tracking-Link ohne Datentrennung | [`09`](09-window-order-workflow.md) |
+| 17 | Google als Prozesskern | [`11`](11-google-calendar-rbac.md) Abschnitt A |
+| 18 | JSONB-only-Checkliste am Vorgang | [`10`](10-checklists-snippets-audit.md) |
+| 19 | Servicebereich über `company_id` | [`10`](10-checklists-snippets-audit.md) |
+| 20 | Audit in Notizen oder Freitext | [`10`](10-checklists-snippets-audit.md) · [`13`](13-crm-audit-retention.md) |
+| 21 | Checklisten-ID in Notizen statt FK | [`10`](10-checklists-snippets-audit.md) |
+| 22 | Zweites Terminsystem (`appointments`) | [`11`](11-google-calendar-rbac.md) Abschnitte A · E.3 |
+| 23 | Private iCal-Adresse als Integration | [`11`](11-google-calendar-rbac.md) Abschnitt B |
+| 24 | Kalender-ID in UI-Komponenten | [`11`](11-google-calendar-rbac.md) Abschnitt B |
+| 25 | Parallele Benutzerverwaltung für Rollen | [`22`](22-security-and-access.md) Abschnitt 4.1 |
+| 26 | OAuth-Tokens in CRM-Tabellen oder Audit | [`11`](11-google-calendar-rbac.md) Abschnitt F · [`22`](22-security-and-access.md) Abschnitt 5 |
+| 27 | Google-Termine pauschal editierbar | [`11`](11-google-calendar-rbac.md) Abschnitt I |
+| 28 | Privatperson-Namensfeld doppelt vorhalten | `03` §1.2 |
+| 29 | `self_contact_id` mit `contacts.company_id` verwechseln | `03` §1.4 |
+| 30 | `is_primary` unabhängig vom `company_id`-Kontext lesen | `03` §1.5 |
+| 31 | Effective-Contact-Regel mehrfach implementieren | `03` §1.6 |
+| 32 | Numerische Entity-/Demo-IDs per Truthiness prüfen | `03` §2.1 |
+| 33 | `error.message` als i18n-Key oder Business-Code | `03` §6 · Ablauf: [`21`](21-agent-runbooks.md) §12 |
+| 34 | `SECURITY DEFINER` blind auf Advisor-Finding umstellen | [`22`](22-security-and-access.md) Abschnitt 7.1 |
+| 35 | Gespeicherte `disposition` als Live-Status lesen | `03` §5 · [`21`](21-agent-runbooks.md) §11 |
+| 36 | KI/Automatisierung mit rohem SQL gegen `audit_events` | [`13`](13-crm-audit-retention.md) · `03` §5 |
+| 37 | Presentation erfindet einen Core-Lifecycle | [`21`](21-agent-runbooks.md) §13 |
+| 38 | Vorgegebene `operationId` ungeprüft registrieren | [`21`](21-agent-runbooks.md) §11 |
+| 39 | Namen aus `sales_directory`; FK auf `sales.id` mit `CASCADE` | `03` §2.2 · [`19`](19-user-lifecycle-architecture.md) §7 |
+| 40 | `contacts.is_primary` als rohe Spalte schreiben | `03` §3.1 · Tests: [`21`](21-agent-runbooks.md) §15 |
+
+---
+
+## 8. Datenmodell-Erweiterungen
+
+Kein neues Feld ohne belegten Bedarf (Grundregel 5). Implementierte Erweiterungen stehen nicht mehr hier — sie sind Teil des aktuellen Modells ([`01`](01-domain-model.md), [`19`](19-user-lifecycle-architecture.md), [`10`](10-checklists-snippets-audit.md)) und ihrer Entscheidung in [`06`](06-decision-log.md).
+
+Noch **nicht** entschiedene, nirgends anders geführte Kandidaten: `follow_up_date` (falls `expected_closing_date` wieder Abschlussdatum werden soll), `priority` und `service_type` am Vorgang, `objects`/`sites` (Baustelle), `measurements` (Aufmaß), `manufacturer_status`, `source_channel` (heute Präfix `Quelle: …` in `deals.description`), `files`/`photos`, `workflow_type` (falls `category` nicht reicht). Geplante Domain-Wellen und ihr Status: [`17`](17-known-issues-and-planned-waves.md) Abschnitt G.
+
+**Verworfen:** eine Tabelle `appointments` als führende Terminquelle (stattdessen `google_calendar_events` als Cache; Google bleibt System of Record — [`11`](11-google-calendar-rbac.md)) und `deals.production_checklist` als JSONB-Hauptmodell (stattdessen relationale Checklisten — [`10`](10-checklists-snippets-audit.md)).

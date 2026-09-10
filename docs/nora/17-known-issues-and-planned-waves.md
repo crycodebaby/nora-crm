@@ -25,6 +25,24 @@ Wirksame Gegenmaßnahme ist deshalb weiterhin **pro Function**: jede sensible Fu
 
 Eigene Folgewelle wäre nötig, falls „neue Function ist standardmäßig unerreichbar" durchgesetzt werden soll. Der naheliegende Weg ist die **creator-scoped globale** Default-Privilegien-Zeile (siehe Korrektur oben); zu bewerten wären dabei: sie gilt für **alle** Schemata, in denen `postgres` Objekte anlegt (nicht nur `public`), sie wirkt nur auf **künftige** Functions und rüstet bestehende nicht nach, und ihre Wechselwirkung mit von der Plattform angelegten Functions ist zu prüfen. Alternativen bleiben ein Event-Trigger oder eine verbindliche Migrationskonvention. Unabhängig davon gilt weiterhin: jede sensible Function bekommt ihr eigenes explizites `revoke`.
 
+### A.10 `anon` besitzt in Production `EXECUTE` auf fünf nicht-Trigger-Functions in `public`
+
+**Status: `OPEN (LOW)`** (read-only verifiziert 2026-09-10; keine Fixwelle beauftragt).
+
+Konkrete Ausprägung von A.8: `anon` hält in Production `EXECUTE` auf `public.get_avatar_for_email`, `public.get_domain_favicon`, `public.get_note_attachments_function_url`, `public.merge_contacts` und `public.nora_entity_uuid` — alle fünf mit „echtem" Rückgabetyp und damit als PostgREST-RPC erreichbar. Die Ursache ist nicht für alle fünf dieselbe: bei `get_avatar_for_email`, `get_domain_favicon`, `get_note_attachments_function_url` und `merge_contacts` trägt der eingebaute `PUBLIC`-EXECUTE-Default (A.8) allein — es sind Functions ohne eigenes `revoke` und ohne expliziten Grant. `nora_entity_uuid` trägt **zusätzlich einen expliziten, bislang nicht widerrufenen Grant an `anon`** (`grant all on function public.nora_entity_uuid(text, bigint) to anon` in `20260628150000_checklists_snippets_audit.sql`). Wer diese Fundstelle bereinigt, darf sie deshalb nicht als reines Default-Problem behandeln — vgl. `20260628140000_numbering_api_hardening.sql`, das genau solche Grants für die Nummern-Functions wieder entzogen hat. Weitere acht Treffer liegen in `nora_private` und sind über die Data API nicht erreichbar (Schema nicht in `config.toml` exponiert).
+
+**Bewertung:** kein bekannter Datenabfluss. Alle fünf sind `SECURITY INVOKER` und laufen damit mit den Rechten von `anon` — und `anon` hält in `public` genau ein Tabellenrecht (`SELECT` auf `init_state`, read-only gegenverifiziert 2026-09-10). `merge_contacts` und `nora_entity_uuid` scheitern deshalb an Tabellen-ACL bzw. RLS; die drei `get_*`-Functions sind reine String-/URL-Helfer ohne Tabellenzugriff. Der Befund ist eine **Defense-in-Depth-Lücke**, kein Exploit — und nach dem Prinzip aus [`22`](22-security-and-access.md) Abschnitt 7.1 auch kein Nachweis für Harmlosigkeit auf Dauer: ein künftiges Tabellenrecht für `anon` oder ein Umbau einer dieser Functions auf `SECURITY DEFINER` würde sie sofort scharf machen.
+
+**Abhilfe** (eigene Welle, nicht beauftragt): je Function ein `revoke all on function … from public, anon, authenticated` — dieselbe Maßnahme, die A.8 als dauerhaft wirksame Gegenmaßnahme benennt — plus Assertion in `public_privilege_hardening_verification.sql`.
+
+### A.11 Deklaratives Schema enthält mehrere Security-Kernhelfer nicht
+
+**Status: `OPEN (LOW)`** (verifiziert am Repository-Stand 2026-09-10).
+
+`supabase/schemas/*.sql` ist ein lesbares Abbild des beabsichtigten Endzustands und wird von keinem `db reset` ausgeführt; autoritativ sind `supabase/migrations/` und die Datenbank ([`22`](22-security-and-access.md) Abschnitt 6.2). Das Abbild ist aber unvollständig: `nora_private.jwt_session_claim`, `nora_private.jwt_session_is_live`, `nora_private.session_binding_health`, `nora_private.guard_sales_delete` und die Definition von `nora_private.is_active_user` fehlen in `02_functions.sql` (die letzte wird in `03_views.sql`/`05_policies.sql` nur *benutzt*). Damit fehlt genau der Session-Autorisierungskern (W6-A) und der `sales`-DELETE-Guard (W6-B) in der reviewbaren Übersicht.
+
+**Konsequenz für Agenten:** Wer den Security-Kern verstehen oder ändern will, liest die Migrationen (`20260906210000_nora_lifecycle_session_authorization.sql`, `20260906230000_nora_lifecycle_account_deletion.sql`) oder die Datenbank — **nicht** das deklarative Schema, und schließt aus dessen Schweigen nichts. **Abhilfe** (eigene Welle, nicht beauftragt): die fehlenden Definitionen nachtragen, so wie `07-agent-change-checklist.md` es für Migrationen ohnehin verlangt.
+
 ### A.9 `pg_default_acl` für Creator `supabase_admin` in `public` bleibt für Nora unerreichbar
 
 **Status: `ACCEPTED LIMITATION`** (read-only bestätigt 2026-09-07, vor und nach dem Wave-1-Apply unverändert).

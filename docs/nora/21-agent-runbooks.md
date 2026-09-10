@@ -6,9 +6,9 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 
 **Wie dieses Dokument benutzt wird:** Der Router [`README.md`](README.md) benennt für die jeweilige Aufgabe die zuständige Sektion. Es wird **genau diese Sektion** gelesen, nicht die Datei. Der Index unten ist der interne Einstieg, keine zweite Routingtabelle — Dokumentzuständigkeiten und Load-Klassen stehen ausschließlich im Router.
 
-**Abgrenzung.** Dieses Dokument enthält **keine** durablen fachlichen oder datenbezogenen Invarianten — die stehen in [`01`](01-domain-model.md), [`03`](03-data-model-guardrails.md) und den Subsystem-Contracts ([`10`](10-checklists-snippets-audit.md), [`11`](11-google-calendar-rbac.md), [`13`](13-crm-audit-retention.md), [`14`](14-google-calendar-readonly-implementation.md), [`18`](18-email-delivery-observability.md), [`19`](19-user-lifecycle-architecture.md)). Hier steht nur, **was beim Ändern zusätzlich zu tun und zu beweisen ist**.
+**Abgrenzung.** Dieses Dokument enthält **keine** durablen fachlichen oder datenbezogenen Invarianten — die stehen in [`01`](01-domain-model.md), [`03`](03-data-model-guardrails.md), [`22`](22-security-and-access.md) und den Subsystem-Contracts ([`10`](10-checklists-snippets-audit.md), [`11`](11-google-calendar-rbac.md), [`13`](13-crm-audit-retention.md), [`14`](14-google-calendar-readonly-implementation.md), [`18`](18-email-delivery-observability.md), [`19`](19-user-lifecycle-architecture.md)). Hier steht nur, **was beim Ändern zusätzlich zu tun und zu beweisen ist**.
 
-**Ownership-Hinweis.** Die Sektionen 4, 11–14 warten auf einen endgültigen Contract-Owner (globales Security & Access, Operations/Errors/Notifications, PWA). Bis dieser existiert, bleiben ihre operativen Regeln bewusst hier — sie wurden **nicht** in einen unpassenden bestehenden Owner geschoben.
+**Ownership-Hinweis.** Sektion 4 hat seit CR2 einen Contract-Owner: [`22-security-and-access.md`](22-security-and-access.md). Die Sektionen **11–14** warten weiterhin auf einen (Operations/Errors/Notifications, PWA). Bis dieser existiert, tragen sie einige Contract-Sätze bewusst mit — jeweils als `Interim-Contract` markiert — statt sie in einen unpassenden bestehenden Owner zu schieben.
 
 ## Index (thematisch)
 
@@ -34,7 +34,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 
 ## 1. Datenbank, Migrationen und Production-Ledger
 
-**Wann:** jede Migration, jeder Schreibzugriff auf eine echte Production-Datenbank (Supabase MCP). Durable Migrations- und Datenregeln: [`03`](03-data-model-guardrails.md) Abschnitt „Migrationsregel". Universelle Release-Reihenfolge und Freigaberegeln: [`07`](07-agent-change-checklist.md).
+**Wann:** jede Migration, jeder Schreibzugriff auf eine echte Production-Datenbank (Supabase MCP). Durable Migrations- und Datenregeln: [`03`](03-data-model-guardrails.md) §4 (Migrationsinvarianten). Universelle Release-Reihenfolge und Freigaberegeln: [`07`](07-agent-change-checklist.md).
 
 - [ ] **Ledger-Drift ist der Normalfall, nicht die Ausnahme.** Sofort nach dem Apply `list_migrations` prüfen: das Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` trägt regelmäßig den **Anwendungszeitstempel** statt des Dateiname-Zeitstempels ein (bei jedem Production-Apply seit 2026-08-25 aufgetreten, zuletzt W1–W5; Evidenz im Archiv `releases/`). Der Release gilt erst als abgeschlossen, wenn der Ledger 1:1 zum Repository passt.
 - [ ] **Korrektur nur nach Halt und expliziter PO-Freigabe.** Vor der Korrektur read-only verifizieren, dass die betroffene Zeile eindeutig zur gerade angewendeten Migration gehört (Name **und** Inhalt/`statements`-Spalte). Dann transaktional **exakt eine Zeile** korrigieren, danach erneut read-only bestätigen: `list_migrations` deckt sich wieder 1:1 mit dem Repo, keine andere Zeile verändert.
@@ -72,23 +72,24 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 
 **Wann:** Änderungen an `SECURITY DEFINER`-Functions/Views, `security_invoker`, Grants oder RLS; jede neue Tabelle, View oder Function in `public`.
 
-> Ein globaler Security-&-Access-Contract existiert noch nicht. Bis dahin sind diese Regeln hier autoritativ für den **Änderungsvorgang**; die durablen Grant-/RLS-Guardrails stehen in [`03`](03-data-model-guardrails.md) Abschnitt „RBAC- und RLS-Guardrails".
+> **Contract: [`22-security-and-access.md`](22-security-and-access.md) — Pflichtlektüre vor der Änderung.** Dort steht, *was wahr sein muss* (Enforcement-Prinzip, Rollen, Trust Boundaries, Grants/RLS, Tabellen- vs. Function-Defaults, `SECURITY DEFINER`, Session-Binding). Hier steht nur, *was zu tun und zu beweisen ist*. Die Regeln werden nicht wiederholt; ein Widerspruch zwischen beiden ist ein Befund.
 
 - [ ] Zugriffsmatrix geprüft: `anon`, `authenticated viewer`, `authenticated office`, `authenticated admin`, `service_role` (nur soweit relevant)
-- [ ] Grants immer als `revoke all` → gezielter `grant`; Privilegienaussagen gegen die **Datenbank** prüfen (`has_table_privilege`, `pg_class.relacl`, `pg_default_acl`) — Begründung und Dauerregel in [`03`](03-data-model-guardrails.md)
+- [ ] Grants immer als `revoke all` → gezielter `grant`; Privilegienaussagen gegen die **Datenbank** prüfen (`has_table_privilege`, `has_function_privilege`, `pg_class.relacl`, `pg_proc.proacl`, `pg_default_acl`) — **nie** gegen `06_grants.sql`
+- [ ] **Objekttyp bestimmen, bevor über Rechte geurteilt wird:** neue Tabelle/View → startet ohne API-Rollen-Recht, braucht explizite Grants; neue **Function** → startet mit `PUBLIC EXECUTE`, braucht ein explizites `revoke`. Die Tabellenregel nie auf Functions übertragen ([`22`](22-security-and-access.md) Abschnitt 6.3)
+- [ ] **Advisor-Finding einzeln bewerten, in beide Richtungen** — kein Beweis für einen Exploit, kein Beweis für Harmlosigkeit; `security_invoker` nie reflexhaft setzen; `trigger`/`event_trigger`-Rückgabetyp ist ein struktureller Falsch-Positiv ([`22`](22-security-and-access.md) Abschnitt 7.1)
 - [ ] Bei `init_state`/`sales_directory`: die bestehende Bewertung ([`06`](06-decision-log.md) „Intentional privileged read views"; Einzelbewertungen im Archiv `releases/2026-08.md`) gilt nur für die dort geprüfte Projektion und deren Grants — bei Änderung **neu bewerten**, nie die alte Einstufung übernehmen
 - [ ] **Security Hardening Wave 1** (`PRODUCTION VERIFIED` 2026-09-07 — der Vertrag ist live, nicht mehr Vorschlag): `supabase/tests/public_privilege_hardening_verification.sql` ausführen. Sie prüft Default-Privilegien, die exakte Zielmatrix aller `public`-Objekte, `anon`-Reichweite, Capability-Rollen (inkl. Spalten-Grant `sales.email`), Schema-`CREATE`, die Future-Object-Regression und die tatsächlichen `TRUNCATE`/`DELETE`-Verweigerungen; sie rollt sich selbst zurück und ist an jeder Stelle nach einem `db reset` lauffähig
-- [ ] **Neue Tabelle/View in `public`?** Sie startet ohne jedes Recht für `anon`/`authenticated`/`service_role`. Zielmatrix in `06_grants.sql` **und** Assertion in der Wave-1-Suite ergänzen, sonst ist das Objekt über PostgREST unerreichbar (oder still zu weit offen)
-- [ ] **Nie `MAINTAIN` im DDL** (existiert erst ab PG17, lokal läuft PG15) — `revoke all` deckt beide Versionen ab; nur Assertions über `current_setting('server_version_num')` verzweigen
-- [ ] **Kein neues `DELETE`-Grant für `service_role` in `public`** ohne belegten, deployten Aufrufer; `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` gehören keiner API-Rolle. Capability-Rollen sind nie Ziel eines `revoke` — `revoke` richtet sich namentlich an `anon, authenticated, service_role`
-- [ ] **`CREATE ON SCHEMA public`** bleibt bei keiner Rolle stehen. Braucht eine Migration es für `alter function … owner to <capability>`, wird es **in derselben Migration** gewährt und vor deren Ende wieder entzogen
-- [ ] **Neue sensible Function** bekommt ihr eigenes `revoke all on function … from public, anon, authenticated` — PostgreSQLs eingebauter Default ist `PUBLIC EXECUTE`, und das **schema-scoped** `alter default privileges … revoke execute on functions` aus Wave 1 stellt ihn **nicht** ab (nur eine creator-scoped globale Zeile ohne `in schema` täte das; sie ist nicht gesetzt). Der explizite `revoke` pro Function ist deshalb Pflicht, nicht Gürtel-und-Hosenträger ([`17`](17-known-issues-and-planned-waves.md) A.8)
-- [ ] **Neue public RPC:** eigener `revoke all … from public, anon, authenticated, service_role` + einziger Grant an `authenticated`; `service_role` nur mit belegtem Aufrufer
+- [ ] **Neue Tabelle/View in `public`?** Zielmatrix in `06_grants.sql` **und** Assertion in der Wave-1-Suite ergänzen, sonst ist das Objekt über PostgREST unerreichbar (oder still zu weit offen)
+- [ ] **Neue sensible Function / neue public RPC?** Eigenes `revoke all on function … from public, anon, authenticated` (bei RPCs zusätzlich `service_role`, sofern kein belegter, deployter Aufrufer existiert) und danach genau ein gezielter Grant — geprüft mit `has_function_privilege`, nicht angenommen
+- [ ] **Nie `MAINTAIN` im DDL**; nur Assertions über `current_setting('server_version_num')` verzweigen
+- [ ] **Kein neues `DELETE`-Grant für `service_role` in `public`** ohne belegten, deployten Aufrufer; `revoke` immer namentlich an `anon, authenticated, service_role` (Capability-Rollen nie als `revoke`-Ziel)
+- [ ] **`CREATE ON SCHEMA public`** bleibt bei keiner Rolle stehen — bei Bedarf in derselben Migration gewähren und vor deren Ende entziehen
 - [ ] `nora_private` nicht in `config.toml` schemas; `nora_role_manager` NOLOGIN — keine Mitgliedschaft für `authenticated`
 - [ ] keine GUC-Namen `nora.allow_sales_privilege_change` / `nora.privilege_rpc_token` im Code
 - [ ] Testmatrix als `postgres` mit `SET LOCAL ROLE nora_rls_test` — **kein** festes Testpasswort in Git
-- [ ] Teamlisten nutzen `sales_directory`, nicht `sales` (außer Admin-Verwaltung / eigenes Profil)
-- [ ] `canAccess.ts` spiegelt die Rollenmatrix; die Datenbank bleibt autoritativ
+- [ ] **Grant-Matrix aktualisiert:** Zielmatrix in `06_grants.sql`, positive **und** negative Assertions in der Wave-1-Suite, Berechtigungsmatrix in [`22`](22-security-and-access.md) Abschnitt 4.3 — eine Rechteänderung ohne Assertion ist nicht bewiesen
+- [ ] `canAccess.ts` an die Rollenmatrix in [`22`](22-security-and-access.md) angeglichen; Teamlisten über `sales_directory`
 
 ## 5. Kanonische lokale SQL-Testsequenz
 
@@ -143,7 +144,7 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ### Audit, Session, Fehlercodes
 
-- [ ] **W3 Audit-Actor:** Audit erst nach Provider-/DB-Erfolg schreiben; ein Audit-Fehler wird `audit_write_failed` und meldet **nie** grün; Operation-ID weiterreichen (`users/audit.ts`); Beweis in der W3-Suite und `users/audit.test.ts`. Ereignistyp-Allowlist, Actor-Herkunft und Ziel: [`03`](03-data-model-guardrails.md) Abschnitt „RBAC- und RLS-Guardrails"
+- [ ] **W3 Audit-Actor:** Audit erst nach Provider-/DB-Erfolg schreiben; ein Audit-Fehler wird `audit_write_failed` und meldet **nie** grün; Operation-ID weiterreichen (`users/audit.ts`); Beweis in der W3-Suite und `users/audit.test.ts`. Ereignistyp-Allowlist, Actor-Herkunft und Ziel: [`13`](13-crm-audit-retention.md); Executor-Vertrag: [`22`](22-security-and-access.md) Abschnitt 8.2
 - [ ] **W4 Links:** wer die Anmeldeadresse bewegt, muss die `auth.one_time_tokens` des Users löschen (der Guard tut es) — nie `auth.users.confirmation_token`/`recovery_token` rotieren (wirkungslos, `NULL sent_at` lässt GoTrue mit 500 panicken)
 - [ ] **W4 Eindeutigkeit:** Adressen vor jedem Provider-Aufruf mit `lower(btrim())` normalisieren; `uq__sales__email` bleibt; Duplikate gegen `sales` **und** `auth.users` prüfen; GoTrue `23505` als `email_already_in_use` mappen
 - [ ] **W4 Operationstypen:** neue Katalogtypen, die in `operation_errors` landen sollen, klein schreiben (`^[a-z][a-z0-9_.]*$`), sonst schweigt `record_operation_error`
@@ -191,7 +192,7 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 9. Rollenbewusste UX und Zugriffsschutz
 
-**Wann:** Änderungen an rollenabhängiger Oberfläche, an Schreib-/Löschaktionen, Dialogen, Lade- und Fehlerzuständen. Aktueller Design-Stand: [`02`](02-design-system.md); Rollenmatrix: [`11`](11-google-calendar-rbac.md) Abschnitt C. Abnahmevorlage (historisches Protokoll v0.3k.2): [`12`](12-role-ux-acceptance.md).
+**Wann:** Änderungen an rollenabhängiger Oberfläche, an Schreib-/Löschaktionen, Dialogen, Lade- und Fehlerzuständen. Aktueller Design-Stand: [`02`](02-design-system.md); Rollenmatrix: [`22`](22-security-and-access.md) Abschnitt 4.3. Abnahmevorlage (historisches Protokoll v0.3k.2): [`12`](12-role-ux-acceptance.md).
 
 - [ ] Schreib-/Lösch-Buttons über `NoraAccessActions` oder `CanAccess` — nicht erst der RLS-Fehler
 - [ ] `NoraReadOnlyBanner` für Viewer; keine Create-Aktion in Leerzuständen
@@ -216,7 +217,12 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 11. Operationen: Correlation, Manager, Katalog
 
-**Wann:** Änderungen an Operation-IDs, am `OperationManager`, am Operations-Katalog oder an der Korrelation zwischen Client und `audit_events`. Guardrails: [`03`](03-data-model-guardrails.md) Abschnitt „Operation Status Contract v1"; Entscheidungen: [`06`](06-decision-log.md) Einträge Operation Correlation / Operation Manager.
+**Wann:** Änderungen an Operation-IDs, am `OperationManager`, am Operations-Katalog oder an der Korrelation zwischen Client und `audit_events`. Entscheidungen: [`06`](06-decision-log.md) Einträge Operation Correlation / Operation Manager. Persistenz-Invarianten: [`03`](03-data-model-guardrails.md) §5; Trust-Boundary („Operation IDs korrelieren, sie autorisieren nicht"): [`22`](22-security-and-access.md) Abschnitt 5.
+
+> **Interim-Contract** (Sektion 11–14 haben noch keinen Contract-Owner — siehe Kopf dieses Dokuments):
+>
+> - **Falle 35 — gespeicherte Disposition ist kein Live-Status.** Die drei idempotenten RPCs schreiben `_meta.disposition = "executed"` beim Erstschreiben **unveränderlich** in `nora_private.idempotency_records`; dieser Wert bleibt für immer `"executed"`, auch nach beliebig vielen Replays. Die **externe** Disposition wird bei **jedem** Request serverseitig frisch berechnet (`v_replay || jsonb_build_object('_meta', …'replayed')` — jsonb `||` gewinnt rechts) und nie aus der gespeicherten Zeile übernommen. Eine Admin-Ansicht oder ein Reporting darf `result._meta.disposition` **nicht** als „letzte bekannte Disposition" ausgeben. Empirisch verifiziert: die direkte Abfrage zeigt `"executed"`, während der gleichzeitige Replay-Response korrekt `"replayed"` liefert. Die Tabelle ist ohnehin nur über `idempotency_check`/`idempotency_persist` erreichbar, nicht direkt per PostgREST.
+> - **Falle 38 — eine vorgegebene `operationId` ist nicht die vergebene.** `createOperationContext()` normalisiert: ungültige Werte werden **verworfen und durch eine frisch geminte ersetzt**, gültige werden lowercased. Wer eine ID vorab anmeldet und dann auf `manager.getOperation(id)` wartet, wartet bei einer ungültigen oder uppercase-UUID auf eine ID, die es nie geben wird — der wartende Zustand löst sich nie auf. Vorgegebene IDs müssen garantiert gültig und lowercase sein (wie `createOperationId()` sie liefert), oder die anmeldende Schicht bindet sich an die **tatsächlich vergebene** Kontext-ID.
 
 - [ ] `nora_private.current_operation_id()` bleibt INVOKER; liefert nur UUID oder NULL; kein Auth-/RLS-Effekt
 - [ ] **Ownership:** der Einstieg mintet die ID einmal; der Transport reicht sie nur weiter und überschreibt gültige IDs nie
@@ -233,7 +239,16 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 12. Fehler: Contract und Observatory
 
-**Wann:** neuer Business-Fehlercode, Änderungen an `normalizeCrmError`, an `operation_errors` oder am Error Observatory. **Der Ablauf für einen neuen Code steht in [`03`](03-data-model-guardrails.md)** (Abschnitt Error Contract, Schritte 1–6) und wird hier nicht wiederholt — hier stehen nur die zusätzlichen Verifikations- und Speicherregeln.
+**Wann:** neuer Business-Fehlercode, Änderungen an `normalizeCrmError`, an `operation_errors` oder am Error Observatory. Der **durable Fehlervertrag** (machine-code-first, `error.message`/`error.details` sind nie Business-Codes, Regex nur als Legacy-Fallback) steht in [`03`](03-data-model-guardrails.md) §6; hier steht der **Ablauf** und die Verifikation.
+
+**Neuen Business-Fehlercode einführen — genau dieser Ablauf, nicht „neues Regex-Pattern ergänzen":**
+
+1. [ ] Kanonischen `NoraErrorCode` in `domain/noraErrorCodes.ts` definieren (`NORA_ERROR_CODES` / `NORA_ERROR_DEFINITIONS`)
+2. [ ] Serverseitig an der RAISE-Stelle `USING DETAIL = 'NORA_<CODE>'` setzen (SQL-Migration **additiv**, `supabase/schemas/02_functions.sql` synchron nachziehen)
+3. [ ] Presentation-Mapping (`messageKey`) in `NORA_ERROR_DEFINITIONS` ergänzen
+4. [ ] FakeRest über `throwNoraError()` denselben Code werfen lassen, soweit FakeRest den Command-Pfad überhaupt modelliert — sonst als Debt dokumentieren, **nicht** Scope aufblasen
+5. [ ] Die menschliche `MESSAGE` bleibt frei umformulierbar/diagnostisch — nie als Business-Identität verwenden
+6. [ ] Bestehende Regex-Pfade **nicht** entfernen (Legacy-Compatibility für nicht migrierte Aufrufer) — nur der Weg für *neue* Fälle ist dieser
 
 - [ ] `supabase/tests/error_contract_verification.sql` (oder eine Erweiterung) nach `db reset --local` grün
 - [ ] **Human Message Independence** nachgewiesen, wenn zwei Origins denselben Code liefern: Test mit unterschiedlichem MESSAGE-Text und gleichem DETAIL
@@ -249,7 +264,9 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 13. Notifications und Feedback
 
-**Wann:** Änderungen an der Notification-Karte, an Toasts, an der Feedback-Schicht eines Flows oder an Overlays/Portalen. Präsentations-Contract: [`02`](02-design-system.md); Guardrails: [`03`](03-data-model-guardrails.md) Fallen 37/38.
+**Wann:** Änderungen an der Notification-Karte, an Toasts, an der Feedback-Schicht eines Flows oder an Overlays/Portalen. Präsentations-Contract: [`02`](02-design-system.md).
+
+> **Interim-Contract — Falle 37: die Presentation erfindet keinen Core-Lifecycle.** Der technische `OperationStatus` bleibt `pending` | `success` | `error`. Ein Presentation-Lifecycle **darf** zusätzliche Werte kennen (`partial` = Core committed, optionaler Folgeschritt nicht), diese entstehen aber ausschließlich durch **Reduktion mehrerer `OperationRecord`s in der Presentation** und werden **nie** in den Core zurückgeschrieben. Ein lange laufendes `pending` wird von der Presentation niemals zu `error`/`timeout` umgedeutet — der fehlende Timeout-Lifecycle ist ein bekannter Core-Follow-up ([`17`](17-known-issues-and-planned-waves.md) D.1) und darf nicht durch eine Anzeige-Heuristik kaschiert werden. Zulässig ist höchstens ein zusätzlicher Hinweis „dauert länger als erwartet" bei unverändertem Lifecycle und Tone.
 
 - [ ] **Ein Flow gehört genau einer Feedback-Schicht.** Wird ein Flow auf die Notification-Karte migriert, werden seine `notify()`-Aufrufe für dieselbe fachliche Aussage im selben Schritt entfernt — nie Karte *und* Toast nebeneinander
 - [ ] sonner bleibt für alle nicht migrierten Flows montiert; keine globale Toast-Bereinigung nebenbei
@@ -273,7 +290,7 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 15. Kunden, Kontakte und Hauptansprechpartner
 
-**Wann:** Änderungen an Kunden-/Kontaktanlage, an `customer_kind`, an `is_primary` oder den zugehörigen RPCs. **Die fachlichen und datenbezogenen Invarianten stehen in [`01`](01-domain-model.md) und [`03`](03-data-model-guardrails.md) (Falle 40 und die Abschnitte zu Kunden/Kontakten)** und werden hier nicht wiederholt — hier stehen nur die zusätzlichen operativen Schritte.
+**Wann:** Änderungen an Kunden-/Kontaktanlage, an `customer_kind`, an `is_primary` oder den zugehörigen RPCs. **Die fachlichen und datenbezogenen Invarianten stehen in [`01`](01-domain-model.md) und [`03`](03-data-model-guardrails.md) (§1 Kern-Entitätsinvarianten, §3 Transaktionen/Sperren/Concurrency)** und werden hier nicht wiederholt — hier stehen nur die zusätzlichen operativen Schritte.
 
 ### Customer & Contact Workflow
 

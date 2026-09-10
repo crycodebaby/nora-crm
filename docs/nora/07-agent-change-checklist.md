@@ -73,7 +73,8 @@ Nicht jedes Dokument muss bei jeder Änderung angefasst werden — **nur die zus
 | Frage | Zuständiges Dokument | Was dorthin gehört |
 |---|---|---|
 | das Fach-/Domänenmodell (neue Entität, Begriff, Regel, Rolle)? | `01-domain-model.md` | kompakte aktuelle Beschreibung, Link auf Details |
-| eine durable Invariante oder Guardrail (Falle, Grant-/RLS-Regel, Migrationsregel)? | `03-data-model-guardrails.md` | die Regel selbst, ohne Release-Evidenz |
+| eine durable Daten-/Persistenzinvariante (Entitätsregel, ID/Referenzintegrität, Concurrency, Migrationsregel, Fehlervertrag)? | `03-data-model-guardrails.md` | die Regel selbst, ohne Release-Evidenz; bei einer neuen Falle auch die Zeile im Fallen-Index |
+| eine Rollen-, Berechtigungs-, RLS-, Grant-, `SECURITY DEFINER`- oder Session-/Executor-Regel? | `22-security-and-access.md` | die Invariante selbst; operative Prüfschritte gehören in `21-agent-runbooks.md` Sektion 4 |
 | eine durable fachliche/architektonische Entscheidung? | `06-decision-log.md` | Datum, Kontext, Entscheidung, Begründung — knapp; Eintrag in der Index-Tabelle; Link ins Archiv |
 | ein dediziertes Architektur-/Spezifikationsdokument (z. B. `19-user-lifecycle-architecture.md`, `18-…`, `13-…`, `11-…`, `02-…`)? | das jeweilige Dokument | aktueller Zustand des Subsystems |
 | eine wiederverwendbare operative Anweisung für ein Subsystem (Testsequenz, Verifikationsschritt, Fallstrick beim Ändern)? | `21-agent-runbooks.md` | die Anweisung in der zuständigen Sektion — nicht in dieses Dokument |
