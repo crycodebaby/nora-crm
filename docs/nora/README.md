@@ -107,14 +107,14 @@ Die Nummer `15` ist nicht vergeben (keine `15-*.md` in der Git-Historie) — kei
 
 Wenn aktuelle Dokumentation und historische Release-Evidenz sich widersprechen:
 
-1. **Tatsächlicher Zustand gewinnt** — und zwar in dieser Reihenfolge: verifizierter Production-Zustand, dann aktueller Code und aktuelle Migrationen im Repository. Weichen beide materiell voneinander ab, beschreibt Production, was **heute läuft**, und das Repository, was der **nächste Release** enthalten wird. Vollständige Truth Hierarchy in [`16`](16-current-state.md) Abschnitt 7.
+1. **Tatsächlicher Zustand gewinnt** — und zwar in dieser Reihenfolge: verifizierter Production-Zustand, dann aktueller Code und aktuelle Migrationen im Repository. Weichen beide materiell voneinander ab, beschreibt Production, was **heute läuft**, und das Repository, was der **nächste Release** enthalten wird. Vollständige Truth Hierarchy in [`16`](16-current-state.md) Abschnitt „Truth Hierarchy".
 2. **Aktuelle Architektur-/Guardrail-Dokumente** (`01`, `03`, `13`, `16`, `18`, `19`, `22`, …) beschreiben den *beabsichtigten aktuellen Vertrag*.
 3. **Das Decision Log** (`06`) erklärt das *Warum*.
 4. **Das Release-Archiv** (`releases/`) erklärt, *was historisch passiert ist* — mit dem Wissensstand des jeweiligen Datums.
 
 **Historische Release-Dokumente sind niemals die autoritative Quelle für den aktuellen Zustand.** Ein Archiveintrag, der „RC, nicht deployt" sagt, beschreibt seinen Tag, nicht heute.
 
-Zwei SHAs sind zwei Fakten: der **Repository-/Dokumentationskopf** (aktueller `main`, wandert mit jedem Docs-Commit) und der **letzte Laufzeit-Release** (steht in [`16`](16-current-state.md) Abschnitt 4). Ein Docs-Commit ist kein Laufzeit-Release.
+Zwei SHAs sind zwei Fakten: der **Repository-/Dokumentationskopf** (aktueller `main`, wandert mit jedem Docs-Commit) und der **letzte Laufzeit-Release** (steht in [`16`](16-current-state.md) Abschnitt „Was ist live?"). Ein Docs-Commit ist kein Laufzeit-Release.
 
 ## Kontextdisziplin für Agenten
 

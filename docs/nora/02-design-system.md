@@ -193,6 +193,8 @@ Operative Startübersicht nach Login — „Was ist heute wichtig?“
 
 **Bewusst nicht:** „Heutige Termine“, „Montage heute“, „Aufmaß heute“ — kein Terminmodell, kein Google Kalender.
 
+**Aktueller Read-Pfad der Startseite (Current Contract).** Die für die Darstellung benötigten Ansprechpartner- und Kunden-Ids werden aus Aufgaben bzw. Vorgängen abgeleitet und derzeit **presentation-lokal** normalisiert — `resolveHotboardContactIds` und `resolveHotboardCompanyIds` in `dashboard/hotboardUtils.ts`: leere Ids raus, Duplikate raus, Reihenfolge des ersten Vorkommens bleibt (`tasks.contact_id` und `deals.company_id` sind nullable). Während des Ladens rendert die Startseite ein Skeleton statt einer leeren Fläche. Das beschreibt den **heutigen** Read-Pfad; eine Application-Query-Schicht existiert dafür aktuell nicht. Die presentation-lokale Normalisierung ist damit der aktuelle Zustand, **keine** Aussage über das langfristige Architekturziel.
+
 ## Hotboard Arbeitsboard (Welle v0.3j)
 
 Lesender Schnellzugriff auf aktuelle Vorgänge — **kein** Drag-and-drop, **keine** Statusänderung.
