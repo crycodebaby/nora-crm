@@ -434,6 +434,8 @@ Lesende Darstellung von `audit_events` — fachlich formatiert, kein technisches
 
 Seit Phase 7B.4 real montiert — vorerst **nur** für Quick Capture. Alle anderen Flows nutzen weiterhin sonner (`admin/notification.tsx`).
 
+> **Abgrenzung.** Dieser Abschnitt besitzt die **Darstellung**: Layer, Position, Geometrie, Timing, Motion, Overlay-Verhalten, Accessibility. Die **Bedeutung** — Intent ≠ Operation, welcher Lifecycle existiert und wann `partial` entstehen darf, Feedback-Policies — steht in [`23`](23-operations-errors-feedback.md) §5.
+
 - **Eine Karte pro Benutzer-Intent**, nicht pro technischer Operation. Quick Capture bündelt Core (Kunde+Kontakt+Vorgang) und optionale Aufgabe in einer Karte.
 - **Tones:** `pending` (neutral), `success`, `warning` (= Presentation-`partial`, z. B. Vorgang angelegt, Aufgabe offen), `error`. Farbe ist nie alleiniger Träger — jede Karte hat Icon **und** eigene Wortwahl.
 - **Position ohne offenen Dialog:** Desktop/Tablet unten rechts; Mobile volle Breite oberhalb der `MobileNavigation` inkl. Safe Area. Bei offenem Dialog gilt stattdessen die modal-aware Position weiter unten.

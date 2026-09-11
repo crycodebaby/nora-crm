@@ -128,7 +128,7 @@ niemals über roh generiertes SQL direkt gegen audit_events oder andere Tabellen
 
 Das ist eine **Architekturregel für künftige Wellen** — bewusst nicht implementiert, nur als Guardrail festgehalten (Stand: `17-known-issues-and-planned-waves.md` Abschnitt G, „Application Queries / Read Models"). Office liest Audit ohnehin nur über die kontrollierte RPC, nie über die Tabelle.
 
-**`request_id` ist die `operation_id`.** Trotz des historischen Spaltennamens trägt `audit_events.request_id` die Operation-Korrelation (befüllt aus dem Request-Header `x-nora-operation-id` über `nora_private.current_operation_id()`) — es ist **keine** zweite, unabhängige Request-ID. `operation_id` (technische Korrelation über Manager / Audit / Error Observatory hinweg) und `idempotency_key` (fachliche Retry-Absicht) sind zwei verschiedene Konzepte und dürfen nicht verwechselt werden. Die `operation_id` ist **nie** ein Auth-Merkmal (`22-security-and-access.md` Abschnitt 5).
+**`request_id` ist die `operation_id`.** Trotz des historischen Spaltennamens trägt `audit_events.request_id` die Operation-Korrelation (befüllt aus dem Request-Header `x-nora-operation-id` über `nora_private.current_operation_id()`) — es ist **keine** zweite, unabhängige Request-ID. `operation_id` (technische Korrelation über Manager / Audit / Error Observatory hinweg) und `idempotency_key` (fachliche Retry-Absicht) sind zwei verschiedene Konzepte und dürfen nicht verwechselt werden — der Operations-seitige Contract dazu steht in `23-operations-errors-feedback.md` §2; Owner dieser Spalte bleibt dieses Dokument. Die `operation_id` ist **nie** ein Auth-Merkmal (`22-security-and-access.md` Abschnitt 5).
 
 ## Speicherstatistik
 

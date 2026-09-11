@@ -355,7 +355,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-29 – Notification Presentation Contract v1 (Phase 7A)
 
-**Status:** Phase 7B `PRODUCTION VERIFIED` (2026-08-30); nur Quick Capture migriert, weitere Intents Phase 7C. Archiv: [Original inkl. Nachträge 7B.3/7B.4/7B.4b/7B.4c/Release](releases/2026-08.md#2026-08-29--notification-presentation-contract-v1-phase-7a). Guardrails: `21-agent-runbooks.md` Sektion 13 (Falle 37) und Sektion 11 (Falle 38) — `Interim-Contract`, solange dieser Bereich keinen eigenen Contract-Owner hat.
+**Status:** Phase 7B `PRODUCTION VERIFIED` (2026-08-30); nur Quick Capture migriert, weitere Intents Phase 7C. Archiv: [Original inkl. Nachträge 7B.3/7B.4/7B.4b/7B.4c/Release](releases/2026-08.md#2026-08-29--notification-presentation-contract-v1-phase-7a). Contract: `23-operations-errors-feedback.md` §5 (Falle 37) und §2 (Falle 38); operative Verifikation: `21-agent-runbooks.md` Sektion 13 bzw. 11.
 
 **Entscheidungen.**
 
@@ -369,7 +369,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-29 – Operation Status Contract Wave (v1, CreateQuickCaptureCase Slice)
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-29). Archiv: [Original inkl. Phasen 6C/6D.1/6E](releases/2026-08.md#2026-08-29--operation-status-contract-wave-v1-createquickcapturecase-slice). Guardrail: `21-agent-runbooks.md` Sektion 11 (Falle 35, `Interim-Contract`); Persistenz-Invariante: `03-data-model-guardrails.md` §5.
+**Status:** `PRODUCTION VERIFIED` (2026-08-29). Archiv: [Original inkl. Phasen 6C/6D.1/6E](releases/2026-08.md#2026-08-29--operation-status-contract-wave-v1-createquickcapturecase-slice). Contract: `23-operations-errors-feedback.md` §1 und §3 (Ausführungssemantik, Falle 35); Persistenz-Invariante: `03-data-model-guardrails.md` §5; operative Verifikation: `21-agent-runbooks.md` Sektion 11.
 
 **Entscheidungen.** Lifecycle bleibt `pending | success | error` (keine Werte ohne reale Semantik). `execution?: "executed" | "replayed"` ist ein Zusatzfeld an `success`, `undefined` ohne `idempotencyKey`. RPC-Transport: additives `_meta.disposition` im JSONB-Result der drei idempotenten RPCs (`CREATE OR REPLACE` auf unveränderten Signaturen), nur mit Key gesetzt; `_meta` ist reine Transportmetadata, nie Business-Feld, nie im Fingerprint; der in `idempotency_records` gespeicherte Wert bleibt für immer `executed`, die Replay-Antwort berechnet `replayed` frisch. `OperationRecord` bekommt `errorCode` (aus `normalizeCrmError().code`) und minimale `result`-Referenzen (IDs, nie Domainobjekte). Manager-API additiv über `reportOutcome`; FakeRest-Parität. Offen: pendente Operationen ohne TTL (LOW).
 
@@ -387,7 +387,7 @@ Konsolidierte durable Entscheidung aus den Wellen PWA-1B, 1C, 1C.1, 1C.2, 1C.2-C
 
 ## 2026-08-28 – Error Contract Wave
 
-**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-28--error-contract-wave). Guardrail: `03-data-model-guardrails.md` §6 (universeller DB-Fehlervertrag); Ablauf für einen neuen Code: `21-agent-runbooks.md` Sektion 12.
+**Status:** `PRODUCTION VERIFIED` (2026-08-28). Archiv: [Original](releases/2026-08.md#2026-08-28--error-contract-wave). Guardrail: `03-data-model-guardrails.md` §6 (universeller DB-Fehlervertrag); eingefrorener `CrmErrorKind` und Observatory-Contract: `23-operations-errors-feedback.md` §4; Ablauf für einen neuen Code: `21-agent-runbooks.md` Sektion 12.
 
 **Entscheidungen.** `MESSAGE` = Mensch/Diagnose, `ERRCODE` = PostgreSQL-Semantik, `DETAIL` = stabiler `NoraErrorCode` (PostgREST transportiert beides unverändert — bewiesen). Zentrale Definition `domain/noraErrorCodes.ts`; `extractNoraErrorCode()` akzeptiert nur kanonische Werte (kein `startsWith("NORA_")`); `normalizeCrmError()` ist **machine-code-first**, Regex nur Legacy-Fallback. `CrmErrorKind` friert ein (Transport-/Infrastrukturfehler); neue Business-Fehler gehen `NoraErrorCode → messageKey` direkt. FakeRest wirft denselben Code über `throwNoraError()`, soweit es den Pfad modelliert (keine Datenebene-Autorisierung in FakeRest — dokumentierter Debt). TOCTOU auf `uq_companies_self_contact_individual` wird in `create_customer_with_contact_core` gezielt übersetzt.
 

@@ -95,11 +95,15 @@ Legende: ✅ erlaubt · 🔶 eingeschränkt · ❌ verboten · ⚙️ nur Admin 
 | **Audit** global lesen (`/audit`, `get_global_audit_events`) | ✅ | ❌ | ❌ |
 | **Audit** in der Akte lesen (`get_entity_audit_events`) | ✅ | ✅ | ❌ |
 | Audit schreiben · ändern · löschen | 🔧 | 🔧 | 🔧 |
+| **Error Observatory** (`operation_errors`) lesen / browsen | ✅ | ❌ | ❌ |
+| **Eigenen** Fehler an IT melden (`report_operation_error`, nur die eigene Zeile) | ✅ | ✅ | ✅ |
 | **Nutzer** einladen, Rolle ändern, deaktivieren, offboarden, Konto löschen | ⚙️ | ❌ | ❌ |
 | App-**Konfiguration** | ⚙️ | ❌ | ❌ |
 | **Kalender** (lesen, verknüpfen, Nora-Termine bearbeiten, OAuth) | → [`11`](11-google-calendar-rbac.md) | | |
 
 **🔶 Eingeschränkt** (bewusst offen, Tendenz dokumentiert): `office` löscht Kunden/Vorgänge nicht physisch, sondern archiviert; `office` deaktiviert nur eigene Textbausteine. Diese Einschränkungen sind heute **nicht** durchgängig in RLS abgebildet — die Kern-CRM-Policies gewähren `authenticated` mit Schreibrolle vollen CRUD. Wer sie durchsetzen will, schreibt Policies und ergänzt die Matrix; er behauptet nicht, sie seien bereits erzwungen.
+
+**Error Observatory (`operation_errors`).** Das Diagnose-Browsen der Tabelle ist **admin-exklusiv**: `authenticated` hält nur `SELECT`, und die Policy filtert auf `nora_private.is_admin()` — für jede andere Rolle ist die Tabelle **leer**, nicht nur ungefiltert. Gemeldet wird ausschließlich über `report_operation_error`; der Actor stammt serverseitig aus `nora_private.safe_auth_uid()`, und eine Zeile mit fremdem `actor_user_id` wird mit `42501` abgewiesen. **`public_ref` (`NORA-E…`), `error_id` und `operation_id` sind Referenz- und Korrelationswerte, keine Autorisierungstoken** — wer eine solche Referenz kennt, erhält dadurch keinen Zugriff (Abschnitt 5). Was ein Error Record fachlich bedeutet, warum die Aufzeichnung best effort ist und wie er sich zu Audit verhält, steht in [`23`](23-operations-errors-feedback.md) §4.
 
 Kalenderspezifische Zeilen bleiben in [`11`](11-google-calendar-rbac.md) — die dortige Ausprägung ist eine **Verfeinerung** dieser Matrix, nie ein Widerspruch. Bei Abweichung gewinnt dieses Dokument.
 

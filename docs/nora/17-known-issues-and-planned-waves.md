@@ -138,6 +138,14 @@ Vertrag: `18-email-delivery-observability.md`.
 
 Bleibt als Fallback bestehen, bis nachgewiesen ist, dass alle relevanten Production-Aufrufer `DETAIL` liefern. `PLANNED FOLLOW-UP`.
 
+### D.5 `operation_errors` — Retention, Datenschutz und Wachstum undefiniert
+
+**Status: `OPEN`** (festgestellt CR3, 2026-09-10) — `public.operation_errors` besitzt **keine** definierte Retention-, Purge- oder Datenschutz-Policy: die Tabelle wächst unbegrenzt, aufgelöste Zeilen (`resolved_at`) werden nicht abgeräumt, und es gibt keine Frist analog zu den `retention_class`-Klassen des Audits ([`13`](13-crm-audit-retention.md)). Die `technical_context`-Allowlist begrenzt zwar den Inhalt, ersetzt aber keine Aufbewahrungsentscheidung. Contract-Ist-Zustand: [`23`](23-operations-errors-feedback.md) §4.5. CR3 hat das bewusst **nicht** entschieden — eine Frist wäre eine eigene Entscheidung mit Migration und gehört in eine eigene Welle.
+
+### D.6 Observatory-Aufzeichnung deckt die camelCase-Operationstypen nicht ab
+
+Siehe Abschnitt **A.6** — der Operationstyp-Check von `record_operation_error` weist die bestehenden Katalogtypen (`quickCapture.createCase`, `customer.createWithContact`, …) ab; technische Fehlschläge dieser Operationen landen nie in `operation_errors`. Das ist die Operations-/Feedback-seitige Folge eines Sicherheits-/Privilegien-Findings und wird hier nur referenziert, nicht dupliziert. Contract-Ist-Zustand: [`23`](23-operations-errors-feedback.md) §4.5.
+
 ## E. PWA und Motion
 
 - **Reduced-Motion-Dauer der Update-Choreografie** — `PARKED` (Product-Frage): bei `prefers-reduced-motion: reduce` steht die Bewegung, die Dauer bleibt 8 s. Empfehlung: ~2,5 s und direkt in die ruhige Szene.

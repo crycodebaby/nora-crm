@@ -8,7 +8,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 
 **Abgrenzung.** Dieses Dokument enthält **keine** durablen fachlichen oder datenbezogenen Invarianten — die stehen in [`01`](01-domain-model.md), [`03`](03-data-model-guardrails.md), [`22`](22-security-and-access.md) und den Subsystem-Contracts ([`10`](10-checklists-snippets-audit.md), [`11`](11-google-calendar-rbac.md), [`13`](13-crm-audit-retention.md), [`14`](14-google-calendar-readonly-implementation.md), [`18`](18-email-delivery-observability.md), [`19`](19-user-lifecycle-architecture.md)). Hier steht nur, **was beim Ändern zusätzlich zu tun und zu beweisen ist**.
 
-**Ownership-Hinweis.** Sektion 4 hat seit CR2 einen Contract-Owner: [`22-security-and-access.md`](22-security-and-access.md). Die Sektionen **11–14** warten weiterhin auf einen (Operations/Errors/Notifications, PWA). Bis dieser existiert, tragen sie einige Contract-Sätze bewusst mit — jeweils als `Interim-Contract` markiert — statt sie in einen unpassenden bestehenden Owner zu schieben.
+**Ownership-Hinweis.** Sektion 4 hat seit CR2 einen Contract-Owner: [`22-security-and-access.md`](22-security-and-access.md). Die Sektionen **11–13** haben seit CR3 einen: [`23-operations-errors-feedback.md`](23-operations-errors-feedback.md) (Operationen, Fehler, Feedback) — sie enthalten deshalb **keine** Contract-Sätze mehr, sondern nur noch die operative Verifikation. Allein Sektion **14** (PWA) wartet weiterhin auf einen Contract-Owner; bis dieser existiert, trägt sie einige Contract-Sätze bewusst mit — als `Interim-Contract` markiert — statt sie in einen unpassenden bestehenden Owner zu schieben.
 
 ## Index (thematisch)
 
@@ -24,7 +24,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Google Kalender, Kalender-RBAC, OAuth | [8. Google Kalender](#8-google-kalender) |
 | Rollenabhängige Oberfläche, Zugriffsschutz in der UI, Dialoge, Fehlergrenzen | [9. Rollenbewusste UX und Zugriffsschutz](#9-rollenbewusste-ux-und-zugriffsschutz) |
 | Demo-Modus, Rollensimulation | [10. Demo-Modus und Rollensimulation](#10-demo-modus-und-rollensimulation) |
-| Operation-IDs, OperationManager, Operations-Katalog | [11. Operationen: Correlation, Manager, Katalog](#11-operationen-correlation-manager-katalog) |
+| Operation-IDs, OperationManager, Operations-Katalog, Idempotency/Replay | [11. Operationen: Correlation, Manager, Katalog](#11-operationen-correlation-manager-katalog) |
 | Neuer Business-Fehlercode, `operation_errors`, Error Observatory | [12. Fehler: Contract und Observatory](#12-fehler-contract-und-observatory) |
 | Notification-Karte, Toasts, Feedback-Schicht, Overlays | [13. Notifications und Feedback](#13-notifications-und-feedback) |
 | Service Worker, Update-Hinweis, Live-Smoke nach Deployment | [14. PWA und Update-Verhalten](#14-pwa-und-update-verhalten) |
@@ -217,29 +217,29 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 11. Operationen: Correlation, Manager, Katalog
 
-**Wann:** Änderungen an Operation-IDs, am `OperationManager`, am Operations-Katalog oder an der Korrelation zwischen Client und `audit_events`. Entscheidungen: [`06`](06-decision-log.md) Einträge Operation Correlation / Operation Manager. Persistenz-Invarianten: [`03`](03-data-model-guardrails.md) §5; Trust-Boundary („Operation IDs korrelieren, sie autorisieren nicht"): [`22`](22-security-and-access.md) Abschnitt 5.
+**Wann:** Änderungen an Operation-IDs, am `OperationManager`, am Operations-Katalog, an der Idempotency-/Replay-Semantik oder an der Korrelation zwischen Client und `audit_events`.
 
-> **Interim-Contract** (Sektion 11–14 haben noch keinen Contract-Owner — siehe Kopf dieses Dokuments):
->
-> - **Falle 35 — gespeicherte Disposition ist kein Live-Status.** Die drei idempotenten RPCs schreiben `_meta.disposition = "executed"` beim Erstschreiben **unveränderlich** in `nora_private.idempotency_records`; dieser Wert bleibt für immer `"executed"`, auch nach beliebig vielen Replays. Die **externe** Disposition wird bei **jedem** Request serverseitig frisch berechnet (`v_replay || jsonb_build_object('_meta', …'replayed')` — jsonb `||` gewinnt rechts) und nie aus der gespeicherten Zeile übernommen. Eine Admin-Ansicht oder ein Reporting darf `result._meta.disposition` **nicht** als „letzte bekannte Disposition" ausgeben. Empirisch verifiziert: die direkte Abfrage zeigt `"executed"`, während der gleichzeitige Replay-Response korrekt `"replayed"` liefert. Die Tabelle ist ohnehin nur über `idempotency_check`/`idempotency_persist` erreichbar, nicht direkt per PostgREST.
-> - **Falle 38 — eine vorgegebene `operationId` ist nicht die vergebene.** `createOperationContext()` normalisiert: ungültige Werte werden **verworfen und durch eine frisch geminte ersetzt**, gültige werden lowercased. Wer eine ID vorab anmeldet und dann auf `manager.getOperation(id)` wartet, wartet bei einer ungültigen oder uppercase-UUID auf eine ID, die es nie geben wird — der wartende Zustand löst sich nie auf. Vorgegebene IDs müssen garantiert gültig und lowercase sein (wie `createOperationId()` sie liefert), oder die anmeldende Schicht bindet sich an die **tatsächlich vergebene** Kontext-ID.
+**Contract (was wahr sein muss):** [`23`](23-operations-errors-feedback.md) §1 (Lifecycle), §2 (Correlation und Identifier, Falle 38), §3 (Idempotency/Retry/Replay, Ausführungsdisposition, Falle 35 Ausführungshälfte) · [`03`](03-data-model-guardrails.md) §5 (Persistenz-Boundary, Falle 35 Persistenzhälfte) · [`13`](13-crm-audit-retention.md) (`audit_events.request_id`) · [`22`](22-security-and-access.md) Abschnitt 5 (Operation IDs korrelieren, sie autorisieren nicht). Begründungen: [`06`](06-decision-log.md) Einträge Operation Correlation / Operation Manager / Idempotency / Operation Status v1. **Hier steht nur die Verifikation.**
 
 - [ ] `nora_private.current_operation_id()` bleibt INVOKER; liefert nur UUID oder NULL; kein Auth-/RLS-Effekt
-- [ ] **Ownership:** der Einstieg mintet die ID einmal; der Transport reicht sie nur weiter und überschreibt gültige IDs nie
 - [ ] `audit_events.request_id` wird über den zentralen Writer befüllt; keine zweite Spalte
 - [ ] Partial Index `audit_events_request_id_idx` (nicht unique)
-- [ ] Manager: `pending` → `success|error`; Exceptions nicht schlucken; ohne React voll funktionsfähig (Singleton); der `OperationProvider` erzeugt keine zweite konkurrierende Instanz
-- [ ] Katalog typisiert; keine Fake-Systemschritte in Messages; `deal.assign` bleibt Katalogeintrag und wird nicht als zweite Mutation erzwungen
-- [ ] in-memory only (kein DB/localStorage/Realtime); Retention: `success` kurz, `error` länger, `pending` nie auto-drop
-- [ ] `runtimeErrorId` nur session-ephemer und ≠ `persistentErrorId` / `publicErrorRef`
+- [ ] Manager-Tests: `pending` → `success|error`, Exceptions werden weitergereicht und nicht geschluckt, ohne React lauffähig
+- [ ] **Singleton-Test:** der `OperationProvider` erzeugt keine zweite konkurrierende Manager-Instanz
+- [ ] in-memory only (kein DB/localStorage/Realtime); Regression: ein `pending`-Record wird von der Kapazitätslogik **nicht** evakuiert
 - [ ] `useSyncExternalStore` für Listen
-- [ ] ein altes Frontend ohne Header bleibt kompatibel (`request_id` NULL)
-- [ ] `supabase/tests/operation_correlation_verification.sql` lokal nach `db reset`; HTTP-Probe `node scripts/verify-operation-header.mjs` nur gegen lokal (mit **und** ohne Header)
+- [ ] **Kompatibilitätsprobe:** ein altes Frontend ohne Header bleibt lauffähig (`request_id` NULL)
+- [ ] **Falle-38-Regression:** eine ungültige oder uppercase-`operationId` wird verworfen bzw. lowercased — eine Schicht, die eine ID vorab anmeldet, prüft die **tatsächlich vergebene** Kontext-ID
+- [ ] `supabase/tests/operation_correlation_verification.sql` lokal nach `db reset`
+- [ ] `supabase/tests/operation_status_disposition_verification.sql` lokal nach `db reset` — **suite-gedeckt** sind `executed` in der Erstschreib-Antwort und `replayed` in der Replay-Antwort. **Nicht** suite-gedeckt ist, dass die **gespeicherte** Zeile dabei `executed` bleibt: die Suite liest `nora_private.idempotency_records` nicht. Diese Persistenzhälfte von Falle 35 gehört [`03`](03-data-model-guardrails.md) §5 — wer die Dispositionslogik ändert, weist sie mit einer **direkten Persistenz-Assertion** auf die gespeicherte Zeile nach
+- [ ] HTTP-Probe `node scripts/verify-operation-header.mjs` nur gegen lokal, mit **und** ohne Header
 - [ ] Unit-Tests Manager A–M + Snapshot/Timer/Singleton + Correlation-Regression
 
 ## 12. Fehler: Contract und Observatory
 
-**Wann:** neuer Business-Fehlercode, Änderungen an `normalizeCrmError`, an `operation_errors` oder am Error Observatory. Der **durable Fehlervertrag** (machine-code-first, `error.message`/`error.details` sind nie Business-Codes, Regex nur als Legacy-Fallback) steht in [`03`](03-data-model-guardrails.md) §6; hier steht der **Ablauf** und die Verifikation.
+**Wann:** neuer Business-Fehlercode, Änderungen an `normalizeCrmError`, an `operation_errors` oder am Error Observatory.
+
+**Contract (was wahr sein muss):** [`03`](03-data-model-guardrails.md) §6 (universeller DB-/Business-Fehlervertrag: machine-code-first, `error.message`/`error.details` sind nie Business-Codes) · [`23`](23-operations-errors-feedback.md) §4 (eingefrorener `CrmErrorKind`, Observatory-Invarianten, Grenze zu Audit). **Hier steht nur der Ablauf und die Verifikation.**
 
 **Neuen Business-Fehlercode einführen — genau dieser Ablauf, nicht „neues Regex-Pattern ergänzen":**
 
@@ -253,26 +253,23 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 - [ ] `supabase/tests/error_contract_verification.sql` (oder eine Erweiterung) nach `db reset --local` grün
 - [ ] **Human Message Independence** nachgewiesen, wenn zwei Origins denselben Code liefern: Test mit unterschiedlichem MESSAGE-Text und gleichem DETAIL
 - [ ] `npx vitest run` zusätzlich zu `typecheck`/`build`
-- [ ] `operation_errors` bleibt additiv und getrennt von `audit_events`; kein Client-INSERT — nur `record_operation_error` / `report_operation_error`
-- [ ] Actor ausschließlich `safe_auth_uid()`; die `operation_id` ist **nie** ein Auth-Merkmal
-- [ ] `public_ref` serverseitig UNIQUE (`NORA-E…`); Dedupe per `operation_id`, neue Attempts bleiben unterscheidbar
-- [ ] `technical_context` nach Allowlist — keine Request-Bodies, Secrets oder personenbezogenen Daten
-- [ ] soft resource refs (kein FK auf Business-Tabellen)
-- [ ] RLS: kein freier Browse; Admin `SELECT`; Report nur für den eigenen Actor
-- [ ] Fehler werden best-effort in **eigener Transaktion** aufgezeichnet; ein Observatory-Ausfall ersetzt niemals die Business-Exception
-- [ ] `supabase/tests/error_observatory_verification.sql` nach `db reset`; Unit-Tests A–H + Kontakttermin-Regression
+
+**Observatory-Änderung zusätzlich:**
+
+- [ ] `supabase/tests/error_observatory_verification.sql` nach `db reset` grün — die Suite ist der Nachweis für die Observatory-Invarianten aus [`23`](23-operations-errors-feedback.md) §4.4 (Trennung von `audit_events`, kein direkter Tabellen-`INSERT`, serverseitiger Actor, UNIQUE `public_ref` und Dedupe per `operation_id`, `technical_context`-Allowlist, soft resource refs); eine neue Spalte oder ein neuer Schreibpfad ergänzt die Suite
+- [ ] **Access-Regel bewiesen, nicht behauptet** (Contract: [`22`](22-security-and-access.md) Abschnitt 4.3): dieselbe Suite assertiert, dass ein Nicht-Admin **null** `operation_errors`-Zeilen sieht, ein Admin die Diagnosezeilen liest und ein Report auf eine Zeile mit fremdem Actor mit `42501` scheitert — wer Policy, Grant oder eine der beiden RPCs anfasst, hält alle drei Assertions grün
+- [ ] **Best-Effort-Regression:** ein erzwungener Recorder-Fehlschlag lässt die fachliche Exception unverändert durch und rollt die Business-Transaktion nicht zurück
+- [ ] Unit-Tests A–H + Kontakttermin-Regression
 
 ## 13. Notifications und Feedback
 
-**Wann:** Änderungen an der Notification-Karte, an Toasts, an der Feedback-Schicht eines Flows oder an Overlays/Portalen. Präsentations-Contract: [`02`](02-design-system.md).
+**Wann:** Änderungen an der Notification-Karte, an Toasts, an der Feedback-Schicht eines Flows oder an Overlays/Portalen.
 
-> **Interim-Contract — Falle 37: die Presentation erfindet keinen Core-Lifecycle.** Der technische `OperationStatus` bleibt `pending` | `success` | `error`. Ein Presentation-Lifecycle **darf** zusätzliche Werte kennen (`partial` = Core committed, optionaler Folgeschritt nicht), diese entstehen aber ausschließlich durch **Reduktion mehrerer `OperationRecord`s in der Presentation** und werden **nie** in den Core zurückgeschrieben. Ein lange laufendes `pending` wird von der Presentation niemals zu `error`/`timeout` umgedeutet — der fehlende Timeout-Lifecycle ist ein bekannter Core-Follow-up ([`17`](17-known-issues-and-planned-waves.md) D.1) und darf nicht durch eine Anzeige-Heuristik kaschiert werden. Zulässig ist höchstens ein zusätzlicher Hinweis „dauert länger als erwartet" bei unverändertem Lifecycle und Tone.
+**Contract (was wahr sein muss):** [`23`](23-operations-errors-feedback.md) §5 (Bedeutung: Intent ≠ Operation, Presentation-Lifecycle und Falle 37, Feedback-Policies, Retry-Fähigkeit vs. Retry-Mechanismus) · [`02`](02-design-system.md) (Darstellung: Layer, Position, Geometrie, Timing, Motion, Overlay, Accessibility). **Hier steht nur die Verifikation.**
 
-- [ ] **Ein Flow gehört genau einer Feedback-Schicht.** Wird ein Flow auf die Notification-Karte migriert, werden seine `notify()`-Aufrufe für dieselbe fachliche Aussage im selben Schritt entfernt — nie Karte *und* Toast nebeneinander
-- [ ] sonner bleibt für alle nicht migrierten Flows montiert; keine globale Toast-Bereinigung nebenbei
-- [ ] ein Operation-Slot wird nur registriert, wenn die Operation auch wirklich startet (kein Phantom-Slot → sonst hängt die Karte für immer auf `pending`)
-- [ ] Fehler **vor** dem Start einer Operation werden nicht in einen synthetischen `OperationRecord` verwandelt — Feldfehler bleiben inline, alles andere meldet der Aufrufer selbst (`QuickCaptureUnnotifiedError`-Muster)
-- [ ] `application/commands/*` importiert weiterhin nichts aus `notifications/` (kein Display Context, kein i18n-Key, kein Tone)
+- [ ] **Migrationsschritt vollständig:** wird ein Flow auf die Notification-Karte migriert, sind seine `notify()`-Aufrufe für dieselbe fachliche Aussage im selben Schritt entfernt — im Diff nachweisen, dass nicht Karte *und* Toast nebeneinander stehen bleiben; sonner bleibt für die nicht migrierten Flows montiert (keine globale Toast-Bereinigung nebenbei)
+- [ ] **Kein Phantom-Slot — Regression:** ein Slot wird nur registriert, wenn die Operation wirklich startet, und ein Abbruch vor dem Start hinterlässt keine dauerhaft auf `pending` stehende Karte (`QuickCaptureUnnotifiedError`-Muster)
+- [ ] **Import-Guard:** `application/commands/*` importiert weiterhin nichts aus `notifications/` (kein Display Context, kein i18n-Key, kein Tone)
 - [ ] kein zweiter `OperationManager`: der `NotificationProvider` liegt unterhalb des `OperationProvider`
 - [ ] neue sichtbare Texte kommen aus `crm.notifications.*` in **allen** registrierten Katalogen (Deutsch primär, Englisch gepflegt, französische Struktur nicht still brechen)
 - [ ] **Overlay-/Portal-/`z-index`-Verhalten wird in der echten gestylten App abgenommen, nicht nur im Test.** Im Browser-Test-Bundle sind Tailwind-Utilities nicht kompiliert — Aussagen über Geometrie, Sichtbarkeit und Klickbarkeit, die an `@apply`-Klassen hängen (`fixed`, `pointer-events-none`, Abstände), sind dort **nicht** bewiesen und können sogar aus dem falschen Grund grün sein. Belastbar sind im Test nur reine CSS-Deklarationen (`z-index`, `pointer-events` aus eigenen Regeln)

@@ -9,7 +9,7 @@ Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md
 | Klasse | Dokumente | Wann |
 |---|---|---|
 | **ALWAYS** | `AGENTS.md` · dieser Router · [`16`](16-current-state.md) · [`01`](01-domain-model.md) · [`03`](03-data-model-guardrails.md) · [`07`](07-agent-change-checklist.md) | jede Aufgabe |
-| **CONDITIONAL CURRENT CONTRACT** | die Subsystemdokumente aus der Tabelle „Architekturbereiche" — darunter [`22`](22-security-and-access.md) (Security / Access / RBAC / RLS / Grants / Authorization) | wenn das Subsystem betroffen ist |
+| **CONDITIONAL CURRENT CONTRACT** | die Subsystemdokumente aus der Tabelle „Architekturbereiche" — darunter [`22`](22-security-and-access.md) (Security / Access / RBAC / RLS / Grants / Authorization) und [`23`](23-operations-errors-feedback.md) (Operationen / Fehler / Feedback, **sektionsweise** §0–§6) | wenn das Subsystem betroffen ist |
 | **CONDITIONAL RUNBOOK** | [`21`](21-agent-runbooks.md) | **nur die betroffene Sektion** (1–15, siehe Architekturbereiche) — operative Zusatzschritte beim Ändern; **nie** als ganze Datei |
 | **OPEN STATE** | [`17`](17-known-issues-and-planned-waves.md) | **nur die betroffene Sektion** (A–I, siehe Architekturbereiche); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review |
 | **RATIONALE** | [`06`](06-decision-log.md) | nur bei Entscheidungs-/Begründungsbedarf, und dann **gezielt über den benannten Eintrag** aus der Architekturbereiche-Tabelle bzw. den thematischen Index in `06` — **nie** als ganze Datei |
@@ -55,6 +55,7 @@ Bei allen Änderungen an **Rollen, Berechtigungen, RLS, Grants, `SECURITY DEFINE
 | [`20-product-changelog.md`](20-product-changelog.md) | benutzerseitige Nora-Produkthistorie |
 | [`21-agent-runbooks.md`](21-agent-runbooks.md) | **conditional** Agent Runbooks: subsystem- und situationsabhängige operative Zusatzschritte beim Ändern (Testsequenzen, Verifikationen, Fallstricke) — sektionsweise geladen (1–15), nie vollständig |
 | [`22-security-and-access.md`](22-security-and-access.md) | **globaler Security- und Access-Contract**: Enforcement-Prinzip, Authentication vs. Authorization, Rollen (`sales.role`) und Capability-Rollen, globale Berechtigungsmatrix, Trust Boundaries, Database Enforcement (RLS, Grants, Default-Privilegien, neue `public`-Objekte, `SECURITY DEFINER`, privilegierte Read-Views, `nora_private`, PostgREST-Exposure), Session- und Executor-Integrität |
+| [`23-operations-errors-feedback.md`](23-operations-errors-feedback.md) | **Application-Contract für Operationen, Fehler und Feedback**: Operation Lifecycle (`pending`/`success`/`error`), Correlation und Identifier (`operation_id` ≠ `idempotency_key`), Idempotency / Retry / Replay / Ausführungsdisposition, Error Observatory (`operation_errors`) und operationsseitige Fehler-**Bedeutung**, Feedback-/Notification-**Bedeutung** auf Application-Ebene — **sektionsweise** geladen (§0–§6). **Kein** Fehlervertrag (→ [`03`](03-data-model-guardrails.md) §6), **kein** Audit (→ [`13`](13-crm-audit-retention.md)), **keine** Darstellung (→ [`02`](02-design-system.md)) |
 | [`releases/`](releases/README.md) | **historische** Release-Evidenz (RC-SHAs, Migrationen, Ledger, Edge-Versionen, Live-Beweise, Originalwortlaut alter Einträge) |
 
 ## Architekturbereiche
@@ -70,7 +71,7 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 | Audit | [`13`](13-crm-audit-retention.md) | CRM-Audit v0.3l · Checklisten/Audit-Datenmodell 7b · W3 Audit-Actor | A · B | 7 |
 | E-Mail-Zustellung | [`18`](18-email-delivery-observability.md) | V1C-A Best-Effort-Korrelation · V1C-B Zustellstatus-UI | C | — |
 | Google Kalender | [`14`](14-google-calendar-readonly-implementation.md) (Implementierung) · [`11`](11-google-calendar-rbac.md) (Architektur/Spezifikation) · [`22`](22-security-and-access.md) (globale Berechtigung) — **die drei `calendar-*` Edge Functions sind nicht deployt; Deployment-Stand im Kopf von `11` und `14`** | Architektur & Rollenmodell v0.4a · Read-only-Grundlage v0.4c.1 · OAuth & Sync v0.4c.2 | — | 8 |
-| Fehler-/Operations-/Feedback-Contract | [`03`](03-data-model-guardrails.md) §6 (universeller DB-Fehlervertrag) und §5 (Persistenz-Boundary) · [`21`](21-agent-runbooks.md) §11–§13 (`Interim-Contract` — dieser Bereich hat noch keinen eigenen Contract-Owner) · `domain/noraErrorCodes.ts` · `operations/*` · `notifications/*` | Error Contract Wave · Operation Status Contract v1 · Idempotency Wave · Notification Presentation Contract 7A/7B · Error Observatory (FW3) · Operation Manager (FW2) · Operation Correlation (FW1) | D | 11 · 12 · 13 |
+| Operationen, Fehler, Feedback | [`23`](23-operations-errors-feedback.md) (**sektionsweise**, siehe Tabelle unten) · [`03`](03-data-model-guardrails.md) §6 (universeller DB-Fehlervertrag) und §5 (Persistenz-Boundary) · [`13`](13-crm-audit-retention.md) (Audit-Grenze) · [`02`](02-design-system.md) (Darstellung) · `domain/noraErrorCodes.ts` · `operations/*` · `notifications/*` | Error Contract Wave · Operation Status Contract v1 · Idempotency Wave · Notification Presentation Contract 7A/7B · Error Observatory (FW3) · Operation Manager (FW2) · Operation Correlation (FW1) | D | 11 · 12 · 13 |
 | PWA / Update-Verhalten | [`06`](06-decision-log.md) Eintrag PWA-Update-Lifecycle (die acht durablen Regeln) · [`02`](02-design-system.md) Abschnitt Anwendungs-Systemereignisse (Präsentation) · `pwa/*` | Update-Lifecycle 1B–V2 (konsolidiert) | E | 14 |
 | Design / UX | [`02`](02-design-system.md) | Typografie 4 · Kanban Navigation Rail · Kontakterstellung UI-Polish · Customer Create Speed & Clarity | F | 9 |
 | Rollen-UX-Abnahme (**historisches Protokoll v0.3k.2, Stand 2026-07-14** — kein aktueller Design-Contract) | [`12`](12-role-ux-acceptance.md) | Rollenbewusste UX v0.3k | G | 9 |
@@ -84,6 +85,21 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 **Unabhängig vom Subsystem:** Wer eine Migration schreibt oder gegen eine echte Production-Datenbank schreibt, liest zusätzlich [`21`](21-agent-runbooks.md) Sektion 1 (Ledger-Hazard beim `apply_migration`); wer RBAC/RLS, Grants oder `SECURITY DEFINER` ändert, [`22`](22-security-and-access.md) **plus** [`21`](21-agent-runbooks.md) Sektion 4 und 5; wer nach einem Deployment einen Live-Smoke macht, Sektion 14.
 
 Sektionen in [`17`](17-known-issues-and-planned-waves.md): **A** Sicherheit und Privilegien · **B** Mitarbeiter-Lifecycle · **C** E-Mail-Zustellbeobachtung · **D** Operationen, Fehler, Feedback · **E** PWA und Motion · **F** Design-System (projektweit) · **G** Kunden, Kontakte, Vorgänge, Aufgaben · **H** Bekannte, nicht untersuchte Themen · **I** Build, Bundle und CI.
+
+### Sektionsweise Routing in [`23`](23-operations-errors-feedback.md)
+
+`23` ist ein **CONDITIONAL CURRENT CONTRACT** und wird **sektionsweise** geladen, nie als ganze Datei. Eine normale UI-, Label- oder Layout-Änderung lädt `23` **nicht**.
+
+| Aufgabe | Contract | Operative Schritte |
+|---|---|---|
+| Operation Lifecycle (`pending`/`success`/`error`, Manager, Singleton) | [`23`](23-operations-errors-feedback.md) §1 | [`21`](21-agent-runbooks.md) §11 |
+| Correlation, `operation_id`, Identifier-Unterscheidung (Falle 38) | [`23`](23-operations-errors-feedback.md) §2 | [`21`](21-agent-runbooks.md) §11 |
+| Idempotency, Retry, Replay, Conflict, Ausführungsdisposition (Falle 35, Ausführungshälfte) | [`23`](23-operations-errors-feedback.md) §3 · [`03`](03-data-model-guardrails.md) §5 (Persistenzhälfte) | [`21`](21-agent-runbooks.md) §11 |
+| Error Observatory (`operation_errors`), `CrmErrorKind` | [`23`](23-operations-errors-feedback.md) §4 | [`21`](21-agent-runbooks.md) §12 |
+| neuer `NoraErrorCode`, `normalizeCrmError`, `DETAIL` | [`03`](03-data-model-guardrails.md) §6 | [`21`](21-agent-runbooks.md) §12 |
+| Feedback-/Notification-**Bedeutung** (Intent ≠ Operation, Presentation-Lifecycle, Falle 37) | [`23`](23-operations-errors-feedback.md) §5 | [`21`](21-agent-runbooks.md) §13 |
+| Feedback-/Notification-**Darstellung** (Layer, Position, Timing, Motion, Overlay, a11y) | [`02`](02-design-system.md) | [`21`](21-agent-runbooks.md) §13 |
+| Audit-Korrelation, `audit_events.request_id` | [`13`](13-crm-audit-retention.md) | [`21`](21-agent-runbooks.md) §7 |
 
 Die Nummer `15` ist nicht vergeben (keine `15-*.md` in der Git-Historie) — keine bewusste Reservierung.
 
@@ -107,6 +123,7 @@ Für normale Arbeit werden **nur die zuständigen aktuellen Dokumente** geladen 
 - das vollständige Decision Log [`06`](06-decision-log.md) — nur der benannte Eintrag aus der Architekturbereiche-Tabelle bzw. über den thematischen Index in `06`,
 - das vollständige [`17`](17-known-issues-and-planned-waves.md) — nur die betroffene Sektion (A–I); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review,
 - das vollständige [`21`](21-agent-runbooks.md) — nur die Sektion, die die Architekturbereiche-Tabelle für die Aufgabe nennt,
+- das vollständige [`23`](23-operations-errors-feedback.md) — nur die Sektion aus der Tabelle „Sektionsweise Routing in `23`"; eine normale UI-/Layout-Änderung lädt es gar nicht,
 - alle Release-Archivdateien,
 - Architekturdokumente nicht betroffener Subsysteme.
 

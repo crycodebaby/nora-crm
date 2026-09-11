@@ -183,7 +183,7 @@ Der Vertrag ist **machine-code-first**:
 - Die Business-Identität eines Fehlers ist ein kanonischer `NoraErrorCode` aus `domain/noraErrorCodes.ts`, serverseitig als `DETAIL = 'NORA_<CODE>'` gesetzt.
 - Nur ein in `NORA_ERROR_CODES` **kanonisch gelisteter** Wert wird akzeptiert — kein `startsWith("NORA_")`-Raten.
 - Die menschenlesbare `MESSAGE` bleibt frei umformulierbar und diagnostisch; sie ist **nie** die Quelle der Business-Identität. Zwei Origins mit demselben Code dürfen unterschiedlichen Text tragen.
-- **Regex-/Nachrichtentext-Parsing ist ausschließlich ein Legacy-Compatibility-Fallback** für nicht migrierte Aufrufer — niemals der primäre oder einzige Mechanismus für einen neuen Code. Bestehende Regex-Pfade bleiben bewusst stehen.
+- **Freitext-/Regex-Erkennung definiert niemals die Identität eines neuen fachlichen `NoraErrorCode`.** Für einen neuen Code ist sie weder der primäre noch ein zulässiger Mechanismus; bestehende Regex-Pfade bleiben als Legacy-Compatibility für nicht migrierte Aufrufer bewusst stehen. Davon zu unterscheiden ist die **bewusst unterstützte generische Permission-Denied-Normalisierung** (RLS-Text · `42501` · `PGRST301` · `insufficient_privilege` · HTTP `403`) für Zugriffsablehnungen **ohne** kanonisches Nora-`DETAIL`: sie greift **unabhängig davon, an welcher serverseitigen Grenze die Ablehnung entsteht** — Datenbank/RLS ebenso wie ein anderer HTTP-`403`-Pfad —, ist ein technischer Infrastructure-/Compatibility-Fallback, kein fachlicher Code-Ursprung, und bleibt zulässig. Abgebildet wird auch sie ausschließlich in `normalizeCrmError`.
 
 Der **operative Ablauf** zur Einführung und Verifikation eines neuen Fehlercodes (Definition, Migration, Presentation-Mapping, FakeRest-Parität, Suiten) steht in [`21`](21-agent-runbooks.md) Sektion 12. *(Falle 33)*
 
@@ -232,10 +232,10 @@ Dieser Index ist ein **Resolver für Cross-References**, keine zweite Inhaltsque
 | 32 | Numerische Entity-/Demo-IDs per Truthiness prüfen | `03` §2.1 |
 | 33 | `error.message` als i18n-Key oder Business-Code | `03` §6 · Ablauf: [`21`](21-agent-runbooks.md) §12 |
 | 34 | `SECURITY DEFINER` blind auf Advisor-Finding umstellen | [`22`](22-security-and-access.md) Abschnitt 7.1 |
-| 35 | Gespeicherte `disposition` als Live-Status lesen | `03` §5 · [`21`](21-agent-runbooks.md) §11 |
+| 35 | Gespeicherte `disposition` als Live-Status lesen | `03` §5 (Persistenz) · [`23`](23-operations-errors-feedback.md) §3 (Ausführungssemantik) |
 | 36 | KI/Automatisierung mit rohem SQL gegen `audit_events` | [`13`](13-crm-audit-retention.md) · `03` §5 |
-| 37 | Presentation erfindet einen Core-Lifecycle | [`21`](21-agent-runbooks.md) §13 |
-| 38 | Vorgegebene `operationId` ungeprüft registrieren | [`21`](21-agent-runbooks.md) §11 |
+| 37 | Presentation erfindet einen Core-Lifecycle | [`23`](23-operations-errors-feedback.md) §5 |
+| 38 | Vorgegebene `operationId` ungeprüft registrieren | [`23`](23-operations-errors-feedback.md) §2 |
 | 39 | Namen aus `sales_directory`; FK auf `sales.id` mit `CASCADE` | `03` §2.2 · [`19`](19-user-lifecycle-architecture.md) §7 |
 | 40 | `contacts.is_primary` als rohe Spalte schreiben | `03` §3.1 · Tests: [`21`](21-agent-runbooks.md) §15 |
 
