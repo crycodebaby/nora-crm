@@ -1,6 +1,6 @@
 # Nora Documentation
 
-Stand: 2026-09-10. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
+Stand: 2026-09-11. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
 
 Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md` nennt nur den Always-Kontext und verweist hierher; `16-current-state.md` beschreibt den Zustand und verweist hierher.
 
@@ -9,7 +9,7 @@ Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md
 | Klasse | Dokumente | Wann |
 |---|---|---|
 | **ALWAYS** | `AGENTS.md` · dieser Router · [`16`](16-current-state.md) · [`01`](01-domain-model.md) · [`03`](03-data-model-guardrails.md) · [`07`](07-agent-change-checklist.md) | jede Aufgabe |
-| **CONDITIONAL CURRENT CONTRACT** | die Subsystemdokumente aus der Tabelle „Architekturbereiche" — darunter [`22`](22-security-and-access.md) (Security / Access / RBAC / RLS / Grants / Authorization) und [`23`](23-operations-errors-feedback.md) (Operationen / Fehler / Feedback, **sektionsweise** §0–§6) | wenn das Subsystem betroffen ist |
+| **CONDITIONAL CURRENT CONTRACT** | die Subsystemdokumente aus der Tabelle „Architekturbereiche" — darunter [`22`](22-security-and-access.md) (Security / Access / RBAC / RLS / Grants / Authorization), [`23`](23-operations-errors-feedback.md) (Operationen / Fehler / Feedback, **sektionsweise** §0–§6) und [`24`](24-pwa-and-update-lifecycle.md) (PWA / Service Worker / Update-Lifecycle, **sektionsweise** §0–§9) | wenn das Subsystem betroffen ist |
 | **CONDITIONAL RUNBOOK** | [`21`](21-agent-runbooks.md) | **nur die betroffene Sektion** (1–15, siehe Architekturbereiche) — operative Zusatzschritte beim Ändern; **nie** als ganze Datei |
 | **OPEN STATE** | [`17`](17-known-issues-and-planned-waves.md) | **nur die betroffene Sektion** (A–I, siehe Architekturbereiche); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review |
 | **RATIONALE** | [`06`](06-decision-log.md) | nur bei Entscheidungs-/Begründungsbedarf, und dann **gezielt über den benannten Eintrag** aus der Architekturbereiche-Tabelle bzw. den thematischen Index in `06` — **nie** als ganze Datei |
@@ -31,6 +31,8 @@ Vor jeder Änderung außerdem: [`07-agent-change-checklist.md`](07-agent-change-
 Bei allen Änderungen an `sales`, der `users` Edge Function, Auth oder Audit-Ereignissen `user.*` ist [`19-user-lifecycle-architecture.md`](19-user-lifecycle-architecture.md) **Pflicht**.
 
 Bei allen Änderungen an **Rollen, Berechtigungen, RLS, Grants, `SECURITY DEFINER`, `service_role`, Session-Autorisierung oder privilegierten Read-Views** ist [`22-security-and-access.md`](22-security-and-access.md) **Pflicht** — Suchbegriffe, die dorthin führen: `SECURITY DEFINER` · `security_invoker` · RLS · Policy · Grants · Default-Privilegien · `public`-Privilegien · `sales.role` · `admin`/`office`/`viewer` · Berechtigungsmatrix · Capability-Rolle · `nora_private` · PostgREST-Exposure · `service_role` · Trust Boundary · Session-Autorisierung · `auth.sessions` · Executor · Actor-Verifikation · privilegierte Read-Views · `init_state` · `sales_directory`. Die operativen Zusatzschritte dazu stehen in [`21`](21-agent-runbooks.md) Sektion 4 und 5.
+
+Bei allen Änderungen an **Service Worker, Precache, Update-Verhalten, Offline-Verhalten, Manifest/Installability oder dem Verhalten mehrerer offener Tabs** ist [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md) **Pflicht** — Suchbegriffe, die dorthin führen: PWA · Service Worker · `vite-plugin-pwa` · `registerType` · Precache · Offline · Manifest · Installability · Multi-Tab · Update Lifecycle. Die Präsentation dazu steht in [`02`](02-design-system.md), die Verifikation nach einem Deployment in [`21`](21-agent-runbooks.md) Sektion 14.
 
 ## Dokument-Zuständigkeiten
 
@@ -56,6 +58,7 @@ Bei allen Änderungen an **Rollen, Berechtigungen, RLS, Grants, `SECURITY DEFINE
 | [`21-agent-runbooks.md`](21-agent-runbooks.md) | **conditional** Agent Runbooks: subsystem- und situationsabhängige operative Zusatzschritte beim Ändern (Testsequenzen, Verifikationen, Fallstricke) — sektionsweise geladen (1–15), nie vollständig |
 | [`22-security-and-access.md`](22-security-and-access.md) | **globaler Security- und Access-Contract**: Enforcement-Prinzip, Authentication vs. Authorization, Rollen (`sales.role`) und Capability-Rollen, globale Berechtigungsmatrix, Trust Boundaries, Database Enforcement (RLS, Grants, Default-Privilegien, neue `public`-Objekte, `SECURITY DEFINER`, privilegierte Read-Views, `nora_private`, PostgREST-Exposure), Session- und Executor-Integrität |
 | [`23-operations-errors-feedback.md`](23-operations-errors-feedback.md) | **Application-Contract für Operationen, Fehler und Feedback**: Operation Lifecycle (`pending`/`success`/`error`), Correlation und Identifier (`operation_id` ≠ `idempotency_key`), Idempotency / Retry / Replay / Ausführungsdisposition, Error Observatory (`operation_errors`) und operationsseitige Fehler-**Bedeutung**, Feedback-/Notification-**Bedeutung** auf Application-Ebene — **sektionsweise** geladen (§0–§6). **Kein** Fehlervertrag (→ [`03`](03-data-model-guardrails.md) §6), **kein** Audit (→ [`13`](13-crm-audit-retention.md)), **keine** Darstellung (→ [`02`](02-design-system.md)) |
+| [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md) | **technischer PWA-/Update-Contract**: Service-Worker-Registrierungsgrenze, Update-Lifecycle und State-Invarianten (Prompt-Modus, wartender Worker, `applying` ≠ `activated`, `reloadRequired`), Update-Erkennung und Prüfkadenz, Aktivierung/Reload-Ownership/Abschluss-Handoff, Precache- und Cache-Grenze, Offline-Grenze, Installability-Grenze, Multi-Tab-Verhalten — **sektionsweise** geladen (§0–§9). **Keine** Präsentation (→ [`02`](02-design-system.md)), **keine** Verifikation/Build-Identität (→ [`21`](21-agent-runbooks.md) §14) |
 | [`releases/`](releases/README.md) | **historische** Release-Evidenz (RC-SHAs, Migrationen, Ledger, Edge-Versionen, Live-Beweise, Originalwortlaut alter Einträge) |
 
 ## Architekturbereiche
@@ -72,7 +75,7 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 | E-Mail-Zustellung | [`18`](18-email-delivery-observability.md) | V1C-A Best-Effort-Korrelation · V1C-B Zustellstatus-UI | C | — |
 | Google Kalender | [`14`](14-google-calendar-readonly-implementation.md) (Implementierung) · [`11`](11-google-calendar-rbac.md) (Architektur/Spezifikation) · [`22`](22-security-and-access.md) (globale Berechtigung) — **die drei `calendar-*` Edge Functions sind nicht deployt; Deployment-Stand im Kopf von `11` und `14`** | Architektur & Rollenmodell v0.4a · Read-only-Grundlage v0.4c.1 · OAuth & Sync v0.4c.2 | — | 8 |
 | Operationen, Fehler, Feedback | [`23`](23-operations-errors-feedback.md) (**sektionsweise**, siehe Tabelle unten) · [`03`](03-data-model-guardrails.md) §6 (universeller DB-Fehlervertrag) und §5 (Persistenz-Boundary) · [`13`](13-crm-audit-retention.md) (Audit-Grenze) · [`02`](02-design-system.md) (Darstellung) · `domain/noraErrorCodes.ts` · `operations/*` · `notifications/*` | Error Contract Wave · Operation Status Contract v1 · Idempotency Wave · Notification Presentation Contract 7A/7B · Error Observatory (FW3) · Operation Manager (FW2) · Operation Correlation (FW1) | D | 11 · 12 · 13 |
-| PWA / Update-Verhalten | [`06`](06-decision-log.md) Eintrag PWA-Update-Lifecycle (die acht durablen Regeln) · [`02`](02-design-system.md) Abschnitt Anwendungs-Systemereignisse (Präsentation) · `pwa/*` | Update-Lifecycle 1B–V2 (konsolidiert) | E | 14 |
+| **PWA / Service Worker / Update-Lifecycle / Precache / Offline / Installability / Multi-Tab** | [`24`](24-pwa-and-update-lifecycle.md) (**sektionsweise** §0–§9) · [`02`](02-design-system.md) Abschnitt Anwendungs-Systemereignisse (**nur** Präsentation: Update-Prompt, Motion, Copy, A11y) · `pwa/*` | PWA Contract Ownership (CR5) · Update-Lifecycle 1B–V2 (konsolidiert) | E | 14 |
 | Design / UX | [`02`](02-design-system.md) | Typografie 4 · Kanban Navigation Rail · Kontakterstellung UI-Polish · Customer Create Speed & Clarity | F | 9 |
 | Rollen-UX-Abnahme (**historisches Protokoll v0.3k.2, Stand 2026-07-14** — kein aktueller Design-Contract) | [`12`](12-role-ux-acceptance.md) | Rollenbewusste UX v0.3k | G | 9 |
 | Routing / i18n | [`04`](04-routing-i18n.md) | — | — | — |
@@ -101,6 +104,25 @@ Sektionen in [`17`](17-known-issues-and-planned-waves.md): **A** Sicherheit und 
 | Feedback-/Notification-**Darstellung** (Layer, Position, Timing, Motion, Overlay, a11y) | [`02`](02-design-system.md) | [`21`](21-agent-runbooks.md) §13 |
 | Audit-Korrelation, `audit_events.request_id` | [`13`](13-crm-audit-retention.md) | [`21`](21-agent-runbooks.md) §7 |
 
+### Sektionsweise Routing in [`24`](24-pwa-and-update-lifecycle.md)
+
+`24` ist ein **CONDITIONAL CURRENT CONTRACT** und wird **sektionsweise** geladen, nie als ganze Datei. Eine Änderung an der Update-**Darstellung** lädt `24` **nicht**, sondern [`02`](02-design-system.md).
+
+| Aufgabe | Contract | Operative Schritte |
+|---|---|---|
+| Zuständigkeitsgrenze klären: welcher Teil der PWA-Fläche gehört `24`, `02`, `21`, `06`, `17` bzw. `22` | [`24`](24-pwa-and-update-lifecycle.md) §0 | [`21`](21-agent-runbooks.md) §14 |
+| Service-Worker-Registrierung, PWA-Architekturgrenze, `usePwaUpdate()`-Boundary | [`24`](24-pwa-and-update-lifecycle.md) §1 | [`21`](21-agent-runbooks.md) §14 |
+| Update-Lifecycle, Zustände, `reloadRequired`, was ein Reload liefert | [`24`](24-pwa-and-update-lifecycle.md) §2 | [`21`](21-agent-runbooks.md) §14 |
+| Update-Erkennung, Prüfintervall, Offline-Guard | [`24`](24-pwa-and-update-lifecycle.md) §3 · Werteklassifikation §9 | [`21`](21-agent-runbooks.md) §14 |
+| Aktivierung, Watchdog, Reload-Ownership, Snooze, Abschluss-Handoff | [`24`](24-pwa-and-update-lifecycle.md) §4 · Werteklassifikation §9 | [`21`](21-agent-runbooks.md) §14 |
+| Precache-/Cache-Grenze, Workbox-Glob, Plugin-Defaults, Production-Exclusion | [`24`](24-pwa-and-update-lifecycle.md) §5 · Werteklassifikation §9 · bei Runtime-Caching von Geschäftsdaten zusätzlich [`22`](22-security-and-access.md) | [`21`](21-agent-runbooks.md) §14 |
+| Offline-Verhalten und -Grenze | [`24`](24-pwa-and-update-lifecycle.md) §6 | [`21`](21-agent-runbooks.md) §14 |
+| Manifest, Standalone, Installability | [`24`](24-pwa-and-update-lifecycle.md) §7 | [`21`](21-agent-runbooks.md) §14 |
+| Multi-Tab, stale Clients, Plugin-/Browser-Eigenheiten | [`24`](24-pwa-and-update-lifecycle.md) §8 | [`21`](21-agent-runbooks.md) §14 |
+| **Einen technischen Wert ändern** (Prüfintervall, Frist, Snooze, Precache-Limit, effektiver Plugin-Default): durable Invariante oder Current Parameter? | [`24`](24-pwa-and-update-lifecycle.md) §9 | [`21`](21-agent-runbooks.md) §14 |
+| **Darstellung** des Update-Ereignisses (Zustände, Copy, Orb/Ring, Motion, A11y) | [`02`](02-design-system.md) | [`21`](21-agent-runbooks.md) §14 |
+| **Verifikation**: Live-Smoke, Build-/Release-Identität, eingebettete Commit-SHA | — | [`21`](21-agent-runbooks.md) §14 |
+
 Die Nummer `15` ist nicht vergeben (keine `15-*.md` in der Git-Historie) — keine bewusste Reservierung.
 
 ## Source-of-Truth-Prinzip
@@ -124,6 +146,7 @@ Für normale Arbeit werden **nur die zuständigen aktuellen Dokumente** geladen 
 - das vollständige [`17`](17-known-issues-and-planned-waves.md) — nur die betroffene Sektion (A–I); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review,
 - das vollständige [`21`](21-agent-runbooks.md) — nur die Sektion, die die Architekturbereiche-Tabelle für die Aufgabe nennt,
 - das vollständige [`23`](23-operations-errors-feedback.md) — nur die Sektion aus der Tabelle „Sektionsweise Routing in `23`"; eine normale UI-/Layout-Änderung lädt es gar nicht,
+- das vollständige [`24`](24-pwa-and-update-lifecycle.md) — nur die betroffene Sektion (§0–§9); eine Änderung an der Update-**Darstellung** lädt [`02`](02-design-system.md), nicht `24`,
 - alle Release-Archivdateien,
 - Architekturdokumente nicht betroffener Subsysteme.
 

@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-10. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-11. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -42,6 +42,18 @@ Konkrete Ausprägung von A.8: `anon` hält in Production `EXECUTE` auf `public.g
 `supabase/schemas/*.sql` ist ein lesbares Abbild des beabsichtigten Endzustands und wird von keinem `db reset` ausgeführt; autoritativ sind `supabase/migrations/` und die Datenbank ([`22`](22-security-and-access.md) Abschnitt 6.2). Das Abbild ist aber unvollständig: `nora_private.jwt_session_claim`, `nora_private.jwt_session_is_live`, `nora_private.session_binding_health`, `nora_private.guard_sales_delete` und die Definition von `nora_private.is_active_user` fehlen in `02_functions.sql` (die letzte wird in `03_views.sql`/`05_policies.sql` nur *benutzt*). Damit fehlt genau der Session-Autorisierungskern (W6-A) und der `sales`-DELETE-Guard (W6-B) in der reviewbaren Übersicht.
 
 **Konsequenz für Agenten:** Wer den Security-Kern verstehen oder ändern will, liest die Migrationen (`20260906210000_nora_lifecycle_session_authorization.sql`, `20260906230000_nora_lifecycle_account_deletion.sql`) oder die Datenbank — **nicht** das deklarative Schema, und schließt aus dessen Schweigen nichts. **Abhilfe** (eigene Welle, nicht beauftragt): die fehlenden Definitionen nachtragen, so wie `07-agent-change-checklist.md` es für Migrationen ohnehin verlangt.
+
+### A.12 Browserseitige React-Query-Persistenz von Geschäftsdaten auf der MobileAdmin-Oberfläche
+
+**Status: `OPEN (MEDIUM)`** (read-only am Repository-Stand 2026-09-11 verifiziert; keine Bewertung abgeschlossen, keine Fixwelle beauftragt).
+
+Die MobileAdmin-Oberfläche hängt ihren React-Query-Cache über `PersistQueryClientProvider` und `createAsyncStoragePersister({ storage: localStorage })` an den Browserspeicher (`src/components/atomic-crm/root/CRM.tsx`); `gcTime` steht auf rund 24 Stunden. Damit liegen Geschäftsdaten persistent im lokalen Browserprofil vor, nicht nur im Arbeitsspeicher der Sitzung.
+
+Ein Logout-Clear für diesen Cache ist im realen Supabase-Pfad **nicht** nachgewiesen: die einzige gefundene Räumung des Persist-Keys steht im Demo-Pfad (`src/components/atomic-crm/providers/fakerest/demoSession.ts`) und belegt nichts über Production.
+
+**Offen zu bewerten** (bewusst nicht vorweggenommen): ob und in welchem Umfang das eine Security-/Privacy-Frage ist, ob beim Logout geräumt werden muss und welche Persistenzdauer gewollt ist. Dieser Eintrag stellt **keinen** Datenschutzverstoß fest, spezifiziert keine Laufzeitlösung und beauftragt keine Welle.
+
+**Abgrenzung.** Dies ist **nicht** der Service-Worker-Cache: der cacht keine Geschäftsdaten ([`24`](24-pwa-and-update-lifecycle.md) §5). Die technische Negativgrenze „Service Worker cacht keine Geschäftsdaten ≠ Nora speichert keine Geschäftsdaten im Browser" steht in [`24`](24-pwa-and-update-lifecycle.md) §6; `24` ist **nicht** Owner dieses Punktes. Security-Contract: [`22`](22-security-and-access.md).
 
 ### A.9 `pg_default_acl` für Creator `supabase_admin` in `public` bleibt für Nora unerreichbar
 
@@ -148,12 +160,12 @@ Siehe Abschnitt **A.6** — der Operationstyp-Check von `record_operation_error`
 
 ## E. PWA und Motion
 
+Der technische PWA-/Update-Contract (Lifecycle, Precache, Offline, Installability, Multi-Tab) steht seit CR5 in [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md); hier stehen **nur genuin offene** Punkte.
+
 - **Reduced-Motion-Dauer der Update-Choreografie** — `PARKED` (Product-Frage): bei `prefers-reduced-motion: reduce` steht die Bewegung, die Dauer bleibt 8 s. Empfehlung: ~2,5 s und direkt in die ruhige Szene.
 - **Nora Loading Motion System** — `PLANNED DOMAIN WAVE`, nicht begonnen. Zwei identische Spinner-Komponenten (`ui/spinner.tsx`, `admin/spinner.tsx`), ~13 direkte `animate-spin`-Vorkommen, ~45 `Loader2`/`Spinner`-Referenzen in ~25 Dateien, dazu Skeleton/Progress und der PWA-Orb. Empfehlung: zentraler Motion Primitive, beide Spinner darauf umstellen, Inline-Stellen nachziehen; Reduced Motion, Hell/Dunkel, 44-px-Touchziele mit abnehmen.
 - **Live-Browser-Verifikation des PWA-V2-Happy-Path** (alter Tab → „Neue Nora-Version verfügbar" → „Jetzt aktualisieren" → Bestätigung genau einmal → zweites F5 ohne Bestätigung) — `NEEDS RE-VERIFICATION`: beim Release `672ebc76` (2026-09-01) nur per Bundle-Copy-Guard geprüft; der 1B–1C.3-Happy-Path war beim Kanban-Release live bestätigt.
-- Bekannte Plugin-Eigenheiten (LOW, `vite-plugin-pwa`, bewusst offen gelassen): Assessment `nothing` (Worker verschwindet ohne Ersatz — Choreografie ohne Exit, theoretisch); kontrollierte Nicht-Klick-Tabs laden nach Fremdaktivierung sofort neu; ein < 60 s nach Registrierung gefundener Worker löst im unkontrollierten Dokument kein `onNeedRefresh` aus. Der State Contract wird dafür nicht wieder geöffnet.
-- **Multi-Tab:** aktualisiert ein Benutzer in einem Tab, laden alle anderen Nora-Tabs ebenfalls neu — ungespeicherte Eingaben dort gehen verloren. Bewusst ohne Cross-Tab-Architektur. `ACCEPTED LIMITATION`.
-- **Nach jedem Deployment liefert der Service Worker beim ersten Aufruf noch den Vorgänger-Build** — gewollt (Prompt-Modus); Release-Smokes müssen „Jetzt aktualisieren" auslösen oder in frischem Profil testen (`07-agent-change-checklist.md`, Details `21-agent-runbooks.md` Sektion 14).
+- **Installability ist kein abgenommenes Produktziel** — `PARKED` (Product-Frage): Nora besitzt Manifest- und Standalone-Grundlagen, aber keinen abgenommenen Installability-Product-Contract und keine eigene Install-UI (kein `beforeinstallprompt`-Handler). Ob Installability ein bewusstes Produktziel werden soll — und damit verifiziert und gepflegt werden muss — ist offen. Aktueller Ist-Stand: [`24`](24-pwa-and-update-lifecycle.md) §7.
 
 ## F. Design-System (projektweit)
 

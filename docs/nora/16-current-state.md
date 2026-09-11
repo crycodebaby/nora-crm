@@ -40,7 +40,7 @@ Security wird **serverseitig** durchgesetzt; die UI ist keine Security Boundary.
 | Alle übrigen Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht in Production deployt** — live sind ausschließlich `users` und `brevo-email-events` | dito |
 | Build / CI | **Build-/Bundle-Gate GREEN**. **Gesamt-CI weiterhin RED** — ausschließlich wegen der dokumentierten E2E-Bootstrap-Baseline, [`17`](17-known-issues-and-planned-waves.md) Abschnitt I | Archiv `releases/2026-09.md` |
 
-Die Release-/Deploy-Grundreihenfolge für schemaabhängige Wellen steht in [`07-agent-change-checklist.md`](07-agent-change-checklist.md). **Nach einem Deployment holt ein Reload allein den neuen Build nicht** (PWA im Prompt-Modus) — Regel und Live-Smoke: [`21`](21-agent-runbooks.md) Sektion 14.
+Die Release-/Deploy-Grundreihenfolge für schemaabhängige Wellen steht in [`07-agent-change-checklist.md`](07-agent-change-checklist.md). **Bei PWA-Clients ist ein Reload allein kein belastbarer Nachweis dafür, welcher Build aktiv ist** — technischer Contract: [`24`](24-pwa-and-update-lifecycle.md); Live-Smoke: [`21`](21-agent-runbooks.md) Sektion 14.
 
 ## Vier Fakten
 

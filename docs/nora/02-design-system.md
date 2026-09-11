@@ -463,7 +463,9 @@ Seit Phase 7B.4 real montiert — vorerst **nur** für Quick Capture. Alle ander
 
 ## Anwendungs-Systemereignisse / Update-Experience (Wellen PWA-1C, PWA-1C.1)
 
-Neue Kategorie neben den Statusmeldungen aus Phase 7B. Ein **Systemereignis** berichtet über die Anwendung selbst (aktuell genau ein Fall: „neue Nora-Version verfügbar"), eine **Statusmeldung** über eine Aktion, die der Benutzer gerade ausgelöst hat. Beide teilen Typografie, Radius und die Motion-Tokens — sie werden aber **nie** semantisch zusammengelegt: ein Update bekommt keine `operationId`, keinen Idempotency-Key und keinen Eintrag im Notification-/Operation-Store.
+Neue Kategorie neben den Statusmeldungen aus Phase 7B. Ein **Systemereignis** berichtet über die Anwendung selbst (aktuell genau ein Fall: „neue Nora-Version verfügbar"), eine **Statusmeldung** über eine Aktion, die der Benutzer gerade ausgelöst hat. Beide teilen Typografie, Radius und die Motion-Tokens — sie werden aber **nie** semantisch zusammengelegt: das Update-Ereignis wird technisch nicht als Business-Operation modelliert (Contract: [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md) §1).
+
+**Ownership.** Dieser Abschnitt besitzt die **Präsentation** des Update-Ereignisses: sichtbare Zustände, Copy, Komposition, Orb/Ring, Choreografie, Motion, Reduced Motion, A11y, Kontrast, Tokens und das Dev-Werkzeug. Den **technischen** PWA-/Update-Contract besitzt [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md); die Verifikation nach einem Deployment [`21-agent-runbooks.md`](21-agent-runbooks.md) §14.
 
 **Stand PWA-1C.1:** die erste visuelle Fassung (kleine 30-rem-Zeile, Motiv links neben Text, zwei Buttons darunter) wurde vom Product Owner als generisch verworfen. Sie war technisch korrekt und von einer beliebigen Framework-Karte nicht zu unterscheiden. Ersetzt wurde nicht die Dekoration, sondern die **Komposition** — Begründung im Decision Log, „2026-08-30 – PWA-1C.1".
 
@@ -537,6 +539,8 @@ Regeln, die dabei nicht verhandelbar sind:
 
 Der frühere Sammelzustand „Recovery" („Aktualisierung dauert länger als erwartet" mit „Erneut versuchen" oder „Nora neu laden") ist ersetzt. Technische Wahrheit liegt in `pwaUpdateStore` (Browser-Fakten: Controller, wartender/aktiver Worker, `activated`, `failed`), die Präsentation wird in `useUpdateChoreography` abgeleitet; die Komponente enthält keine Service-Worker-Logik.
 
+Die Spalte „Technische Bedingung" erklärt, **wann** welches Bild erscheint. Sie ist eine **abgeleitete, zitierte Bedingung** — Owner der Invarianten dahinter ist [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md) §2; `02` besitzt sie nicht.
+
 | Zustand | Technische Bedingung | Titel | Zeile | Aktion(en) |
 |---|---|---|---|---|
 | `available` | Update entdeckt, Worker wartet, Dokument kontrolliert | Neue Nora-Version verfügbar | Offene Eingaben vor dem Aktualisieren kurz speichern. | Später · **Jetzt aktualisieren** |
@@ -554,11 +558,11 @@ Regeln:
 - **Slow-Motion:** die ruhige Update-Szene läuft einfach weiter, die drei Punkte atmen langsamer (3,2 s statt 2,4 s). Nichts wächst, nichts wechselt die Farbe.
 - **Reduced Motion** unverändert: Ebenen stehen still, Faltungen werden zu Fades, die Punkte behalten nur ihren Deckkraftzyklus.
 
-Die Messwerte zur 5-Sekunden-Frist (2–34 ms Übernahme, 14 ms im V2-Repro) und die Begründung des Nora-eigenen Reloads stehen im Decision Log („2026-09-01 – PWA Update State Contract V2").
+Die Fristen selbst (Watchdog, Nora-eigener Reload) sind technische Parameter und stehen in [`24`](24-pwa-and-update-lifecycle.md) §4; die historischen Messwerte dazu liegen in der Release-Evidenz — die Watchdog-Messreihe (2–34 ms Übernahme) in [`releases/2026-08.md`](releases/2026-08.md#2026-08-30--aktivierungsanfrage-ist-kein-erfolgssignal-watchdog-statt-promise-pwa-1c2) (PWA-1C.2), der 14-ms-Wert des V2-Repros in [`releases/2026-09.md`](releases/2026-09.md#2026-09-01--pwa-update-state-contract-v2-browser-fakten-statt-entdeckungssignal).
 
 ### Visual Polish 2 (2026-09-01): Komposition, Ring, ruhiger Slow-Zustand
 
-Der State Contract V2 ist technisch abgenommen und eingefroren; diese Welle ändert **nur die Präsentation** (`NoraUpdateEvent.tsx`, `NoraUpdateOrb.tsx`, PWA-CSS, `crm.pwa.*`). `pwaUpdateStore.ts`, `pwaRegistration.ts`, `usePwaUpdate.ts` und `useUpdateChoreography.ts` sind byteweise unverändert.
+Diese Welle ändert **nur die Präsentation** (`NoraUpdateEvent.tsx`, `NoraUpdateOrb.tsx`, PWA-CSS, `crm.pwa.*`) — der technische State Contract bleibt unberührt ([`24`](24-pwa-and-update-lifecycle.md) §2). Der Nachweis der Unberührtheit gehört zur Release-Evidenz dieser Welle: [`releases/2026-09.md`](releases/2026-09.md#2026-09-01--pwa-visual-polish-2-ring-statt-spektakel-kein-reload-angebot-bei-wartendem-worker).
 
 **Was sich sichtbar geändert hat:**
 
@@ -583,7 +587,7 @@ Der State Contract V2 ist technisch abgenommen und eingefroren; diese Welle änd
 
 ### Abschlussbestätigung „Aktualisierung abgeschlossen" (2026-09-01)
 
-Der sechste sichtbare Zustand — und der einzige, der **nicht aus dem Store** kommt. Er erscheint genau einmal in der **frisch geladenen Version** nach einem erfolgreichen Update (Übergabe per `sessionStorage`-Bit, `pwa/pwaUpdateCompletion.ts`; Regeln im Decision Log „2026-09-01 – PWA Completion Acknowledgement"). Nie vor dem Reload, nie nach einem gewöhnlichen Neuladen, nie nach `failed`.
+Der sechste sichtbare Zustand — und der einzige, der **nicht aus dem Store** kommt. Er erscheint genau einmal in der **frisch geladenen Version** nach einem erfolgreichen Update (Übergabe per `sessionStorage`-Bit, `pwa/pwaUpdateCompletion.ts`; technische Regel: [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md) §4, historische Herkunft: [`releases/2026-09.md`](releases/2026-09.md#2026-09-01--pwa-completion-acknowledgement-aktualisierung-abgeschlossen-nach-dem-reload-genau-einmal)). Nie vor dem Reload, nie nach einem gewöhnlichen Neuladen, nie nach `failed`.
 
 - **Copy:** Titel „Aktualisierung abgeschlossen", Zeile „Nora ist bereit." (`crm.pwa.completed_title` / `completed_hint`). Announcer sagt beides als einen Satz.
 - **Dieselbe Fläche, derselbe Orb, grün:** `.nora-system-event[data-presentation="completed"]` hängt `--nora-brand`, `--nora-brand-hover`, `--nora-system-aura`, `--nora-system-ring` und die Hairline auf `--nora-success` / `--nora-success-deep` / `--nora-system-hairline-success` um — die Orb-Ebenen lesen ihre Farben aus diesen Variablen, nichts wird von Hand nachgefärbt, Hell und Dunkel behalten ihr eigenes Grün (hell `oklch(0.52 0.13 150)`, dunkel `oklch(0.76 0.15 150)`). Titel in `--nora-success` (hell ≥ 4,5:1 auf Weiß, dunkel ≈ 7:1). Kein Orange, kein Warnsymbol, kein Rot.

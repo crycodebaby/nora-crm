@@ -1,6 +1,6 @@
 # 07 – Agent Change Protocol (universal)
 
-Stand: 2026-09-10. Dieses Dokument enthält **nur** Regeln, die bei praktisch jeder Nora-Änderung gelten. Es gehört zur Load-Klasse ALWAYS (siehe Router [`README.md`](README.md)) und bleibt deshalb bewusst kurz.
+Stand: 2026-09-11. Dieses Dokument enthält **nur** Regeln, die bei praktisch jeder Nora-Änderung gelten. Es gehört zur Load-Klasse ALWAYS (siehe Router [`README.md`](README.md)) und bleibt deshalb bewusst kurz.
 
 Subsystem- und situationsabhängige Anweisungen — Datenbank/Migration, Security & Privilegien, Mitarbeiter-Lifecycle, Audit, Google Kalender, Nummern, Checklisten, Operationen/Fehler, Notifications, PWA, Rollen-UX, Demo — stehen **nicht** hier, sondern in [`21-agent-runbooks.md`](21-agent-runbooks.md). Dort werden sie **sektionsweise** geladen, nur wenn die Aufgabe sie betrifft. Welche Sektion für welche Aufgabe gilt, sagt ausschließlich der Router [`README.md`](README.md); dieses Dokument führt bewusst **keine zweite Routingtabelle**.
 
@@ -55,7 +55,7 @@ Bei schemaabhängigen Wellen mit automatischem Vercel-Deploy gilt diese Reihenfo
 6. automatisches Vercel-Deployment
 7. Live-Smoke
 
-**Live-Smoke: ein Reload genügt nicht.** Nora ist eine PWA im Prompt-Modus; ein bereits installierter Browser zeigt auch nach beliebig vielen Reloads weiter den Vorgänger-Build. Belastbar ist nur: den Update-Hinweis auslösen **oder** ein frisches Profil/`unregister()` — und die Asset-Hashes des live ausgelieferten `index.html` gegen das DOM prüfen. Vollständige Regel: [`21`](21-agent-runbooks.md) Abschnitt „PWA und Update-Verhalten"; Ursache und Reproduktion: [`17`](17-known-issues-and-planned-waves.md) Abschnitt E.
+**Live-Smoke: ein Reload allein ist kein belastbarer PWA-Live-Smoke.** Nora ist eine PWA im Prompt-Modus; welcher Build nach einem Reload sichtbar ist, entscheidet der Browser- und Controller-Zustand. Belastbar ist nur: den Update-Hinweis auslösen **oder** ein frisches Profil/`unregister()` — und die Asset-Hashes des live ausgelieferten `index.html` gegen das DOM prüfen. Vollständige Smoke-Prozedur und Build-Identität: [`21`](21-agent-runbooks.md) Abschnitt „PWA und Update-Verhalten"; technischer PWA-/Update-Contract: [`24`](24-pwa-and-update-lifecycle.md).
 
 ## STOP-Regeln
 
