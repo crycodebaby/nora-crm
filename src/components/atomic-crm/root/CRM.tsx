@@ -5,11 +5,9 @@ import type {
   LayoutComponent,
 } from "ra-core";
 import { CustomRoutes, localStorageStore, Resource } from "ra-core";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Route } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { Admin } from "@/components/admin/admin";
 import { ForgotPasswordPage } from "@/components/supabase/forgot-password-page";
 import { SetPasswordPage } from "@/components/supabase/set-password-page";
@@ -65,6 +63,7 @@ import { NoteShowPage } from "../notes/NoteShowPage.tsx";
 import { useNoraResourceAliasRoutes } from "../routing/NoraResourceAliasRoutes";
 import { OperationProvider } from "../operations/OperationProvider";
 import { NotificationProvider } from "../notifications/NotificationProvider";
+import { purgeLegacyReactQueryPersistence } from "./browserPersistence";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -139,6 +138,16 @@ export const CRM = ({
   disableTelemetry = true,
   ...rest
 }: CRMProps) => {
+  // Retires the pre-SEC-B2 persisted React Query business cache. It sits here,
+  // above the responsive split, on purpose: the legacy snapshot was written by
+  // the mobile surface but must disappear no matter which surface, viewport or
+  // logout state the browser profile happens to open next. Nothing writes the
+  // key any more, so running it on every mount is enough — see
+  // ./browserPersistence.
+  useEffect(() => {
+    purgeLegacyReactQueryPersistence();
+  }, []);
+
   useEffect(() => {
     // Nora never reports Atomic CRM host telemetry.
     if (
@@ -315,20 +324,24 @@ const MobileAdmin = (
     layout?: LayoutComponent;
   },
 ) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        gcTime: 1000 * 60 * 60 * 24, // 24 hours
-        networkMode: "offlineFirst",
-      },
-      mutations: {
-        networkMode: "offlineFirst",
-      },
-    },
-  });
-  const asyncStoragePersister = createAsyncStoragePersister({
-    storage: localStorage,
-  });
+  // One QueryClient per mount, never a fresh one per re-render: the cache is
+  // now the only place mobile business data lives (no browser persistence since
+  // SEC-B2), so re-creating the client would silently drop it. `gcTime` is an
+  // in-memory retention budget only — nothing is written to browser storage.
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            gcTime: 1000 * 60 * 60 * 24, // 24 hours
+            networkMode: "offlineFirst",
+          },
+          mutations: {
+            networkMode: "offlineFirst",
+          },
+        },
+      }),
+  );
   const noraAliasRoutes = useNoraResourceAliasRoutes({
     contacts: {
       list: ContactListMobile,
@@ -339,54 +352,52 @@ const MobileAdmin = (
     deals: {},
   });
 
+  // No PersistQueryClientProvider: `Admin` (ra-core CoreAdminContext) already
+  // supplies the QueryClientProvider for the client passed below, and Nora must
+  // not dehydrate business data into browser storage (SEC-B2).
   return (
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{ persister: asyncStoragePersister }}
+    <Admin
+      queryClient={queryClient}
+      layout={props.layout ?? MobileLayout}
+      dashboard={props.dashboard ?? MobileDashboard}
+      {...props}
     >
-      <Admin
-        queryClient={queryClient}
-        layout={props.layout ?? MobileLayout}
-        dashboard={props.dashboard ?? MobileDashboard}
-        {...props}
+      <CustomRoutes noLayout>
+        <Route path={SignupPage.path} element={<SignupPage />} />
+        <Route
+          path={ConfirmationRequired.path}
+          element={<ConfirmationRequired />}
+        />
+        <Route path={SetPasswordPage.path} element={<SetPasswordPage />} />
+        <Route
+          path={AccessLinkLandingPage.path}
+          element={<AccessLinkLandingPage />}
+        />
+        <Route
+          path={ForgotPasswordPage.path}
+          element={<ForgotPasswordPage />}
+        />
+        <Route path={OAuthConsentPage.path} element={<OAuthConsentPage />} />
+      </CustomRoutes>
+      <CustomRoutes>
+        <Route
+          path={SettingsPageMobile.path}
+          element={<SettingsPageMobile />}
+        />
+        <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+        <Route path={AuditPage.path} element={<AuditPage />} />
+        {noraAliasRoutes}
+      </CustomRoutes>
+      <Resource
+        name="contacts"
+        list={ContactListMobile}
+        show={ContactShow}
+        recordRepresentation={contacts.recordRepresentation}
       >
-        <CustomRoutes noLayout>
-          <Route path={SignupPage.path} element={<SignupPage />} />
-          <Route
-            path={ConfirmationRequired.path}
-            element={<ConfirmationRequired />}
-          />
-          <Route path={SetPasswordPage.path} element={<SetPasswordPage />} />
-          <Route
-            path={AccessLinkLandingPage.path}
-            element={<AccessLinkLandingPage />}
-          />
-          <Route
-            path={ForgotPasswordPage.path}
-            element={<ForgotPasswordPage />}
-          />
-          <Route path={OAuthConsentPage.path} element={<OAuthConsentPage />} />
-        </CustomRoutes>
-        <CustomRoutes>
-          <Route
-            path={SettingsPageMobile.path}
-            element={<SettingsPageMobile />}
-          />
-          <Route path={ChangelogPage.path} element={<ChangelogPage />} />
-          <Route path={AuditPage.path} element={<AuditPage />} />
-          {noraAliasRoutes}
-        </CustomRoutes>
-        <Resource
-          name="contacts"
-          list={ContactListMobile}
-          show={ContactShow}
-          recordRepresentation={contacts.recordRepresentation}
-        >
-          <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
-        </Resource>
-        <Resource name="companies" show={CompanyShow} />
-        <Resource name="tasks" list={MobileTasksList} />
-      </Admin>
-    </PersistQueryClientProvider>
+        <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
+      </Resource>
+      <Resource name="companies" show={CompanyShow} />
+      <Resource name="tasks" list={MobileTasksList} />
+    </Admin>
   );
 };

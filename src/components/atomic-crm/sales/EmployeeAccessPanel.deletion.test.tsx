@@ -236,6 +236,12 @@ describe("EmployeeAccessPanel — Benutzerkonto endgültig löschen (W6-B)", () 
         reasons: ["identity_inconsistent"],
       }),
     });
+    // Awaited like every sibling assertion in this file: since SEC-B2 removed
+    // the mobile React Query persister, `render()` returns while ra-core is
+    // still evaluating `requireAuth`, so the section appears one frame later.
+    await expect
+      .element(screen.getByTestId("employee-account-deletion"))
+      .toBeInTheDocument();
     const text = screen
       .getByTestId("employee-account-deletion")
       .element().textContent;

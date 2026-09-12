@@ -11,11 +11,9 @@ import {
   NORA_DEMO_USER_STORAGE_KEY,
   resolveDemoPostSwitchUrl,
   resolveDemoSaleByEmail,
-  REACT_QUERY_PERSIST_KEY,
   saleToDemoIdentity,
   switchDemoUserByRole,
   switchDemoUserByEmail,
-  clearDemoQueryPersistCache,
   isRouteAllowedForDemoRole,
 } from "../providers/fakerest/demoSession";
 import { getAccessRedirectTarget } from "./noraAccessGuardUtils";
@@ -62,12 +60,6 @@ describe("demoSession canonical source", () => {
     const reloaded = JSON.parse(stored!);
     expect(reloaded.first_name).toBe("Vera");
     expect(getActiveDemoRole()).toBe("viewer");
-  });
-
-  it("clearDemoQueryPersistCache removes react-query offline cache key", () => {
-    localStorage.setItem(REACT_QUERY_PERSIST_KEY, "{}");
-    clearDemoQueryPersistCache();
-    expect(localStorage.getItem(REACT_QUERY_PERSIST_KEY)).toBeNull();
   });
 });
 

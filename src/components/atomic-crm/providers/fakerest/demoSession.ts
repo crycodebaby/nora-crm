@@ -16,9 +16,6 @@ import { isNoraDemoMode } from "../../misc/noraDemoMode";
  */
 export const NORA_DEMO_USER_STORAGE_KEY = "user";
 
-/** React Query persist key used by MobileAdmin (must be cleared on role switch). */
-export const REACT_QUERY_PERSIST_KEY = "REACT_QUERY_OFFLINE_CACHE";
-
 const baseAvatar = {
   src: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=",
 };
@@ -141,15 +138,6 @@ export const switchDemoUserByEmail = (email: string): Sale | null => {
   if (!sale) return null;
   setActiveDemoSale(sale);
   return sale;
-};
-
-/** Clears persisted React Query cache so identity/canAccess refetch after role switch. */
-export const clearDemoQueryPersistCache = (): void => {
-  try {
-    localStorage.removeItem(REACT_QUERY_PERSIST_KEY);
-  } catch {
-    // ignore
-  }
 };
 
 const FORBIDDEN_PREFIXES_FOR_NON_ADMIN = ["/settings", "/import", "/sales"];

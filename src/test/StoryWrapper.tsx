@@ -155,7 +155,9 @@ export const StoryWrapper = ({
   const store = useMemo(() => memoryStore(), []);
 
   useEffect(() => {
-    // Clear localStorage on mount to prevent data pollution from previous story / test, since we persist react-query cache in localStorage.
+    // Clear localStorage on mount to prevent data pollution from a previous
+    // story / test (store preferences, drafts). Since SEC-B2 the react-query
+    // cache itself is no longer persisted — see root/browserPersistence.
     localStorage.clear();
   }, []);
 

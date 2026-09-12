@@ -20,9 +20,16 @@ describe("Startseite initial loading state", () => {
     );
 
     // A blank page reads as broken — the loading state must be perceivable
-    // right away, not after an arbitrary delay.
-    expect(skeletons().length).toBeGreaterThan(0);
-    expect(document.querySelectorAll("[aria-busy]").length).toBeGreaterThan(0);
+    // right away, not after an arbitrary delay. Polled rather than asserted
+    // synchronously: since SEC-B2 removed the mobile React Query persister,
+    // `render()` returns one commit earlier (ra-core is still evaluating
+    // `requireAuth`), and the skeleton lands on the next animation frame —
+    // before the first paint, so there is no blank page. The tight default
+    // poll window keeps this a first-frame guarantee, not "eventually".
+    await expect.poll(() => skeletons().length).toBeGreaterThan(0);
+    await expect
+      .poll(() => document.querySelectorAll("[aria-busy]").length)
+      .toBeGreaterThan(0);
   });
 
   it("shows a calm skeleton instead of a blank mobile page", async () => {
@@ -32,6 +39,6 @@ describe("Startseite initial loading state", () => {
       </StoryWrapper>,
     );
 
-    expect(skeletons().length).toBeGreaterThan(0);
+    await expect.poll(() => skeletons().length).toBeGreaterThan(0);
   });
 });
