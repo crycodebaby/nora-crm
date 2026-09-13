@@ -46,10 +46,10 @@ Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabell
 **Entscheidungen.**
 
 1. **Einen Vorgang ansehen gehört mobil zum Nora-Kernworkflow.** Mobile registriert für `deals` eine eigene Show-Fläche mit dem fachlichen Kern des Vorgangs.
-2. **Nur Show.** Mobile Vorgangsliste/Kanban, Anlegen und Bearbeiten werden bewusst **nicht** mit eingeführt; jede davon ist eine eigene Produktentscheidung. Folge: mobile Flächen bieten keine Links auf die Vorgangsliste an.
+2. **Nur Show.** Eine dedizierte mobile Vorgangsliste/Kanban sowie dedizierte mobile Resource-Anlege-/Bearbeiten-Flächen (Create-/Edit-Routen für `deals`) werden bewusst **nicht** mit eingeführt; jede davon wäre eine eigene Produktentscheidung, die W7-M1 nicht trifft. Die bestehende Schnellerfassung ist davon unberührt: ein separater Anlageworkflow, über den auch mobil ein Vorgang angelegt und anschließend geöffnet wird. Folge: mobile Flächen bieten keine Links auf die Vorgangsliste an.
 3. **Desktop bleibt unverändert** (Kanban, Vorgangs-Dialog). Keine allgemeine Mobile/Desktop-Parität.
 
-**Begründung.** Nora selbst schickte mobile Nutzer bereits zu Vorgängen; der Ausschluss stammte aus dem Upstream-Zustand und war kein tragfähiger Produktvertrag. Der kleinste Schnitt, der diese Einstiege konsistent macht, ist die Show-Fläche — eine mobile Liste oder Bearbeitung hätte eigene UX-Fragen, die nicht Teil der Korrektur sind. Verworfen: die mobilen Einstiege entfernen (nimmt Nutzern den Vorgang, den Nora ihnen gerade zeigt) und Desktop-Parität in einem Schritt.
+**Begründung.** Nora selbst schickte mobile Nutzer bereits zu Vorgängen; der Ausschluss stammte aus dem Upstream-Zustand und war kein tragfähiger Produktvertrag. Der kleinste Schnitt, der diese Einstiege konsistent macht, ist die Show-Fläche — eine dedizierte mobile Liste oder Bearbeitungsfläche hätte eigene UX-Fragen, die nicht Teil der Korrektur sind. Verworfen: die mobilen Einstiege entfernen (nimmt Nutzern den Vorgang, den Nora ihnen gerade zeigt) und Desktop-Parität in einem Schritt.
 
 ## 2026-09-11 – PWA Contract Ownership (CR5): eigener Current Owner für Service Worker und Update-Lifecycle
 
