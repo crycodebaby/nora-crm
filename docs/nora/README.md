@@ -1,6 +1,6 @@
 # Nora Documentation
 
-Stand: 2026-09-11. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
+Stand: 2026-09-13. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
 
 Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md` nennt nur den Always-Kontext und verweist hierher; `16-current-state.md` beschreibt den Zustand und verweist hierher.
 
@@ -78,7 +78,7 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 | **PWA / Service Worker / Update-Lifecycle / Precache / Offline / Installability / Multi-Tab** | [`24`](24-pwa-and-update-lifecycle.md) (**sektionsweise** §0–§9) · [`02`](02-design-system.md) Abschnitt Anwendungs-Systemereignisse (**nur** Präsentation: Update-Prompt, Motion, Copy, A11y) · `pwa/*` | PWA Contract Ownership (CR5) · Update-Lifecycle 1B–V2 (konsolidiert) | E | 14 |
 | Design / UX | [`02`](02-design-system.md) | Typografie 4 · Kanban Navigation Rail · Kontakterstellung UI-Polish · Customer Create Speed & Clarity | F | 9 |
 | Rollen-UX-Abnahme (**historisches Protokoll v0.3k.2, Stand 2026-07-14** — kein aktueller Design-Contract) | [`12`](12-role-ux-acceptance.md) | Rollenbewusste UX v0.3k | G | 9 |
-| Routing / i18n | [`04`](04-routing-i18n.md) | — | — | — |
+| Routing / i18n (inkl. Mobile/Desktop-Resource-Grenze) | [`04`](04-routing-i18n.md) | Mobile Vorgang-Details: nur Show (W7-M1) | G (G.5) | — |
 | Demo-Daten / Demo-Rollensimulation | [`05`](05-demo-data-guidelines.md) · [`04`](04-routing-i18n.md) Abschnitt Demo-Rollensimulation | Basisentscheidungen 2026-06-28 | — | 10 |
 | Nummern, Suche, Fensterauftrag, Checklisten | [`08`](08-numbering-and-global-search.md) · [`09`](09-window-order-workflow.md) · [`10`](10-checklists-snippets-audit.md) | Nummern 6c · Globale Suche 6d · Fensterauftrag 7a · Checklisten/Audit-Datenmodell 7b | G | 2 · 3 |
 | Build, Bundle-Budget, Visualizer, CI-Baselines | [`06`](06-decision-log.md) Einträge Visualizer Production Exclusion und Kernindizes und Bundle-Budget | Visualizer Production Exclusion · Kernindizes und Bundle-Budget | I | — |

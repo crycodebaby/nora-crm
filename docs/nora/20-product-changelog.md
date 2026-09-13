@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-08
+Stand: 2026-09-13
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,20 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-09-13 — Vorgänge auf dem Smartphone öffnen
+
+**Was ändert sich für Sie:** Vorgänge lassen sich jetzt auch auf dem Smartphone direkt öffnen — etwa über die
+Startseite (auch aus den Produktionsfreigaben) oder die Suche. Bisher blieb der Bildschirm dabei leer. Die
+Vorgangsseite zeigt das Wichtigste auf einen Blick: Vorgangsnummer, Titel, Kunde, Status, Zuständigkeit und den
+nächsten Kontakttermin, dazu Beschreibung und Ansprechpartner, sofern vorhanden. Von dort kommen Sie direkt zum
+Kunden oder zum Ansprechpartner und mit „Zurück" wieder zur Startseite.
+
+Auf dem Smartphone können Vorgänge damit angesehen, aber nicht bearbeitet oder neu angelegt werden; die
+Vorgangsübersicht mit den Statusspalten gibt es weiterhin nur am Rechner. Dort ändert sich nichts.
+
+**Technischer Hinweis:** Reine Oberflächenänderung, keine Datenbank- oder Datenänderung. Details:
+`releases/2026-09.md` „Mobile Vorgang-Detailroute W7-M1".
 
 ## 2026-09-08 — Startseite: Ansprechpartner sind wieder da, kein leerer Bildschirm beim Laden
 

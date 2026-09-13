@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-11 · Load-Klasse: **ALWAYS** · Status: **CURRENT SNAPSHOT**
+Stand: 2026-09-13 · Load-Klasse: **ALWAYS** · Status: **CURRENT SNAPSHOT**
 
 Dieses Dokument besitzt den **heutigen Zustand** von Nora — nicht die Contracts der Subsysteme, nicht deren Runbooks, nicht die offenen Punkte und nicht die Release-Historie. Welches Dokument wofür zuständig ist und wann es geladen wird, entscheidet ausschließlich der Router [`README.md`](README.md); dieses Dokument führt bewusst keine zweite Routingtabelle und keine Owner-Liste. Die aktuellen Release- und Laufzeitfakten stehen hier; die historische Beweisführung (RC-SHAs, Migrations-Hashes, Testzahlen, Live-Beweise, Zwischenfälle) liegt im Archiv [`releases/`](releases/README.md). **Repository-Kopf und Laufzeit-Kopf sind zwei verschiedene Fakten** — siehe Abschnitt „Vier Fakten".
 
@@ -31,8 +31,8 @@ Security wird **serverseitig** durchgesetzt; die UI ist keine Security Boundary.
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — hier bewusst nicht als SHA festgeschrieben, weil reine Docs-Commits ihn verschieben, ohne die Laufzeit zu ändern | `git log` |
-| Letzter Laufzeit-Release | Entry-Chunk-Budget H2, Laufzeit-RC **und** Release-Kopf `5cae655fdc4accda3c2613b316293b896b466ca4` (2026-09-10) — **frontend-only**: keine Migration, kein Edge-Deploy, keine Production-DB-Änderung, keine sichtbare Funktionsänderung | Archiv `releases/2026-09.md` |
-| Letzter Release mit **sichtbarer** Funktionalität | Startseite-Zuverlässigkeit W7-R1A, Laufzeit-RC **und** Release-Kopf `8fcb603dac7db3599695c031a7fc3ef702892fa3` (2026-09-08) — **frontend-only**. Fachlich ist das der heute sichtbare Stand; die beiden Laufzeit-Releases danach ändern keine Funktion | Archiv `releases/2026-09.md` |
+| Letzter Laufzeit-Release | Mobile Vorgang-Detailroute W7-M1, Laufzeit `8aa62cc88c938a082fe0df99c84f96297c5ebbbc` (2026-09-13, `PRODUCTION VERIFIED`) — **frontend-only**: keine Migration, kein Edge-Deploy, keine Production-DB-Änderung. Der Build enthält als direkten Vorgänger den Laufzeitcommit `c7501f9` (SEC-B2 Browser-Persistenz); dessen Verifikation und Abschluss sind eine eigene Welle und mit W7-M1 **nicht** mitbehauptet | Archiv `releases/2026-09.md` |
+| Letzter Release mit **sichtbarer** Funktionalität | W7-M1 (derselbe Build): Vorgänge lassen sich unter 768 CSS px über `/vorgaenge/:id/show` als eigene mobile Detailseite öffnen. **Nur Anzeige** — keine mobile Vorgangsliste/Kanban, kein mobiles Anlegen/Bearbeiten; Desktop unverändert. Routing-Contract: [`04`](04-routing-i18n.md) | Archiv `releases/2026-09.md` |
 | Frontend / Deploy | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`; **jeder Push auf `main` löst ein automatisches Production-Deployment aus**. Prüfregel für die Build-/Release-Identität: [`21`](21-agent-runbooks.md) Sektion 14 | Archiv `releases/2026-09.md` |
 | Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **58 Einträge, Kopf `20260908120000_nora_atomic_contact_primary_intent`**, deckungsgleich mit `supabase/migrations/` (58 Dateien) | `list_migrations` read-only 2026-09-08 |
 | Edge Function `users` | **Version 9** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-07 |

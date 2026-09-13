@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-11. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-13. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -211,6 +211,15 @@ Nach den beiden Blocker-Fixes (RC `0fb3d6ba`, zwei unabhängige Reviews 2026-09-
 - **Application Queries / Read Models** für künftige KI-/Automatisierungs-Konsumenten (Falle 36) — Richtung dokumentiert, nichts implementiert.
 - **Wave 7 R1B — `Deal.company_id` Contract-Parity** — `PLANNED FOLLOW-UP`, noch nicht begonnen. `deals.company_id` ist in der Datenbank nullable, der TypeScript-Typ bildet das nicht ab. W7-R1A (`PRODUCTION VERIFIED` 2026-09-08) entschärft nur die Startseiten-Lesepfade über `resolveHotboardCompanyIds`; der Typvertrag selbst bleibt unangeglichen. Evidenz: `releases/2026-09.md` „Startseite-Zuverlässigkeit W7-R1A".
 - **Mobile-Ladezustand der Startseite live nachprüfen** — `PLANNED FOLLOW-UP` aus dem W7-R1A-Release (2026-09-08): der Ein-Sekunden-Vorlauf ist im ausgelieferten Build konstruktiv entfernt und durch Tests abgedeckt, eine Sichtprüfung auf einem echten mobilen Viewport steht aber aus (die Release-Session erreichte den ≤ 767-px-Breakpoint nicht).
+
+### G.5 Mobile Vorgang-Routing — offen nach W7-M1 (2026-09-13)
+
+W7-M1 (mobile Vorgang-Detailroute) ist `PRODUCTION VERIFIED` und hier **nicht** offen — Contract [`04`](04-routing-i18n.md), Entscheidung [`06`](06-decision-log.md) „2026-09-13 – Mobile Vorgang-Details: nur die Show-Fläche", Evidenz `releases/2026-09.md`. Die folgenden Punkte wurden dabei festgestellt und bewusst **nicht** in W7-M1 gezogen; sie öffnen W7-M1 nicht wieder.
+
+- **Unbekannte Pfade enden projektweit in einer leeren Fläche** — `PLANNED FOLLOW-UP` (kleine Routing-Härtung). Nora nutzt weiterhin den ra-core-Standard-Catch-All; nicht registrierte oder ungültige Pfade (auf Mobile z. B. `/vorgaenge` als Liste) zeigen weder Fehler noch Ausweg. Nicht Vorgang-spezifisch.
+- **Aktivitätsverlauf unterdrückt mobil Vorgang-Links und nutzt einen Legacy-Pfad** — `OPEN (LOW)`. `activity/ActivityLogDealCreated.tsx` und `ActivityLogDealNoteCreated.tsx` rendern mobil (`isMobile`) Vorgänge noch aus der Zeit ohne mobile Vorgang-Route ohne Link; zusätzlich sind `/deals/${…}/show` hartcodiert statt über `noraRoutes.ts` (Regel in [`04`](04-routing-i18n.md)). Funktioniert über den Legacy-Redirect, verschenkt aber die inzwischen vorhandene mobile Detailseite.
+- **Fehlerzustand der mobilen Vorgang-Detailseite ohne Kopfzeile** — `OPEN (LOW, UX)`, live beobachtet 2026-09-13. Bei einem nicht existierenden Vorgang zeigt Nora den generischen Ladefehler mit „Erneut versuchen"; die untere Navigation bleibt als Ausweg, der übliche Kopf „Vorgang" mit Zurück-Schaltfläche fehlt aber.
+- **Mobile Vorgangsliste/Kanban und mobiles Bearbeiten/Anlegen** — `PARKED` (Produktfrage). Bewusst nicht Teil von W7-M1; eigene Produktentscheidung, falls gewünscht.
 
 ## H. Bekannte, nicht untersuchte Themen
 

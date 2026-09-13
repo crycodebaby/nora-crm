@@ -34,6 +34,28 @@ Interne alte Links dürfen über Redirects weiter funktionieren, sollten aber sc
 - Die englischen Pfade sind ausschließlich als **Legacy-Redirect-Eingang** gedacht (`LegacyPathRedirect`), nicht als interne Navigationsquelle.
 - Bei Übernahme von Atomic-CRM-Ur-Code oder beim Schreiben neuer Show-/Tab-/Routing-Logik: explizit prüfen, ob englische Pfade hartcodiert sind, und auf `noraRoutes.ts`-Helfer umstellen.
 
+## Mobile / Desktop: getrennte Resource-Registrierung
+
+Nora registriert ihre Ressourcen je Oberfläche **unterschiedlich**: unter 768 CSS px läuft `MobileAdmin`, darüber die Desktop-Oberfläche (beide in `root/CRM.tsx`). Eine Route, die auf Desktop existiert, existiert deshalb nicht automatisch auf Mobile — die deutschen Alias-Routen (`useNoraResourceAliasRoutes`) werden je Oberfläche aus genau dieser Registrierung erzeugt.
+
+**Regel:** Jeder interne Link, der aus einer **mobilen** Oberfläche erreichbar ist (Startseite/Hotboard, Suche, Schnellerfassung, Akten, Aktivitätsverlauf, Deep Links), muss auf eine Route zeigen, die **auf Mobile tatsächlich registriert** ist. Keine Links auf Desktop-only-Flächen (z. B. eine Liste, die mobil nicht existiert). Wer mobil eine neue Link-Quelle baut oder eine Resource-Registrierung ändert, prüft beide Richtungen: Ziel registriert? Kein Einstieg zeigt ins Leere?
+
+Unbekannte bzw. nicht registrierte Pfade landen heute im ra-core-Standard-Catch-All und können eine leere Fläche erzeugen — das ist **kein** Fehlerzustand, auf den man sich verlassen kann (offen: [`17`](17-known-issues-and-planned-waves.md) Abschnitt G).
+
+### Vorgang-Routen je Oberfläche (seit W7-M1, 2026-09-13)
+
+| Pfad | Desktop | Mobile (< 768 CSS px) |
+|---|---|---|
+| `/vorgaenge` | Kanban | **nicht unterstützt** — keine mobile Vorgangsliste, kein Kanban |
+| `/vorgaenge/:id/show` | Vorgangs-Dialog über dem Kanban | eigene mobile Vorgang-Detailseite (nur Anzeige) |
+| Anlegen / Bearbeiten eines Vorgangs | vorhanden | **nicht registriert** |
+| `/deals/:id/show` (Legacy) | → `/vorgaenge/:id/show` | → `/vorgaenge/:id/show` |
+
+- Auf Mobile ist für Vorgänge **nur die Show-Route** registriert. Nicht daraus ableiten, dass `/vorgaenge/*` mobil allgemein unterstützt ist.
+- Weil mobil keine Vorgangsliste existiert, bieten mobile Flächen keine klickbaren Listen-Links wie „Alle Vorgänge" oder „+N weitere" an.
+- Kanonischer Link auf einen Vorgang ist immer `/vorgaenge/:id/show`; `/deals/...` ist nur Legacy-Eingang (siehe oben).
+- Begründung: [`06`](06-decision-log.md) „2026-09-13 – Mobile Vorgang-Details: nur die Show-Fläche".
+
 ## Öffentliche Auth-Routen (Welle 6a)
 
 | Route | Zweck | Auth |
