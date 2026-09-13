@@ -1,6 +1,6 @@
 # 03 – Datenmodell- und Persistenz-Guardrails
 
-Stand: 2026-09-10 · Load-Klasse: **ALWAYS**
+Stand: 2026-09-13 · Load-Klasse: **ALWAYS**
 
 Dieses Dokument hält die **universellen Daten- und Persistenzinvarianten** von Nora fest: Regeln, die bei praktisch jeder Datenmodell- oder Persistenzänderung gelten, unabhängig von Subsystem und Release.
 
@@ -66,6 +66,15 @@ Die Regel „gehört dieser Kontakt zu dieser Kundenakte?" existiert an genau dr
 | FakeRest | `providers/fakerest/internal/taskContextCheck.ts` |
 
 Keine Ad-hoc-Logik in `CompanyShow`, in der Aufgaben-Kontaktauswahl oder in Quick Capture. Wer die Regel ändert, ändert **alle drei** Stellen **und** die gemeinsam benannte Szenario-Matrix `domain/effectiveContactContext.contractCases.ts` synchron (Fallnamen identisch in TS und SQL) — Testsequenz: [`21`](21-agent-runbooks.md) §15. *(Falle 31)*
+
+### 1.7 Jeder Vorgang hat genau einen Kunden
+
+`public.deals.company_id` ist **`NOT NULL`** (FK auf `companies.id`), und im Domain-Typ ist `Deal.company_id` nicht-null. Datenbank und Domäne stimmen damit überein; fachliche Regel: [`01`](01-domain-model.md).
+
+- Kein direkter oder künftiger Schreibpfad (RPC, Import, Automatisierung, Demo) legt einen Vorgang ohne Kunden an oder setzt `company_id` auf `null`. Die verknüpften Ansprechpartner (`deals.contact_ids`) sind kein Ersatz für den Kunden.
+- Die Nullability wird nicht „zur Sicherheit" wieder aufgeweicht, weil die aus Atomic CRM geerbte Spalte früher nullable war. Defensive Null-Behandlung beim **Lesen** fehlerhafter Daten bleibt erlaubt, beschreibt aber keinen legitimen Fachzustand.
+- FakeRest spiegelt die Regel in den normalen `create`/`update`-Pfaden für `deals` (Parität, §5). Existenzprüfung nullish, nie per Truthiness — Kunden-Id `0` ist gültig (§2.1, Falle 32).
+- Diese Invariante betrifft nur die Nullability. Das Löschverhalten des Fremdschlüssels ist **nicht** Teil davon und wird hier nicht festgelegt.
 
 ---
 

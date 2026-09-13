@@ -204,12 +204,12 @@ Nach den beiden Blocker-Fixes (RC `0fb3d6ba`, zwei unabhängige Reviews 2026-09-
 
 - **Privatperson/Firma-Unterscheidung in Quick Capture** — `PLANNED FOLLOW-UP`: die Schnellerfassung erzeugt Kunden ohne `customer_kind`-Auswahl (Default `business`); die „Diese Person ist selbst Ansprechpartner"-Option fehlt dort bewusst (Self Contact Wave).
 - **Customer-Archive-/Soft-Delete-Lifecycle** (`ArchiveCustomer`/`RestoreCustomer`) — `PLANNED FOLLOW-UP`, kein Zeitdruck. Domänenregel steht (INAKTIV ≠ NICHT-EXISTENT, W2); bisher nur die Self-Contact-Delete-Invariante abgesichert; kein generisches Archiv-Framework.
+- **Business Data Lifecycle (allgemeines Archiv / Wiederherstellen / Endgültig löschen)** — `PARKED` (PO-Entscheidung 2026-09-13). Ein allgemeines Archiv-/Restore-/Purge-Modell für Geschäftsdaten ist derzeit **keine** freigegebene Arbeit; eine `/archiv`-Fläche ist nicht geplant. Das bestehende Löschverhalten für Administratoren bleibt vorerst akzeptiert. Eine spätere Richtung „Geschäftsdatensätze werden fortgeschrieben und in Zustände überführt statt gelöscht" kann neu bewertet werden. Der schmalere Punkt „Customer-Archive-/Soft-Delete-Lifecycle" oben wird dadurch nicht zu einer allgemeinen Archivwelle erweitert; eigenständige technische Findings (z. B. `storage`, H) bleiben bei ihrem Owner.
 - **Legacy-Spalten-Cleanup** (`companies.linkedin_url`, `website`, `context_links`, `phone_number`, `contacts.linkedin_url`) — `PLANNED FOLLOW-UP`, kein Zeitdruck; erst nach Übergangszeit und Bestätigung, dass keine Integration (CSV-Import, alte Clients) mehr schreibt.
 - **Mobile „Aufgaben"-Bereich auf der Kundenakte** — der Tab existiert nur im Desktop-`CompanyShow`; `CompanyShowContentMobile` hat keine Tab-Struktur. `PLANNED FOLLOW-UP`.
 - **`deals.contact_ids bigint[]`** als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen-/Zeitdimension) — `PLANNED DOMAIN WAVE`, nicht designt.
 - **Kontakterstellung UI-Polish**: förmliche Rollen-UX-Abnahme nach `12-role-ux-acceptance.md` nie durchlaufen (technisch deployed). `NEEDS RE-VERIFICATION`.
 - **Application Queries / Read Models** für künftige KI-/Automatisierungs-Konsumenten (Falle 36) — Richtung dokumentiert, nichts implementiert.
-- **Wave 7 R1B — `Deal.company_id` Contract-Parity** — `PLANNED FOLLOW-UP`, noch nicht begonnen. `deals.company_id` ist in der Datenbank nullable, der TypeScript-Typ bildet das nicht ab. W7-R1A (`PRODUCTION VERIFIED` 2026-09-08) entschärft nur die Startseiten-Lesepfade über `resolveHotboardCompanyIds`; der Typvertrag selbst bleibt unangeglichen. Evidenz: `releases/2026-09.md` „Startseite-Zuverlässigkeit W7-R1A".
 - **Mobile-Ladezustand der Startseite live nachprüfen** — `PLANNED FOLLOW-UP` aus dem W7-R1A-Release (2026-09-08): der Ein-Sekunden-Vorlauf ist im ausgelieferten Build konstruktiv entfernt und durch Tests abgedeckt, eine Sichtprüfung auf einem echten mobilen Viewport steht aber aus (die Release-Session erreichte den ≤ 767-px-Breakpoint nicht).
 
 ### G.5 Mobile Vorgang-Routing — offen nach W7-M1 (2026-09-13)
@@ -220,6 +220,12 @@ W7-M1 (mobile Vorgang-Detailroute) ist `PRODUCTION VERIFIED` und hier **nicht** 
 - **Aktivitätsverlauf unterdrückt mobil Vorgang-Links und nutzt einen Legacy-Pfad** — `OPEN (LOW)`. `activity/ActivityLogDealCreated.tsx` und `ActivityLogDealNoteCreated.tsx` rendern mobil (`isMobile`) Vorgänge noch aus der Zeit ohne mobile Vorgang-Route ohne Link; zusätzlich sind `/deals/${…}/show` hartcodiert statt über `noraRoutes.ts` (Regel in [`04`](04-routing-i18n.md)). Funktioniert über den Legacy-Redirect, verschenkt aber die inzwischen vorhandene mobile Detailseite.
 - **Fehlerzustand der mobilen Vorgang-Detailseite ohne Kopfzeile** — `OPEN (LOW, UX)`, live beobachtet 2026-09-13. Bei einem nicht existierenden Vorgang zeigt Nora den generischen Ladefehler mit „Erneut versuchen"; die untere Navigation bleibt als Ausweg, der übliche Kopf „Vorgang" mit Zurück-Schaltfläche fehlt aber.
 - **Mobile Vorgangsliste/Kanban und mobiles Bearbeiten/Anlegen** — `PARKED` (Produktfrage). Bewusst nicht Teil von W7-M1; eigene Produktentscheidung, falls gewünscht.
+
+### G.6 Vorgang ↔ Kunde — offen nach W7-R1B (2026-09-13)
+
+W7-R1B (`deals.company_id NOT NULL`) ist `PRODUCTION VERIFIED` und hier **nicht** offen — Invariante [`03`](03-data-model-guardrails.md) §1.7, Entscheidung [`06`](06-decision-log.md) „2026-09-13 – W7-R1B", Evidenz `releases/2026-09.md`.
+
+- **FakeRest `updateMany("deals", …)` umgeht die Kunden-Paritätsprüfung** — `OPEN (LOW)`. Der FakeRest-Guard für `company_id` hängt an `beforeCreate`/`beforeUpdate`; `updateMany` läuft nicht durch `beforeUpdate`, ein `updateMany("deals", { data: { company_id: null } })` würde in der Demo also nicht abgewiesen. Heute schreibt kein Aufrufer `company_id` über diesen Pfad (der einzige gefundene `updateMany`-Aufrufer für Vorgänge ändert `sales_id`). Supabase/Production ist nicht betroffen — dort erzwingt `NOT NULL` die Regel. Beheben, sobald ein Pfad zur Sammel-Umhängung von Kunden entsteht, oder in einer kleinen Paritätsbereinigung.
 
 ## H. Bekannte, nicht untersuchte Themen
 

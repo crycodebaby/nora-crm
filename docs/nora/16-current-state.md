@@ -31,10 +31,10 @@ Security wird **serverseitig** durchgesetzt; die UI ist keine Security Boundary.
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — hier bewusst nicht als SHA festgeschrieben, weil reine Docs-Commits ihn verschieben, ohne die Laufzeit zu ändern | `git log` |
-| Letzter Laufzeit-Release | Mobile Vorgang-Detailroute W7-M1, Laufzeit `8aa62cc88c938a082fe0df99c84f96297c5ebbbc` (2026-09-13, `PRODUCTION VERIFIED`) — **frontend-only**: keine Migration, kein Edge-Deploy, keine Production-DB-Änderung. Der Build enthält als direkten Vorgänger den Laufzeitcommit `c7501f9` (SEC-B2 Browser-Persistenz); dessen Verifikation und Abschluss sind eine eigene Welle und mit W7-M1 **nicht** mitbehauptet | Archiv `releases/2026-09.md` |
-| Letzter Release mit **sichtbarer** Funktionalität | W7-M1 (derselbe Build): Vorgänge lassen sich unter 768 CSS px über `/vorgaenge/:id/show` als eigene mobile Detailseite öffnen. **Nur Anzeige** — keine mobile Vorgangsliste/Kanban, kein mobiles Anlegen/Bearbeiten; Desktop unverändert. Routing-Contract: [`04`](04-routing-i18n.md) | Archiv `releases/2026-09.md` |
+| Letzter Laufzeit-Release | Deal-Kunde-Contract W7-R1B, Laufzeit `fd635b08d57173d26a76c58c6029e2d95030a81f` (2026-09-13, `PRODUCTION VERIFIED`) — Migration `20260913120000_nora_deal_company_required` (`deals.company_id` jetzt `NOT NULL`), kein Edge-Deploy, keine sichtbare Funktionsänderung. Der Build enthält die Vorgänger W7-M1 (`8aa62cc`) und den Laufzeitcommit `c7501f9` (SEC-B2 Browser-Persistenz); dessen Verifikation und Abschluss sind eine eigene Welle und weder mit W7-M1 noch mit W7-R1B mitbehauptet | Vercel `dpl_5znn2iBQCVxnspnGzWd2RiJwfWte`; Archiv `releases/2026-09.md` |
+| Letzter Release mit **sichtbarer** Funktionalität | W7-M1 (Laufzeit `8aa62cc`, im aktuellen Build enthalten): Vorgänge lassen sich unter 768 CSS px über `/vorgaenge/:id/show` als eigene mobile Detailseite öffnen. Die mobile Vorgang-**Route** ist nur eine Anzeige — mobil sind für Vorgänge keine Listen-/Kanban-, Anlege- oder Bearbeiten-Routen registriert (andere mobile Einstiege wie die Schnellerfassung sind davon unberührt); Desktop unverändert. Routing-Contract: [`04`](04-routing-i18n.md) | Archiv `releases/2026-09.md` |
 | Frontend / Deploy | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`; **jeder Push auf `main` löst ein automatisches Production-Deployment aus**. Prüfregel für die Build-/Release-Identität: [`21`](21-agent-runbooks.md) Sektion 14 | Archiv `releases/2026-09.md` |
-| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **58 Einträge, Kopf `20260908120000_nora_atomic_contact_primary_intent`**, deckungsgleich mit `supabase/migrations/` (58 Dateien) | `list_migrations` read-only 2026-09-08 |
+| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **59 Einträge, Kopf `20260913120000_nora_deal_company_required`**, deckungsgleich mit `supabase/migrations/` (59 Dateien) | Ledger-Abgleich nach dem W7-R1B-Apply, read-only bestätigt 2026-09-13 |
 | Edge Function `users` | **Version 9** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-07 |
 | Edge Function `brevo-email-events` | **Version 2** (`verify_jwt = false`, Bearer-Token) | dito |
 | Alle übrigen Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht in Production deployt** — live sind ausschließlich `users` und `brevo-email-events` | dito |
@@ -55,12 +55,12 @@ Der laufende Gegenbeleg ist der **Kalender**: der Code liegt vollständig auf `m
 
 ## Aktive Programmlage
 
-Aktiv ist **Wave 7**; offen ist **W7-R1B** (`Deal.company_id` Contract-Parity). Der vollständige offene Zustand — Bugs, Restrisiken, geplante Wellen — steht ausschließlich in [`17`](17-known-issues-and-planned-waves.md); dieses Dokument führt weder eine zweite Known-Issues-Liste noch eine Chronik abgeschlossener Wellen. Abgeschlossene Wellen und ihre Evidenz liegen im Archiv [`releases/`](releases/README.md).
+Aktiv ist **Wave 7**; ihre offenen Folgepunkte (Vorgänge, mobile Vorgang-Fläche) stehen in [`17`](17-known-issues-and-planned-waves.md) Abschnitt G. Der vollständige offene Zustand — Bugs, Restrisiken, geplante Wellen — steht ausschließlich in [`17`](17-known-issues-and-planned-waves.md); dieses Dokument führt weder eine zweite Known-Issues-Liste noch eine Chronik abgeschlossener Wellen. Abgeschlossene Wellen und ihre Evidenz liegen im Archiv [`releases/`](releases/README.md).
 
 Global zustandsprägende offene Punkte:
 
 - Gesamt-CI rot wegen bekannter E2E-Bootstrap-Baseline → [`17`](17-known-issues-and-planned-waves.md) Abschnitt I
-- Wave 7 / W7-R1B → [`17`](17-known-issues-and-planned-waves.md) Abschnitt G
+- Wave 7 Folgepunkte → [`17`](17-known-issues-and-planned-waves.md) Abschnitt G
 - Kalender nicht produktiv nutzbar → [`11`](11-google-calendar-rbac.md) / [`14`](14-google-calendar-readonly-implementation.md)
 
 ## Welche Dokumente muss ich für welches Thema lesen?

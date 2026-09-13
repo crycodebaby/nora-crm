@@ -28,7 +28,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Neuer Business-Fehlercode, `operation_errors`, Error Observatory | [12. Fehler: Contract und Observatory](#12-fehler-contract-und-observatory) |
 | Notification-Karte, Toasts, Feedback-Schicht, Overlays | [13. Notifications und Feedback](#13-notifications-und-feedback) |
 | Service Worker, Update-Hinweis, Live-Smoke nach Deployment | [14. PWA und Update-Verhalten](#14-pwa-und-update-verhalten) |
-| Kunden-/Kontaktanlage, `customer_kind`, Hauptansprechpartner | [15. Kunden, Kontakte und Hauptansprechpartner](#15-kunden-kontakte-und-hauptansprechpartner) |
+| Kunden-/Kontaktanlage, `customer_kind`, Hauptansprechpartner, Kunde eines Vorgangs (`deals.company_id`) | [15. Kunden, Kontakte und Hauptansprechpartner](#15-kunden-kontakte-und-hauptansprechpartner) |
 
 ---
 
@@ -290,7 +290,7 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 15. Kunden, Kontakte und Hauptansprechpartner
 
-**Wann:** Änderungen an Kunden-/Kontaktanlage, an `customer_kind`, an `is_primary` oder den zugehörigen RPCs. **Die fachlichen und datenbezogenen Invarianten stehen in [`01`](01-domain-model.md) und [`03`](03-data-model-guardrails.md) (§1 Kern-Entitätsinvarianten, §3 Transaktionen/Sperren/Concurrency)** und werden hier nicht wiederholt — hier stehen nur die zusätzlichen operativen Schritte.
+**Wann:** Änderungen an Kunden-/Kontaktanlage, an `customer_kind`, an `is_primary`, an `deals.company_id` oder den zugehörigen RPCs. **Die fachlichen und datenbezogenen Invarianten stehen in [`01`](01-domain-model.md) und [`03`](03-data-model-guardrails.md) (§1 Kern-Entitätsinvarianten, §3 Transaktionen/Sperren/Concurrency)** und werden hier nicht wiederholt — hier stehen nur die zusätzlichen operativen Schritte.
 
 ### Customer & Contact Workflow
 
@@ -309,3 +309,7 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 - [ ] vor einem Release **alle drei** Real-Session-Matrizen lokal ausführen (nie gegen Production; sie hinterlassen zwei Fixture-`sales`-Zeilen): `supabase/tests/contact_primary_intent_concurrency_runner.ps1` (neu gegen neu, A–F) **und** `supabase/tests/contact_primary_cross_command_runner.ps1` (neu gegen bestehende Befehle, X-A..X-G inkl. gegenläufigem Kundenwechsel) **und** `supabase/tests/contact_primary_trigger_race_runner.ps1` (neu gegen **rohe** Kontakt-Namensschreibung, T-A..T-F — der Pfad von „Kontakte zusammenführen"). Die beiden 2026-09-08-Reviews zeigten: eine Matrix, die nur neu gegen neu rennt, übersieht den ersten Deadlock; eine, die nur Befehle gegeneinander rennt, den zweiten
 - [ ] die Runner nehmen `-Container`: die entscheidenden Concurrency-Läufe zusätzlich gegen einen lokalen **PostgreSQL 17.6**-Stack (Production-Version) zertifizieren, nicht nur gegen den PG15-Entwicklungsstack
 - [ ] Concurrency-Assertions prüfen **Ergebnisklassen und Invarianten**, nie einen bestimmten Rennsieger und nie eine Wanduhr-Dauer; wo eine spätere Stufe denselben Kunden legitim verändert, wird gegen einen Schnappschuss direkt nach der Stufe geprüft, nicht gegen den Endzustand
+
+### Vorgang ↔ Kunde (`deals.company_id`)
+
+- [ ] bei jeder Änderung an `deals.company_id`, am Vorgang-Kunde-Fremdschlüssel oder an einem Schreibpfad, der den Kunden eines Vorgangs setzt (inkl. Schnellerfassung): `supabase/tests/deal_company_required_verification.sql` nach `db reset` (self-contained, rollt zurück; leere DB oder mit Fixtures) — Invariante: [`03`](03-data-model-guardrails.md) §1.7

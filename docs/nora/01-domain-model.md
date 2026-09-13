@@ -1,6 +1,6 @@
 # 01 – Fachliches Domänenmodell
 
-Stand: 2026-09-06. Dieses Dokument beschreibt das **aktuelle** Fach-/Domänenmodell kompakt; Begründungen stehen in `06-decision-log.md`, Daten-/Persistenzinvarianten in `03-data-model-guardrails.md`, Security und Rollen in `22-security-and-access.md`, der Mitarbeiter-Lifecycle im Detail in `19-user-lifecycle-architecture.md`.
+Stand: 2026-09-13. Dieses Dokument beschreibt das **aktuelle** Fach-/Domänenmodell kompakt; Begründungen stehen in `06-decision-log.md`, Daten-/Persistenzinvarianten in `03-data-model-guardrails.md`, Security und Rollen in `22-security-and-access.md`, der Mitarbeiter-Lifecycle im Detail in `19-user-lifecycle-architecture.md`.
 
 ## Zentrale fachliche Unterscheidung
 
@@ -8,7 +8,9 @@ Kunde ≠ Kontakt ≠ Vorgang ≠ Aufgabe.
 
 Kunde ist nicht Vorgang.
 
-Ein Kunde kann mehrere Ansprechpartner und mehrere Vorgänge haben.
+Ein Kunde kann mehrere Ansprechpartner und mehrere Vorgänge haben. Umgekehrt gilt:
+
+**Jeder Vorgang gehört genau einem Kunden** (`deals.company_id`). Die am Vorgang verknüpften Ansprechpartner (`deal.contact_ids`) ersetzen den Kunden nicht — Kunde ≠ Kontakt. Ein Vorgang ohne Kunden ist kein legitimer Nora-Zustand. Daten-Invariante: `03-data-model-guardrails.md` §1.7; Begründung: Decision Log „2026-09-13 – W7-R1B".
 
 Beispiel:
 
