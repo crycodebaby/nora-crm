@@ -182,6 +182,10 @@ describe("resolveHotboardCompanyIds", () => {
     ).toEqual([7, 2]);
   });
 
+  it("keeps company id 0 (nullish, not truthiness)", () => {
+    expect(resolveHotboardCompanyIds([deal(1, 0), deal(2, 0)])).toEqual([0]);
+  });
+
   it("returns an empty list when no deal has a customer", () => {
     expect(resolveHotboardCompanyIds([deal(1, null)])).toEqual([]);
     expect(resolveHotboardCompanyIds([])).toEqual([]);

@@ -42,10 +42,12 @@ export function resolveHotboardContactIds(
 /**
  * Kunden-Ids für die Startseite aus Vorgängen ableiten.
  *
- * `deals.company_id` ist in der Datenbank nullable (ein Vorgang kann ohne
- * zugeordneten Kunden existieren), auch wenn der TypeScript-Typ das derzeit
- * nicht abbildet. Dieselbe Regel wie bei [resolveHotboardContactIds] gilt: ein
- * leeres Element würde die Kundenauflösung der gesamten Startseite kippen.
+ * Jeder Vorgang gehört genau einem Kunden — `deals.company_id` ist seit W7-R1B
+ * auch in der Datenbank `NOT NULL`. Die Null-Behandlung hier ist reine
+ * Defensive gegen fehlerhafte oder unvollständige Lesedaten, kein legitimer
+ * Fachzustand. Dieselbe Regel wie bei [resolveHotboardContactIds] gilt: ein
+ * leeres Element würde die Kundenauflösung der gesamten Startseite kippen,
+ * Duplikate blähen sie nur auf.
  */
 export function resolveHotboardCompanyIds(
   deals: readonly Deal[],

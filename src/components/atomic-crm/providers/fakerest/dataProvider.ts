@@ -158,6 +158,22 @@ const runWithFakeRestIdempotency = async <T>(
 };
 
 /**
+ * FakeRest mirror of `public.deals.company_id NOT NULL` (W7-R1B, 2026-09-13):
+ * every deal belongs to exactly one company. Rejected the way Postgres
+ * rejects it (SQLSTATE 23502, same message) — deliberately no NoraErrorCode,
+ * the regular UI paths already require a customer. Nullish, never truthiness:
+ * company id `0` is a valid identifier.
+ */
+const assertDealHasCompany = (companyId: Identifier | null | undefined) => {
+  if (companyId != null) return;
+  const error = new Error(
+    'null value in column "company_id" of relation "deals" violates not-null constraint',
+  ) as Error & { code: string };
+  error.code = "23502";
+  throw error;
+};
+
+/**
  * FakeRest mirror of nora_private.guard_active_assignment() (User Lifecycle
  * W2 hardening, 2026-09-05): a disabled employee may stay referenced by an
  * existing record but may not be newly assigned as the responsible employee.
@@ -1924,6 +1940,7 @@ export const createDataProvider = ({
         resource: "deals",
         beforeCreate: async (params, dataProvider) => {
           await guardAssignmentOnCreate(params, dataProvider);
+          assertDealHasCompany(params.data.company_id);
           const created_at = new Date().toISOString();
           return {
             ...params,
@@ -1946,6 +1963,10 @@ export const createDataProvider = ({
         },
         beforeUpdate: async (params, dataProvider) => {
           await guardAssignmentOnUpdate(params, dataProvider);
+          // A patch that doesn't carry company_id keeps the stored customer.
+          if ("company_id" in params.data) {
+            assertDealHasCompany(params.data.company_id);
+          }
           return {
             ...params,
             data: {
