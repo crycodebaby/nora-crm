@@ -3,6 +3,7 @@ import { useTranslate } from "ra-core";
 import { Link } from "react-router";
 
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { noraCreatePath } from "../routing/noraRoutes";
 import type { Company, Deal } from "../types";
@@ -33,6 +34,10 @@ export const HotboardFocusBoard = ({
 }: HotboardFocusBoardProps) => {
   const translate = useTranslate();
   const scrollRef = useHorizontalWheelScroll<HTMLDivElement>();
+  // W7-M1: the mobile app has a Vorgang-Detailseite but deliberately no
+  // Vorgangsliste, so "Alle Vorgänge" would be a dead link there. Desktop
+  // keeps it.
+  const isMobile = useIsMobile();
 
   const columns: Record<(typeof FOCUS_BOARD_STAGES)[number], FocusColumnDeals> =
     {
@@ -49,13 +54,15 @@ export const HotboardFocusBoard = ({
         <h2 className="text-lg font-semibold tracking-tight">
           {translate("crm.dashboard.hotboard.focus_board.title")}
         </h2>
-        <Link
-          to={noraCreatePath({ resource: "deals", type: "list" })}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline nora-touch-target shrink-0"
-        >
-          {translate("crm.dashboard.hotboard.focus_board.open_all_deals")}
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </Link>
+        {isMobile ? null : (
+          <Link
+            to={noraCreatePath({ resource: "deals", type: "list" })}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline nora-touch-target shrink-0"
+          >
+            {translate("crm.dashboard.hotboard.focus_board.open_all_deals")}
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
+        )}
       </div>
 
       <div

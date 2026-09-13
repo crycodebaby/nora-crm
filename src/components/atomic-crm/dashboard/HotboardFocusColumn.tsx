@@ -1,6 +1,8 @@
 import { useTranslate } from "ra-core";
 import { Link } from "react-router";
 
+import { useIsMobile } from "@/hooks/use-mobile";
+
 import { findDealLabel } from "../deals/dealUtils";
 import { noraCreatePath } from "../routing/noraRoutes";
 import { useConfigurationContext } from "../root/ConfigurationContext";
@@ -28,6 +30,10 @@ export const HotboardFocusColumn = ({
   const translate = useTranslate();
   const { dealStages } = useConfigurationContext();
   const stageLabel = findDealLabel(dealStages, stage);
+  // W7-M1: no Vorgangsliste exists on mobile, so the "+N weitere" link would
+  // be a dead end. The count itself stays — it is fachliche Information, not
+  // navigation — but on mobile it is plain text instead of a link.
+  const isMobile = useIsMobile();
 
   return (
     <div className="nora-focus-column flex flex-col min-w-[280px] max-w-full">
@@ -64,14 +70,22 @@ export const HotboardFocusColumn = ({
           </p>
         )}
         {remaining > 0 ? (
-          <Link
-            to={noraCreatePath({ resource: "deals", type: "list" })}
-            className="text-sm font-medium text-primary hover:underline px-1 py-2 nora-touch-target inline-flex items-center"
-          >
-            {translate("crm.dashboard.hotboard.focus_board.more_deals", {
-              count: remaining,
-            })}
-          </Link>
+          isMobile ? (
+            <p className="nora-muted text-sm px-1 py-2">
+              {translate("crm.dashboard.hotboard.focus_board.more_deals", {
+                count: remaining,
+              })}
+            </p>
+          ) : (
+            <Link
+              to={noraCreatePath({ resource: "deals", type: "list" })}
+              className="text-sm font-medium text-primary hover:underline px-1 py-2 nora-touch-target inline-flex items-center"
+            >
+              {translate("crm.dashboard.hotboard.focus_board.more_deals", {
+                count: remaining,
+              })}
+            </Link>
+          )
         ) : null}
       </div>
     </div>

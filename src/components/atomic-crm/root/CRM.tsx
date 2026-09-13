@@ -59,6 +59,7 @@ import { MobileTasksList } from "../tasks/MobileTasksList.tsx";
 import { ContactListMobile } from "../contacts/ContactList.tsx";
 import { ContactShow } from "../contacts/ContactShow.tsx";
 import { CompanyShow } from "../companies/CompanyShow.tsx";
+import { DealShowMobile } from "../deals/DealShowMobile.tsx";
 import { NoteShowPage } from "../notes/NoteShowPage.tsx";
 import { useNoraResourceAliasRoutes } from "../routing/NoraResourceAliasRoutes";
 import { OperationProvider } from "../operations/OperationProvider";
@@ -349,7 +350,10 @@ const MobileAdmin = (
       children: <Route path=":id/notes/:noteId" element={<NoteShowPage />} />,
     },
     companies: { show: CompanyShow },
-    deals: {},
+    // W7-M1: show only. The mobile app deliberately has no Vorgangsliste,
+    // Kanban, create or edit surface — registering more here would hand the
+    // alias router routes that nothing on mobile can navigate back out of.
+    deals: { show: DealShowMobile },
   });
 
   // No PersistQueryClientProvider: `Admin` (ra-core CoreAdminContext) already
@@ -397,6 +401,14 @@ const MobileAdmin = (
         <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
       </Resource>
       <Resource name="companies" show={CompanyShow} />
+      {/* Show only, so `hasList`/`hasEdit` stay false for deals on mobile and
+          no generic react-admin surface offers a Vorgangsliste or Bearbeiten
+          link that would go nowhere. This registration only supplies the
+          react-admin resource definition (`hasShow`). It serves no URL: the
+          alias routes above serve /vorgaenge/:id/show, and their
+          LegacyPathRedirect rewrites /deals/* to /vorgaenge/* before this
+          resource's own deals/* route can match. */}
+      <Resource name="deals" show={DealShowMobile} />
       <Resource name="tasks" list={MobileTasksList} />
     </Admin>
   );

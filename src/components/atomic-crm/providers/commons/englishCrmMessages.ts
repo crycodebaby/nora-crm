@@ -270,6 +270,7 @@ export const englishCrmMessages = {
     },
     deals: {
       name: "Deal |||| Deals",
+      forcedCaseName: "Deal",
       fields: {
         name: "Name",
         description: "Description",

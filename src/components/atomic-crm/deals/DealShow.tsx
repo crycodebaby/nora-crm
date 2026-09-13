@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { isValid } from "date-fns";
 import { Archive, ArchiveRestore } from "lucide-react";
 import {
   InfiniteListBase,
@@ -22,8 +21,6 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import { NoteCreate } from "../notes/NoteCreate";
 import { NotesIterator } from "../notes/NotesIterator";
-import { useGetSalesName } from "../sales/useGetSalesName";
-import { useConfigurationContext } from "../root/ConfigurationContext";
 import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraSectionCard } from "../misc/NoraSectionCard";
@@ -34,13 +31,7 @@ import { DealTasksSection } from "./DealTasksSection";
 import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
-import {
-  findDealLabel,
-  formatDealAmount,
-  formatISODateString,
-  getFollowUpStatus,
-  isDealTerminalStage,
-} from "./dealUtils";
+import { useDealShowFacts } from "./useDealShowFacts";
 import { isNoraRecordId } from "../routing/noraRoutes";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
@@ -79,19 +70,17 @@ export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
 
 const DealShowContent = () => {
   const translate = useTranslate();
-  const { dealStages, dealCategories, currency } = useConfigurationContext();
   const record = useRecordContext<Deal>();
-  const salesName = useGetSalesName(record?.sales_id);
+  const {
+    stageLabel,
+    categoryLabel,
+    amountLabel,
+    followUpDateLabel,
+    followUpStatus,
+    showFollowUp,
+    salesName,
+  } = useDealShowFacts(record);
   if (!record) return null;
-
-  const categoryLabel =
-    dealCategories.find((c) => c.value === record.category)?.label ??
-    record.category;
-  const stageLabel = findDealLabel(dealStages, record.stage);
-  const showFollowUp = !isDealTerminalStage(record.stage);
-  const followUpStatus = showFollowUp
-    ? getFollowUpStatus(record.expected_closing_date)
-    : null;
 
   return (
     <div className="nora-detail-scroll flex flex-col min-h-0 flex-1">
@@ -166,11 +155,7 @@ const DealShowContent = () => {
                 label={translate(
                   "resources.deals.fields.expected_closing_date",
                 )}
-                value={
-                  isValid(new Date(record.expected_closing_date))
-                    ? formatISODateString(record.expected_closing_date)
-                    : translate("resources.deals.invalid_date")
-                }
+                value={followUpDateLabel}
                 extra={
                   showFollowUp && followUpStatus === "upcoming" ? (
                     <DealFollowUpBadge
@@ -182,14 +167,11 @@ const DealShowContent = () => {
               />
               <DealFact
                 label={translate("resources.deals.fields.amount")}
-                value={formatDealAmount(record.amount, currency, {
-                  notation: "compact",
-                  minimumSignificantDigits: 3,
-                })}
+                value={amountLabel}
               />
               <DealFact
                 label={translate("resources.deals.fields.sales_id")}
-                value={salesName ?? "—"}
+                value={salesName}
               />
             </div>
           </NoraSectionCard>

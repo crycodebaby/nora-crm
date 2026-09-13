@@ -276,6 +276,7 @@ export const germanCrmMessages = {
     },
     deals: {
       name: "Vorgang |||| Vorgänge",
+      forcedCaseName: "Vorgang",
       fields: {
         name: "Titel",
         description: "Beschreibung",
