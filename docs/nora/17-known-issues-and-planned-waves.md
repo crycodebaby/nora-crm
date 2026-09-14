@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-13. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-14. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -239,21 +239,16 @@ Aus einer frühen Analyse benannt, seither **nicht** in einer Session verifizier
 
 ## I. Build, Bundle und CI
 
-Das **Build-/Bundle-Gate ist seit H2 (`PRODUCTION VERIFIED` 2026-09-10) wieder grün** — Entry 1009 kB gegen das
-unveränderte Budget von 1050 kB, Gesamt 2392 kB gegen 2600 kB. Der **Gesamt-CI bleibt rot**, ausschließlich
-wegen I.2 (E2E-Bootstrap). Diese beiden Aussagen sind nicht dasselbe. Die folgenden Punkte sind vorbestehend und
-unabhängig voneinander; H2 hat sie weder verursacht noch verändert. **H1 und H2 sind abgeschlossen** — Evidenz:
+Das **Build-/Bundle-Gate ist seit H2 (`PRODUCTION VERIFIED` 2026-09-10) grün** — Entry 1009 kB gegen das
+unveränderte Budget von 1050 kB, Gesamt 2392 kB gegen 2600 kB. **H1 und H2 sind abgeschlossen** — Evidenz:
 `releases/2026-09.md` „Entry-Chunk-Budget H2" und „Visualizer Production Exclusion H1"; der frühere Punkt I.1
 (Entry-Chunk über Budget) ist aufgelöst und liegt im Originalwortlaut im Archiv (`releases/2026-09.md`, Anhang
 zum H2-Eintrag).
 
-### I.2 E2E-Bootstrap schlägt fehl
-
-**Status: `OPEN`**, vorbestehend, eigene Baseline — weder H1 noch H2 zuzurechnen. Der E2E-Bootstrap meldet
-`First E2E auth user was not bootstrapped as an active admin` und
-`A user with this email address has already been registered`: der erste E2E-Auth-Benutzer existiert bereits, wird
-aber nicht als aktiver Administrator eingerichtet. Nicht untersucht; vor Bearbeitung gegen den aktuellen
-Bootstrap-Pfad und den tatsächlichen Zustand des E2E-Projekts prüfen.
+Der frühere Punkt **I.2 (E2E-Bootstrap schlägt fehl) ist `RESOLVED`** durch E2E-B1 (Test-Infrastruktur-Commit
+`7384431d`, GitHub Actions „Check" Run #104 mit allen sechs Jobs grün). Ursache und Evidenz:
+`releases/2026-09.md` „E2E-Testisolation E2E-B1" (dort auch der I.2-Originalwortlaut); Regel: `06` „2026-09-14 –
+E2E-Testisolation"; Runbook: [`21`](21-agent-runbooks.md) Sektion 16. Die folgenden Punkte sind davon unabhängig.
 
 ### I.3 `vite.demo.config.ts` aktiviert den Visualizer weiterhin unabhängig
 
@@ -269,3 +264,17 @@ wieder zu öffnen.
 Überschreitung `dist/stats.html`. Nach H1 entsteht diese Datei lokal nur noch bei `ANALYZE=true`; in CI bleibt
 der Hinweis korrekt, weil der Build-Step die Variable setzt. H2 hat den Text bewusst **nicht** angefasst (der
 Slice berührte nur eine Importzeile); der kleine Textnachzug bleibt offen.
+
+### I.5 E2E-Code ist vom App-Typecheck nicht vollständig abgedeckt (F-2)
+
+**Status: `OPEN (LOW)`**, festgestellt in E2E-B1 (2026-09-14); kein Release-Blocker. `npm run typecheck` deckt
+`e2e/` nicht vollständig ab — Typfehler in Fixtures und Specs fallen dort nicht zwingend auf. **Abhilfe** (eigener
+kleiner Slice, nicht beauftragt): dedizierter E2E-Typecheck oder saubere tsconfig-/Script-Lösung.
+
+### I.6 Legacy-Runner `rbac_rls_first_admin_parallel_runner.ps1` löscht `sales`/`auth.users` direkt (F-3)
+
+**Status: `OPEN (LOW)`**, festgestellt in E2E-B1 (2026-09-14). Das Cleanup am Ende des Skripts
+(`delete from public.sales …` / `delete from auth.users …`) widerspricht dem W6-B-Vertrag (direkte `sales`-DELETEs
+sind für alle Rollen verweigert, [`19`](19-user-lifecycle-architecture.md) §15). Die E2E-Isolation nutzt den Runner
+**nicht**. Bekannter zweiter Mangel desselben Skripts (Windows-Regex): Abschnitt B, Eintrag W9. **Abhilfe** (eigener
+Slice, nicht beauftragt): Cleanup auf Rollback bzw. W6-B-konformen Pfad umstellen, zusammen mit W9 bewerten.

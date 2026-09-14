@@ -1,6 +1,6 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-13 · Load-Klasse: **ALWAYS** · Status: **CURRENT SNAPSHOT**
+Stand: 2026-09-14 · Load-Klasse: **ALWAYS** · Status: **CURRENT SNAPSHOT**
 
 Dieses Dokument besitzt den **heutigen Zustand** von Nora — nicht die Contracts der Subsysteme, nicht deren Runbooks, nicht die offenen Punkte und nicht die Release-Historie. Welches Dokument wofür zuständig ist und wann es geladen wird, entscheidet ausschließlich der Router [`README.md`](README.md); dieses Dokument führt bewusst keine zweite Routingtabelle und keine Owner-Liste. Die aktuellen Release- und Laufzeitfakten stehen hier; die historische Beweisführung (RC-SHAs, Migrations-Hashes, Testzahlen, Live-Beweise, Zwischenfälle) liegt im Archiv [`releases/`](releases/README.md). **Repository-Kopf und Laufzeit-Kopf sind zwei verschiedene Fakten** — siehe Abschnitt „Vier Fakten".
 
@@ -38,7 +38,7 @@ Security wird **serverseitig** durchgesetzt; die UI ist keine Security Boundary.
 | Edge Function `users` | **Version 9** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-07 |
 | Edge Function `brevo-email-events` | **Version 2** (`verify_jwt = false`, Bearer-Token) | dito |
 | Alle übrigen Edge Functions im Repo (`calendar-*`, `merge_contacts`, `delete_note_attachments`, `update_password`, `postmark`, `mcp`) | **nicht in Production deployt** — live sind ausschließlich `users` und `brevo-email-events` | dito |
-| Build / CI | **Build-/Bundle-Gate GREEN**. **Gesamt-CI weiterhin RED** — ausschließlich wegen der dokumentierten E2E-Bootstrap-Baseline, [`17`](17-known-issues-and-planned-waves.md) Abschnitt I | Archiv `releases/2026-09.md` |
+| Build / CI (Repository, **nicht** Laufzeit) | **Gesamt-CI GREEN**: GitHub Actions „Check" Run #104 (ID `34791859868`) auf `7384431d917eed79000d50437a53abd514bc27c5` — alle sechs Jobs erfolgreich (Prettier, Typecheck, Test, ESLint, Build, `e2e-test`); Playwright 7 passed / 1 bewusst übersprungen / 0 failed / 0 flaky. `7384431d` ändert ausschließlich E2E-Test-Infrastruktur (E2E-B1) — **kein** Laufzeit-Release, keine Production-Verifikation, ein durch den Push ausgelöstes Vercel-Deployment wurde nicht geprüft; die Zeile „Letzter Laufzeit-Release" bleibt davon unberührt. E2E-Isolationsregeln: [`21`](21-agent-runbooks.md) Sektion 16 | Archiv `releases/2026-09.md` „E2E-Testisolation E2E-B1" |
 
 Die Release-/Deploy-Grundreihenfolge für schemaabhängige Wellen steht in [`07-agent-change-checklist.md`](07-agent-change-checklist.md). **Bei PWA-Clients ist ein Reload allein kein belastbarer Nachweis dafür, welcher Build aktiv ist** — technischer Contract: [`24`](24-pwa-and-update-lifecycle.md); Live-Smoke: [`21`](21-agent-runbooks.md) Sektion 14.
 
@@ -59,7 +59,6 @@ Aktiv ist **Wave 7**; ihre offenen Folgepunkte (Vorgänge, mobile Vorgang-Fläch
 
 Global zustandsprägende offene Punkte:
 
-- Gesamt-CI rot wegen bekannter E2E-Bootstrap-Baseline → [`17`](17-known-issues-and-planned-waves.md) Abschnitt I
 - Wave 7 Folgepunkte → [`17`](17-known-issues-and-planned-waves.md) Abschnitt G
 - Kalender nicht produktiv nutzbar → [`11`](11-google-calendar-rbac.md) / [`14`](14-google-calendar-readonly-implementation.md)
 

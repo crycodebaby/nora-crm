@@ -1,6 +1,6 @@
 # 21 – Agent Runbooks (conditional)
 
-Stand: 2026-09-11 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
+Stand: 2026-09-14 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
 
 Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für Änderungen an Nora: Testsequenzen, Verifikationsschritte, wiederkehrende Fallstricke. Sie standen früher als `Bei <X> zusätzlich:`-Blöcke in [`07`](07-agent-change-checklist.md) und wurden damit bei **jeder** Aufgabe mitgeladen, auch bei einer reinen Label-Änderung. [`07`](07-agent-change-checklist.md) behält nur das universelle Change Protocol; hier liegt alles Bedingte.
 
@@ -29,6 +29,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Notification-Karte, Toasts, Feedback-Schicht, Overlays | [13. Notifications und Feedback](#13-notifications-und-feedback) |
 | Service Worker, Update-Hinweis, Live-Smoke nach Deployment | [14. PWA und Update-Verhalten](#14-pwa-und-update-verhalten) |
 | Kunden-/Kontaktanlage, `customer_kind`, Hauptansprechpartner, Kunde eines Vorgangs (`deals.company_id`) | [15. Kunden, Kontakte und Hauptansprechpartner](#15-kunden-kontakte-und-hauptansprechpartner) |
+| E2E-Tests (Playwright), Fixtures, Test-Reset, CI-Job `e2e-test` | [16. E2E-Testinfrastruktur und Isolation](#16-e2e-testinfrastruktur-und-isolation) |
 
 ---
 
@@ -103,7 +104,7 @@ Reihenfolge:
 - [ ] `rbac_rls_verification.sql` gehört wie `rbac_rls_production_check.sql` auf die **leere** Datenbank (vor `setup` oder nach `teardown`): ihre erste Assertion lautet „`nora_rls_test` must not exist after production migrations only". Nach `setup` schlägt sie fehl — das ist Reihenfolge, kein Regressionsbefund
 - [ ] `public_privilege_hardening_verification.sql` an beliebiger Stelle nach einem `db reset` — self-contained, rollt zurück, hinterlässt keine Testrolle
 - [ ] die Lifecycle-Suiten W1 → W6-B laufen **je zweimal** (leere DB **und** mit Fixtures) in der Reihenfolge aus Sektion 6
-- [ ] Bekannter Windows-Tooling-Bug in `rbac_rls_first_admin_parallel_runner.ps1` (die Vorbedingungs-Regex parst die mehrzeilige `psql`-Ausgabe falsch — kein SQL-/Produktfehler) samt Workaround: [`17`](17-known-issues-and-planned-waves.md) Abschnitt B, Eintrag W9. Der Workaround bildet die im Skript enthaltene SQL manuell nach (zwei parallele `docker exec … psql`-Sessions gegen `auth.users`, danach die Verifikation „exakt 1 Admin + 1 Viewer", dann Cleanup) — das Skript **nicht** nebenbei patchen
+- [ ] Bekannter Windows-Tooling-Bug in `rbac_rls_first_admin_parallel_runner.ps1` (die Vorbedingungs-Regex parst die mehrzeilige `psql`-Ausgabe falsch — kein SQL-/Produktfehler) samt Workaround: [`17`](17-known-issues-and-planned-waves.md) Abschnitt B, Eintrag W9. Der Workaround bildet die im Skript enthaltene SQL manuell nach (zwei parallele `docker exec … psql`-Sessions gegen `auth.users`, danach die Verifikation „exakt 1 Admin + 1 Viewer", dann Cleanup) — das Skript **nicht** nebenbei patchen. Achtung: das `DELETE`-Cleanup des Skripts auf `sales`/`auth.users` ist seit W6-B verweigert ([`17`](17-known-issues-and-planned-waves.md) I.6) — Fixtures im Workaround per Rollback entfernen
 
 ## 6. Mitarbeiter-Lifecycle W1–W6-B
 
@@ -313,3 +314,39 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 ### Vorgang ↔ Kunde (`deals.company_id`)
 
 - [ ] bei jeder Änderung an `deals.company_id`, am Vorgang-Kunde-Fremdschlüssel oder an einem Schreibpfad, der den Kunden eines Vorgangs setzt (inkl. Schnellerfassung): `supabase/tests/deal_company_required_verification.sql` nach `db reset` (self-contained, rollt zurück; leere DB oder mit Fixtures) — Invariante: [`03`](03-data-model-guardrails.md) §1.7
+
+## 16. E2E-Testinfrastruktur und Isolation
+
+**Wann:** Änderungen an `e2e/` (Specs, `fixtures.ts`, `helpers/e2eState.ts`), am CI-Job `e2e-test` oder bei E2E-Flakes. Regel mit Begründung: [`06`](06-decision-log.md) „2026-09-14 – E2E-Testisolation"; offene Punkte: [`17`](17-known-issues-and-planned-waves.md) Abschnitt I (I.5, I.6). Hier steht nur, **wie** man daran sicher arbeitet.
+
+### Umgebung und Identität
+
+- [ ] E2E läuft gegen einen **lokalen, disposable** Supabase-Stack (lokal und im GitHub-Runner) — kein persistentes Remote-„E2E-Projekt" voraussetzen, nie gegen Production
+- [ ] **genau ein** kanonischer E2E-Admin (`admin@nora-e2e.local`, Worker-Fixture `e2eAdmin`): angelegt nur auf einem leeren Stack (Rolle über den First-Admin-Trigger), sonst aus dem DB-Zustand wiedererkannt — ein Worker-Neustart, Retry oder zweiter Lauf auf demselben Stack muss ihn ohne Neuanlage finden
+- [ ] Specs legen **keine** eigenen Mitarbeiter an; sie nutzen `e2eAdmin`
+
+### Reset
+
+- [ ] Geschäftsdaten werden vor jedem Test über die **authentifizierte Session des kanonischen Admins** (Admin-RLS) gelöscht, nicht per `service_role` — `service_role` dient nur zum Anlegen von Testdaten und für lesende Prüfungen
+- [ ] aktueller Reset-Scope (`BUSINESS_TABLES`, FK-sichere Reihenfolge): `tasks`, `contact_notes`, `deal_notes`, `deals`, `contacts`, `companies`, `tags`
+- [ ] **nicht** gelöscht werden: `sales`, `auth.users`, `audit_events`, `configuration` (nur als kanonische Zeile `id = 1`, `config = {}` geprüft), Seed-/Lookup-Daten (z. B. `favicons_excluded_domains`), technischer Lifecycle-Zustand
+
+### Fail-closed
+
+- [ ] jedes Supabase-`{ error }` wird ausgewertet — ein ignoriertes `{ error }` war die Ursache der CI-Baseline vor E2E-B1
+- [ ] nach dem Reset Postconditions prüfen (Tabellen leer, `configuration` kanonisch, Identität unverändert); keine automatische Reparatur
+- [ ] ein unerwarteter zweiter Mitarbeiter oder Auth-Benutzer ist **kein** Cleanup-Problem, sondern ein Verstoß gegen den Test-State-Vertrag — Ursache im Test suchen, nicht im Reset wegräumen
+
+### Erweiterungsregel
+
+- [ ] erzeugt ein neuer Test einen **neuen Geschäftsdatentyp**, braucht er einen **zweiten Mitarbeiter**, erzeugt er **Selbstkontakte** oder **Checklisten-/Lifecycle-Zustand**, wird die Isolationsstrategie bewusst geprüft und erweitert (z. B. `BUSINESS_TABLES` samt Postcondition) — kein generisches „delete everything"
+- [ ] wer einen zweiten Mitarbeiter braucht, modelliert ihn ausdrücklich und W6-B-konform; das Identitäts-Gate lehnt zusätzliche Zeilen heute ab
+
+### Verifikation und Flakes
+
+- [ ] bei Änderungen an Fixtures oder Isolation: gezielte Tests, CI-äquivalente Full Suite **und** ein zweiter Lauf auf demselben Stack (beweist Wiedererkennung statt Neuanlage)
+- [ ] Flake-Fixes über **semantische Readiness-Signale** (Ziel-Oberfläche sichtbar), nicht über Sleeps, höhere Retries oder `.first()` zum Kaschieren. Die Kontaktlisten-Readiness in `menu.goToContacts` hängt heute an `.nora-list-row`; ein neuer E2E mit Kontaktfiltern braucht dafür einen expliziten semantischen Hook
+
+### Fehlersignaturen
+
+- [ ] `First E2E auth user was not bootstrapped as an active admin`, `email_exists` / „already been registered" oder ein `E2E_IDENTITY_*`-Code deuten bei dieser Architektur zuerst auf einen Bruch der Identitäts-Isolation (übrig gebliebener oder zusätzlicher Benutzer), **nicht** automatisch auf einen defekten First-Admin-Trigger — ein weiterer Benutzer auf einem nicht leeren Stack wird korrekt `viewer`

@@ -1,6 +1,6 @@
 # Nora Documentation
 
-Stand: 2026-09-13. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
+Stand: 2026-09-14. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
 
 Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md` nennt nur den Always-Kontext und verweist hierher; `16-current-state.md` beschreibt den Zustand und verweist hierher.
 
@@ -10,7 +10,7 @@ Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md
 |---|---|---|
 | **ALWAYS** | `AGENTS.md` · dieser Router · [`16`](16-current-state.md) · [`01`](01-domain-model.md) · [`03`](03-data-model-guardrails.md) · [`07`](07-agent-change-checklist.md) | jede Aufgabe |
 | **CONDITIONAL CURRENT CONTRACT** | die Subsystemdokumente aus der Tabelle „Architekturbereiche" — darunter [`22`](22-security-and-access.md) (Security / Access / RBAC / RLS / Grants / Authorization), [`23`](23-operations-errors-feedback.md) (Operationen / Fehler / Feedback, **sektionsweise** §0–§6) und [`24`](24-pwa-and-update-lifecycle.md) (PWA / Service Worker / Update-Lifecycle, **sektionsweise** §0–§9) | wenn das Subsystem betroffen ist |
-| **CONDITIONAL RUNBOOK** | [`21`](21-agent-runbooks.md) | **nur die betroffene Sektion** (1–15, siehe Architekturbereiche) — operative Zusatzschritte beim Ändern; **nie** als ganze Datei |
+| **CONDITIONAL RUNBOOK** | [`21`](21-agent-runbooks.md) | **nur die betroffene Sektion** (1–16, siehe Architekturbereiche) — operative Zusatzschritte beim Ändern; **nie** als ganze Datei |
 | **OPEN STATE** | [`17`](17-known-issues-and-planned-waves.md) | **nur die betroffene Sektion** (A–I, siehe Architekturbereiche); vollständig nur bei Roadmap-, Release- oder Cross-Cutting-Review |
 | **RATIONALE** | [`06`](06-decision-log.md) | nur bei Entscheidungs-/Begründungsbedarf, und dann **gezielt über den benannten Eintrag** aus der Architekturbereiche-Tabelle bzw. den thematischen Index in `06` — **nie** als ganze Datei |
 | **HISTORY** | [`releases/`](releases/README.md) | nur für historische Evidenz, Regression, Release-Abstammung oder Rekonstruktion |
@@ -55,7 +55,7 @@ Bei allen Änderungen an **Service Worker, Precache, Update-Verhalten, Offline-V
 | [`18-email-delivery-observability.md`](18-email-delivery-observability.md) | E-Mail-Zustellbeobachtung (Brevo-Vertrag, Operator-Konfiguration) |
 | [`19-user-lifecycle-architecture.md`](19-user-lifecycle-architecture.md) | aktuelle User-Lifecycle-Architektur, Roadmap W1–W10 |
 | [`20-product-changelog.md`](20-product-changelog.md) | benutzerseitige Nora-Produkthistorie |
-| [`21-agent-runbooks.md`](21-agent-runbooks.md) | **conditional** Agent Runbooks: subsystem- und situationsabhängige operative Zusatzschritte beim Ändern (Testsequenzen, Verifikationen, Fallstricke) — sektionsweise geladen (1–15), nie vollständig |
+| [`21-agent-runbooks.md`](21-agent-runbooks.md) | **conditional** Agent Runbooks: subsystem- und situationsabhängige operative Zusatzschritte beim Ändern (Testsequenzen, Verifikationen, Fallstricke) — sektionsweise geladen (1–16), nie vollständig |
 | [`22-security-and-access.md`](22-security-and-access.md) | **globaler Security- und Access-Contract**: Enforcement-Prinzip, Authentication vs. Authorization, Rollen (`sales.role`) und Capability-Rollen, globale Berechtigungsmatrix, Trust Boundaries, Database Enforcement (RLS, Grants, Default-Privilegien, neue `public`-Objekte, `SECURITY DEFINER`, privilegierte Read-Views, `nora_private`, PostgREST-Exposure), Session- und Executor-Integrität |
 | [`23-operations-errors-feedback.md`](23-operations-errors-feedback.md) | **Application-Contract für Operationen, Fehler und Feedback**: Operation Lifecycle (`pending`/`success`/`error`), Correlation und Identifier (`operation_id` ≠ `idempotency_key`), Idempotency / Retry / Replay / Ausführungsdisposition, Error Observatory (`operation_errors`) und operationsseitige Fehler-**Bedeutung**, Feedback-/Notification-**Bedeutung** auf Application-Ebene — **sektionsweise** geladen (§0–§6). **Kein** Fehlervertrag (→ [`03`](03-data-model-guardrails.md) §6), **kein** Audit (→ [`13`](13-crm-audit-retention.md)), **keine** Darstellung (→ [`02`](02-design-system.md)) |
 | [`24-pwa-and-update-lifecycle.md`](24-pwa-and-update-lifecycle.md) | **technischer PWA-/Update-Contract**: Service-Worker-Registrierungsgrenze, Update-Lifecycle und State-Invarianten (Prompt-Modus, wartender Worker, `applying` ≠ `activated`, `reloadRequired`), Update-Erkennung und Prüfkadenz, Aktivierung/Reload-Ownership/Abschluss-Handoff, Precache- und Cache-Grenze, Offline-Grenze, Installability-Grenze, Multi-Tab-Verhalten — **sektionsweise** geladen (§0–§9). **Keine** Präsentation (→ [`02`](02-design-system.md)), **keine** Verifikation/Build-Identität (→ [`21`](21-agent-runbooks.md) §14) |
@@ -82,6 +82,7 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 | Demo-Daten / Demo-Rollensimulation | [`05`](05-demo-data-guidelines.md) · [`04`](04-routing-i18n.md) Abschnitt Demo-Rollensimulation | Basisentscheidungen 2026-06-28 | — | 10 |
 | Nummern, Suche, Fensterauftrag, Checklisten | [`08`](08-numbering-and-global-search.md) · [`09`](09-window-order-workflow.md) · [`10`](10-checklists-snippets-audit.md) | Nummern 6c · Globale Suche 6d · Fensterauftrag 7a · Checklisten/Audit-Datenmodell 7b | G | 2 · 3 |
 | Build, Bundle-Budget, Visualizer, CI-Baselines | [`06`](06-decision-log.md) Einträge Visualizer Production Exclusion und Kernindizes und Bundle-Budget | Visualizer Production Exclusion · Kernindizes und Bundle-Budget | I | — |
+| E2E-Tests (Playwright), Test-Reset, E2E-Isolation | [`21`](21-agent-runbooks.md) Sektion 16 · `e2e/helpers/e2eState.ts` | E2E-Testisolation | I | 16 |
 | Produkt-Changelog, `/changelog`-Vertrag | [`20`](20-product-changelog.md) | — | — | — |
 | Projektziel, Nicht-Ziele | [`00`](00-project-context.md) | Basisentscheidungen 2026-06-28 | — | — |
 
