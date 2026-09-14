@@ -2,21 +2,12 @@ import { test, expect } from "./fixtures";
 
 test("first-run dashboard shows the Nora onboarding stepper", async ({
   page,
-  createSales,
+  e2eAdmin,
   loginAsAdmin,
 }) => {
-  const admin = await createSales({
-    email: "admin@nora-e2e.local",
-    first_name: "Nora",
-    last_name: "Admin",
-    password: "password",
-  });
-  expect(admin.role).toBe("admin");
-
-  await loginAsAdmin({
-    email: "admin@nora-e2e.local",
-    password: "password",
-  });
+  // First-run means an empty business state (no contacts, no notes), which
+  // resetBusinessState guarantees — not an empty employee table.
+  await loginAsAdmin(e2eAdmin);
 
   await expect(page).toHaveTitle(/Nora CRM/);
   await expect(

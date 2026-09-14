@@ -1,151 +1,54 @@
 import { test as base, expect, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { loginAsAdmin } from "./helpers/auth";
 import { runAuthRbacPreflight } from "./helpers/authPreflight";
+import {
+  ensureE2eAdmin,
+  resetBusinessState,
+  type E2eAdmin,
+  type E2eAdminCredentials,
+} from "./helpers/e2eState";
 
-const adminSupabase = createClient(
-  process.env.VITE_SUPABASE_URL ?? "http://127.0.0.1:54341",
-  process.env.SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
+const supabaseUrl = process.env.VITE_SUPABASE_URL ?? "http://127.0.0.1:54341";
 
-const CANONICAL_CONFIGURATION = { id: 1, config: {} };
+// Seeding/reading only: service_role holds no DELETE on business tables and
+// must not be used for resets (see helpers/e2eState.ts).
+const adminSupabase = createClient(supabaseUrl, process.env.SERVICE_ROLE_KEY!, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
-// Tables in FK-safe deletion order (children before parents)
-const TABLES = [
-  "tasks",
-  "contact_notes",
-  "deal_notes",
-  "deals",
-  "contacts",
-  "companies",
-  "tags",
-  "favicons_excluded_domains",
-  "sales",
-];
+// The one employee of the disposable E2E stack. Tests needing a second
+// employee must model it explicitly; the admin state gate rejects extra rows.
+const E2E_ADMIN_CREDENTIALS: E2eAdminCredentials = {
+  email: "admin@nora-e2e.local",
+  password: "password",
+  first_name: "Nora",
+  last_name: "Admin",
+};
 
-async function resetDb() {
-  for (const table of TABLES) {
-    // Supabase client delete need a where clause to get executed, so we use one that will match on all rows (id is not null)
-    await adminSupabase.from(table).delete().not("id", "is", null);
+const signInAsE2eAdmin = async (admin: E2eAdmin) => {
+  const publishableKey = process.env.VITE_SB_PUBLISHABLE_KEY;
+  if (!publishableKey) {
+    throw new Error("VITE_SB_PUBLISHABLE_KEY is required for the E2E reset");
   }
-
-  const { data: configuration, error: configurationError } = await adminSupabase
-    .from("configuration")
-    .upsert(CANONICAL_CONFIGURATION)
-    .select("id, config")
-    .single();
-
-  if (
-    configurationError ||
-    configuration?.id !== CANONICAL_CONFIGURATION.id ||
-    configuration.config == null ||
-    Array.isArray(configuration.config) ||
-    typeof configuration.config !== "object" ||
-    Object.keys(configuration.config).length !== 0
-  ) {
+  const client = createClient(supabaseUrl, publishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+  const { data, error } = await client.auth.signInWithPassword({
+    email: admin.email,
+    password: admin.password,
+  });
+  if (error || data.user?.id !== admin.userId) {
     throw new Error(
-      `Failed to restore canonical configuration: ${configurationError?.message ?? "unexpected row"}`,
+      `Canonical E2E admin sign-in for the business reset failed: ${error?.message ?? "session belongs to another user"}`,
     );
   }
-
-  // Delete all auth users (cascades to sales via DB trigger)
-  const { data } = await adminSupabase.auth.admin.listUsers();
-  await Promise.all(
-    data.users.map((user) => adminSupabase.auth.admin.deleteUser(user.id)),
-  );
-}
-
-async function createUser({
-  email,
-  password,
-  first_name,
-  last_name,
-}: {
-  email: string;
-  password: string;
-  first_name?: string;
-  last_name?: string;
-}) {
-  const { data, error } = await adminSupabase.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata:
-      first_name || last_name
-        ? {
-            first_name,
-            last_name,
-          }
-        : undefined,
-  });
-
-  if (error) {
-    throw new Error(`Failed to create user: ${error.message}`);
-  }
-
-  return data.user;
-}
-
-async function createSales({
-  first_name,
-  last_name,
-  email,
-  password,
-}: {
-  first_name: string;
-  last_name: string;
-  email: string;
-  password: string;
-}) {
-  const user = await createUser({
-    email,
-    password,
-    first_name,
-    last_name,
-  });
-
-  const deadline = Date.now() + 5_000;
-  let lastState = "sales profile not found";
-
-  while (Date.now() < deadline) {
-    const { data, error } = await adminSupabase
-      .from("sales")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (error) {
-      lastState = error.message;
-    } else if (
-      data?.user_id === user.id &&
-      data.role === "admin" &&
-      data.administrator === true &&
-      data.disabled === false
-    ) {
-      await runAuthRbacPreflight({
-        adminSupabase,
-        userId: user.id,
-        email,
-        password,
-      });
-      return data;
-    } else if (data) {
-      lastState = JSON.stringify({
-        user_id: data.user_id,
-        role: data.role,
-        administrator: data.administrator,
-        disabled: data.disabled,
-      });
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error(
-    `First E2E auth user was not bootstrapped as an active admin: ${lastState}`,
-  );
-}
+  return client;
+};
 
 async function createNotes({
   contactId,
@@ -257,7 +160,18 @@ const getMenuMethod = ({ page }: { page: Page; isMobile: boolean }) => ({
   },
   goToContacts: async () => {
     await page.getByRole("link", { name: "Kontakte" }).click();
-    await page.waitForLoadState("networkidle");
+    // Neither the URL nor networkidle proves the target page is rendered: the
+    // previous page (e.g. the dashboard, which links contacts too) can still be
+    // on screen. Wait for the contacts list surface itself — its rows
+    // (`nora-list-row` is only used by the contacts list, desktop and mobile)
+    // or its empty state. It replaces the previous page in one render.
+    await expect(page).toHaveURL(/\/#\/kontakte(?:\?.*)?$/);
+    await expect(
+      page
+        .locator(".nora-list-row")
+        .or(page.getByRole("heading", { name: "Keine Kontakte gefunden" }))
+        .first(),
+    ).toBeVisible();
   },
 });
 
@@ -268,38 +182,63 @@ const dismissToast = async (page: Page, content: string) => {
   await page.waitForLoadState("networkidle");
 };
 
-export const test = base.extend<{
-  resetDb: void;
-  createUser: typeof createUser;
-  createSales: typeof createSales;
-  createCompany: typeof createCompany;
-  createContact: typeof createContact;
-  createNotes: typeof createNotes;
-  menu: ReturnType<typeof getMenuMethod>;
-  loginAsAdmin: (credentials: {
-    email: string;
-    password: string;
-  }) => Promise<void>;
-  dismissToast: (content: string) => Promise<void>;
-}>({
-  resetDb: [
+export const test = base.extend<
+  {
+    resetBusinessState: void;
+    createCompany: typeof createCompany;
+    createContact: typeof createContact;
+    createNotes: typeof createNotes;
+    menu: ReturnType<typeof getMenuMethod>;
+    loginAsAdmin: (credentials: {
+      email: string;
+      password: string;
+    }) => Promise<void>;
+    dismissToast: (content: string) => Promise<void>;
+  },
+  {
+    e2eAdmin: E2eAdmin;
+    e2eAdminSupabase: SupabaseClient;
+  }
+>({
+  e2eAdmin: [
     // The first argument to a Playwright fixture function must use object destructuring ({}) — _ is not allowed.
     // Playwright uses this to statically analyze which fixtures are requested.
     // eslint-disable-next-line no-empty-pattern
     async ({}, use) => {
-      await resetDb();
+      // Supabase state is the source of truth: a restarted worker (retry,
+      // next project, next run) re-derives and reuses the same admin.
+      await use(
+        await ensureE2eAdmin({
+          serviceClient: adminSupabase,
+          credentials: E2E_ADMIN_CREDENTIALS,
+          runPreflight: runAuthRbacPreflight,
+        }),
+      );
+    },
+    { scope: "worker" },
+  ],
+  e2eAdminSupabase: [
+    async ({ e2eAdmin }, use) => {
+      const client = await signInAsE2eAdmin(e2eAdmin);
+      try {
+        await use(client);
+      } finally {
+        await client.auth.signOut({ scope: "local" });
+      }
+    },
+    { scope: "worker" },
+  ],
+  resetBusinessState: [
+    async ({ e2eAdmin, e2eAdminSupabase }, use) => {
+      await resetBusinessState({
+        adminClient: e2eAdminSupabase,
+        serviceClient: adminSupabase,
+        admin: e2eAdmin,
+      });
       await use();
     },
     { auto: true },
   ],
-  // eslint-disable-next-line no-empty-pattern
-  createUser: async ({}, cb) => {
-    await cb(createUser);
-  },
-  // eslint-disable-next-line no-empty-pattern
-  createSales: async ({}, cb) => {
-    await cb(createSales);
-  },
   // eslint-disable-next-line no-empty-pattern
   createCompany: async ({}, cb) => {
     await cb(createCompany);

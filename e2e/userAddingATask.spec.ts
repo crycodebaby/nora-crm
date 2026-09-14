@@ -1,24 +1,17 @@
 import { expect, test } from "./fixtures";
 
 test.describe("user adding a task", () => {
-  test.beforeEach(async ({ createSales, createContact, createCompany }) => {
-    const sales = await createSales({
-      first_name: "John",
-      last_name: "Doe",
-      email: "john@doe.com",
-      password: "password",
-    });
-
+  test.beforeEach(async ({ e2eAdmin, createContact, createCompany }) => {
     const company = await createCompany({
       name: "Smith Corp",
-      salesId: sales.id,
+      salesId: e2eAdmin.id,
     });
 
     await createContact({
       first_name: "Jane",
       last_name: "Smith",
       title: "CEO",
-      sales_id: sales.id,
+      sales_id: e2eAdmin.id,
       company_id: company.id,
       notes: [{ text: "Met at a conference." }],
     });
@@ -27,7 +20,7 @@ test.describe("user adding a task", () => {
       first_name: "Bob",
       last_name: "Johnson",
       title: "CTO",
-      sales_id: sales.id,
+      sales_id: e2eAdmin.id,
       company_id: company.id,
     });
 
@@ -35,21 +28,19 @@ test.describe("user adding a task", () => {
       first_name: "Alice",
       last_name: "Williams",
       title: "CFO",
-      sales_id: sales.id,
+      sales_id: e2eAdmin.id,
       company_id: company.id,
     });
   });
   test("user adding a task", async ({
     page,
     isMobile,
+    e2eAdmin,
     menu,
     loginAsAdmin,
     dismissToast,
   }) => {
-    await loginAsAdmin({
-      email: "john@doe.com",
-      password: "password",
-    });
+    await loginAsAdmin(e2eAdmin);
     await expect(page).toHaveTitle(/Nora CRM/);
 
     await menu.goToContacts();

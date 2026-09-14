@@ -4,37 +4,27 @@ test("user adds a tag to several contacts", async ({
   page,
   isMobile,
   createContact,
-  createSales,
+  e2eAdmin,
   menu,
   loginAsAdmin,
   dismissToast,
 }) => {
   test.skip(isMobile, "Bulk tag is only available on desktop");
 
-  const sales = await createSales({
-    email: "john@doe.com",
-    first_name: "John",
-    last_name: "Doe",
-    password: "password",
-  });
-
   await createContact({
     first_name: "Ada",
     last_name: "Lovelace",
-    sales_id: sales.id,
+    sales_id: e2eAdmin.id,
     title: "CTO",
   });
   await createContact({
     first_name: "Grace",
     last_name: "Hopper",
-    sales_id: sales.id,
+    sales_id: e2eAdmin.id,
     title: "Rear Admiral",
   });
 
-  await loginAsAdmin({
-    email: "john@doe.com",
-    password: "password",
-  });
+  await loginAsAdmin(e2eAdmin);
 
   // First-run dashboards without notes are valid; navigate straight to Kontakte.
   await menu.goToContacts();

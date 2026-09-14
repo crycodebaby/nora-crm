@@ -2,29 +2,19 @@ import { test, expect } from "./fixtures";
 
 test("dashboard shows Hotboard after a contact note exists", async ({
   page,
-  createSales,
+  e2eAdmin,
   createContact,
   loginAsAdmin,
 }) => {
-  const admin = await createSales({
-    email: "hotboard@nora-e2e.local",
-    first_name: "Nora",
-    last_name: "Hotboard",
-    password: "password",
-  });
-
   await createContact({
     first_name: "Ada",
     last_name: "Lovelace",
-    sales_id: admin.id,
+    sales_id: e2eAdmin.id,
     title: "CTO",
     notes: [{ text: "Erste Kontaktnotiz für das Hotboard." }],
   });
 
-  await loginAsAdmin({
-    email: "hotboard@nora-e2e.local",
-    password: "password",
-  });
+  await loginAsAdmin(e2eAdmin);
 
   await expect(page).toHaveTitle(/Nora CRM/);
 
