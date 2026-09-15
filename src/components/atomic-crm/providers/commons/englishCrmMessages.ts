@@ -414,6 +414,10 @@ export const englishCrmMessages = {
       },
       validation: {
         note_or_attachment_required: "A note or an attachment is required",
+        attachment_file_type:
+          "Not attached – file type not allowed: %{names}. Allowed are images (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX), TXT and CSV. |||| Not attached – file types not allowed: %{names}. Allowed are images (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX), TXT and CSV.",
+        attachment_file_size:
+          "Not attached – larger than 50 MB: %{names} |||| Not attached – larger than 50 MB: %{names}",
       },
     },
     sales: {

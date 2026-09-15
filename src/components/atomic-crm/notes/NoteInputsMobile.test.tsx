@@ -1,4 +1,5 @@
 import { composeStories } from "@storybook/react-vite";
+import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import * as stories from "./NoteInputsMobile.stories";
 
@@ -71,6 +72,48 @@ describe("NoteInputsMobile", () => {
 
     await expect
       .element(screen.getByText("A note or an attachment is required"))
+      .not.toBeInTheDocument();
+  });
+
+  it("restricts the file picker to the attachment allowlist", async () => {
+    const screen = await render(<Default />);
+    await expect
+      .element(screen.getByRole("button", { name: "Attach document" }))
+      .toBeVisible();
+
+    const accept = screen.container
+      .querySelector('input[type="file"]')
+      ?.getAttribute("accept")
+      ?.split(",");
+    expect(accept).toContain("application/pdf");
+    expect(accept).not.toContain("image/svg+xml");
+    expect(accept).not.toContain("text/html");
+  });
+
+  it("attaches allowed files and refuses disallowed ones with a message", async () => {
+    const screen = await render(<Default />);
+    await expect
+      .element(screen.getByRole("button", { name: "Attach document" }))
+      .toBeVisible();
+    const input = screen.container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    await userEvent.upload(input, [
+      new File(["%PDF"], "angebot.pdf", { type: "application/pdf" }),
+      new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" }),
+    ]);
+
+    await expect
+      .element(
+        page.getByText(/Not attached – file type not allowed: logo\.svg/),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("link", { name: "angebot.pdf" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("link", { name: "logo.svg" }))
       .not.toBeInTheDocument();
   });
 });

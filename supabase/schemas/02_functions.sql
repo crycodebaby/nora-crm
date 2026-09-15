@@ -3,56 +3,6 @@
 -- This file declares all PL/pgSQL functions in the public schema.
 --
 
-CREATE OR REPLACE FUNCTION "public"."cleanup_note_attachments"() RETURNS "trigger"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-    DECLARE
-      payload jsonb;
-      request_headers jsonb;
-      auth_header text;
-    BEGIN
-      request_headers := coalesce(
-        nullif(current_setting('request.headers', true), '')::jsonb,
-        '{}'::jsonb
-      );
-      auth_header := request_headers ->> 'authorization';
-
-      IF auth_header IS NULL OR auth_header = '' THEN
-        IF TG_OP = 'DELETE' THEN
-          RETURN OLD;
-        END IF;
-
-        RETURN NEW;
-      END IF;
-
-      payload := jsonb_build_object(
-        'old_record', OLD,
-        'record', NEW,
-        'type', TG_OP
-      );
-
-      PERFORM net.http_post(
-        url := public.get_note_attachments_function_url(),
-        body := payload,
-        params := '{}'::jsonb,
-        headers := jsonb_build_object(
-          'Content-Type',
-          'application/json',
-          'Authorization',
-          auth_header
-        ),
-        timeout_milliseconds := 10000
-      );
-
-      IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-      END IF;
-
-      RETURN NEW;
-    END;
-    $$;
-
 CREATE OR REPLACE FUNCTION "public"."get_avatar_for_email"("email" "text") RETURNS "text"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
@@ -97,54 +47,6 @@ begin
     );
 end;
 $$;
-
-CREATE OR REPLACE FUNCTION "public"."get_note_attachments_function_url"() RETURNS "text"
-    LANGUAGE "plpgsql"
-    SET "search_path" TO 'public'
-    AS $$
-    DECLARE
-      issuer text;
-      function_url text;
-    BEGIN
-      issuer := coalesce(
-        nullif(current_setting('request.jwt.claim.iss', true), ''),
-        (
-          coalesce(
-            nullif(current_setting('request.jwt.claims', true), ''),
-            '{}'
-          )::jsonb ->> 'iss'
-        )
-      );
-      issuer := nullif(issuer, '');
-      IF issuer IS NOT NULL THEN
-        issuer := rtrim(issuer, '/');
-        IF right(issuer, 8) = '/auth/v1' THEN
-          function_url :=
-            left(issuer, length(issuer) - 8) || '/functions/v1/delete_note_attachments';
-
-          IF function_url LIKE 'http://127.0.0.1:%' THEN
-            RETURN replace(
-              function_url,
-              'http://127.0.0.1:',
-              'http://host.docker.internal:'
-            );
-          END IF;
-
-          IF function_url LIKE 'http://localhost:%' THEN
-            RETURN replace(
-              function_url,
-              'http://localhost:',
-              'http://host.docker.internal:'
-            );
-          END IF;
-
-          RETURN function_url;
-        END IF;
-      END IF;
-
-      RETURN 'http://host.docker.internal:54321/functions/v1/delete_note_attachments';
-    END;
-    $$;
 
 CREATE OR REPLACE FUNCTION "public"."get_user_id_by_email"("email" "text") RETURNS TABLE("id" "uuid")
     LANGUAGE "plpgsql" SECURITY DEFINER

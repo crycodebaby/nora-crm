@@ -1,4 +1,5 @@
 import { composeStories } from "@storybook/react-vite";
+import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import * as stories from "./NoteInputs.stories";
 import { NoteInputsStory } from "./NoteInputs.stories";
@@ -153,6 +154,37 @@ describe("NoteInputs", () => {
 
     await expect
       .element(screen.getByText("A note or an attachment is required"))
+      .not.toBeInTheDocument();
+  });
+
+  it("refuses disallowed attachment types with a message and keeps allowed ones", async () => {
+    const screen = await render(<Default />);
+    await screen.getByRole("button", { name: "Show options" }).click();
+    const input = screen.container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
+
+    await userEvent.upload(input, [
+      new File(["%PDF"], "angebot.pdf", { type: "application/pdf" }),
+      new File(["<html/>"], "seite.html", { type: "text/html" }),
+      new File(["a;b"], "export.csv", { type: "application/vnd.ms-excel" }),
+    ]);
+
+    await expect
+      .element(
+        page.getByText(
+          /Not attached – file types not allowed: seite\.html, export\.csv/,
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("link", { name: "angebot.pdf" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("link", { name: "seite.html" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("link", { name: "export.csv" }))
       .not.toBeInTheDocument();
   });
 });

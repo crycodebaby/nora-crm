@@ -423,6 +423,10 @@ export const germanCrmMessages = {
       validation: {
         note_or_attachment_required:
           "Eine Notiz oder ein Anhang ist erforderlich",
+        attachment_file_type:
+          "Nicht angehängt – Dateityp nicht erlaubt: %{names}. Erlaubt sind Bilder (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX), TXT und CSV. |||| Nicht angehängt – Dateitypen nicht erlaubt: %{names}. Erlaubt sind Bilder (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX), TXT und CSV.",
+        attachment_file_size:
+          "Nicht angehängt – größer als 50 MB: %{names} |||| Nicht angehängt – größer als 50 MB: %{names}",
       },
     },
     sales: {

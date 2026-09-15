@@ -85,7 +85,10 @@ import {
   readOperationIdFromMeta,
   withOperationIdParams,
 } from "../../operations/operationTransport";
-import { ATTACHMENTS_BUCKET } from "../commons/attachments";
+import {
+  ATTACHMENTS_BUCKET,
+  createAttachmentObjectKey,
+} from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
 
@@ -964,10 +967,7 @@ const uploadToBucket = async (fi: RAFile) => {
   }
 
   const file = fi.rawFile;
-  const fileParts = file.name.split(".");
-  const fileExt = fileParts.length > 1 ? `.${file.name.split(".").pop()}` : "";
-  const fileName = `${Math.random()}${fileExt}`;
-  const filePath = `${fileName}`;
+  const filePath = createAttachmentObjectKey(file.name);
   const { error: uploadError } = await getSupabaseClient()
     .storage.from(ATTACHMENTS_BUCKET)
     .upload(filePath, dataContent);

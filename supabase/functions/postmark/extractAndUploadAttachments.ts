@@ -25,8 +25,8 @@ export type Attachment = {
  * [{
  *    title: "test.txt",
  *    type: "text/plain",
- *    "path": "0.8262106278726917.txt",
- *    "src": "http://127.0.0.1:54321/storage/v1/object/public/attachments/0.8262106278726917.txt",
+ *    "path": "3f1c2a9e-7b4d-4e8a-9c21-5d6f0b8a7e13.txt",
+ *    "src": "http://127.0.0.1:54321/storage/v1/object/public/attachments/3f1c2a9e-7b4d-4e8a-9c21-5d6f0b8a7e13.txt",
  * }]
  *
  */
@@ -59,10 +59,13 @@ export const extractAndUploadAttachments = async (
 
         const fileParts = Name.split(".");
         const fileExt = fileParts.length > 1 ? `.${Name.split(".").pop()}` : "";
-        const fileName = `${Math.random()}${fileExt}`;
+        const fileName = `${crypto.randomUUID()}${fileExt}`;
+        // The attachments bucket enforces a MIME allowlist (W8-B). Without an
+        // explicit contentType, storage-js sends an ArrayBuffer body as
+        // text/plain;charset=UTF-8, which the bucket rejects for every file.
         const { error: uploadError } = await supabaseAdmin.storage
           .from("attachments")
-          .upload(fileName, decodedContent);
+          .upload(fileName, decodedContent, { contentType: ContentType });
 
         if (uploadError) {
           console.error("uploadError", uploadError);

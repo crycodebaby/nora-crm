@@ -15,6 +15,14 @@ import { contactOptionText } from "../misc/ContactOption";
 import { AttachmentField } from "./AttachmentField";
 import { foreignKeyMapping } from "./foreignKeyMapping";
 import { validateNoteOrAttachmentRequired } from "./noteModel";
+import {
+  type RejectedAttachment,
+  useAttachmentRejectionNotify,
+} from "./useAttachmentRejectionNotify";
+import {
+  ATTACHMENT_ACCEPT_ATTRIBUTE,
+  getAttachmentFileRejection,
+} from "../providers/commons/attachments";
 import type { ContactNote } from "../types";
 
 export const NoteInputsMobile = ({
@@ -85,24 +93,36 @@ const AttachButton = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const { getValues, setValue } = useFormContext();
   const translate = useTranslate();
+  const notifyRejectedAttachments = useAttachmentRejectionNotify();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
-    const newFiles = Array.from(fileList).map((file) => ({
-      rawFile: file,
-      src: URL.createObjectURL(file),
-      title: file.name,
-    }));
+    const newFiles: { rawFile: File; src: string; title: string }[] = [];
+    const rejected: RejectedAttachment[] = [];
+    for (const file of Array.from(fileList)) {
+      const reason = getAttachmentFileRejection(file);
+      if (reason) {
+        rejected.push({ name: file.name, reason });
+      } else {
+        newFiles.push({
+          rawFile: file,
+          src: URL.createObjectURL(file),
+          title: file.name,
+        });
+      }
+    }
+    notifyRejectedAttachments(rejected);
+
+    e.target.value = "";
+    if (newFiles.length === 0) return;
 
     const existing = getValues("attachments") || [];
     const currentFiles = Array.isArray(existing) ? existing : [existing];
     setValue("attachments", [...currentFiles, ...newFiles], {
       shouldDirty: true,
     });
-
-    e.target.value = "";
   };
 
   return (
@@ -121,6 +141,7 @@ const AttachButton = () => {
         ref={inputRef}
         type="file"
         multiple
+        accept={ATTACHMENT_ACCEPT_ATTRIBUTE}
         className="hidden"
         onChange={handleFileChange}
       />

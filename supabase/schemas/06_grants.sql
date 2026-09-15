@@ -37,10 +37,6 @@ grant usage on schema public to authenticated;
 grant usage on schema public to service_role;
 
 -- Function grants
-grant all on function public.cleanup_note_attachments() to anon;
-grant all on function public.cleanup_note_attachments() to authenticated;
-grant all on function public.cleanup_note_attachments() to service_role;
-
 grant all on function public.get_avatar_for_email(text) to anon;
 grant all on function public.get_avatar_for_email(text) to authenticated;
 grant all on function public.get_avatar_for_email(text) to service_role;
@@ -48,10 +44,6 @@ grant all on function public.get_avatar_for_email(text) to service_role;
 grant all on function public.get_domain_favicon(text) to anon;
 grant all on function public.get_domain_favicon(text) to authenticated;
 grant all on function public.get_domain_favicon(text) to service_role;
-
-grant all on function public.get_note_attachments_function_url() to anon;
-grant all on function public.get_note_attachments_function_url() to authenticated;
-grant all on function public.get_note_attachments_function_url() to service_role;
 
 revoke all on function public.get_user_id_by_email(text) from public;
 grant all on function public.get_user_id_by_email(text) to service_role;

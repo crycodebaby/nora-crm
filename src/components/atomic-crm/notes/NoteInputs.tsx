@@ -7,8 +7,14 @@ import { DateTimeInput } from "@/components/admin/date-time-input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useFormContext, useWatch } from "react-hook-form";
+import type { DropzoneOptions } from "react-dropzone";
 
 import type { ContactNote, DealNote } from "../types";
+import {
+  ATTACHMENT_ACCEPT,
+  getAttachmentFileRejection,
+} from "../providers/commons/attachments";
+import { useAttachmentRejectionNotify } from "./useAttachmentRejectionNotify";
 import { Status } from "../misc/Status";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { getCurrentDate } from "./utils";
@@ -65,6 +71,22 @@ export const NoteInputs = ({
         selectedContactId != null,
     },
   );
+  const notifyRejectedAttachments = useAttachmentRejectionNotify();
+  const attachmentDropzoneOptions: DropzoneOptions = {
+    validator: (file) => {
+      const reason = getAttachmentFileRejection(file);
+      return reason ? { code: reason, message: reason } : null;
+    },
+    onDropRejected: (rejections) =>
+      notifyRejectedAttachments(
+        rejections.map(({ file, errors }) => ({
+          name: file.name,
+          reason: errors.some((error) => error.code === "file_size")
+            ? "file_size"
+            : "file_type",
+        })),
+      ),
+  };
   const resolvedDefaultStatus = shouldHydrateStatus
     ? reference === "contacts" && selectReference
       ? selectedContact?.status
@@ -183,6 +205,8 @@ export const NoteInputs = ({
           source="attachments"
           label="resources.notes.fields.attachments"
           multiple
+          accept={ATTACHMENT_ACCEPT}
+          options={attachmentDropzoneOptions}
         >
           <AttachmentField source="src" title="title" target="_blank" />
         </FileInput>

@@ -48,28 +48,6 @@ create or replace trigger on_public_contact_notes_created_or_updated
     after insert on public.contact_notes
     for each row execute function public.handle_contact_note_created_or_updated();
 
--- Cleanup storage attachments when contact notes are updated or deleted
-create or replace trigger on_contact_notes_attachments_updated_delete_note_attachments
-    after update on public.contact_notes
-    for each row
-    when (old.attachments is distinct from new.attachments)
-    execute function public.cleanup_note_attachments();
-
-create or replace trigger on_contact_notes_deleted_delete_note_attachments
-    after delete on public.contact_notes
-    for each row execute function public.cleanup_note_attachments();
-
--- Cleanup storage attachments when deal notes are updated or deleted
-create or replace trigger on_deal_notes_attachments_updated_delete_note_attachments
-    after update on public.deal_notes
-    for each row
-    when (old.attachments is distinct from new.attachments)
-    execute function public.cleanup_note_attachments();
-
-create or replace trigger on_deal_notes_deleted_delete_note_attachments
-    after delete on public.deal_notes
-    for each row execute function public.cleanup_note_attachments();
-
 -- Auth triggers: sync auth.users to public.sales
 create or replace trigger on_auth_user_created
     after insert on auth.users

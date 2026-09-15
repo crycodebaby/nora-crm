@@ -424,6 +424,10 @@ export const frenchCrmMessages = {
       },
       validation: {
         note_or_attachment_required: "Une note ou une pièce jointe est requise",
+        attachment_file_type:
+          "Non joint – type de fichier non autorisé : %{names}. Sont autorisés les images (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX), TXT et CSV. |||| Non joints – types de fichier non autorisés : %{names}. Sont autorisés les images (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX), TXT et CSV.",
+        attachment_file_size:
+          "Non joint – plus de 50 Mo : %{names} |||| Non joints – plus de 50 Mo : %{names}",
       },
     },
     sales: {
