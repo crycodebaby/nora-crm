@@ -103,7 +103,11 @@ begin
             ('authenticated','public.deals',                      'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.contact_notes',              'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.deal_notes',                 'SELECT,INSERT,UPDATE,DELETE'),
-            ('authenticated','public.tasks',                      'SELECT,INSERT,UPDATE,DELETE'),
+            -- W8-C S1 (2026-09-16): attachment metadata. No UPDATE — the rows are
+            -- immutable and carry no UPDATE policy; nothing for service_role —
+            -- there is no traced, deployed backend caller.
+            ('authenticated','public.attachments',                'SELECT,INSERT,DELETE'),
+            ('authenticated','public.tasks',                    'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.tags',                       'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.favicons_excluded_domains',  'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.sales',                      'SELECT,UPDATE'),
@@ -145,7 +149,8 @@ begin
             ('service_role','public.google_calendar_events',      'SELECT,INSERT,UPDATE'),
             ('service_role','public.audit_events',                'SELECT,INSERT'),
             ('service_role','public.email_delivery_events',       'SELECT,INSERT'),
-            ('service_role','public.number_counters',             '')
+            ('service_role','public.number_counters',             ''),
+            ('service_role','public.attachments',                 '')
         ) as t(grantee, obj, privs)
     loop
         foreach v_priv in array array['SELECT','INSERT','UPDATE','DELETE'] loop
@@ -444,6 +449,7 @@ begin
             ('authenticated','public.google_calendar_events'),
             ('authenticated','public.checklist_runs'),
             ('authenticated','public.configuration'),
+            ('authenticated','public.attachments'),
             ('service_role','public.sales'),
             ('service_role','public.companies'),
             ('service_role','public.audit_events'),
@@ -473,6 +479,7 @@ begin
             ('service_role','public.sales'),
             ('service_role','public.companies'),
             ('service_role','public.contacts'),
+            ('service_role','public.attachments'),
             ('service_role','public.audit_events'),
             ('authenticated','public.sales'),
             ('authenticated','public.checklist_templates'),

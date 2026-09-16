@@ -128,3 +128,19 @@ create policy "Google calendar events read calendar linker" on public.google_cal
 -- Foundation Wave 3: Error Observatory
 alter table public.operation_errors enable row level security;
 create policy "Operation errors read admin only" on public.operation_errors for select to authenticated using (nora_private.is_admin());
+
+-- Nora CRM W8-C S1 (2026-09-16): attachment metadata
+-- Migration: 20260916120000_nora_attachment_foundation.sql
+-- No UPDATE policy and no ALL policy: attachment metadata is immutable
+-- (replace/remove, never mutate). The policy names are snake_case like the
+-- W8-B storage policies; policy names are per table, so the identically named
+-- SELECT/INSERT policies on storage.objects are separate objects.
+--
+-- DELETE = can_write() is intentional and not privilege widening: office
+-- already removes an attachment reference today by UPDATE-ing the note's
+-- attachments array (note UPDATE = can_write()). Office still may NOT delete
+-- the note itself (note DELETE = is_admin()).
+alter table public.attachments enable row level security;
+create policy "attachments_select_active_user" on public.attachments for select to authenticated using (nora_private.is_active_user());
+create policy "attachments_insert_writer" on public.attachments for insert to authenticated with check (nora_private.can_write());
+create policy "attachments_delete_writer" on public.attachments for delete to authenticated using (nora_private.can_write());
