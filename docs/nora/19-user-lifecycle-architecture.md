@@ -160,7 +160,7 @@ Regeln: kein Audit ohne Änderung, keine Änderung ohne Audit (Trigger/Executor 
 
 - Ein JWT bleibt bis `exp` kryptografisch gültig, und GoTrue bietet keinen Admin-Logout. Deshalb ist **Offboarding erst durch die Session-Revokation wirksam** (§13), nicht durch den Auth-Bann allein.
 - Eine widerrufene Sitzung ist **sofort** tot — auch nach Reaktivierung, auch bei unverfallenem Token. **Reaktivierung erfordert deshalb eine neue Anmeldung** (§14).
-- Blast Radius der Bindung: 57 von 74 Policies auf 20 Tabellen, 2 Views, 11 RPCs; die übrigen 17 Policies sind rollennamenbasiert (Capability-Rollen, Storage). `service_role` ist unbetroffen.
+- Blast Radius der Bindung **zum Zeitpunkt W6-A**: 57 von 74 Policies auf 20 Tabellen, 2 Views, 11 RPCs; die übrigen 17 Policies waren rollennamenbasiert (Capability-Rollen, Storage). `service_role` ist unbetroffen. *Nachtrag 2026-09-16: seit W8-B sind auch die beiden Policies des Buckets `attachments` an die Bindung angeschlossen (sie rufen `is_active_user()` bzw. `can_write()`) — die Zahlen oben sind die W6-A-Messung, nicht der heutige Stand ([`22`](22-security-and-access.md) Abschnitt 6.5).*
 - Kosten: ein PK-Lookup mit Besitzer-Vergleich pro Policy-Auswertung.
 - Bewiesen lokal gegen GoTrue 2.196 / PostgREST 16 (echte Anmeldungen, mit dem lokalen Schlüssel signierte Claim-Formen); Production läuft PostgREST 14.5 (setzt ebenfalls nur `request.jwt.claims`).
 

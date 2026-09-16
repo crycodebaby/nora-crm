@@ -70,7 +70,7 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 | Kern-CRM / Domäne (Kunden, Kontakte, Vorgänge, Aufgaben, Notizen) | [`01`](01-domain-model.md) + [`03`](03-data-model-guardrails.md) | Atomic Contact Primary Intent · Self Contact Wave · Unified Tasks Wave · Customer & Contact Workflow Wave | G | 15 |
 | Mitarbeiter-/User-Lifecycle (Einladung, Rolle, Zugang, Anmeldeadresse, Offboarding, Session-Bindung, Hard Delete) | [`19`](19-user-lifecycle-architecture.md) | User Lifecycle W1–W6-B · V1A Zugangsstatus · V1B Präsentation | B | 6 |
 | Mitarbeiter-Onboarding (Einladung → Passwort → Profil) | [`19`](19-user-lifecycle-architecture.md) Abschnitt 4 · [`02`](02-design-system.md) Abschnitt Mitarbeiter-Onboarding & Zugang · `login/employeeOnboardingFlow.ts` | V1A Zugangsstatus · V1B Präsentation | B | 6 |
-| **Security / Access / Rollen / RBAC / RLS / Grants / Authorization** | [`22`](22-security-and-access.md) | Global Security & Access Owner · Wave 1 Default-Privilegien & Zielmatrix · Wave 0 TRUNCATE · RBAC/RLS v0.4b · v0.4b.1 · v0.4b.2 · Privilegierte Read-Views · Residual Advisor Closure | A | 4 · 5 |
+| **Security / Access / Rollen / RBAC / RLS / Grants / Authorization** | [`22`](22-security-and-access.md) | W8-B Attachment Hardening · Global Security & Access Owner · Wave 1 Default-Privilegien & Zielmatrix · Wave 0 TRUNCATE · RBAC/RLS v0.4b · v0.4b.1 · v0.4b.2 · Privilegierte Read-Views · Residual Advisor Closure | A · H (Anhänge/Storage) | 4 · 5 |
 | Audit | [`13`](13-crm-audit-retention.md) | CRM-Audit v0.3l · Checklisten/Audit-Datenmodell 7b · W3 Audit-Actor | A · B | 7 |
 | E-Mail-Zustellung | [`18`](18-email-delivery-observability.md) | V1C-A Best-Effort-Korrelation · V1C-B Zustellstatus-UI | C | — |
 | Google Kalender | [`14`](14-google-calendar-readonly-implementation.md) (Implementierung) · [`11`](11-google-calendar-rbac.md) (Architektur/Spezifikation) · [`22`](22-security-and-access.md) (globale Berechtigung) — **die drei `calendar-*` Edge Functions sind nicht deployt; Deployment-Stand im Kopf von `11` und `14`** | Architektur & Rollenmodell v0.4a · Read-only-Grundlage v0.4c.1 · OAuth & Sync v0.4c.2 | — | 8 |
@@ -88,7 +88,7 @@ Die **eine** Routingtabelle: pro Bereich der aktuelle Contract, der benannte `06
 
 **Unabhängig vom Subsystem:** Wer eine Migration schreibt oder gegen eine echte Production-Datenbank schreibt, liest zusätzlich [`21`](21-agent-runbooks.md) Sektion 1 (Ledger-Hazard beim `apply_migration`); wer RBAC/RLS, Grants oder `SECURITY DEFINER` ändert, [`22`](22-security-and-access.md) **plus** [`21`](21-agent-runbooks.md) Sektion 4 und 5; wer nach einem Deployment einen Live-Smoke macht, Sektion 14.
 
-Sektionen in [`17`](17-known-issues-and-planned-waves.md): **A** Sicherheit und Privilegien · **B** Mitarbeiter-Lifecycle · **C** E-Mail-Zustellbeobachtung · **D** Operationen, Fehler, Feedback · **E** PWA und Motion · **F** Design-System (projektweit) · **G** Kunden, Kontakte, Vorgänge, Aufgaben · **H** Bekannte, nicht untersuchte Themen · **I** Build, Bundle und CI.
+Sektionen in [`17`](17-known-issues-and-planned-waves.md): **A** Sicherheit und Privilegien · **B** Mitarbeiter-Lifecycle · **C** E-Mail-Zustellbeobachtung · **D** Operationen, Fehler, Feedback · **E** PWA und Motion · **F** Design-System (projektweit) · **G** Kunden, Kontakte, Vorgänge, Aufgaben · **H** Anhänge, Storage und weitere bekannte Themen · **I** Build, Bundle und CI.
 
 ### Sektionsweise Routing in [`23`](23-operations-errors-feedback.md)
 

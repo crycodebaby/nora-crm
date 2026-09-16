@@ -1,6 +1,6 @@
 # 21 – Agent Runbooks (conditional)
 
-Stand: 2026-09-14 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
+Stand: 2026-09-16 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
 
 Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für Änderungen an Nora: Testsequenzen, Verifikationsschritte, wiederkehrende Fallstricke. Sie standen früher als `Bei <X> zusätzlich:`-Blöcke in [`07`](07-agent-change-checklist.md) und wurden damit bei **jeder** Aufgabe mitgeladen, auch bei einer reinen Label-Änderung. [`07`](07-agent-change-checklist.md) behält nur das universelle Change Protocol; hier liegt alles Bedingte.
 
@@ -17,7 +17,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Migration schreiben oder gegen Production anwenden | [1. Datenbank, Migrationen und Production-Ledger](#1-datenbank-migrationen-und-production-ledger) |
 | Kunden-/Vorgangsnummern, Nummernlogik | [2. Nummern und Nummernlogik](#2-nummern-und-nummernlogik) |
 | Checklisten, Textbausteine, Checklisten-Audit | [3. Checklisten, Textbausteine und Checklisten-Audit](#3-checklisten-textbausteine-und-checklisten-audit) |
-| `SECURITY DEFINER`, `security_invoker`, Grants, RLS, neue Tabelle/View/Function in `public` | [4. Security und Zugriff](#4-security-und-zugriff) |
+| `SECURITY DEFINER`, `security_invoker`, Grants, RLS, neue Tabelle/View/Function in `public`, Storage-Policies und Bucket `attachments` | [4. Security und Zugriff](#4-security-und-zugriff) |
 | RBAC-/RLS-Änderung lokal verifizieren | [5. Kanonische lokale SQL-Testsequenz](#5-kanonische-lokale-sql-testsequenz) |
 | `sales`, `users` Edge Function, Auth, Rolle, Zugang, Anmeldeadresse, Offboarding, Kontolöschung | [6. Mitarbeiter-Lifecycle W1–W6-B](#6-mitarbeiter-lifecycle-w1w6-b) |
 | CRM-Audit-Verlauf, `audit_events` | [7. CRM-Audit-Verlauf](#7-crm-audit-verlauf) |
@@ -40,6 +40,8 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 - [ ] **Ledger-Drift ist der Normalfall, nicht die Ausnahme.** Sofort nach dem Apply `list_migrations` prüfen: das Zeitstempel-Präfix muss exakt dem lokalen Dateinamen entsprechen — `apply_migration` trägt regelmäßig den **Anwendungszeitstempel** statt des Dateiname-Zeitstempels ein (bei jedem Production-Apply seit 2026-08-25 aufgetreten, zuletzt W1–W5; Evidenz im Archiv `releases/`). Der Release gilt erst als abgeschlossen, wenn der Ledger 1:1 zum Repository passt.
 - [ ] **Korrektur nur nach Halt und expliziter PO-Freigabe.** Vor der Korrektur read-only verifizieren, dass die betroffene Zeile eindeutig zur gerade angewendeten Migration gehört (Name **und** Inhalt/`statements`-Spalte). Dann transaktional **exakt eine Zeile** korrigieren, danach erneut read-only bestätigen: `list_migrations` deckt sich wieder 1:1 mit dem Repo, keine andere Zeile verändert.
 - [ ] `npx supabase db reset --local` nach jeder neuen Migration — die Migration muss reproduzierbar durchlaufen.
+- [ ] **Der Production-Runner muss beim ersten Fehler abbrechen.** Ein `psql -f …` **ohne** `-v ON_ERROR_STOP=1` ist **kein** zulässiges Production-Migrationsverfahren: eine Migration mit fail-closed Vorbedingungsblock läuft sonst trotz abgewiesener Vorbedingung weiter und hinterlässt einen Teilzustand. Kanonisch ist der Supabase-CLI-Weg (`db push`) oder `apply_migration`; ein Ad-hoc-`psql` nur mit `ON_ERROR_STOP`.
+- [ ] **Ledger-Korrektur ist kein Routineschritt.** Sie ist die dokumentierte Abhilfe für eine festgestellte Drift (oben), nicht ein fester Bestandteil eines Deployments. Der W8-B-Apply über die CLI trug den Dateinamen-Zeitstempel korrekt ein und brauchte **keine** Korrektur — erst prüfen, dann nur bei echter Drift und mit PO-Freigabe eingreifen.
 - [ ] Schema-Dateien (`supabase/schemas/01_tables` … `06_grants`) mit der Migration synchron halten. `06_grants.sql` wird von keinem `db reset` ausgeführt und ist **nie** die Quelle für eine Privilegienaussage (siehe Sektion 4).
 
 ## 2. Nummern und Nummernlogik
@@ -91,6 +93,9 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 - [ ] Testmatrix als `postgres` mit `SET LOCAL ROLE nora_rls_test` — **kein** festes Testpasswort in Git
 - [ ] **Grant-Matrix aktualisiert:** Zielmatrix in `06_grants.sql`, positive **und** negative Assertions in der Wave-1-Suite, Berechtigungsmatrix in [`22`](22-security-and-access.md) Abschnitt 4.3 — eine Rechteänderung ohne Assertion ist nicht bewiesen
 - [ ] `canAccess.ts` an die Rollenmatrix in [`22`](22-security-and-access.md) angeglichen; Teamlisten über `sales_directory`
+- [ ] **Storage / Bucket `attachments` berührt?** Contract [`22`](22-security-and-access.md) Abschnitt 6.5 lesen, dann beide W8-B-Suiten ausführen: `supabase/tests/attachment_storage_hardening_verification.sql` (Policies, Bucket-Grenzen, Abwesenheit des Löschpfads; self-contained, rollt zurück) und `supabase/tests/attachment_storage_policy_verification.mjs` (echte Storage-API-Aufrufe je Rolle und Zugangszustand). Die SQL-Suite allein beweist **nicht**, wie `storage-api` antwortet
+- [ ] **Policies auf `storage.objects` nie „aufräumen".** Permissive Policies werden ODER-verknüpft: eine zusätzliche permissive Policy öffnet den Bucket, eine fremde zu löschen kann eine andere Fläche stilllegen. Unbekannte Policies führen zum Abbruch der Migration und zu einer PO-Entscheidung, nicht zu einem `drop policy`
+- [ ] **Nicht behaupten, der Bucket sei privat.** Solange `storage.buckets.public = true` ist, liefert `storage-api` jeden bekannten Objektschlüssel ohne Anmeldung aus — unabhängig von jeder RLS-Policy ([`17`](17-known-issues-and-planned-waves.md) H.1)
 
 ## 5. Kanonische lokale SQL-Testsequenz
 

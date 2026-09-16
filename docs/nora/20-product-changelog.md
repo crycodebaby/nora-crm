@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-13
+Stand: 2026-09-16
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,23 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-09-16 — Anhänge: klare Regeln, welche Dateien an eine Notiz dürfen
+
+**Was ändert sich für Sie:** Beim Anhängen einer Datei an eine Notiz gelten jetzt feste Regeln — am Rechner wie
+am Smartphone. Erlaubt sind Bilder (JPG, PNG, WebP, GIF), PDF, Word (DOCX), Excel (XLSX) sowie TXT und CSV, bis
+50 MB je Datei. Passt eine Datei nicht, sagt Nora das direkt im Formular; die übrigen Dateien werden weiterhin
+angehängt. Außerdem können nur noch Büro und Leitung Dateien hochladen — wer Nora nur lesen darf, kann keine
+Anhänge mehr hinzufügen. Wessen Zugang beendet wurde, kann die Dateiablage über Nora nicht mehr durchsuchen oder
+öffnen (eine ihm bereits bekannte direkte Datei-Adresse funktioniert weiterhin, siehe unten).
+
+Wenn Sie ein Format brauchen, das heute nicht in der Liste steht (zum Beispiel iPhone-Fotos im HEIC-Format oder
+ältere Word-/Excel-Dateien), melden Sie das bitte — die Liste ist bewusst ein Anfang und kann erweitert werden.
+
+**Technischer Hinweis:** Sicherheitsänderung an der Dateiablage. Zwei Punkte bleiben bewusst offen und sind kein
+Versehen: eine gelöschte Notiz entfernt die zugehörige Datei derzeit **nicht** aus der Ablage, und wer eine
+direkte Datei-Adresse kennt, kann sie weiterhin ohne Anmeldung öffnen. Details: `releases/2026-09.md`
+„Attachment Security Hardening W8-B".
 
 ## 2026-09-13 — Vorgänge auf dem Smartphone öffnen
 

@@ -1,6 +1,6 @@
 # 22 – Security und Access (global)
 
-Stand: 2026-09-10 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-16 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **globale Security- und Access-Contract** von Nora: Authentifizierung vs. Autorisierung, Rollen und Capabilities, Trust Boundaries, Datenbank-Enforcement (RLS, Grants, Default-Privilegien, `SECURITY DEFINER`), Session- und Executor-Integrität.
 
@@ -97,6 +97,7 @@ Legende: ✅ erlaubt · 🔶 eingeschränkt · ❌ verboten · ⚙️ nur Admin 
 | Audit schreiben · ändern · löschen | 🔧 | 🔧 | 🔧 |
 | **Error Observatory** (`operation_errors`) lesen / browsen | ✅ | ❌ | ❌ |
 | **Eigenen** Fehler an IT melden (`report_operation_error`, nur die eigene Zeile) | ✅ | ✅ | ✅ |
+| **Datei** an eine Notiz anhängen (Bucket `attachments`, Details Abschnitt 6.5) | ✅ | ✅ | ❌ |
 | **Nutzer** einladen, Rolle ändern, deaktivieren, offboarden, Konto löschen | ⚙️ | ❌ | ❌ |
 | App-**Konfiguration** | ⚙️ | ❌ | ❌ |
 | **Kalender** (lesen, verknüpfen, Nora-Termine bearbeiten, OAuth) | → [`11`](11-google-calendar-rbac.md) | | |
@@ -181,7 +182,7 @@ Verbindliche Handlungsregeln:
 - **Neue sensible Function:** eigenes `revoke all on function … from public, anon, authenticated` (bei RPCs zusätzlich `service_role`, wenn kein belegter Backend-Aufrufer existiert), danach genau ein gezielter Grant.
 - **Neue public RPC:** `revoke all … from public, anon, authenticated, service_role` + einziger Grant an `authenticated`; `service_role` nur mit belegtem, deployten Aufrufer.
 - **Eine neue Function nie aus der Tabellenregel heraus als „automatisch rechtelos" annehmen.** Wer das tut, veröffentlicht eine sensible Function an `anon`.
-- **Nicht abgedeckt:** `pg_default_acl` für Creator `supabase_admin` in `public` sagt den API-Rollen weiterhin `arwdDxtm` zu; `postgres` ist kein Mitglied und kann das nicht ändern. Die Zeile ist **ruhend, nicht harmlos** — sie greift nur für Objekte, die `supabase_admin` in `public` anlegt. Die Vorbedingung „**alle** `public`-Relationen gehören `postgres`" ist deshalb eine **Sicherheitsannahme, kein Formalismus**: wer sie verletzt sieht, behandelt das als Sicherheitsvorfall, nicht als Aufräumarbeit ([`17`](17-known-issues-and-planned-waves.md) A.9). Ebenfalls nicht abgedeckt: Schema `storage` und der öffentliche Attachment-Bucket.
+- **Nicht abgedeckt:** `pg_default_acl` für Creator `supabase_admin` in `public` sagt den API-Rollen weiterhin `arwdDxtm` zu; `postgres` ist kein Mitglied und kann das nicht ändern. Die Zeile ist **ruhend, nicht harmlos** — sie greift nur für Objekte, die `supabase_admin` in `public` anlegt. Die Vorbedingung „**alle** `public`-Relationen gehören `postgres`" ist deshalb eine **Sicherheitsannahme, kein Formalismus**: wer sie verletzt sieht, behandelt das als Sicherheitsvorfall, nicht als Aufräumarbeit ([`17`](17-known-issues-and-planned-waves.md) A.9). Ebenfalls nicht abgedeckt: die Default-Privilegien des Schemas `storage` ([`17`](17-known-issues-and-planned-waves.md) Abschnitt H) — der Attachment-Bucket selbst hat seit W8-B einen eigenen Contract (Abschnitt 6.5).
 
 ### 6.4 Privilegierte Read-Views
 
@@ -190,6 +191,41 @@ Verbindliche Handlungsregeln:
 Datenexposition der `sales`-Sicht: `sales_directory` und `sales_identities` zeigen allen aktiven Rollen nur Name und Avatar (Identities zusätzlich `disabled`); `public.sales` mit dem vollständigen Profil inklusive `role`/`email`/`disabled` liest ein Admin für alle Zeilen, jeder andere nur die eigene. Welche View wofür zuständig ist (aktive Zuweisung vs. historische Identität): [`19`](19-user-lifecycle-architecture.md) §7–§8.
 
 Beide Views sind `security_invoker = false` über genau eine Tabelle und damit auto-updatable — deshalb explizit **`SELECT`-only** (`revoke all` + `grant select`), unabhängig von Default-Privilegien, und ohne Identity-/Security-Metadaten. Teamlisten nutzen `sales_directory`, nicht `sales`. Direkte Data-API-Updates auf `role`, `disabled`, `administrator`, `user_id`, `email` sind per Trigger blockiert (`prevent_sales_privilege_escalation`).
+
+### 6.5 Storage: der Bucket `attachments`
+
+Stand seit W8-B (`PRODUCTION VERIFIED` 2026-09-16, Migration `20260915120000_nora_attachment_storage_hardening`). Ein **einziger** Bucket `attachments` trägt Notiz-Anhänge, Kundenlogos und Branding-Logos.
+
+**Die entscheidende Unterscheidung.** Storage kennt zwei getrennte Fragen, und nur eine davon beantworten RLS-Policies:
+
+| Frage | Wer entscheidet |
+|---|---|
+| **Storage-API-Autorisierung** — auflisten, signierte URLs erzeugen, hochladen, überschreiben, verschieben, kopieren, löschen | RLS auf `storage.objects` (unten) |
+| **Abruf eines bekannten Objektschlüssels** aus einem `public`-Bucket | **niemand** — `storage-api` liefert ihn ohne Anmeldung aus und fragt RLS nicht |
+
+> **Der Bucket ist `public = true` und die W8-B-Policies machen ihn nicht privat.** Wer einen Objektschlüssel kennt, lädt die Datei ohne Konto herunter. Das ist ein bewusst getragenes Restrisiko ([`17`](17-known-issues-and-planned-waves.md) Abschnitt H) und wird in einer eigenen Welle (Umstellung auf einen privaten Bucket) entschieden — nicht nebenbei.
+
+**Zugriffsmatrix (Ist-Zustand Production):**
+
+| Aufrufer | Auflisten / signierte URL | Hochladen | Überschreiben (`UPDATE`) | Löschen | Bekannten öffentlichen Schlüssel abrufen |
+|---|:---:|:---:|:---:|:---:|:---:|
+| nicht angemeldet (`anon`) | ❌ | ❌ | ❌ | ❌ | ✅ (Bucket ist öffentlich) |
+| `admin` / `office`, aktiv | ✅ | ✅ | ❌ | ❌ | ✅ |
+| `viewer`, aktiv | ✅ | ❌ | ❌ | ❌ | ✅ |
+| deaktivierter Mitarbeiter mit noch gültigem JWT | ❌ | ❌ | ❌ | ❌ | ✅ |
+| `service_role` | RLS-Bypass — kein deployter Nora-Aufrufer | | | | |
+
+Technische Grundlage:
+
+- `SELECT`: Policy `attachments_select_active_user` — `to authenticated`, `bucket_id = 'attachments' and nora_private.is_active_user()`. Damit trägt der Bucket dieselbe Aktiv-/Session-Bindung wie die CRM-Tabellen (Abschnitt 8.1).
+- `INSERT`: Policy `attachments_insert_writer` — `to authenticated`, `bucket_id = 'attachments' and nora_private.can_write()` (Büro/Admin, aktiv, lebende eigene Sitzung).
+- `UPDATE` und `DELETE`: **keine Policy** für normale Rollen. Kein Upsert-/Overwrite-Vertrag, kein Löschpfad über die Storage-API: **für normale Rollen ist das Ersetzen desselben Schlüssels durch fremden Inhalt nicht autorisiert.** Die Aussage betrifft den regulären Rollen-/RLS-Pfad — nicht `service_role` (RLS-Bypass, siehe Matrix) und nicht bereits ausgestellte signierte Upload-Token, die bis zu ihrem Ablauf gültig bleiben ([`17`](17-known-issues-and-planned-waves.md) H.1).
+- Bucket-Grenzen in `storage.buckets`: `file_size_limit = 52428800` (50 MiB) und eine **Allowlist aus genau neun MIME-Typen** (JPEG, PNG, WebP, GIF, PDF, DOCX, XLSX, TXT, CSV). Nicht erlaubt sind insbesondere SVG, HTML/XHTML/XML, JavaScript, Makro- und Legacy-Office-Formate sowie typlose Uploads (`application/octet-stream`).
+- **Geprüft wird der deklarierte MIME-Typ**, nicht der Byteinhalt. Es findet **keine** Inhalts-, Viren- oder Magic-Byte-Prüfung statt; eine als `image/png` deklarierte Datei mit anderem Inhalt wird angenommen. Die Client-Prüfung im Formular ist Bedienkomfort und spiegelt dieselben Werte — der Bucket ist die Boundary.
+- **Objektschlüssel neuer Uploads** sind CSPRNG-UUIDs (`crypto.randomUUID()`) plus normalisierter Endung, nicht mehr aus Zeitstempeln oder Dateinamen abgeleitet. Bestehende Legacy-Schlüssel bleiben unverändert und weiterhin lesbar.
+- **Kein physischer Löschpfad.** Die frühere Kette AFTER-DELETE/UPDATE-Trigger → `public.cleanup_note_attachments()` → `pg_net` → Edge Function `delete_note_attachments` (`service_role`-`remove` auf client-kontrollierte Pfade) ist vollständig entfernt, ebenso `public.get_note_attachments_function_url()`. W8-B hat diesen unsicheren Pfad **abgeschaltet, ohne ihn zu ersetzen**: gelöschte Notizen hinterlassen verwaiste Storage-Objekte. Wer einen Löschpfad wieder einführt, entwirft ihn neu (Ownership auf Datensatzebene, kein client-kontrollierter Pfad) — er reaktiviert den alten nicht.
+
+**Regel für künftige Änderungen:** permissive Policies werden ODER-verknüpft. Eine zusätzliche permissive Policy auf `storage.objects` öffnet den Bucket wieder, auch wenn die W8-B-Policies stehen bleiben. Die Migration bricht deshalb ab, sobald sie eine unbekannte Policy auf `storage.objects` findet, und löscht niemals eine fremde Policy. Wer hier etwas ändert, führt die Verifikationssuiten aus [`21`](21-agent-runbooks.md) Sektion 4 aus.
 
 ---
 
