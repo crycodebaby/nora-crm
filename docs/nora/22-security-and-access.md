@@ -1,6 +1,6 @@
 # 22 – Security und Access (global)
 
-Stand: 2026-09-16 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-17 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **globale Security- und Access-Contract** von Nora: Authentifizierung vs. Autorisierung, Rollen und Capabilities, Trust Boundaries, Datenbank-Enforcement (RLS, Grants, Default-Privilegien, `SECURITY DEFINER`), Session- und Executor-Integrität.
 
@@ -226,6 +226,35 @@ Technische Grundlage:
 - **Kein physischer Löschpfad.** Die frühere Kette AFTER-DELETE/UPDATE-Trigger → `public.cleanup_note_attachments()` → `pg_net` → Edge Function `delete_note_attachments` (`service_role`-`remove` auf client-kontrollierte Pfade) ist vollständig entfernt, ebenso `public.get_note_attachments_function_url()`. W8-B hat diesen unsicheren Pfad **abgeschaltet, ohne ihn zu ersetzen**: gelöschte Notizen hinterlassen verwaiste Storage-Objekte. Wer einen Löschpfad wieder einführt, entwirft ihn neu (Ownership auf Datensatzebene, kein client-kontrollierter Pfad) — er reaktiviert den alten nicht.
 
 **Regel für künftige Änderungen:** permissive Policies werden ODER-verknüpft. Eine zusätzliche permissive Policy auf `storage.objects` öffnet den Bucket wieder, auch wenn die W8-B-Policies stehen bleiben. Die Migration bricht deshalb ab, sobald sie eine unbekannte Policy auf `storage.objects` findet, und löscht niemals eine fremde Policy. Wer hier etwas ändert, führt die Verifikationssuiten aus [`21`](21-agent-runbooks.md) Sektion 4 aus.
+
+### 6.6 Die Tabelle `public.attachments`
+
+Stand seit W8-C S1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260916120000_nora_attachment_foundation`). **Zwei verschiedene Flächen, zwei verschiedene Contracts:** Abschnitt 6.5 regelt den **Storage-Bucket** (die Binärdateien), dieser Abschnitt die **Metadatentabelle** in `public`. Sie sind unabhängig — die Tabelle macht den Bucket weder privater noch offener.
+
+> **Die Tabelle ist ein Schemafundament, keine Funktion.** Sie ist in Production **leer**, und **kein Code in `src/**` liest oder schreibt sie**. Die live genutzte Anhangdarstellung bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments` ([`16`](16-current-state.md) Abschnitt „Anhänge / Storage"). Aus ihrer Existenz folgt **keine** Anhangverwaltung, kein Viewer, keine Audit-Spur und kein Löschpfad.
+
+**Zugriffsmatrix (Ist-Zustand Production):**
+
+| Aufrufer | `SELECT` | `INSERT` | `UPDATE` | `DELETE` |
+|---|:---:|:---:|:---:|:---:|
+| nicht angemeldet (`anon`) | ❌ | ❌ | ❌ | ❌ |
+| `viewer`, aktiv | ✅ | ❌ | ❌ | ❌ |
+| `office` / `admin`, aktiv | ✅ | ✅ | ❌ | ✅ |
+| deaktivierter Mitarbeiter mit noch gültigem JWT | ❌ | ❌ | ❌ | ❌ |
+| `service_role` | ❌ (kein Grant) | ❌ | ❌ | ❌ |
+
+Technische Grundlage — **beide Gates sind gesetzt** (Abschnitt 6.2):
+
+- RLS ist aktiviert; genau drei permissive Policies `to authenticated`: `attachments_select_active_user` (`nora_private.is_active_user()`), `attachments_insert_writer` (`nora_private.can_write()`), `attachments_delete_writer` (`nora_private.can_write()`). **Keine `UPDATE`-Policy und keine `ALL`-Policy** — Anhang-Metadaten sind konzeptionell unveränderlich: ersetzen oder entfernen, nie mutieren.
+- Grants: `revoke all` an `anon, authenticated, service_role`, danach genau `grant select, insert, delete … to authenticated`. `anon` und `service_role` halten **nichts**; `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` hält keine Rolle. `service_role` bleibt leer, weil es **keinen belegten, deployten Backend-Aufrufer** gibt — ein solcher Pfad braucht eigene Begründung, Zielmatrix-Eintrag und Assertion.
+- **`DELETE = can_write()` ist keine Rechteausweitung.** Büro kann einen Anhangverweis heute bereits entfernen, indem es das `attachments`-Array der Notiz per `UPDATE` schreibt (Notiz-`UPDATE` ist `can_write()`); die Zeilenlöschung ist das modellierte Äquivalent genau dieser bestehenden Fähigkeit. Die Notiz **selbst** zu löschen bleibt `is_admin()`. Das nicht „zu `is_admin()` korrigieren", ohne diesen Absatz gelesen zu haben.
+- Ownership-Invariante `attachments_owner_check`: genau **ein** Besitzer (`contact_note_id` **XOR** `deal_note_id`) — nie beide, nie keiner. Beide FKs sind `ON UPDATE CASCADE ON DELETE CASCADE`.
+- **`CASCADE` löscht ausschließlich die Metadatenzeile, niemals das Storage-Objekt.** S1 enthält keinen physischen Löschpfad; verwaiste Objekte bleiben liegen (akzeptierte Einschränkung seit W8-B, [`17`](17-known-issues-and-planned-waves.md) H.1). Nie als „die Datei wird gelöscht" formulieren.
+- `storage_key` ist `NOT NULL` und **`UNIQUE`** — eine provider-neutrale Objektidentität: kein `src`, keine öffentliche oder signierte URL, kein Hostname, kein Bucket- oder Anbietername wird hier persistiert. Bewusst **kein** Formatzwang, damit eine spätere Schlüsselstruktur (W8-E) möglich bleibt.
+- `mime_type` ist `NOT NULL` und hält den **deklarierten** Typ des Uploads. Die Neun-Typen-Allowlist bleibt Bucket-Policy (Abschnitt 6.5) und wird hier **bewusst nicht** als Entitätsinvariante dupliziert; eine Inhalts-, Magic-Byte- oder Virenprüfung findet nirgends in Nora statt.
+- Kein `uploaded_by`/`created_by`: eine Mitarbeiterreferenz würde Hard-Delete-Semantik, Lifecycle-Referenzintegrität und die Löschvorschau ohne aktuellen Bedarf ausweiten. Additiv nachrüstbar.
+
+Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
 ---
 

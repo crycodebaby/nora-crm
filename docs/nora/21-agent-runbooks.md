@@ -1,6 +1,6 @@
 # 21 – Agent Runbooks (conditional)
 
-Stand: 2026-09-16 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
+Stand: 2026-09-17 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
 
 Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für Änderungen an Nora: Testsequenzen, Verifikationsschritte, wiederkehrende Fallstricke. Sie standen früher als `Bei <X> zusätzlich:`-Blöcke in [`07`](07-agent-change-checklist.md) und wurden damit bei **jeder** Aufgabe mitgeladen, auch bei einer reinen Label-Änderung. [`07`](07-agent-change-checklist.md) behält nur das universelle Change Protocol; hier liegt alles Bedingte.
 
@@ -17,7 +17,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Migration schreiben oder gegen Production anwenden | [1. Datenbank, Migrationen und Production-Ledger](#1-datenbank-migrationen-und-production-ledger) |
 | Kunden-/Vorgangsnummern, Nummernlogik | [2. Nummern und Nummernlogik](#2-nummern-und-nummernlogik) |
 | Checklisten, Textbausteine, Checklisten-Audit | [3. Checklisten, Textbausteine und Checklisten-Audit](#3-checklisten-textbausteine-und-checklisten-audit) |
-| `SECURITY DEFINER`, `security_invoker`, Grants, RLS, neue Tabelle/View/Function in `public`, Storage-Policies und Bucket `attachments` | [4. Security und Zugriff](#4-security-und-zugriff) |
+| `SECURITY DEFINER`, `security_invoker`, Grants, RLS, neue Tabelle/View/Function in `public`, Storage-Policies, Bucket `attachments` und Tabelle `public.attachments` | [4. Security und Zugriff](#4-security-und-zugriff) |
 | RBAC-/RLS-Änderung lokal verifizieren | [5. Kanonische lokale SQL-Testsequenz](#5-kanonische-lokale-sql-testsequenz) |
 | `sales`, `users` Edge Function, Auth, Rolle, Zugang, Anmeldeadresse, Offboarding, Kontolöschung | [6. Mitarbeiter-Lifecycle W1–W6-B](#6-mitarbeiter-lifecycle-w1w6-b) |
 | CRM-Audit-Verlauf, `audit_events` | [7. CRM-Audit-Verlauf](#7-crm-audit-verlauf) |
@@ -94,6 +94,8 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 - [ ] **Grant-Matrix aktualisiert:** Zielmatrix in `06_grants.sql`, positive **und** negative Assertions in der Wave-1-Suite, Berechtigungsmatrix in [`22`](22-security-and-access.md) Abschnitt 4.3 — eine Rechteänderung ohne Assertion ist nicht bewiesen
 - [ ] `canAccess.ts` an die Rollenmatrix in [`22`](22-security-and-access.md) angeglichen; Teamlisten über `sales_directory`
 - [ ] **Storage / Bucket `attachments` berührt?** Contract [`22`](22-security-and-access.md) Abschnitt 6.5 lesen, dann beide W8-B-Suiten ausführen: `supabase/tests/attachment_storage_hardening_verification.sql` (Policies, Bucket-Grenzen, Abwesenheit des Löschpfads; self-contained, rollt zurück) und `supabase/tests/attachment_storage_policy_verification.mjs` (echte Storage-API-Aufrufe je Rolle und Zugangszustand). Die SQL-Suite allein beweist **nicht**, wie `storage-api` antwortet
+- [ ] **Tabelle `public.attachments` berührt?** Contract [`22`](22-security-and-access.md) Abschnitt 6.6 lesen, dann `supabase/tests/attachment_foundation_verification.sql` ausführen (Tabellenform, Ownership-XOR, `storage_key`-Unique, FK-`CASCADE`, RLS-Policies, Privilegienmatrix je Rolle; self-contained, rollt zurück). Sie ist von den beiden W8-B-Storage-Suiten **unabhängig**: die eine prüft Metadaten in `public`, die anderen den Bucket — eine grüne Suite beweist die andere Fläche nicht
+- [ ] **`public.attachments` ist leer und unverdrahtet** (W8-C S1). Wer sie anbindet, befüllt oder einen Löschpfad ergänzt, baut S2 ff. — das ist eine eigene Welle mit eigener Abnahme, keine Nebenwirkung. Bis dahin **nie** behaupten, Nora nutze die Tabelle, und ein Zeilen-`DELETE`/`CASCADE` **nie** als „die Datei wird gelöscht" beschreiben
 - [ ] **Policies auf `storage.objects` nie „aufräumen".** Permissive Policies werden ODER-verknüpft: eine zusätzliche permissive Policy öffnet den Bucket, eine fremde zu löschen kann eine andere Fläche stilllegen. Unbekannte Policies führen zum Abbruch der Migration und zu einer PO-Entscheidung, nicht zu einem `drop policy`
 - [ ] **Nicht behaupten, der Bucket sei privat.** Solange `storage.buckets.public = true` ist, liefert `storage-api` jeden bekannten Objektschlüssel ohne Anmeldung aus — unabhängig von jeder RLS-Policy ([`17`](17-known-issues-and-planned-waves.md) H.1)
 

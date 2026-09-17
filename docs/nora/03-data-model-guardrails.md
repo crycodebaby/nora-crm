@@ -1,6 +1,6 @@
 # 03 – Datenmodell- und Persistenz-Guardrails
 
-Stand: 2026-09-13 · Load-Klasse: **ALWAYS**
+Stand: 2026-09-17 · Load-Klasse: **ALWAYS**
 
 Dieses Dokument hält die **universellen Daten- und Persistenzinvarianten** von Nora fest: Regeln, die bei praktisch jeder Datenmodell- oder Persistenzänderung gelten, unabhängig von Subsystem und Release.
 
@@ -75,6 +75,13 @@ Keine Ad-hoc-Logik in `CompanyShow`, in der Aufgaben-Kontaktauswahl oder in Quic
 - Die Nullability wird nicht „zur Sicherheit" wieder aufgeweicht, weil die aus Atomic CRM geerbte Spalte früher nullable war. Defensive Null-Behandlung beim **Lesen** fehlerhafter Daten bleibt erlaubt, beschreibt aber keinen legitimen Fachzustand.
 - FakeRest spiegelt die Regel in den normalen `create`/`update`-Pfaden für `deals` (Parität, §5). Existenzprüfung nullish, nie per Truthiness — Kunden-Id `0` ist gültig (§2.1, Falle 32).
 - Diese Invariante betrifft nur die Nullability. Das Löschverhalten des Fremdschlüssels ist **nicht** Teil davon und wird hier nicht festgelegt.
+
+### 1.8 Anhang-Metadaten: ein Besitzer, und `CASCADE` löscht keine Datei
+
+Seit W8-C S1 existiert `public.attachments` — **additiv, leer und nicht an die Anwendung angebunden**. Live genutzt bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`. Vollständiger Contract (Spalten, RLS, Grants, Begründungen): [`22`](22-security-and-access.md) Abschnitt 6.6 — hier stehen nur die beiden Invarianten, die beim Datenmodellieren zählen:
+
+- **Genau ein Besitzer:** `contact_note_id` **XOR** `deal_note_id` (`attachments_owner_check`), nie beide, nie keiner. Keine polymorphe `owner_type`/`owner_id`-Spalte — sie gäbe die Fremdschlüsselintegrität auf.
+- **Ein Zeilen-`DELETE` — auch per FK-`CASCADE` — entfernt ausschließlich die Metadatenzeile, niemals das Objekt im Storage.** Es gibt keinen physischen Löschpfad; verwaiste Objekte bleiben liegen ([`17`](17-known-issues-and-planned-waves.md) H.1). Diesen Cascade nie als „die Datei wird gelöscht" beschreiben oder darauf aufbauen.
 
 ---
 
