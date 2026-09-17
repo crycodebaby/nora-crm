@@ -205,3 +205,13 @@ create or replace trigger audit_checklist_run_item_changes_trigger
 create or replace trigger audit_saved_text_snippet_changes_trigger
     after insert or update on public.saved_text_snippets
     for each row execute function public.audit_saved_text_snippet_changes();
+
+-- Nora CRM W8-C S2A1 (2026-09-17): capture every attachment metadata deletion.
+-- ONE trigger covers all six deletion paths (direct, contact_note, deal_note,
+-- contact, deal, company), because PostgreSQL runs an ON DELETE CASCADE action
+-- as a real DELETE against the child table, which fires its row triggers.
+-- TRUNCATE is the one row-delete path that does not fire it; no API role holds
+-- TRUNCATE on public.attachments or any ancestor (Security Hardening Wave 1).
+create or replace trigger enqueue_attachment_storage_deletion_after_delete_trigger
+    after delete on public.attachments
+    for each row execute function nora_private.enqueue_attachment_storage_deletion();

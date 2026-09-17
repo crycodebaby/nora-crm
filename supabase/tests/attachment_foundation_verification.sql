@@ -31,7 +31,8 @@
 --      the last one is denied by the session binding itself and not by
 --      sales.role or sales.disabled
 --   8. scope: the table is empty (no backfill), the legacy note JSON arrays are
---      untouched, and no trigger / queue table exists on it
+--      untouched, and the only trigger on it is the W8-C S2A1 capture hook
+--      (20260917120000) — no consumer, no physical storage delete path
 --   9. no GUC or role leak
 --
 -- NOT proven here (out of S1 scope by design): physical storage deletion,
@@ -671,6 +672,7 @@ $$;
 do $$
 declare
     v_failures text[] := '{}';
+    v_extra    text;
 begin
     if (select count(*) from public.attachments) <> 0 then
         v_failures := array_append(v_failures, 'public.attachments is not empty — S1 performs no backfill');
@@ -686,14 +688,34 @@ begin
         v_failures := array_append(v_failures, 'the legacy note attachment columns were changed by S1');
     end if;
 
-    -- no queue, no trigger: that is S2
-    if exists (select 1 from pg_trigger t
-               where t.tgrelid = 'public.attachments'::regclass and not t.tgisinternal) then
-        v_failures := array_append(v_failures, 'a trigger exists on public.attachments (S2 scope)');
+    -- Deletion machinery: since W8-C S2A1 (20260917120000) exactly ONE trigger
+    -- is expected here — the capture hook that writes a deletion INTENT into
+    -- the private outbox. It is still true that S1 itself carries no deletion
+    -- path; this assertion therefore no longer demands "no trigger", it demands
+    -- "no trigger BEYOND the agreed capture hook". Anything else on this table
+    -- is an unreviewed deletion path and must fail.
+    select string_agg(t.tgname, ', ' order by t.tgname) into v_extra
+    from pg_trigger t
+    where t.tgrelid = 'public.attachments'::regclass and not t.tgisinternal
+      and t.tgname <> 'enqueue_attachment_storage_deletion_after_delete_trigger';
+    if v_extra is not null then
+        v_failures := v_failures || format('unexpected trigger on public.attachments beyond the S2A1 capture hook: %s', v_extra);
     end if;
-    if to_regclass('public.storage_object_deletions') is not null
-       or to_regclass('nora_private.storage_object_deletions') is not null then
-        v_failures := array_append(v_failures, 'a storage deletion queue exists (S2 scope)');
+
+    -- The capture hook enqueues only. A CONSUMER (claim/ack/fail contract or a
+    -- worker) is S2A2 and must NOT appear as a side effect of anything else.
+    if exists (select 1 from pg_proc p
+               join pg_namespace n on n.oid = p.pronamespace
+               where p.proname ~ 'attachment.*(claim|ack|fail|drain|worker)'
+                  or p.proname ~ '(claim|ack|fail|drain|worker).*attachment') then
+        v_failures := array_append(v_failures, 'an attachment deletion consumer exists (S2A2 scope)');
+    end if;
+
+    -- S1 still performs no physical storage deletion, and the removed W8-B
+    -- pg_net path stays removed.
+    if to_regprocedure('public.cleanup_note_attachments()') is not null
+       or to_regprocedure('public.get_note_attachments_function_url()') is not null then
+        v_failures := array_append(v_failures, 'the removed W8-B pg_net delete path reappeared');
     end if;
 
     -- W8-B is untouched: still exactly its two storage policies, bucket public
@@ -709,7 +731,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL: scope:\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  8. metadata only: table empty, legacy note JSON untouched, no trigger/queue, W8-B storage contract unchanged';
+    raise notice 'OK  8. metadata only: table empty, legacy note JSON untouched, only the S2A1 capture hook and no consumer, W8-B storage contract unchanged';
 end;
 $$;
 
