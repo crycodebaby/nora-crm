@@ -837,33 +837,39 @@ create unique index uq__attachment_deletion_queue__active_storage_key
     on nora_private.attachment_storage_deletion_queue (storage_key)
     where state in ('pending', 'claimed', 'failed_retryable');
 
--- Drain order for the future consumer: oldest due work first. This index serves
--- DUE, UNCLAIMED work only ('pending' + 'failed_retryable'). It deliberately
--- does NOT serve stale-CLAIM recovery: an expired 'claimed' lease is found by
--- claimed_at, a different access path belonging to claim semantics that do not
--- exist yet. S2A2 chooses and adds that lease-recovery index; S2A1 adds no index
--- for a consumer it does not have.
+-- Drain order for claim_next: oldest due work first. This index serves DUE,
+-- UNCLAIMED work only ('pending' + 'failed_retryable'). It deliberately does
+-- NOT serve stale-CLAIM recovery: an expired 'claimed' lease is found by
+-- claimed_at, a different access path (next index, W8-C S2A2.2).
 create index attachment_deletion_queue_due_idx
     on nora_private.attachment_storage_deletion_queue (available_at, id)
     where state in ('pending', 'failed_retryable');
 
+-- Nora CRM W8-C S2A2.2 (2026-09-18): stale-lease recovery index.
+-- Migration: 20260918180000_nora_attachment_deletion_queue_execution.sql
+-- Recovery runs on EVERY claim and terminal rows are retained forever, so the
+-- scan for expired leases must not grow with history; the claimed set is tiny.
+create index attachment_deletion_queue_claimed_idx
+    on nora_private.attachment_storage_deletion_queue (claimed_at, id)
+    where state = 'claimed';
+
 comment on table nora_private.attachment_storage_deletion_queue is
-    'W8-C S2A1 (2026-09-17): durable capture of the intent to delete a storage object, written by the AFTER DELETE trigger on public.attachments. A row here is an INTENT, never a permission: nothing may delete an object before a consumer has proven the key is referenced nowhere (legacy note JSON arrays, company logos and the URL-only branding logos included). No direct grants for any API role - not reachable through PostgREST. W8-C S2A2.1 (2026-09-18) adds the read-only liveness resolver nora_private.attachment_storage_key_liveness(text) and the terminal vocabulary state skipped_live; there is still no consumer: no claim/ack/fail contract, no worker, no Storage call.';
+    'W8-C S2A1 (2026-09-17): durable capture of the intent to delete a storage object, written by the AFTER DELETE trigger on public.attachments. A row here is an INTENT, never a permission: nothing may delete an object before a consumer has proven the key is referenced nowhere (legacy note JSON arrays, company logos and the URL-only branding logos included). No direct grants for any API role - not reachable through PostgREST. W8-C S2A2.1 (2026-09-18) adds the read-only liveness resolver nora_private.attachment_storage_key_liveness(text) and the terminal state skipped_live. W8-C S2A2.2 (2026-09-18) adds the DB-only execution contract (nora_private.attachment_deletion_claim_next / _inspect / _fail, postgres only): claim under a server-minted lease, stale-lease recovery, bounded attempts with backoff, LIVE -> skipped_live, UNKNOWN -> retry/terminal, DEAD -> no write. The lease fences queue mutations only, not an external side effect. Still no worker, no Storage call, no path to done.';
 
 comment on column nora_private.attachment_storage_deletion_queue.storage_key is
     'Provider-neutral object identity copied from the deleted attachment row (OLD.storage_key). Never a src, URL, hostname or bucket name, and never a caller-supplied path.';
 comment on column nora_private.attachment_storage_deletion_queue.state is
-    'pending | claimed | failed_retryable | done | failed_terminal | skipped_live. pending, claimed and failed_retryable are ACTIVE and carry the partial unique invariant on storage_key; done, failed_terminal and skipped_live are TERMINAL. skipped_live = the deletion intent was terminally withdrawn because the key was observed LIVE under the liveness contract in force at that moment - it is NOT a physical deletion, NOT a permanent guarantee against future orphaning and NOT a deletion authorization. S2A1 only ever produces pending; nothing produces skipped_live yet (S2A2.1 adds the vocabulary only).';
+    'pending | claimed | failed_retryable | done | failed_terminal | skipped_live. pending, claimed and failed_retryable are ACTIVE and carry the partial unique invariant on storage_key; done, failed_terminal and skipped_live are TERMINAL. done = object confirmed gone; nothing writes it yet (S2B). skipped_live = the deletion intent was terminally withdrawn because the key was observed LIVE under the liveness contract in force at that moment - it is NOT a physical deletion, NOT a permanent guarantee against future orphaning and NOT a deletion authorization; only nora_private.attachment_deletion_inspect produces it.';
 comment on column nora_private.attachment_storage_deletion_queue.attempt_count is
-    'Consumer retry counter (S2A2). Always 0 in S2A1.';
+    'Number of claims granted for this job. Incremented by nora_private.attachment_deletion_claim_next at CLAIM (a crash after claiming still consumes budget), never by recovery or failure. Budget: nora_private.attachment_deletion_max_attempts().';
 comment on column nora_private.attachment_storage_deletion_queue.available_at is
-    'Earliest instant a consumer may work this job (S2A2 backoff). Defaults to now(), i.e. immediately due.';
+    'Earliest instant claim_next may claim this job. Defaults to now(), i.e. immediately due; after a retryable failure or lease expiry it is now() + nora_private.attachment_deletion_retry_delay(attempt_count).';
 comment on column nora_private.attachment_storage_deletion_queue.claimed_at is
-    'Lease start. Non-null exactly while state = claimed; the basis for stale-claim recovery in S2A2.';
+    'Lease start. Non-null exactly while state = claimed. The lease is valid while claimed_at > now() - nora_private.attachment_deletion_lease_ttl() and stale (recoverable) once claimed_at <= now() - lease_ttl.';
 comment on column nora_private.attachment_storage_deletion_queue.claimed_by is
-    'Opaque consumer instance identifier holding the lease. Non-null exactly while state = claimed.';
+    'Server-minted per-claim LEASE TOKEN (gen_random_uuid()::text written by nora_private.attachment_deletion_claim_next), never a caller-supplied value and never a reusable worker identity: every claim gets a fresh token, so a stale holder cannot act on a reclaimed job (ABA). Non-null exactly while state = claimed.';
 comment on column nora_private.attachment_storage_deletion_queue.last_error_code is
-    'Machine-readable failure code from the last consumer attempt (S2A2), never a free-text provider message.';
+    'Machine-readable cause of the last failed attempt (^NORA_ATTACHMENT_[A-Z0-9_]+$, e.g. NORA_ATTACHMENT_LEASE_EXPIRED, NORA_ATTACHMENT_LIVENESS_UNKNOWN), never a free-text provider message. Kept as history across later claims and on terminal rows.';
 comment on column nora_private.attachment_storage_deletion_queue.completed_at is
     'Set exactly when the job reaches a terminal state (done / failed_terminal / skipped_live). skipped_live is terminal but records a WITHDRAWN intent, not a deletion. Terminal rows are RETAINED, never auto-purged: a queue that deletes its own evidence cannot be audited.';
 

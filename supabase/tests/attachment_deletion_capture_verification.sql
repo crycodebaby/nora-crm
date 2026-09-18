@@ -14,7 +14,10 @@
 --      (a permanent UNIQUE would strand a legitimately re-referenced key)
 --   2. queue security: no privilege for anon / authenticated / service_role on
 --      any of the eight/seven privilege kinds, RLS enabled, zero policies,
---      owned by postgres, and the schema is not PostgREST-exposed
+--      owned by postgres, and the schema is not PostgREST-exposed; the only
+--      consumer functions are the W8-C S2A2.2 set in nora_private
+--      (claim_next / inspect / fail), none executable by any API role and none
+--      in public
 --   3. capture function: SECURITY DEFINER, owner postgres, search_path = '',
 --      no EXECUTE for public/anon/authenticated/service_role, and a body that
 --      contains no HTTP / pg_net / Storage / Edge Function call whatsoever
@@ -44,10 +47,11 @@
 --      intended duplicate, the business DELETE rolls back and the attachment
 --      row survives — no silent loss of deletion intent
 --
--- NOT proven here (out of S2A1 scope by design): claim/ack/fail semantics, the
--- live-reference resolver, lease/retry behaviour, and any physical storage
--- deletion. S2A1 has no consumer — a row in this queue is an INTENT, never a
--- permission to delete an object.
+-- NOT proven here (out of S2A1 scope by design): claim/inspect/fail semantics
+-- (attachment_deletion_queue_execution_verification.sql), the live-reference
+-- resolver, lease/retry behaviour, and any physical storage deletion. S2A1 has
+-- no consumer — a row in this queue is an INTENT, never a permission to delete
+-- an object.
 
 \set ON_ERROR_STOP on
 
@@ -180,10 +184,12 @@ $$;
 -- ---------------------------------------------------------------------------
 do $$
 declare
-    v_priv     text;
-    v_role     text;
-    v_failures text[] := '{}';
-    v_privs    text[] := case when current_setting('server_version_num')::int >= 170000
+    v_priv      text;
+    v_role      text;
+    v_sig       text;
+    v_consumers text[];
+    v_failures  text[] := '{}';
+    v_privs     text[] := case when current_setting('server_version_num')::int >= 170000
                               then array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']
                               else array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']
                          end;
@@ -207,21 +213,45 @@ begin
         v_failures := array_append(v_failures, 'the queue must carry no policy at all (deny-all by absence)');
     end if;
 
-    -- S2A1 introduces no claim/ack/fail contract: service_role gained nothing
-    if exists (
-        select 1 from pg_proc p
-        join pg_namespace n on n.oid = p.pronamespace
-        where p.proname ~ 'attachment.*(claim|ack|fail|drain|worker)'
-           or p.proname ~ '(claim|ack|fail|drain|worker).*attachment'
-    ) then
-        v_failures := array_append(v_failures,
-            'a claim/ack/fail/worker function exists — that is S2A2, not S2A1');
+    -- The consumer contract exists ONLY as the approved W8-C S2A2.2 set in
+    -- nora_private (claim_next / inspect / fail): no ack, completion, drain or
+    -- worker function anywhere, nothing in public, and no API role - service_role
+    -- included - may execute any of them. service_role gained nothing.
+    select array_agg(n.nspname || '.' || p.proname order by n.nspname, p.proname) into v_consumers
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where p.proname ~ 'attachment.*(claim|ack|fail|drain|worker|inspect|complete)'
+       or p.proname ~ '(claim|ack|fail|drain|worker|inspect|complete).*attachment';
+    if v_consumers is distinct from array['nora_private.attachment_deletion_claim_next',
+                                          'nora_private.attachment_deletion_fail',
+                                          'nora_private.attachment_deletion_inspect'] then
+        v_failures := v_failures || format(
+            'the queue consumer functions are not exactly the approved S2A2.2 set (claim_next / fail / inspect): %s',
+            coalesce(array_to_string(v_consumers, ', '), '<none>'));
+    end if;
+
+    foreach v_sig in array array['nora_private.attachment_deletion_claim_next()',
+                                 'nora_private.attachment_deletion_fail(bigint,text,text,boolean)',
+                                 'nora_private.attachment_deletion_inspect(bigint,text)'] loop
+        if to_regprocedure(v_sig) is not null then
+            foreach v_role in array array['public','anon','authenticated','service_role'] loop
+                if has_function_privilege(v_role, v_sig, 'EXECUTE') then
+                    v_failures := v_failures || format('%s holds EXECUTE on the consumer function %s', v_role, v_sig);
+                end if;
+            end loop;
+        end if;
+    end loop;
+
+    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+               where n.nspname = 'public'
+                 and p.prosrc like '%attachment_storage_deletion_queue%') then
+        v_failures := array_append(v_failures, 'a public (API-exposed) function references the queue');
     end if;
 
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (queue security):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 2. queue security: zero API-role privileges, RLS on, no policy, no consumer RPC';
+    raise notice 'OK 2. queue security: zero API-role privileges, RLS on, no policy, consumer = exactly the postgres-only S2A2.2 set, no API-executable consumer';
 end;
 $$;
 

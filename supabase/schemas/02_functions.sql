@@ -4804,3 +4804,384 @@ revoke all on function nora_private.attachment_storage_key_liveness(text) from p
 revoke all on function nora_private.attachment_storage_key_liveness(text) from anon;
 revoke all on function nora_private.attachment_storage_key_liveness(text) from authenticated;
 revoke all on function nora_private.attachment_storage_key_liveness(text) from service_role;
+
+-- Nora CRM W8-C S2A2.2 (2026-09-18): attachment deletion queue execution contract.
+-- Migration: 20260918180000_nora_attachment_deletion_queue_execution.sql
+-- DB-only: claim under a server-minted lease, stale-lease recovery, bounded
+-- attempts with deterministic backoff, lease-guarded liveness inspection and
+-- failure. postgres only - no API role may execute any of these functions.
+-- No Storage call, no network, no path to done, no new queue state. The lease
+-- fences QUEUE mutations only; it does not fence an external Storage request
+-- that a future worker has already started (S3 / S2B close that).
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.2 (2026-09-18) (a) DB-owned constants
+--
+-- One definition each; every lease, budget and backoff decision below reads
+-- them. STABLE (not IMMUTABLE) on purpose: no index or generated column may
+-- ever bake one of these values in. Changed only by a migration.
+-- ---------------------------------------------------------------------------
+
+-- Lease TTL. Comfortably longer than the longest run of a future external
+-- worker (an Edge Function is bounded at roughly 400 s), so a lease should
+-- only expire when its holder is dead. S2B re-validates this against the
+-- platform it actually runs on.
+create or replace function nora_private.attachment_deletion_lease_ttl()
+returns interval
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+    select interval '10 minutes';
+$$;
+
+alter function nora_private.attachment_deletion_lease_ttl() owner to postgres;
+
+comment on function nora_private.attachment_deletion_lease_ttl() is
+    'W8-C S2A2.2: the single authoritative lease TTL of the attachment deletion queue (10 minutes). A lease is valid while claimed_at > now() - ttl and stale once claimed_at <= now() - ttl (the exact boundary is expired). Changed only by migration.';
+
+revoke all on function nora_private.attachment_deletion_lease_ttl() from public;
+revoke all on function nora_private.attachment_deletion_lease_ttl() from anon;
+revoke all on function nora_private.attachment_deletion_lease_ttl() from authenticated;
+revoke all on function nora_private.attachment_deletion_lease_ttl() from service_role;
+
+-- Attempt budget, global across all failure causes. attempt_count grows at
+-- CLAIM, so a worker that crashes after claiming still consumes budget.
+create or replace function nora_private.attachment_deletion_max_attempts()
+returns integer
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+    select 5;
+$$;
+
+alter function nora_private.attachment_deletion_max_attempts() owner to postgres;
+
+comment on function nora_private.attachment_deletion_max_attempts() is
+    'W8-C S2A2.2: attempt budget of an attachment deletion job (5), shared by every failure cause. attempt_count increments at claim; a failure or lease expiry at attempt_count >= 5 ends the job as failed_terminal with its real cause code.';
+
+revoke all on function nora_private.attachment_deletion_max_attempts() from public;
+revoke all on function nora_private.attachment_deletion_max_attempts() from anon;
+revoke all on function nora_private.attachment_deletion_max_attempts() from authenticated;
+revoke all on function nora_private.attachment_deletion_max_attempts() from service_role;
+
+-- Deterministic exponential backoff, no jitter: 15 min x 2^(n-1), capped at
+-- 6 hours. The exponent is clamped before multiplying so no attempt count can
+-- overflow the interval; with a budget of 5 the cap is dormant.
+create or replace function nora_private.attachment_deletion_retry_delay(p_attempt_count integer)
+returns interval
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+begin
+    if p_attempt_count is null or p_attempt_count < 1 then
+        raise exception 'attachment deletion retry delay: attempt count must be >= 1, got %', p_attempt_count
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_INVALID_ARGUMENT';
+    end if;
+
+    return least(interval '15 minutes' * power(2, least(p_attempt_count - 1, 5)),
+                 interval '6 hours');
+end;
+$$;
+
+alter function nora_private.attachment_deletion_retry_delay(integer) owner to postgres;
+
+comment on function nora_private.attachment_deletion_retry_delay(integer) is
+    'W8-C S2A2.2: retry delay after the n-th attempt failed: 15 min x 2^(n-1), capped at 6 hours (15 / 30 / 60 / 120 / 240 min for attempts 1-5). Deterministic, no jitter. n < 1 or NULL raises 22023 NORA_ATTACHMENT_INVALID_ARGUMENT.';
+
+revoke all on function nora_private.attachment_deletion_retry_delay(integer) from public;
+revoke all on function nora_private.attachment_deletion_retry_delay(integer) from anon;
+revoke all on function nora_private.attachment_deletion_retry_delay(integer) from authenticated;
+revoke all on function nora_private.attachment_deletion_retry_delay(integer) from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.2 (2026-09-18) (b) Claim (with stale-lease recovery)
+--
+-- SECURITY INVOKER, callable by postgres only. Every execution path runs as
+-- postgres (a test, or a future S2B definer wrapper owned by postgres); if
+-- EXECUTE ever leaked to an API role, the call would still fail on the queue,
+-- which grants that role nothing. row_security = off turns any RLS-visibility
+-- drift on the queue into an error instead of silently hiding claimed rows
+-- from recovery.
+--
+-- 1. Recovery: at most 25 expired leases (claimed_at <= now() - ttl), oldest
+--    first, SKIP LOCKED. claimed -> failed_retryable (+ backoff) or, with the
+--    budget spent, failed_terminal; code NORA_ATTACHMENT_LEASE_EXPIRED.
+--    Recovery never increments attempt_count.
+-- 2. Selection: the oldest due job (pending / failed_retryable,
+--    available_at <= now(), ordered by available_at, id), SKIP LOCKED, one row.
+--    A just-recovered row is never due in the same call (its backoff is >= 15
+--    minutes).
+-- 3. Claim: state claimed, attempt_count + 1, claimed_at = now(), claimed_by =
+--    a fresh server-minted UUID token. The caller supplies nothing. Earlier
+--    error fields are kept as history.
+--
+-- No work returns zero rows, never an exception.
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.attachment_deletion_claim_next()
+returns table (
+    job_id           bigint,
+    storage_key      text,
+    lease_token      text,
+    attempt_count    integer,
+    claimed_at       timestamptz,
+    lease_expires_at timestamptz
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+set row_security = off
+as $$
+declare
+    v_ttl constant interval := nora_private.attachment_deletion_lease_ttl();
+    v_max constant integer  := nora_private.attachment_deletion_max_attempts();
+    v_id  bigint;
+begin
+    -- 1. stale-lease recovery (bounded, never blocks on a lock)
+    with stale as (
+        select q.id
+          from nora_private.attachment_storage_deletion_queue q
+         where q.state = 'claimed'
+           and q.claimed_at <= now() - v_ttl
+         order by q.claimed_at, q.id
+         limit 25
+         for update skip locked
+    )
+    update nora_private.attachment_storage_deletion_queue q
+       set state           = case when q.attempt_count < v_max then 'failed_retryable' else 'failed_terminal' end,
+           available_at    = case when q.attempt_count < v_max
+                                  then now() + nora_private.attachment_deletion_retry_delay(q.attempt_count)
+                                  else q.available_at end,
+           completed_at    = case when q.attempt_count < v_max then null else now() end,
+           claimed_at      = null,
+           claimed_by      = null,
+           last_error_code = 'NORA_ATTACHMENT_LEASE_EXPIRED',
+           last_error_at   = now()
+      from stale
+     where q.id = stale.id;
+
+    -- 2. the next due job
+    select q.id
+      into v_id
+      from nora_private.attachment_storage_deletion_queue q
+     where q.state in ('pending', 'failed_retryable')
+       and q.available_at <= now()
+     order by q.available_at, q.id
+     limit 1
+     for update skip locked;
+
+    if v_id is null then
+        return;
+    end if;
+
+    -- 3. the claim: a fresh, server-minted lease token per claim
+    return query
+    update nora_private.attachment_storage_deletion_queue q
+       set state         = 'claimed',
+           attempt_count = q.attempt_count + 1,
+           claimed_at    = now(),
+           claimed_by    = gen_random_uuid()::text
+     where q.id = v_id
+       and q.state in ('pending', 'failed_retryable')
+    returning q.id, q.storage_key, q.claimed_by, q.attempt_count, q.claimed_at, q.claimed_at + v_ttl;
+end;
+$$;
+
+alter function nora_private.attachment_deletion_claim_next() owner to postgres;
+
+comment on function nora_private.attachment_deletion_claim_next() is
+    'W8-C S2A2.2: claims the oldest due attachment deletion job (pending / failed_retryable, available_at <= now(), ordered by available_at, id, FOR UPDATE SKIP LOCKED) under a fresh server-minted lease token (gen_random_uuid) and increments attempt_count. First recovers at most 25 expired leases (claimed_at <= now() - lease_ttl) to failed_retryable with backoff, or failed_terminal once the attempt budget is spent, code NORA_ATTACHMENT_LEASE_EXPIRED, without incrementing attempt_count. Returns zero rows when there is no work. The lease fences queue mutations only, never an external side effect. postgres only - no API role may execute it.';
+
+revoke all on function nora_private.attachment_deletion_claim_next() from public;
+revoke all on function nora_private.attachment_deletion_claim_next() from anon;
+revoke all on function nora_private.attachment_deletion_claim_next() from authenticated;
+revoke all on function nora_private.attachment_deletion_claim_next() from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.2 (2026-09-18) (c) Fail (lease-guarded)
+--
+-- ONE conditional UPDATE whose predicate is the full valid-lease rule:
+--   id = p_job_id AND state = 'claimed' AND claimed_by = p_lease_token
+--   AND claimed_at > now() - lease_ttl()
+-- Zero matching rows - wrong token, expired lease, unknown id, non-claimed
+-- row - raise 55000 NORA_ATTACHMENT_LEASE_LOST. A lost lease is never success
+-- and never "last writer wins".
+--
+--   retryable and attempt_count < budget  -> failed_retryable, backoff
+--   otherwise                             -> failed_terminal, completed_at
+--
+-- The supplied cause code is kept in both cases (no separate "max attempts"
+-- code: state + attempt_count already say that).
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.attachment_deletion_fail(
+    p_job_id      bigint,
+    p_lease_token text,
+    p_error_code  text,
+    p_retryable   boolean
+)
+returns text
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+set row_security = off
+as $$
+declare
+    v_ttl   constant interval := nora_private.attachment_deletion_lease_ttl();
+    v_max   constant integer  := nora_private.attachment_deletion_max_attempts();
+    v_state text;
+begin
+    if p_job_id is null
+       or p_lease_token is null or btrim(p_lease_token) = ''
+       or p_retryable is null
+       or p_error_code is null
+       or p_error_code !~ '^NORA_ATTACHMENT_[A-Z0-9_]{1,64}$' then
+        raise exception 'attachment deletion fail: job id, lease token, retryable flag and a NORA_ATTACHMENT_* error code are required'
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_INVALID_ARGUMENT';
+    end if;
+
+    update nora_private.attachment_storage_deletion_queue q
+       set state           = case when p_retryable and q.attempt_count < v_max
+                                  then 'failed_retryable' else 'failed_terminal' end,
+           available_at    = case when p_retryable and q.attempt_count < v_max
+                                  then now() + nora_private.attachment_deletion_retry_delay(q.attempt_count)
+                                  else q.available_at end,
+           completed_at    = case when p_retryable and q.attempt_count < v_max
+                                  then null else now() end,
+           claimed_at      = null,
+           claimed_by      = null,
+           last_error_code = p_error_code,
+           last_error_at   = now()
+     where q.id = p_job_id
+       and q.state = 'claimed'
+       and q.claimed_by = p_lease_token
+       and q.claimed_at > now() - v_ttl
+    returning q.state into v_state;
+
+    if v_state is null then
+        raise exception 'attachment deletion lease lost: job % is not held by this lease token', p_job_id
+            using errcode = '55000', detail = 'NORA_ATTACHMENT_LEASE_LOST';
+    end if;
+
+    return v_state;
+end;
+$$;
+
+alter function nora_private.attachment_deletion_fail(bigint, text, text, boolean) owner to postgres;
+
+comment on function nora_private.attachment_deletion_fail(bigint, text, text, boolean) is
+    'W8-C S2A2.2: lease-guarded failure of an attachment deletion job, one conditional UPDATE on id + state claimed + lease token + claimed_at > now() - lease_ttl. Retryable below the attempt budget -> failed_retryable with backoff; otherwise failed_terminal with completed_at. The cause code (^NORA_ATTACHMENT_[A-Z0-9_]{1,64}$) is stored either way. A lost lease (wrong token, expired, unknown id, not claimed) raises 55000 NORA_ATTACHMENT_LEASE_LOST; invalid arguments raise 22023 NORA_ATTACHMENT_INVALID_ARGUMENT. Returns the resulting state. postgres only - no API role may execute it.';
+
+revoke all on function nora_private.attachment_deletion_fail(bigint, text, text, boolean) from public;
+revoke all on function nora_private.attachment_deletion_fail(bigint, text, text, boolean) from anon;
+revoke all on function nora_private.attachment_deletion_fail(bigint, text, text, boolean) from authenticated;
+revoke all on function nora_private.attachment_deletion_fail(bigint, text, text, boolean) from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.2 (2026-09-18) (d) Inspect (lease-guarded liveness)
+--
+-- Locks the job under the full valid-lease rule, calls the S2A2.1 resolver
+-- exactly once and maps its verdict:
+--
+--   live     claimed -> skipped_live: completed_at = now(), claim cleared,
+--            attempt_count and error history kept. The intent is WITHDRAWN
+--            because the key was observed live at this moment - not deleted,
+--            not permanently safe from later orphaning.
+--   unknown  fail(..., 'NORA_ATTACHMENT_LIVENESS_UNKNOWN', retryable): retry
+--            with backoff, terminal once the budget is spent. Never done,
+--            never skipped_live - UNKNOWN is fail-closed.
+--   dead     NO WRITE. The row stays claimed with the same token, claimed_at
+--            and attempt_count; the verdict goes back to the lease holder
+--            only. DEAD is an observation, not a deletion permission, and it
+--            is never persisted (it would be stale at once). If nothing acts
+--            on it, the lease expires and ordinary recovery applies.
+--
+-- A resolver error propagates and aborts the caller's transaction, leaving the
+-- job claimed and unchanged: an error is never a verdict.
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.attachment_deletion_inspect(
+    p_job_id      bigint,
+    p_lease_token text
+)
+returns table (
+    verdict   text,
+    job_state text
+)
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+set row_security = off
+as $$
+declare
+    v_key     text;
+    v_verdict text;
+    v_state   text;
+    v_rows    integer;
+begin
+    if p_job_id is null or p_lease_token is null or btrim(p_lease_token) = '' then
+        raise exception 'attachment deletion inspect: job id and lease token are required'
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_INVALID_ARGUMENT';
+    end if;
+
+    select q.storage_key
+      into v_key
+      from nora_private.attachment_storage_deletion_queue q
+     where q.id = p_job_id
+       and q.state = 'claimed'
+       and q.claimed_by = p_lease_token
+       and q.claimed_at > now() - nora_private.attachment_deletion_lease_ttl()
+       for update;
+
+    if v_key is null then
+        raise exception 'attachment deletion lease lost: job % is not held by this lease token', p_job_id
+            using errcode = '55000', detail = 'NORA_ATTACHMENT_LEASE_LOST';
+    end if;
+
+    v_verdict := nora_private.attachment_storage_key_liveness(v_key);
+
+    if v_verdict = 'live' then
+        update nora_private.attachment_storage_deletion_queue q
+           set state        = 'skipped_live',
+               completed_at = now(),
+               claimed_at   = null,
+               claimed_by   = null
+         where q.id = p_job_id
+           and q.state = 'claimed'
+           and q.claimed_by = p_lease_token;
+        get diagnostics v_rows = row_count;
+        if v_rows <> 1 then
+            raise exception 'attachment deletion inspect: locked job % could not be withdrawn', p_job_id
+                using errcode = 'XX000';
+        end if;
+        v_state := 'skipped_live';
+    elsif v_verdict = 'unknown' then
+        v_state := nora_private.attachment_deletion_fail(p_job_id, p_lease_token,
+                                                         'NORA_ATTACHMENT_LIVENESS_UNKNOWN', true);
+    elsif v_verdict = 'dead' then
+        v_state := 'claimed';
+    else
+        raise exception 'attachment deletion inspect: unexpected liveness verdict %', coalesce(v_verdict, '<null>')
+            using errcode = 'XX000';
+    end if;
+
+    verdict := v_verdict;
+    job_state := v_state;
+    return next;
+end;
+$$;
+
+alter function nora_private.attachment_deletion_inspect(bigint, text) owner to postgres;
+
+comment on function nora_private.attachment_deletion_inspect(bigint, text) is
+    'W8-C S2A2.2: lease-guarded liveness inspection of a claimed attachment deletion job. Locks the job under the full valid-lease rule, calls nora_private.attachment_storage_key_liveness exactly once and returns (verdict, job_state): live -> skipped_live (intent withdrawn, completed_at set, attempt_count and error history kept); unknown -> attachment_deletion_fail with NORA_ATTACHMENT_LIVENESS_UNKNOWN (retry, or terminal at the budget); dead -> no write, the job stays claimed under the same lease. DEAD is an observation for the lease holder, never a deletion permission, and the lease fences queue mutations only, not an external Storage request. Resolver errors propagate. Lost lease 55000 NORA_ATTACHMENT_LEASE_LOST, invalid arguments 22023 NORA_ATTACHMENT_INVALID_ARGUMENT. postgres only - no API role may execute it.';
+
+revoke all on function nora_private.attachment_deletion_inspect(bigint, text) from public;
+revoke all on function nora_private.attachment_deletion_inspect(bigint, text) from anon;
+revoke all on function nora_private.attachment_deletion_inspect(bigint, text) from authenticated;
+revoke all on function nora_private.attachment_deletion_inspect(bigint, text) from service_role;

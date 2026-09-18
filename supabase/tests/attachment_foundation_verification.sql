@@ -32,7 +32,8 @@
 --      sales.role or sales.disabled
 --   8. scope: the table is empty (no backfill), the legacy note JSON arrays are
 --      untouched, and the only trigger on it is the W8-C S2A1 capture hook
---      (20260917120000) — no consumer, no physical storage delete path
+--      (20260917120000); the only queue consumer is the postgres-only W8-C
+--      S2A2.2 set (claim_next / inspect / fail) — no physical storage delete path
 --   9. no GUC or role leak
 --
 -- NOT proven here (out of S1 scope by design): physical storage deletion,
@@ -671,8 +672,11 @@ $$;
 -- ---------------------------------------------------------------------------
 do $$
 declare
-    v_failures text[] := '{}';
-    v_extra    text;
+    v_failures  text[] := '{}';
+    v_extra     text;
+    v_sig       text;
+    v_role      text;
+    v_consumers text[];
 begin
     if (select count(*) from public.attachments) <> 0 then
         v_failures := array_append(v_failures, 'public.attachments is not empty — S1 performs no backfill');
@@ -702,14 +706,33 @@ begin
         v_failures := v_failures || format('unexpected trigger on public.attachments beyond the S2A1 capture hook: %s', v_extra);
     end if;
 
-    -- The capture hook enqueues only. A CONSUMER (claim/ack/fail contract or a
-    -- worker) is S2A2 and must NOT appear as a side effect of anything else.
-    if exists (select 1 from pg_proc p
-               join pg_namespace n on n.oid = p.pronamespace
-               where p.proname ~ 'attachment.*(claim|ack|fail|drain|worker)'
-                  or p.proname ~ '(claim|ack|fail|drain|worker).*attachment') then
-        v_failures := array_append(v_failures, 'an attachment deletion consumer exists (S2A2 scope)');
+    -- The capture hook enqueues only. The consumer contract exists ONLY as the
+    -- approved W8-C S2A2.2 set in nora_private (claim_next / inspect / fail):
+    -- no ack / completion / drain / worker function anywhere, none executable
+    -- by any API role, none in public. Anything else is an unreviewed consumer.
+    select array_agg(n.nspname || '.' || p.proname order by n.nspname, p.proname) into v_consumers
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where p.proname ~ 'attachment.*(claim|ack|fail|drain|worker|inspect|complete)'
+       or p.proname ~ '(claim|ack|fail|drain|worker|inspect|complete).*attachment';
+    if v_consumers is distinct from array['nora_private.attachment_deletion_claim_next',
+                                          'nora_private.attachment_deletion_fail',
+                                          'nora_private.attachment_deletion_inspect'] then
+        v_failures := v_failures || format(
+            'the attachment deletion consumer functions are not exactly the approved S2A2.2 set (claim_next / fail / inspect): %s',
+            coalesce(array_to_string(v_consumers, ', '), '<none>'));
     end if;
+    foreach v_sig in array array['nora_private.attachment_deletion_claim_next()',
+                                 'nora_private.attachment_deletion_fail(bigint,text,text,boolean)',
+                                 'nora_private.attachment_deletion_inspect(bigint,text)'] loop
+        if to_regprocedure(v_sig) is not null then
+            foreach v_role in array array['public','anon','authenticated','service_role'] loop
+                if has_function_privilege(v_role, v_sig, 'EXECUTE') then
+                    v_failures := v_failures || format('%s holds EXECUTE on the consumer function %s', v_role, v_sig);
+                end if;
+            end loop;
+        end if;
+    end loop;
 
     -- S1 still performs no physical storage deletion, and the removed W8-B
     -- pg_net path stays removed.
@@ -731,7 +754,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL: scope:\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  8. metadata only: table empty, legacy note JSON untouched, only the S2A1 capture hook and no consumer, W8-B storage contract unchanged';
+    raise notice 'OK  8. metadata only: table empty, legacy note JSON untouched, only the S2A1 capture hook, consumer = exactly the postgres-only S2A2.2 set, W8-B storage contract unchanged';
 end;
 $$;
 

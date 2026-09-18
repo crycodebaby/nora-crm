@@ -50,12 +50,14 @@
 --      companies.banner_url text) is flagged until classified
 --  14. queue vocabulary: skipped_live is terminal, requires completed_at, can
 --      carry no claim, is neither active nor due, does not block a later
---      pending job, and nothing writes it; the S2A1 capture still produces
---      only pending; queue ACL unchanged
+--      pending job, and only the W8-C S2A2.2 inspect primitive
+--      (nora_private.attachment_deletion_inspect) produces it; the S2A1
+--      capture still produces only pending; queue ACL unchanged
 --
--- NOT proven here (out of S2A2.1 scope by design): claim / lease / ack / fail,
--- retry behaviour, any consumer, any physical storage deletion. 'dead' is an
--- observation, never a deletion permission.
+-- NOT proven here (out of S2A2.1 scope by design): claim / lease / inspect /
+-- fail and retry behaviour (attachment_deletion_queue_execution_verification.sql),
+-- any physical storage deletion. 'dead' is an observation, never a deletion
+-- permission.
 
 \set ON_ERROR_STOP on
 
@@ -1003,7 +1005,7 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 14. Queue vocabulary: skipped_live (vocabulary only)
+-- 14. Queue vocabulary: skipped_live (produced only by the S2A2.2 inspect primitive)
 -- ---------------------------------------------------------------------------
 do $$
 declare
@@ -1014,6 +1016,7 @@ declare
     v_n        bigint;
     v_priv     text;
     v_role     text;
+    v_writers  text[];
     v_failures text[] := '{}';
     v_all_privs text[] := case when current_setting('server_version_num')::int >= 170000
                                then array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']
@@ -1134,11 +1137,15 @@ begin
         v_failures := array_append(v_failures, '14f capture produced a state other than pending');
     end if;
 
-    -- ---- 14g. nothing in the database writes skipped_live -------------------
-    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-               where n.nspname in ('public', 'nora_private')
-                 and p.prosrc like '%skipped_live%') then
-        v_failures := array_append(v_failures, '14g a function references skipped_live — S2A2.1 is vocabulary only');
+    -- ---- 14g. only the W8-C S2A2.2 inspect primitive produces skipped_live --
+    select array_agg(n.nspname || '.' || p.proname order by n.nspname, p.proname) into v_writers
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'nora_private')
+      and p.prosrc like '%skipped_live%';
+    if v_writers is distinct from array['nora_private.attachment_deletion_inspect'] then
+        v_failures := v_failures || format(
+            '14g skipped_live is referenced by %s - only nora_private.attachment_deletion_inspect may produce it',
+            coalesce(array_to_string(v_writers, ', '), '<nothing>'));
     end if;
 
     -- ---- 14h. queue ACL unchanged -------------------------------------------
@@ -1163,7 +1170,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (queue vocabulary):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 14. skipped_live: terminal, needs completed_at, no claim, not active/due, does not block, nobody writes it; capture still pending-only; ACL unchanged';
+    raise notice 'OK 14. skipped_live: terminal, needs completed_at, no claim, not active/due, does not block, only the S2A2.2 inspect primitive produces it; capture still pending-only; ACL unchanged';
 
     raise exception 'ROLLBACK_W8C_S2A21_TEST';
 exception
