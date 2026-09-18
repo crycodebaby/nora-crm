@@ -816,7 +816,7 @@ create table nora_private.attachment_storage_deletion_queue (
     created_at timestamptz not null default now(),
     completed_at timestamptz,
     constraint attachment_storage_deletion_queue_state_check
-        check (state in ('pending', 'claimed', 'failed_retryable', 'done', 'failed_terminal')),
+        check (state in ('pending', 'claimed', 'failed_retryable', 'done', 'failed_terminal', 'skipped_live')),
     constraint attachment_storage_deletion_queue_storage_key_check
         check (btrim(storage_key) <> '' and char_length(storage_key) <= 512),
     constraint attachment_storage_deletion_queue_attempt_count_check
@@ -827,7 +827,7 @@ create table nora_private.attachment_storage_deletion_queue (
             or (state <> 'claimed' and claimed_at is null and claimed_by is null)
         ),
     constraint attachment_storage_deletion_queue_completed_check
-        check ((state in ('done', 'failed_terminal')) = (completed_at is not null)),
+        check ((state in ('done', 'failed_terminal', 'skipped_live')) = (completed_at is not null)),
     constraint attachment_storage_deletion_queue_error_check
         check ((last_error_code is null) = (last_error_at is null))
 );
@@ -848,12 +848,12 @@ create index attachment_deletion_queue_due_idx
     where state in ('pending', 'failed_retryable');
 
 comment on table nora_private.attachment_storage_deletion_queue is
-    'W8-C S2A1 (2026-09-17): durable capture of the intent to delete a storage object, written by the AFTER DELETE trigger on public.attachments. A row here is an INTENT, never a permission: nothing may delete an object before a consumer has proven the key is referenced nowhere (legacy note JSON arrays, company logos and the URL-only branding logos included). No direct grants for any API role. S2A1 has no consumer: no claim/ack/fail contract, no worker, no Storage call.';
+    'W8-C S2A1 (2026-09-17): durable capture of the intent to delete a storage object, written by the AFTER DELETE trigger on public.attachments. A row here is an INTENT, never a permission: nothing may delete an object before a consumer has proven the key is referenced nowhere (legacy note JSON arrays, company logos and the URL-only branding logos included). No direct grants for any API role - not reachable through PostgREST. W8-C S2A2.1 (2026-09-18) adds the read-only liveness resolver nora_private.attachment_storage_key_liveness(text) and the terminal vocabulary state skipped_live; there is still no consumer: no claim/ack/fail contract, no worker, no Storage call.';
 
 comment on column nora_private.attachment_storage_deletion_queue.storage_key is
     'Provider-neutral object identity copied from the deleted attachment row (OLD.storage_key). Never a src, URL, hostname or bucket name, and never a caller-supplied path.';
 comment on column nora_private.attachment_storage_deletion_queue.state is
-    'pending | claimed | failed_retryable | done | failed_terminal. The first three are ACTIVE and carry the partial unique invariant on storage_key. S2A1 only ever produces pending.';
+    'pending | claimed | failed_retryable | done | failed_terminal | skipped_live. pending, claimed and failed_retryable are ACTIVE and carry the partial unique invariant on storage_key; done, failed_terminal and skipped_live are TERMINAL. skipped_live = the deletion intent was terminally withdrawn because the key was observed LIVE under the liveness contract in force at that moment - it is NOT a physical deletion, NOT a permanent guarantee against future orphaning and NOT a deletion authorization. S2A1 only ever produces pending; nothing produces skipped_live yet (S2A2.1 adds the vocabulary only).';
 comment on column nora_private.attachment_storage_deletion_queue.attempt_count is
     'Consumer retry counter (S2A2). Always 0 in S2A1.';
 comment on column nora_private.attachment_storage_deletion_queue.available_at is
@@ -865,7 +865,7 @@ comment on column nora_private.attachment_storage_deletion_queue.claimed_by is
 comment on column nora_private.attachment_storage_deletion_queue.last_error_code is
     'Machine-readable failure code from the last consumer attempt (S2A2), never a free-text provider message.';
 comment on column nora_private.attachment_storage_deletion_queue.completed_at is
-    'Set exactly when the job reaches a terminal state (done / failed_terminal). Terminal rows are RETAINED, never auto-purged: a queue that deletes its own evidence cannot be audited.';
+    'Set exactly when the job reaches a terminal state (done / failed_terminal / skipped_live). skipped_live is terminal but records a WITHDRAWN intent, not a deletion. Terminal rows are RETAINED, never auto-purged: a queue that deletes its own evidence cannot be audited.';
 
 revoke all on table nora_private.attachment_storage_deletion_queue from public;
 revoke all on table nora_private.attachment_storage_deletion_queue from anon;

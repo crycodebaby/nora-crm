@@ -4448,3 +4448,359 @@ revoke all on function nora_private.enqueue_attachment_storage_deletion() from p
 revoke all on function nora_private.enqueue_attachment_storage_deletion() from anon;
 revoke all on function nora_private.enqueue_attachment_storage_deletion() from authenticated;
 revoke all on function nora_private.enqueue_attachment_storage_deletion() from service_role;
+
+-- Nora CRM W8-C S2A2.1 (2026-09-18): central attachment liveness resolver.
+-- Read-only reference observation: live | dead | unknown for one storage key.
+-- No consumer, no queue write, no Storage call, no network. 'dead' is an
+-- observation, never a deletion permission. Execution errors propagate; there
+-- is deliberately no `exception when others`.
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.1 (2026-09-18) (a) URL helper
+--
+-- Classifies ONE URL against ONE candidate key: 'live' | 'none' | 'unknown'.
+-- Reads no table. The parser may PROVE liveness; it never nominates an object
+-- for deletion — 'none' only means "this value does not reference the key".
+--
+-- Canonical form (and the ONLY form that can prove 'live'):
+--   ^(https?://[^/?#\s]+)/storage/v1/object/public/attachments/([A-Za-z0-9._-]{1,512})$
+--   key not '.' / '..'
+-- No normalization, no percent-decoding, no trimming, no case folding.
+--
+-- Origin allowlist v1 (exact string match, nothing speculative):
+--   https://kixxroxtfzbcbzctohex.supabase.co   Production project
+--   http://127.0.0.1:54321                     local Supabase stack
+--
+-- STABLE (not IMMUTABLE) on purpose: no index or generated column may ever
+-- depend on this classification, which is a contract that will evolve.
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.attachment_url_liveness(p_url text, p_storage_key text)
+returns text
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+    v_match text[];
+    v_lower text;
+begin
+    -- nothing there, or an inline / in-browser object: never a bucket reference
+    if p_url is null or btrim(p_url) = '' then
+        return 'none';
+    end if;
+
+    v_lower := lower(p_url);
+    if left(v_lower, 5) in ('data:', 'blob:') then
+        return 'none';
+    end if;
+
+    -- The canonical public-bucket URL. PostgreSQL regex bounds stop at 255,
+    -- so the 512-character key limit is checked separately.
+    v_match := regexp_match(p_url,
+        '^(https?://[^/?#\s]+)/storage/v1/object/public/attachments/([A-Za-z0-9._-]+)$');
+    if v_match is not null
+       and char_length(v_match[2]) <= 512
+       and v_match[2] not in ('.', '..') then
+        if v_match[2] is distinct from p_storage_key then
+            return 'none';
+        end if;
+        if v_match[1] in ('https://kixxroxtfzbcbzctohex.supabase.co', 'http://127.0.0.1:54321') then
+            return 'live';
+        end if;
+        -- same key, canonical shape, but an origin this contract does not
+        -- know: cannot prove live, must not claim dead
+        return 'unknown';
+    end if;
+
+    -- Not canonical. Anything that still LOOKS like a storage reference is
+    -- fail-closed: sign/, authenticated/, render/image/, query, fragment,
+    -- percent-encoding, duplicate or embedded slashes, empty key, '..',
+    -- relative form, padding, case mutation.
+    if v_lower ~ 'storage(/|%2f)+v1'
+       or (position('attachments' in v_lower) > 0 and v_lower ~ '(^|/|%2f)object(/|%2f)') then
+        -- a storage URL that names no attachments bucket in any spelling and
+        -- carries no encoding is clearly a different bucket
+        if position('attachments' in v_lower) = 0 and position('%' in v_lower) = 0 then
+            return 'none';
+        end if;
+        return 'unknown';
+    end if;
+
+    -- an ordinary foreign URL (favicon service, website, ...)
+    return 'none';
+end;
+$$;
+
+alter function nora_private.attachment_url_liveness(text, text) owner to postgres;
+
+comment on function nora_private.attachment_url_liveness(text, text) is
+    'W8-C S2A2.1: classifies one URL against one candidate storage key -> live | none | unknown. Only the canonical public attachments URL on an allowlisted origin (Production project, local stack) can prove live; the same canonical URL on another origin carrying the key is unknown; any other storage-looking attachments value (sign/authenticated/render paths, query, fragment, percent-encoding, extra slashes, padding, relative form) is unknown; data:, blob:, blank and ordinary foreign URLs are none. Reads no table. Never nominates an object for deletion.';
+
+revoke all on function nora_private.attachment_url_liveness(text, text) from public;
+revoke all on function nora_private.attachment_url_liveness(text, text) from anon;
+revoke all on function nora_private.attachment_url_liveness(text, text) from authenticated;
+revoke all on function nora_private.attachment_url_liveness(text, text) from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.1 (2026-09-18) (b) File-value helper (RAFile-like object: { path?, src?, ... })
+--
+--   path ABSENT     field absent, JSON null, or blank string
+--   path USABLE     JSON string, non-blank, <= 512 chars, already trimmed,
+--                   no '://', not starting with '/'
+--   path MALFORMED  anything else
+--   src             absent / JSON null -> none; string -> URL helper;
+--                   any other JSON type -> unknown
+--
+--   USABLE    path = key -> live; otherwise the src verdict decides
+--             (a local src naming a SECOND key keeps that key live too —
+--             the value references both, neither is silently dropped;
+--             a foreign-origin or malformed src -> unknown)
+--   ABSENT    src fallback
+--   MALFORMED a src proving the key live -> live; otherwise unknown
+--   {}        none
+--   SQL NULL / JSON null   none (no file reference at all)
+--   any other non-object JSON (string, number, boolean, array) -> unknown
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.attachment_file_value_liveness(p_value jsonb, p_storage_key text)
+returns text
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+    v_path       jsonb;
+    v_path_text  text;
+    v_path_state text;
+    v_src        jsonb;
+    v_src_state  text;
+begin
+    -- SQL NULL and JSON null both mean "no file reference": the same
+    -- absence semantics as a JSON-null path / src / branding key.
+    if p_value is null or jsonb_typeof(p_value) = 'null' then
+        return 'none';
+    end if;
+
+    if jsonb_typeof(p_value) <> 'object' then
+        return 'unknown';
+    end if;
+
+    v_path := p_value -> 'path';
+    if v_path is null or jsonb_typeof(v_path) = 'null' then
+        v_path_state := 'absent';
+    elsif jsonb_typeof(v_path) = 'string' then
+        v_path_text := v_path #>> '{}';
+        if btrim(v_path_text) = '' then
+            v_path_state := 'absent';
+        elsif char_length(v_path_text) <= 512
+              and v_path_text = btrim(v_path_text)
+              and position('://' in v_path_text) = 0
+              and left(v_path_text, 1) <> '/' then
+            v_path_state := 'usable';
+        else
+            v_path_state := 'malformed';
+        end if;
+    else
+        v_path_state := 'malformed';
+    end if;
+
+    v_src := p_value -> 'src';
+    if v_src is null or jsonb_typeof(v_src) = 'null' then
+        v_src_state := 'none';
+    elsif jsonb_typeof(v_src) = 'string' then
+        v_src_state := nora_private.attachment_url_liveness(v_src #>> '{}', p_storage_key);
+    else
+        v_src_state := 'unknown';
+    end if;
+
+    if v_path_state = 'usable' then
+        if v_path_text = p_storage_key then
+            return 'live';
+        end if;
+        -- the path names another key; the src may still reference this one
+        return v_src_state;
+    elsif v_path_state = 'absent' then
+        return v_src_state;
+    end if;
+
+    -- malformed path: only a src that PROVES the key live is conclusive
+    if v_src_state = 'live' then
+        return 'live';
+    end if;
+    return 'unknown';
+end;
+$$;
+
+alter function nora_private.attachment_file_value_liveness(jsonb, text) owner to postgres;
+
+comment on function nora_private.attachment_file_value_liveness(jsonb, text) is
+    'W8-C S2A2.1: classifies one RAFile-like JSON value ({path?, src?}) against one candidate storage key -> live | none | unknown. A usable path equal to the key proves live; a src is classified by attachment_url_liveness and can prove a SECOND key live when it names a different local key than the path; absent path falls back to src; a malformed path or non-null non-object JSON is unknown unless a src proves live; {}, JSON null and SQL NULL are none. Reads no table.';
+
+revoke all on function nora_private.attachment_file_value_liveness(jsonb, text) from public;
+revoke all on function nora_private.attachment_file_value_liveness(jsonb, text) from anon;
+revoke all on function nora_private.attachment_file_value_liveness(jsonb, text) from authenticated;
+revoke all on function nora_private.attachment_file_value_liveness(jsonb, text) from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W8-C S2A2.1 (2026-09-18) (c) The central resolver
+--
+-- SECURITY DEFINER is required for COMPLETE visibility, not for privilege: it
+-- must see every row of every registered table independent of RLS and of the
+-- caller, otherwise it would report a false 'dead'. It is not an API: EXECUTE
+-- is revoked from every API role (authenticated holds USAGE on nora_private,
+-- so the revoke is load-bearing).
+--
+-- `set row_security = off` makes that visibility FAIL-CLOSED: if a later
+-- drift (FORCE ROW LEVEL SECURITY, an ownership change, a lost BYPASSRLS)
+-- would let a policy filter any registered table, PostgreSQL raises 42501
+-- instead of silently returning fewer rows — a filtered read is a false
+-- 'dead', an error is not a verdict.
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.attachment_storage_key_liveness(p_storage_key text)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+set row_security = off
+as $$
+declare
+    v_live        boolean;
+    v_unknown     boolean;
+    v_any_unknown boolean := false;
+    v_key_json    text;
+begin
+    -- Queue-domain input contract. The key is compared EXACTLY as given; a
+    -- padded but non-blank key is valid and is never trimmed.
+    if p_storage_key is null
+       or btrim(p_storage_key) = ''
+       or char_length(p_storage_key) > 512 then
+        raise exception 'NORA_ATTACHMENT_LIVENESS_INVALID_KEY: storage key must be non-blank text of at most 512 characters'
+            using errcode = '22023';
+    end if;
+
+    -- S1 public.attachments.storage_key (UNIQUE-indexed identity)
+    if exists (select 1 from public.attachments a where a.storage_key = p_storage_key) then
+        return 'live';
+    end if;
+
+    -- S2 public.contact_notes.attachments (jsonb[])
+    select coalesce(bool_or(s.v = 'live'), false), coalesce(bool_or(s.v = 'unknown'), false)
+      into v_live, v_unknown
+      from (select nora_private.attachment_file_value_liveness(e.item, p_storage_key) as v
+              from public.contact_notes n
+              cross join lateral unnest(n.attachments) as e(item)) as s;
+    if v_live then
+        return 'live';
+    end if;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    -- S3 public.deal_notes.attachments (jsonb[])
+    select coalesce(bool_or(s.v = 'live'), false), coalesce(bool_or(s.v = 'unknown'), false)
+      into v_live, v_unknown
+      from (select nora_private.attachment_file_value_liveness(e.item, p_storage_key) as v
+              from public.deal_notes n
+              cross join lateral unnest(n.attachments) as e(item)) as s;
+    if v_live then
+        return 'live';
+    end if;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    -- S4 public.companies.logo
+    select coalesce(bool_or(s.v = 'live'), false), coalesce(bool_or(s.v = 'unknown'), false)
+      into v_live, v_unknown
+      from (select nora_private.attachment_file_value_liveness(c.logo, p_storage_key) as v
+              from public.companies c) as s;
+    if v_live then
+        return 'live';
+    end if;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    -- S5 public.configuration.config -> lightModeLogo / darkModeLogo.
+    -- Production stores these as URL-ONLY JSON strings; only the URL helper
+    -- finds them. A non-object config is an unexpected shape -> unknown.
+    select coalesce(bool_or(s.v = 'live'), false), coalesce(bool_or(s.v = 'unknown'), false)
+      into v_live, v_unknown
+      from (select case
+                       when jsonb_typeof(c.config) is distinct from 'object' then 'unknown'
+                       when k.item is null or jsonb_typeof(k.item) = 'null' then 'none'
+                       when jsonb_typeof(k.item) = 'string'
+                           then nora_private.attachment_url_liveness(k.item #>> '{}', p_storage_key)
+                       when jsonb_typeof(k.item) = 'object'
+                           then nora_private.attachment_file_value_liveness(k.item, p_storage_key)
+                       else 'unknown'
+                   end as v
+              from public.configuration c
+              cross join lateral (values (c.config -> 'lightModeLogo'),
+                                         (c.config -> 'darkModeLogo')) as k(item)) as s;
+    if v_live then
+        return 'live';
+    end if;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    -- S6 public.contacts.avatar
+    select coalesce(bool_or(s.v = 'live'), false), coalesce(bool_or(s.v = 'unknown'), false)
+      into v_live, v_unknown
+      from (select nora_private.attachment_file_value_liveness(c.avatar, p_storage_key) as v
+              from public.contacts c) as s;
+    if v_live then
+        return 'live';
+    end if;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    -- S7 public.sales.avatar
+    select coalesce(bool_or(s.v = 'live'), false), coalesce(bool_or(s.v = 'unknown'), false)
+      into v_live, v_unknown
+      from (select nora_private.attachment_file_value_liveness(sa.avatar, p_storage_key) as v
+              from public.sales sa) as s;
+    if v_live then
+        return 'live';
+    end if;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    -- S5r residual configuration tripwire: after removing the two registered
+    -- branding keys, any storage-looking text left in config is a reference
+    -- this contract does not know -> fail closed. Detection only; it never
+    -- registers anything and never proves live. It trips on
+    --   * a storage URL marker            storage/v1 (any case, %2F)
+    --   * a bucket path segment           attachments/ or attachments%2F,
+    --                                      which also covers the relative
+    --                                      object/public/attachments/<key>
+    --   * the historic combined marker     'attachments' + /object/
+    --   * the candidate key itself          verbatim anywhere in the residue
+    --                                      (bare key, {"path": key}, any
+    --                                      other unregistered shape).
+    -- The candidate is matched in its JSON-escaped spelling, exactly as it
+    -- appears in the serialized residue, and case-sensitively like a key.
+    v_key_json := to_jsonb(p_storage_key)::text;
+    v_key_json := substr(v_key_json, 2, char_length(v_key_json) - 2);
+
+    select coalesce(bool_or(
+               case
+                   when jsonb_typeof(c.config) is distinct from 'object' then true
+                   else lower((c.config - 'lightModeLogo' - 'darkModeLogo')::text) ~ 'storage(/|%2f)+v1'
+                        or lower((c.config - 'lightModeLogo' - 'darkModeLogo')::text) ~ 'attachments(/|%2f)'
+                        or (position('attachments' in lower((c.config - 'lightModeLogo' - 'darkModeLogo')::text)) > 0
+                            and lower((c.config - 'lightModeLogo' - 'darkModeLogo')::text) ~ '(/|%2f)object(/|%2f)')
+                        or position(v_key_json in (c.config - 'lightModeLogo' - 'darkModeLogo')::text) > 0
+               end), false)
+      into v_unknown
+      from public.configuration c;
+    v_any_unknown := v_any_unknown or v_unknown;
+
+    if v_any_unknown then
+        return 'unknown';
+    end if;
+    return 'dead';
+end;
+$$;
+
+alter function nora_private.attachment_storage_key_liveness(text) owner to postgres;
+
+comment on function nora_private.attachment_storage_key_liveness(text) is
+    'W8-C S2A2.1: central attachment liveness resolver -> live | dead | unknown for one storage key, over the hard-coded reference registry v1 (public.attachments.storage_key; contact_notes/deal_notes.attachments jsonb[]; companies.logo; configuration.config lightModeLogo/darkModeLogo incl. URL-only strings plus a residual tripwire on storage markers, attachments/ path segments and the candidate key verbatim; contacts.avatar; sales.avatar). LIVE dominates UNKNOWN; DEAD only when every surface was inspected without live proof or ambiguity. A statement-snapshot OBSERVATION, never a deletion permission. Audit snapshots and storage.objects do not participate. Invalid key (NULL, blank, > 512 chars) raises 22023 NORA_ATTACHMENT_LIVENESS_INVALID_KEY; execution errors propagate and are never mapped to unknown. SECURITY DEFINER for complete RLS-independent visibility, with row_security = off so that any RLS-filtered read raises instead of hiding rows; no API role may execute it.';
+
+revoke all on function nora_private.attachment_storage_key_liveness(text) from public;
+revoke all on function nora_private.attachment_storage_key_liveness(text) from anon;
+revoke all on function nora_private.attachment_storage_key_liveness(text) from authenticated;
+revoke all on function nora_private.attachment_storage_key_liveness(text) from service_role;
