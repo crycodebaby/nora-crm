@@ -82,6 +82,7 @@ Seit W8-C S1 existiert `public.attachments` — **additiv, leer und nicht an die
 
 - **Genau ein Besitzer:** `contact_note_id` **XOR** `deal_note_id` (`attachments_owner_check`), nie beide, nie keiner. Keine polymorphe `owner_type`/`owner_id`-Spalte — sie gäbe die Fremdschlüsselintegrität auf.
 - **Ein Zeilen-`DELETE` — auch per FK-`CASCADE` — entfernt ausschließlich die Metadatenzeile, niemals das Objekt im Storage.** Es gibt keinen physischen Löschpfad; verwaiste Objekte bleiben liegen ([`17`](17-known-issues-and-planned-waves.md) H.1). Diesen Cascade nie als „die Datei wird gelöscht" beschreiben oder darauf aufbauen.
+- **Seit W8-C S2A1 ist dieses Zeilen-`DELETE` transaktional an eine fail-closed Erfassung gekoppelt:** ein `AFTER DELETE`-Trigger hält `storage_key` als Lösch**vorhaben** in einer privaten Warteschlange fest; scheitert diese Erfassung (außer beim bereits erfassten aktiven Vorhaben, das idempotent unterdrückt wird), scheitert die Löschung mit. Wer an `public.attachments`, ihren Fremdschlüsseln oder ihren Löschpfaden arbeitet, rechnet also mit einem Schreibvorgang in derselben Transaktion. Vollständiger Contract: [`22`](22-security-and-access.md) Abschnitt 6.7.
 
 ---
 
