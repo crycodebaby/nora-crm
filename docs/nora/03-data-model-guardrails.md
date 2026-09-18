@@ -1,6 +1,6 @@
 # 03 – Datenmodell- und Persistenz-Guardrails
 
-Stand: 2026-09-17 · Load-Klasse: **ALWAYS**
+Stand: 2026-09-18 · Load-Klasse: **ALWAYS**
 
 Dieses Dokument hält die **universellen Daten- und Persistenzinvarianten** von Nora fest: Regeln, die bei praktisch jeder Datenmodell- oder Persistenzänderung gelten, unabhängig von Subsystem und Release.
 
@@ -76,13 +76,14 @@ Keine Ad-hoc-Logik in `CompanyShow`, in der Aufgaben-Kontaktauswahl oder in Quic
 - FakeRest spiegelt die Regel in den normalen `create`/`update`-Pfaden für `deals` (Parität, §5). Existenzprüfung nullish, nie per Truthiness — Kunden-Id `0` ist gültig (§2.1, Falle 32).
 - Diese Invariante betrifft nur die Nullability. Das Löschverhalten des Fremdschlüssels ist **nicht** Teil davon und wird hier nicht festgelegt.
 
-### 1.8 Anhang-Metadaten: ein Besitzer, und `CASCADE` löscht keine Datei
+### 1.8 Anhang-Metadaten: ein Besitzer, `CASCADE` löscht keine Datei, Referenzspalten sind registriert
 
-Seit W8-C S1 existiert `public.attachments` — **additiv, leer und nicht an die Anwendung angebunden**. Live genutzt bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`. Vollständiger Contract (Spalten, RLS, Grants, Begründungen): [`22`](22-security-and-access.md) Abschnitt 6.6 — hier stehen nur die beiden Invarianten, die beim Datenmodellieren zählen:
+Seit W8-C S1 existiert `public.attachments` — **additiv, leer und nicht an die Anwendung angebunden**. Live genutzt bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`. Vollständiger Contract (Spalten, RLS, Grants, Begründungen): [`22`](22-security-and-access.md) Abschnitt 6.6 — hier stehen nur die Invarianten, die beim Datenmodellieren zählen:
 
 - **Genau ein Besitzer:** `contact_note_id` **XOR** `deal_note_id` (`attachments_owner_check`), nie beide, nie keiner. Keine polymorphe `owner_type`/`owner_id`-Spalte — sie gäbe die Fremdschlüsselintegrität auf.
 - **Ein Zeilen-`DELETE` — auch per FK-`CASCADE` — entfernt ausschließlich die Metadatenzeile, niemals das Objekt im Storage.** Es gibt keinen physischen Löschpfad; verwaiste Objekte bleiben liegen ([`17`](17-known-issues-and-planned-waves.md) H.1). Diesen Cascade nie als „die Datei wird gelöscht" beschreiben oder darauf aufbauen.
 - **Seit W8-C S2A1 ist dieses Zeilen-`DELETE` transaktional an eine fail-closed Erfassung gekoppelt:** ein `AFTER DELETE`-Trigger hält `storage_key` als Lösch**vorhaben** in einer privaten Warteschlange fest; scheitert diese Erfassung (außer beim bereits erfassten aktiven Vorhaben, das idempotent unterdrückt wird), scheitert die Löschung mit. Wer an `public.attachments`, ihren Fremdschlüsseln oder ihren Löschpfaden arbeitet, rechnet also mit einem Schreibvorgang in derselben Transaktion. Vollständiger Contract: [`22`](22-security-and-access.md) Abschnitt 6.7.
+- **Jede Schemafläche, die dafür vorgesehen ist, Datei-, Bild-, Logo- oder Anhangreferenzen (Objektschlüssel, Dateiobjekt oder Storage-URL) zu speichern, gehört in die Liveness-Registry — oder wird dort ausdrücklich und mit Begründung ausgeschlossen.** Seit W8-C S2A2.1 entscheidet der zentrale Resolver `nora_private.attachment_storage_key_liveness(text)` über eine **fest codierte** Liste von Referenzflächen, ob ein Schlüssel noch referenziert wird. Eine neue, nicht registrierte Referenzspalte (z. B. ein weiteres Logo-, Bild- oder Anhangfeld) sähe der Resolver nicht — ihre Schlüssel würden als `dead` beobachtet. Wer eine solche Spalte anlegt, erweitert den Resolver per Migration oder klassifiziert sie bewusst als ausgeschlossen. Gewöhnliche Freitext- und Link-Felder sind **nicht** automatisch Referenzflächen, auch wenn dort eine URL stehen kann ([`22`](22-security-and-access.md) Abschnitt 6.8). Der Katalog-Vollständigkeitswächter der Verifikationssuite ist ein Schema-Wächter: er meldet neu hinzugefügte, wahrscheinliche Referenzspalten (JSON-Spalten und Textspalten mit datei- oder link-typischem Namen), solange sie nicht klassifiziert sind — er erkennt keine beliebig in Freitext eingefügten URLs und ersetzt die bewusste Klassifikation nicht. Audit-Snapshots sind bewusst **keine** Referenzfläche. Vollständiger Contract: [`22`](22-security-and-access.md) Abschnitt 6.8.
 
 ---
 

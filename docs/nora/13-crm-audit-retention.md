@@ -1,6 +1,6 @@
 # 13 – CRM-Audit-Verlauf und Aufbewahrung
 
-Stand: 2026-09-07 (v0.3l/v0.3l.1 vom 2026-07-15, ergänzt um Operation Correlation 2026-08-10, Security Hardening Wave 0 2026-09-04, User Lifecycle W3/W4/W5 2026-09-05/06 und W6-B 2026-09-07). Dieses Dokument beschreibt den **aktuellen** Audit-Vertrag; Release-Evidenz liegt im Archiv (`releases/`).
+Stand: 2026-09-18 (v0.3l/v0.3l.1 vom 2026-07-15, ergänzt um Operation Correlation 2026-08-10, Security Hardening Wave 0 2026-09-04, User Lifecycle W3/W4/W5 2026-09-05/06, W6-B 2026-09-07 und die Anhang-Liveness-Abgrenzung W8-C S2A2.1 2026-09-18). Dieses Dokument beschreibt den **aktuellen** Audit-Vertrag; Release-Evidenz liegt im Archiv (`releases/`).
 
 ## Zweck
 
@@ -71,6 +71,8 @@ Bei jedem Ereignis serverseitig:
 **Metadaten-Hygiene:** nie JWT, Access-/Refresh-Token, Service-Role-Secret, SMTP-Zugang, Invite-Token, OTP, Reset-Token, Sitzungs-IDs, Ticket-IDs, Provider-Nutzlasten oder Stacktraces in `metadata`. Enthalten (retentions-sensibel, offene Entscheidung): `invitee_email`, `employee_email`, `changes.email`. `user.account_deleted` (W6-B) trägt bewusst **keine** Adresse und keinen Namen — nur Ids und Zähler.
 
 **Kontolöschung ≠ Löschung der Historie (W6-B):** der kontrollierte Hard Delete entfernt Nora-Konto und Anmeldeidentität, **nicht** die Audit-Zeilen, in denen der Mitarbeiter Ziel war (sie bleiben unter der stabilen `entity_id`), nicht GoTrues eigene `auth.audit_log_entries` (`user_deleted`, enthält die E-Mail in `traits`, von GoTrue geschrieben) und nicht `operation_errors`/`idempotency_records`. Ein Mitarbeiter, der selbst als **Actor** im Audit steht, ist nicht löschbar (durable Provenienz). Retention/Anonymisierung dieser Reste bleibt die geparkte Entscheidung unten.
+
+**Audit-Historie hält keine Anhangdateien am Leben (W8-C S2A2.1, 2026-09-18):** Ein Audit-Snapshot, der einen Anhang, ein Logo oder einen Avatar samt Objektschlüssel nennt, ist Evidenz darüber, *was war* — **keine** lebende Referenz. Der Anhang-Liveness-Resolver wertet `audit_events` (`old_data`, `new_data`, `metadata`) bewusst **nicht** aus, damit Audit-Evidenz Storage-Bytes nicht unbegrenzt festhält. Das betrifft ausschließlich die Frage, ob ein Storage-Objekt noch gebraucht wird: Audit-Zeilen werden dadurch weder gelöscht noch verändert, und append-only gilt unverändert. Eine im Audit genannte Datei kann nach einer künftigen physischen Bereinigung (S2B, nicht implementiert) nicht mehr abrufbar sein. Contract: [`22-security-and-access.md`](22-security-and-access.md) Abschnitt 6.8.
 
 ### Änderungsformat (kompakt)
 

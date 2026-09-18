@@ -1,6 +1,6 @@
 # 22 – Security und Access (global)
 
-Stand: 2026-09-17 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-18 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **globale Security- und Access-Contract** von Nora: Authentifizierung vs. Autorisierung, Rollen und Capabilities, Trust Boundaries, Datenbank-Enforcement (RLS, Grants, Default-Privilegien, `SECURITY DEFINER`), Session- und Executor-Integrität.
 
@@ -223,7 +223,7 @@ Technische Grundlage:
 - Bucket-Grenzen in `storage.buckets`: `file_size_limit = 52428800` (50 MiB) und eine **Allowlist aus genau neun MIME-Typen** (JPEG, PNG, WebP, GIF, PDF, DOCX, XLSX, TXT, CSV). Nicht erlaubt sind insbesondere SVG, HTML/XHTML/XML, JavaScript, Makro- und Legacy-Office-Formate sowie typlose Uploads (`application/octet-stream`).
 - **Geprüft wird der deklarierte MIME-Typ**, nicht der Byteinhalt. Es findet **keine** Inhalts-, Viren- oder Magic-Byte-Prüfung statt; eine als `image/png` deklarierte Datei mit anderem Inhalt wird angenommen. Die Client-Prüfung im Formular ist Bedienkomfort und spiegelt dieselben Werte — der Bucket ist die Boundary.
 - **Objektschlüssel neuer Uploads** sind CSPRNG-UUIDs (`crypto.randomUUID()`) plus normalisierter Endung, nicht mehr aus Zeitstempeln oder Dateinamen abgeleitet. Bestehende Legacy-Schlüssel bleiben unverändert und weiterhin lesbar.
-- **Kein physischer Löschpfad.** Die frühere Kette AFTER-DELETE/UPDATE-Trigger → `public.cleanup_note_attachments()` → `pg_net` → Edge Function `delete_note_attachments` (`service_role`-`remove` auf client-kontrollierte Pfade) ist vollständig entfernt, ebenso `public.get_note_attachments_function_url()`. W8-B hat diesen unsicheren Pfad **abgeschaltet, ohne ihn zu ersetzen**: gelöschte Notizen hinterlassen verwaiste Storage-Objekte. Wer einen Löschpfad wieder einführt, entwirft ihn neu (Ownership auf Datensatzebene, kein client-kontrollierter Pfad) — er reaktiviert den alten nicht. **Auch W8-C S2A1 hat daran nichts geändert:** es erfasst seit 2026-09-17 das *Vorhaben* einer Objektlöschung in einer privaten Warteschlange (Abschnitt 6.7), berührt den Bucket aber nicht und löscht kein Objekt.
+- **Kein physischer Löschpfad.** Die frühere Kette AFTER-DELETE/UPDATE-Trigger → `public.cleanup_note_attachments()` → `pg_net` → Edge Function `delete_note_attachments` (`service_role`-`remove` auf client-kontrollierte Pfade) ist vollständig entfernt, ebenso `public.get_note_attachments_function_url()`. W8-B hat diesen unsicheren Pfad **abgeschaltet, ohne ihn zu ersetzen**: gelöschte Notizen hinterlassen verwaiste Storage-Objekte. Wer einen Löschpfad wieder einführt, entwirft ihn neu (Ownership auf Datensatzebene, kein client-kontrollierter Pfad) — er reaktiviert den alten nicht. **Auch W8-C S2A1 und S2A2.1 haben daran nichts geändert:** S2A1 erfasst seit 2026-09-17 das *Vorhaben* einer Objektlöschung in einer privaten Warteschlange (Abschnitt 6.7), S2A2.1 beobachtet seit 2026-09-18 read-only, ob ein Objektschlüssel noch referenziert wird (Abschnitt 6.8) — keiner von beiden berührt den Bucket oder löscht ein Objekt.
 
 **Regel für künftige Änderungen:** permissive Policies werden ODER-verknüpft. Eine zusätzliche permissive Policy auf `storage.objects` öffnet den Bucket wieder, auch wenn die W8-B-Policies stehen bleiben. Die Migration bricht deshalb ab, sobald sie eine unbekannte Policy auf `storage.objects` findet, und löscht niemals eine fremde Policy. Wer hier etwas ändert, führt die Verifikationssuiten aus [`21`](21-agent-runbooks.md) Sektion 4 aus.
 
@@ -249,7 +249,7 @@ Technische Grundlage — **beide Gates sind gesetzt** (Abschnitt 6.2):
 - Grants: `revoke all` an `anon, authenticated, service_role`, danach genau `grant select, insert, delete … to authenticated`. `anon` und `service_role` halten **nichts**; `TRUNCATE`/`REFERENCES`/`TRIGGER`/`MAINTAIN` hält keine Rolle. `service_role` bleibt leer, weil es **keinen belegten, deployten Backend-Aufrufer** gibt — ein solcher Pfad braucht eigene Begründung, Zielmatrix-Eintrag und Assertion.
 - **`DELETE = can_write()` ist keine Rechteausweitung.** Büro kann einen Anhangverweis heute bereits entfernen, indem es das `attachments`-Array der Notiz per `UPDATE` schreibt (Notiz-`UPDATE` ist `can_write()`); die Zeilenlöschung ist das modellierte Äquivalent genau dieser bestehenden Fähigkeit. Die Notiz **selbst** zu löschen bleibt `is_admin()`. Das nicht „zu `is_admin()` korrigieren", ohne diesen Absatz gelesen zu haben.
 - Ownership-Invariante `attachments_owner_check`: genau **ein** Besitzer (`contact_note_id` **XOR** `deal_note_id`) — nie beide, nie keiner. Beide FKs sind `ON UPDATE CASCADE ON DELETE CASCADE`.
-- **`CASCADE` löscht ausschließlich die Metadatenzeile, niemals das Storage-Objekt.** Weder S1 noch S2A1 enthalten einen physischen Löschpfad; verwaiste Objekte bleiben liegen (akzeptierte Einschränkung seit W8-B, [`17`](17-known-issues-and-planned-waves.md) H.1). Nie als „die Datei wird gelöscht" formulieren. Seit S2A1 hängt an derselben Zeilenlöschung ein `AFTER DELETE`-Trigger, der ein Lösch**vorhaben** festhält — Abschnitt 6.7.
+- **`CASCADE` löscht ausschließlich die Metadatenzeile, niemals das Storage-Objekt.** Weder S1 noch S2A1 noch S2A2.1 enthalten einen physischen Löschpfad; verwaiste Objekte bleiben liegen (akzeptierte Einschränkung seit W8-B, [`17`](17-known-issues-and-planned-waves.md) H.1). Nie als „die Datei wird gelöscht" formulieren. Seit S2A1 hängt an derselben Zeilenlöschung ein `AFTER DELETE`-Trigger, der ein Lösch**vorhaben** festhält — Abschnitt 6.7.
 - `storage_key` ist `NOT NULL` und **`UNIQUE`** — eine provider-neutrale Objektidentität: kein `src`, keine öffentliche oder signierte URL, kein Hostname, kein Bucket- oder Anbietername wird hier persistiert. Bewusst **kein** Formatzwang, damit eine spätere Schlüsselstruktur (W8-E) möglich bleibt.
 - `mime_type` ist `NOT NULL` und hält den **deklarierten** Typ des Uploads. Die Neun-Typen-Allowlist bleibt Bucket-Policy (Abschnitt 6.5) und wird hier **bewusst nicht** als Entitätsinvariante dupliziert; eine Inhalts-, Magic-Byte- oder Virenprüfung findet nirgends in Nora statt.
 - Kein `uploaded_by`/`created_by`: eine Mitarbeiterreferenz würde Hard-Delete-Semantik, Lifecycle-Referenzintegrität und die Löschvorschau ohne aktuellen Bedarf ausweiten. Additiv nachrüstbar.
@@ -258,9 +258,9 @@ Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
 ### 6.7 Die Löschintent-Warteschlange `nora_private.attachment_storage_deletion_queue`
 
-Stand seit W8-C S2A1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260917120000_nora_attachment_deletion_capture`). **Dritte Fläche, dritter Contract:** 6.5 regelt den Bucket, 6.6 die Metadatentabelle, dieser Abschnitt die private Warteschlange, in der das *Vorhaben* einer Objektlöschung festgehalten wird.
+Stand seit W8-C S2A1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260917120000_nora_attachment_deletion_capture`), Zustandsvokabular erweitert durch W8-C S2A2.1 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918120000_nora_attachment_liveness_resolver`). **Dritte Fläche, dritter Contract:** 6.5 regelt den Bucket, 6.6 die Metadatentabelle, dieser Abschnitt die private Warteschlange, in der das *Vorhaben* einer Objektlöschung festgehalten wird.
 
-> **Ein Eintrag in dieser Warteschlange ist ein Lösch-VORHABEN, niemals eine Erlaubnis, das Storage-Objekt zu löschen.** Wer später einen Konsumenten baut, muss **unabhängig beweisen**, dass der Objektschlüssel nirgends mehr referenziert wird — und die lebende Referenzmenge ist größer als `public.attachments`: die Legacy-JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`, Kundenlogos und URL-basierte Branding-Verweise gehören dazu. Diesen Resolver entwirft S2A2, nicht dieser Abschnitt.
+> **Ein Eintrag in dieser Warteschlange ist ein Lösch-VORHABEN, niemals eine Erlaubnis, das Storage-Objekt zu löschen.** Wer später einen Konsumenten baut, muss **unabhängig beweisen**, dass der Objektschlüssel nirgends mehr referenziert wird — und die lebende Referenzmenge ist größer als `public.attachments`: die Legacy-JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`, Kundenlogos, Avatare und URL-basierte Branding-Verweise gehören dazu. Die zentrale Beobachtung dafür liefert seit S2A2.1 der Liveness-Resolver (Abschnitt 6.8) — **ein Resolver-Ergebnis allein ist aber ebenfalls keine Erlaubnis.**
 
 **Zugriffsmatrix (Ist-Zustand Production):**
 
@@ -278,8 +278,61 @@ Technische Grundlage:
 - **Der Funktionsrumpf macht ausschließlich Datenbankarbeit.** Kein HTTP, kein `pg_net`, kein Storage-API-Aufruf, keine Edge-Function-Invokation, kein Netzwerkaufruf — das ist der ausdrückliche Gegenentwurf zur mit W8-B entfernten Kette und wird nicht nachträglich „ergänzt".
 - **Die Erfassung ist fail-closed.** Ein doppeltes *aktives* Vorhaben zum selben Schlüssel wird idempotent unterdrückt (partieller Unique-Index über die aktiven Zustände, benanntes Konfliktziel); **jede andere** Einfügefehlerlage schlägt durch und rollt die äußere Metadaten-`DELETE`-Transaktion zurück. Kein `exception when others`: ein stillschweigend verschlucktes Vorhaben wäre genau der Defekt, den die Warteschlange verhindern soll.
 - **Vertrauensgrenze der Eingabe:** erfasst wird `OLD.storage_key` — ein bereits unter den 6.6-Invarianten persistierter Wert, **nie** ein vom löschenden Aufrufer geliefertes Pfad-, `src`- oder URL-Fragment.
-- **Kein Konsumentenvertrag.** Es gibt keine Claim-/Ack-/Fail-RPC, keinen Worker, keinen Liveness-Resolver und keinen Retry-Mechanismus; die Zustände jenseits von `pending` sind nur Vokabular für S2A2. S2A1 erzeugt ausschließlich `pending`.
+- **Zustandsvokabular (sechs Zustände):** aktiv sind `pending` · `claimed` · `failed_retryable` — nur sie tragen den partiellen Unique-Index auf `storage_key`, und nur `pending` / `failed_retryable` sind fällig; terminal sind `done` · `failed_terminal` · `skipped_live` — genau sie setzen `completed_at`, und terminale Zeilen bleiben erhalten.
+- **`skipped_live`** (seit S2A2.1): das Lösch**vorhaben** wurde terminal zurückgezogen, weil der Schlüssel zu diesem Zeitpunkt unter dem Liveness-Vertrag (Abschnitt 6.8) als `live` beobachtet wurde. `skipped_live` heißt **nicht**: Objekt gelöscht, Objekt dauerhaft vor Verwaisung sicher, S3 abgeschlossen oder Löschung autorisiert. Weil der Zustand weder aktiv noch fällig ist, blockiert er ein späteres, legitimes Vorhaben zum selben Schlüssel nicht.
+- **Kein Konsumentenvertrag.** Es gibt keine Claim-/Lease-/Ack-/Fail-RPC, keinen Worker, keine Lease-Recovery und keinen Retry-Mechanismus; die Zustände jenseits von `pending` sind Vokabular für S2A2.2 ff. S2A1 erzeugt ausschließlich `pending`; **nichts erzeugt heute `skipped_live`** — S2A2.1 hat nur das Vokabular angelegt und keine Zeile geschrieben oder überführt.
 - **Kein Einfluss auf die Rechte aus 6.6:** die `DELETE`-Berechtigung von Büro/Admin auf `public.attachments` bleibt unverändert, ebenso alle Policies aus 6.5.
+
+Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
+
+### 6.8 Der Liveness-Resolver `nora_private.attachment_storage_key_liveness(text)`
+
+Stand seit W8-C S2A2.1 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918120000_nora_attachment_liveness_resolver`). **Vierte Fläche, vierter Contract:** eine read-only Beobachtung, keine Tabelle und kein Schreibpfad. Der Resolver beantwortet genau eine Frage — *wird dieser Objektschlüssel von irgendeiner registrierten Nora-Fläche noch referenziert?* — und liefert `live`, `dead` oder `unknown`.
+
+> **`dead` ist eine Beobachtung, niemals eine Löscherlaubnis.** Das Ergebnis beschreibt, was **ein** Statement-Snapshot gesehen hat. Ein künftiger Konsument (S2A2.2) muss sich dennoch gegen gleichzeitige Re-Referenzierung serialisieren, und physisch löschen darf erst S2B, nachdem S3 die Referenzschreibung abgesichert hat ([`17`](17-known-issues-and-planned-waves.md) H.1, Re-Referenzierungs-Rennen). S2A2.1 schließt dieses Rennen **nicht**.
+
+**Tri-State-Semantik:**
+
+| Ergebnis | Bedeutung |
+|---|---|
+| `live` | mindestens eine registrierte Fläche **beweist**, dass der Schlüssel referenziert wird. **`live` dominiert `unknown`** — ein Beweis ist ein Beweis, auch wenn eine andere Fläche mehrdeutig ist |
+| `dead` | **alle** registrierten Flächen wurden erfolgreich ausgewertet, keine beweist `live`, und es trat **keine** Mehrdeutigkeit auf |
+| `unknown` | kein `live`-Beweis, aber mindestens ein registrierter Wert hat eine Form, aus der sich `dead` nicht sicher ableiten lässt |
+
+- **Ein Fehler ist kein Urteil.** Es gibt kein `exception when others`: Schema-Drift, ein fehlendes Objekt oder ein Codefehler bricht den Aufrufer ab und wird **nie** zu `unknown` oder `dead`. Ein ungültiger Schlüssel (`NULL`, leer, länger als 512 Zeichen) wirft `22023` `NORA_ATTACHMENT_LIVENESS_INVALID_KEY`; ein gültiger Schlüssel wird exakt verglichen, nie getrimmt.
+
+**Registrierte Referenzflächen (Registry v1, bewusst fest codiert — keine Registry-Tabelle, kein dynamisches SQL):**
+
+- `public.attachments.storage_key` (exakter Vergleich)
+- `contact_notes.attachments` und `deal_notes.attachments` — beide **`jsonb[]`**, elementweise ausgewertet
+- `companies.logo`
+- `configuration`: die Branding-Logos `lightModeLogo` / `darkModeLogo` — **auch in der reinen URL-Form ohne `path`**, wie sie in Production vorkommt; sie nehmen an der Liveness vollwertig teil
+- `configuration`-Rest (alles außer den beiden Branding-Schlüsseln) als **Sicherheits-Stolperdraht**: ein speicherartiger Wert oder der Kandidatenschlüssel selbst an unregistrierter Stelle ergibt `unknown` — nie `live`, nie eine stille Registrierung
+- `contacts.avatar`
+- `sales.avatar`
+
+**Klassifikationsregeln mit dauerhafter Sicherheitswirkung:**
+
+- **Fehlformen sind fail-closed.** Ein registrierter Wert mit unerwarteter Form (fehlerhafter `path`, Nicht-Objekt-JSON, eine `attachments`-artige Storage-URL außerhalb der kanonischen Form — signiert, authentifiziert, Render-Pfad, Query, Fragment, Prozent-Kodierung, zusätzliche Schrägstriche, relativ, gepolstert) ergibt `unknown`, nie `none`.
+- **Unter den URL-Formen kann nur die kanonische öffentliche `attachments`-URL auf einem allowlisteten Origin `live` beweisen** (exakter Stringvergleich: das Production-Projekt und der lokale Supabase-Stack). Unabhängig davon beweisen ein exakter `public.attachments.storage_key` und ein verwendbarer `path`, der dem Schlüssel entspricht, `live`. Derselbe kanonische Schlüssel in URL-Form auf einem **anderen** Origin ergibt `unknown` — er kann weder `live` beweisen noch `dead` erlauben. URL-Referenzen, die auf einem neuen, noch nicht allowlisteten Origin (etwa einer eigenen Domain) gespeichert werden, sind deshalb fail-closed `unknown`, nicht fälschlich `dead`; `storage_key`-/`path`-Referenzen und URLs auf weiterhin erlaubten Origins bleiben davon unberührt. Ein neuer Origin wird nicht automatisch unterstützt — die Allowlist wird nur per Migration erweitert.
+- **Fremde und nicht-Nora-Werte werden keine Referenz:** gewöhnliche fremde URLs, `data:`- und `blob:`-Werte, leere Werte und JSON-`null` zählen als „keine Referenz" — sie machen keinen Schlüssel `live` und keinen Schlüssel `unknown`.
+- **Audit-Historie nimmt nicht teil.** `audit_events` (`old_data`, `new_data`, `metadata`) ist historische Evidenz darüber, *was war*; sie hält keine Storage-Bytes am Leben. Ebenso ausgeschlossen: `idempotency_records`, `operation_errors`, Löschticket-Snapshots, Freitext- und Link-Felder, Auth-eigene Daten und `storage.objects` selbst (Liveness fragt nach **Referenzen**, nicht danach, ob ein Objekt im Bucket existiert). Das betrifft ausschließlich die Anhang-Liveness — Audit-Daten werden dadurch **nicht** gelöscht oder verändert ([`13`](13-crm-audit-retention.md)).
+- **Eine neue Spalte, die einen Objektschlüssel oder eine Storage-URL tragen kann, muss explizit registriert oder explizit ausgeschlossen werden.** Die Verifikationssuite hält dafür einen Katalog-Vollständigkeitswächter; eine nicht klassifizierte Spalte ist ein Befund ([`03`](03-data-model-guardrails.md) §1.8).
+
+**Security-Contract:**
+
+| Function | Modus | Owner | Settings | API-`EXECUTE` |
+|---|---|---|---|---|
+| `nora_private.attachment_storage_key_liveness(text)` — Resolver | `SECURITY DEFINER`, `STABLE` | `postgres` | `search_path = ''`, `row_security = off` | keine (`public`, `anon`, `authenticated`, `service_role` widerrufen) |
+| `nora_private.attachment_url_liveness(text, text)` — URL-Helfer | `SECURITY INVOKER`, `STABLE`, liest keine Tabelle | `postgres` | `search_path = ''` | keine |
+| `nora_private.attachment_file_value_liveness(jsonb, text)` — Dateiwert-Helfer | `SECURITY INVOKER`, `STABLE`, liest keine Tabelle | `postgres` | `search_path = ''` | keine |
+
+- **`SECURITY DEFINER` dient der vollständigen Sichtbarkeit, nicht einem Privileg:** der Resolver muss jede Zeile jeder registrierten Tabelle unabhängig von RLS und Aufrufer sehen — ein Resolver, der weniger Zeilen sieht, meldet ein falsches `dead`.
+- **`row_security = off` macht diese Sichtbarkeit fail-closed:** würde künftige Drift (`FORCE ROW LEVEL SECURITY`, Owner-Wechsel, verlorenes `BYPASSRLS`) eine Policy auf eine registrierte Tabelle wirken lassen, wirft PostgreSQL `42501`, statt still weniger Zeilen zu liefern. Ein gefilterter Read wäre ein falsches `dead`; ein Fehler ist kein Urteil.
+- **Kein API-Aufrufpfad.** `nora_private` ist nicht über PostgREST exponiert (Abschnitt 6.1); zusätzlich ist `EXECUTE` für alle API-Rollen widerrufen — das ist **tragend**, weil `authenticated` `USAGE` auf `nora_private` hält. Weil keine Rolle den Resolver aufrufen kann, trägt er — anders als eine RPC nach Abschnitt 7.2 — keine Auth-Prüfung im Funktionskörper. Wer ihn je aufrufbar macht, entwirft eine neue Trust Boundary und prüft 7.2 neu.
+- **Keine neue Fähigkeit:** `service_role` erhält kein Recht, keine API-Rolle erhält einen Grant auf irgendeine Tabelle, es gibt keinen neuen Index, keinen Netzwerk-, `pg_net`-, Edge- oder Storage-Aufruf und keinen Schreibvorgang. Die Helfer sind reine Klassifikatoren und benennen nie ein Objekt zur Löschung.
+
+**Abgrenzung — was S2A2.1 nicht ist:** kein Claim, kein Lease-Token, keine Lease-Recovery, keine Attempt-Behandlung, kein Ack, kein Fail, kein Retry/Backoff, keine `service_role`-Ausführungs-RPC, kein Worker, keine physische Storage-Löschung. Das ist S2A2.2 (Ausführungsvertrag), S3 (Referenzschreibung) und S2B (physischer Worker) — offen bzw. blockiert, [`17`](17-known-issues-and-planned-waves.md) H.1.
 
 Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
