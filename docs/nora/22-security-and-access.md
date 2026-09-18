@@ -258,7 +258,7 @@ Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
 ### 6.7 Die Löschintent-Warteschlange `nora_private.attachment_storage_deletion_queue`
 
-Stand seit W8-C S2A1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260917120000_nora_attachment_deletion_capture`), Zustandsvokabular erweitert durch W8-C S2A2.1 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918120000_nora_attachment_liveness_resolver`). **Dritte Fläche, dritter Contract:** 6.5 regelt den Bucket, 6.6 die Metadatentabelle, dieser Abschnitt die private Warteschlange, in der das *Vorhaben* einer Objektlöschung festgehalten wird.
+Stand seit W8-C S2A1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260917120000_nora_attachment_deletion_capture`), Zustandsvokabular erweitert durch W8-C S2A2.1 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918120000_nora_attachment_liveness_resolver`), datenbankinterner Ausführungsvertrag durch W8-C S2A2.2 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918180000_nora_attachment_deletion_queue_execution`, Abschnitt 6.9). **Dritte Fläche, dritter Contract:** 6.5 regelt den Bucket, 6.6 die Metadatentabelle, dieser Abschnitt die private Warteschlange, in der das *Vorhaben* einer Objektlöschung festgehalten wird.
 
 > **Ein Eintrag in dieser Warteschlange ist ein Lösch-VORHABEN, niemals eine Erlaubnis, das Storage-Objekt zu löschen.** Wer später einen Konsumenten baut, muss **unabhängig beweisen**, dass der Objektschlüssel nirgends mehr referenziert wird — und die lebende Referenzmenge ist größer als `public.attachments`: die Legacy-JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`, Kundenlogos, Avatare und URL-basierte Branding-Verweise gehören dazu. Die zentrale Beobachtung dafür liefert seit S2A2.1 der Liveness-Resolver (Abschnitt 6.8) — **ein Resolver-Ergebnis allein ist aber ebenfalls keine Erlaubnis.**
 
@@ -273,14 +273,15 @@ Stand seit W8-C S2A1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `2026091712000
 Technische Grundlage:
 
 - Die Tabelle liegt in **`nora_private`** und ist damit nicht über PostgREST erreichbar (Abschnitt 6.1). Zusätzlich: `revoke all` an `public`, `anon`, `authenticated`, `service_role` — **keine** API-Rolle hält irgendein Recht. RLS ist aktiviert und trägt **null Policies**; das ist Defense in Depth hinter den fehlenden Grants, kein Zugriffsweg.
-- **`service_role` erhält durch S2A1 kein neues Recht** — weder auf die Warteschlange noch auf `public.attachments` noch auf eine Geschäftstabelle. Es gibt bis heute **keinen** deployten Backend-Aufrufer, der die Warteschlange abarbeiten könnte.
-- Geschrieben wird ausschließlich durch die Triggerfunktion `nora_private.enqueue_attachment_storage_deletion()` — `SECURITY DEFINER` mit `set search_path = ''`, Owner `postgres`, `revoke all` von `public`/`anon`/`authenticated`/`service_role`. `SECURITY DEFINER` ist hier **erforderlich**, nicht stilistisch: der löschende Aufrufer ist `authenticated` und hält auf der Warteschlange nichts; ohne Definer-Kontext scheiterte jede Anhanglöschung.
+- **`service_role` erhält weder durch S2A1 noch durch S2A2.2 ein neues Recht** — weder auf die Warteschlange noch auf `public.attachments`, eine Geschäftstabelle oder eine der Ausführungs-Functions. Es gibt bis heute **keinen** deployten Backend-Aufrufer, der die Warteschlange abarbeiten könnte.
+- **Neue Vorhaben** entstehen ausschließlich durch die Triggerfunktion `nora_private.enqueue_attachment_storage_deletion()`; **Zustandsübergänge** danach ausschließlich durch die drei `postgres`-only Ausführungsprimitive aus Abschnitt 6.9. Die Triggerfunktion ist `SECURITY DEFINER` mit `set search_path = ''`, Owner `postgres`, `revoke all` von `public`/`anon`/`authenticated`/`service_role`. `SECURITY DEFINER` ist hier **erforderlich**, nicht stilistisch: der löschende Aufrufer ist `authenticated` und hält auf der Warteschlange nichts; ohne Definer-Kontext scheiterte jede Anhanglöschung.
 - **Der Funktionsrumpf macht ausschließlich Datenbankarbeit.** Kein HTTP, kein `pg_net`, kein Storage-API-Aufruf, keine Edge-Function-Invokation, kein Netzwerkaufruf — das ist der ausdrückliche Gegenentwurf zur mit W8-B entfernten Kette und wird nicht nachträglich „ergänzt".
 - **Die Erfassung ist fail-closed.** Ein doppeltes *aktives* Vorhaben zum selben Schlüssel wird idempotent unterdrückt (partieller Unique-Index über die aktiven Zustände, benanntes Konfliktziel); **jede andere** Einfügefehlerlage schlägt durch und rollt die äußere Metadaten-`DELETE`-Transaktion zurück. Kein `exception when others`: ein stillschweigend verschlucktes Vorhaben wäre genau der Defekt, den die Warteschlange verhindern soll.
 - **Vertrauensgrenze der Eingabe:** erfasst wird `OLD.storage_key` — ein bereits unter den 6.6-Invarianten persistierter Wert, **nie** ein vom löschenden Aufrufer geliefertes Pfad-, `src`- oder URL-Fragment.
 - **Zustandsvokabular (sechs Zustände):** aktiv sind `pending` · `claimed` · `failed_retryable` — nur sie tragen den partiellen Unique-Index auf `storage_key`, und nur `pending` / `failed_retryable` sind fällig; terminal sind `done` · `failed_terminal` · `skipped_live` — genau sie setzen `completed_at`, und terminale Zeilen bleiben erhalten.
-- **`skipped_live`** (seit S2A2.1): das Lösch**vorhaben** wurde terminal zurückgezogen, weil der Schlüssel zu diesem Zeitpunkt unter dem Liveness-Vertrag (Abschnitt 6.8) als `live` beobachtet wurde. `skipped_live` heißt **nicht**: Objekt gelöscht, Objekt dauerhaft vor Verwaisung sicher, S3 abgeschlossen oder Löschung autorisiert. Weil der Zustand weder aktiv noch fällig ist, blockiert er ein späteres, legitimes Vorhaben zum selben Schlüssel nicht.
-- **Kein Konsumentenvertrag.** Es gibt keine Claim-/Lease-/Ack-/Fail-RPC, keinen Worker, keine Lease-Recovery und keinen Retry-Mechanismus; die Zustände jenseits von `pending` sind Vokabular für S2A2.2 ff. S2A1 erzeugt ausschließlich `pending`; **nichts erzeugt heute `skipped_live`** — S2A2.1 hat nur das Vokabular angelegt und keine Zeile geschrieben oder überführt.
+- **`skipped_live`** (Vokabular seit S2A2.1, erzeugt seit S2A2.2 ausschließlich von `nora_private.attachment_deletion_inspect`, Abschnitt 6.9): das Lösch**vorhaben** wurde terminal zurückgezogen, weil der Schlüssel zu diesem Zeitpunkt unter dem Liveness-Vertrag (Abschnitt 6.8) als `live` beobachtet wurde. `skipped_live` heißt **nicht**: Objekt gelöscht, Objekt dauerhaft vor Verwaisung sicher, S3 abgeschlossen oder Löschung autorisiert. Weil der Zustand weder aktiv noch fällig ist, blockiert er ein späteres, legitimes Vorhaben zum selben Schlüssel nicht.
+- **`done` heißt „Storage-Objekt bestätigt entfernt" — und nichts schreibt es.** S2A1 erzeugt ausschließlich `pending`; der Ausführungsvertrag aus S2A2.2 (Abschnitt 6.9) erzeugt `claimed`, `failed_retryable`, `failed_terminal` und `skipped_live`, hat aber **keinen** Pfad zu `done`: kein Ack, keine Abschlussbestätigung, keine physische Löschung. Erst ein künftiger physischer Worker (S2B) darf `done` schreiben.
+- **Ausführungsvertrag ohne Ausführenden.** Die Primitive aus Abschnitt 6.9 sind nur für `postgres` ausführbar; es gibt keinen Worker, keinen Scheduler, keine Edge Function und keine API-Rolle, die die Warteschlange abarbeitet.
 - **Kein Einfluss auf die Rechte aus 6.6:** die `DELETE`-Berechtigung von Büro/Admin auf `public.attachments` bleibt unverändert, ebenso alle Policies aus 6.5.
 
 Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
@@ -289,7 +290,7 @@ Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
 Stand seit W8-C S2A2.1 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918120000_nora_attachment_liveness_resolver`). **Vierte Fläche, vierter Contract:** eine read-only Beobachtung, keine Tabelle und kein Schreibpfad. Der Resolver beantwortet genau eine Frage — *wird dieser Objektschlüssel von irgendeiner registrierten Nora-Fläche noch referenziert?* — und liefert `live`, `dead` oder `unknown`.
 
-> **`dead` ist eine Beobachtung, niemals eine Löscherlaubnis.** Das Ergebnis beschreibt, was **ein** Statement-Snapshot gesehen hat. Ein künftiger Konsument (S2A2.2) muss sich dennoch gegen gleichzeitige Re-Referenzierung serialisieren, und physisch löschen darf erst S2B, nachdem S3 die Referenzschreibung abgesichert hat ([`17`](17-known-issues-and-planned-waves.md) H.1, Re-Referenzierungs-Rennen). S2A2.1 schließt dieses Rennen **nicht**.
+> **`dead` ist eine Beobachtung, niemals eine Löscherlaubnis.** Das Ergebnis beschreibt, was **ein** Statement-Snapshot gesehen hat. Der Ausführungsvertrag (S2A2.2, Abschnitt 6.9) persistiert `dead` deshalb nicht, sondern gibt es nur an den Lease-Halter zurück. Die Serialisierung gegen gleichzeitige Re-Referenzierung gehört zu S3, und physisch löschen darf erst S2B, nachdem S3 die Referenzschreibung abgesichert hat ([`17`](17-known-issues-and-planned-waves.md) H.1, Re-Referenzierungs-Rennen und LOW-1). Weder S2A2.1 noch S2A2.2 schließt dieses Rennen.
 
 **Tri-State-Semantik:**
 
@@ -332,7 +333,48 @@ Stand seit W8-C S2A2.1 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918120
 - **Kein API-Aufrufpfad.** `nora_private` ist nicht über PostgREST exponiert (Abschnitt 6.1); zusätzlich ist `EXECUTE` für alle API-Rollen widerrufen — das ist **tragend**, weil `authenticated` `USAGE` auf `nora_private` hält. Weil keine Rolle den Resolver aufrufen kann, trägt er — anders als eine RPC nach Abschnitt 7.2 — keine Auth-Prüfung im Funktionskörper. Wer ihn je aufrufbar macht, entwirft eine neue Trust Boundary und prüft 7.2 neu.
 - **Keine neue Fähigkeit:** `service_role` erhält kein Recht, keine API-Rolle erhält einen Grant auf irgendeine Tabelle, es gibt keinen neuen Index, keinen Netzwerk-, `pg_net`-, Edge- oder Storage-Aufruf und keinen Schreibvorgang. Die Helfer sind reine Klassifikatoren und benennen nie ein Objekt zur Löschung.
 
-**Abgrenzung — was S2A2.1 nicht ist:** kein Claim, kein Lease-Token, keine Lease-Recovery, keine Attempt-Behandlung, kein Ack, kein Fail, kein Retry/Backoff, keine `service_role`-Ausführungs-RPC, kein Worker, keine physische Storage-Löschung. Das ist S2A2.2 (Ausführungsvertrag), S3 (Referenzschreibung) und S2B (physischer Worker) — offen bzw. blockiert, [`17`](17-known-issues-and-planned-waves.md) H.1.
+**Abgrenzung — was S2A2.1 nicht ist:** kein Ausführungsvertrag. Claim, Lease, Lease-Recovery, Attempt-Budget, Fail und Retry/Backoff liefert S2A2.2 (Abschnitt 6.9); dessen `nora_private.attachment_deletion_inspect` ist der **einzige** Aufrufer des Resolvers und selbst nur für `postgres` ausführbar — einen produktiven Aufrufer gibt es nicht. Kein Worker, keine `service_role`-Ausführung, keine physische Storage-Löschung: das bleibt S3 (Referenzschreibung, `OPEN`) und S2B (physischer Worker, `BLOCKED`), [`17`](17-known-issues-and-planned-waves.md) H.1.
+
+Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
+
+### 6.9 Der Ausführungsvertrag der Warteschlange (claim / inspect / fail)
+
+Stand seit W8-C S2A2.2 (`PRODUCTION VERIFIED` 2026-09-18, Migration `20260918180000_nora_attachment_deletion_queue_execution`). **Fünfte Fläche, fünfter Contract:** wie ein Auftrag der Warteschlange (6.7) unter einer exklusiven Lease beansprucht, per Resolver (6.8) inspiziert, wiederholt oder beendet wird.
+
+> **Das ist ein Ausführungsvertrag in der Datenbank, kein Worker.** Er hat keinen Aufrufer: kein Worker, kein Scheduler/Cron, keine Edge Function, keine API-Rolle. **Die Lease grenzt nur Warteschlangen-Mutationen ab, keine externen Seiteneffekte** — ein künftiger Storage-Aufruf, der schon läuft, endet nicht, wenn die Lease in der Datenbank abläuft. Für physische Löschung reicht S2A2.2 deshalb ausdrücklich nicht ([`17`](17-known-issues-and-planned-waves.md) H.1).
+
+**Security-Contract (sechs Functions, alle in `nora_private`):**
+
+| Function | Rolle | Settings |
+|---|---|---|
+| `attachment_deletion_lease_ttl()` · `attachment_deletion_max_attempts()` · `attachment_deletion_retry_delay(integer)` | DB-eigene Konstanten (10 min · 5 · Backoff), nur per Migration änderbar | `search_path = ''` |
+| `attachment_deletion_claim_next()` | Claim mit vorgelagerter Stale-Recovery | `search_path = ''`, `row_security = off` |
+| `attachment_deletion_inspect(bigint, text)` | lease-geschützte Liveness-Inspektion | `search_path = ''`, `row_security = off` |
+| `attachment_deletion_fail(bigint, text, text, boolean)` | lease-geschützter Fehlschlag | `search_path = ''`, `row_security = off` |
+
+- **Alle sechs:** `SECURITY INVOKER`, Owner `postgres`, ACL nur `postgres`; `EXECUTE` für `PUBLIC`, `anon`, `authenticated` **und** `service_role` widerrufen. Jeder Ausführungspfad läuft als `postgres`. Selbst ein versehentlich gewährtes `EXECUTE` griffe ins Leere, weil die aufrufende API-Rolle auf der Warteschlange nichts hält. `row_security = off` lässt RLS-Sichtbarkeits-Drift auf der Warteschlange mit einem Fehler scheitern, statt beanspruchte Zeilen still vor der Recovery zu verbergen.
+- **Kein Public-Wrapper, kein `service_role`-Wrapper — bewusst, nicht unfertig.** Nach Abschnitt 6.3 bekommt `service_role` ein Ausführungsrecht nur mit einem belegten, deployten Aufrufer, und den gibt es nicht. Eine eng geschnittene `service_role`-Grenze entsteht erst zusammen mit dem echten Worker in S2B. Sie ist dann eine neue Trust Boundary und wird nach Abschnitt 7.2 entworfen.
+- Die Warteschlange selbst bleibt unverändert: RLS an, null Policies, keine API-Grants (6.7).
+
+**Lease-Vertrag:**
+
+- **`claimed_by` ist ein serverseitig erzeugtes Lease-Token je Claim** (`gen_random_uuid()`), **keine** Worker-Identität und nie ein Aufruferwert. Jeder Claim bekommt ein neues Token; ein veralteter Halter kann einen neu beanspruchten Auftrag deshalb nicht mehr verändern (ABA-Schutz).
+- **Gültig** ist die Lease, solange `claimed_at > now() − TTL` (TTL **10 Minuten**); ab der exakten Grenze ist sie abgelaufen. Jeder lease-geschützte Schreibvorgang prüft Id, Zustand `claimed`, Token und Gültigkeit in **einem** Prädikat. Trifft es keine Zeile, wirft der Aufruf `55000` `NORA_ATTACHMENT_LEASE_LOST` — nie Erfolg, nie „der letzte Schreiber gewinnt". Ungültige Argumente werfen `22023` `NORA_ATTACHMENT_INVALID_ARGUMENT`.
+- **Claim** (`claim_next`): der älteste fällige Auftrag (`pending` / `failed_retryable`, `available_at <= now()`, `SKIP LOCKED`). Ohne Arbeit liefert er null Zeilen, keine Exception. **`attempt_count` steigt beim Claim** — ein Absturz nach dem Claim verbraucht also Budget; Recovery und Fail zählen nicht.
+- **Stale-Recovery** läuft vor jedem Claim: höchstens 25 abgelaufene Leases, älteste zuerst, `SKIP LOCKED`, Fehlercode `NORA_ATTACHMENT_LEASE_EXPIRED`. Die Leases gehen auf `failed_retryable` mit Backoff, bei erschöpftem Budget auf `failed_terminal`. Der partielle Index `(claimed_at, id) WHERE state = 'claimed'` hält diese Suche unabhängig von der wachsenden terminalen Historie.
+- **Budget und Backoff:** höchstens **5** Versuche, global über alle Ursachen. Deterministischer Backoff ohne Jitter: 15 · 2^(n−1) Minuten, also **15 / 30 / 60 / 120 / 240** Minuten, gedeckelt bei 6 Stunden (bei Budget 5 ruhend).
+- **Fail** (`fail`): retrybar und unter dem Budget ergibt `failed_retryable` mit Backoff, sonst `failed_terminal` mit `completed_at`. Der Ursachencode (`NORA_ATTACHMENT_*`) bleibt in beiden Fällen erhalten.
+
+**Liveness → Warteschlange** (`inspect` ruft den Resolver genau einmal unter gültiger Lease):
+
+| Resolver | Wirkung auf den Auftrag |
+|---|---|
+| `live` | `claimed` → **`skipped_live`**: das Vorhaben wird zurückgezogen, weil der Schlüssel in diesem Moment `live` beobachtet wurde. Kein Löschen, keine dauerhafte Sicherheit (6.7) |
+| `unknown` | **fail-closed:** `fail(…, NORA_ATTACHMENT_LIVENESS_UNKNOWN, retrybar)` — Wiederholung mit Backoff, bei erschöpftem Budget `failed_terminal`. Nie `skipped_live`, nie `done`. **`unknown` ist nie eine Löscherlaubnis** |
+| `dead` | **kein Schreibvorgang.** Der Auftrag bleibt `claimed` mit demselben Token; das Urteil geht nur an den Lease-Halter zurück. Es gibt keinen Zustand „löschbereit" (`deletion_ready`), und `dead` wird nie gespeichert. Handelt niemand, läuft die Lease ab und die normale Recovery greift |
+| Fehler | ist **kein** `unknown`: er bricht die Transaktion des Aufrufers ab, der Auftrag bleibt unverändert beansprucht |
+
+**Grenze von S2A2.2:** kein Worker, kein Aufrufer, kein Ack, kein Pfad zu `done`, kein Storage-, Netzwerk-, `pg_net`- oder Edge-Aufruf, kein neuer Warteschlangenzustand, keine Constraint- oder Spaltenänderung. S2A2.2 schließt weder das Re-Referenzierungs-Rennen noch den verwandten Verlust eines Vorhabens zwischen Erfassung und Inspektion (LOW-1). Beides und die Absicherung externer Seiteneffekte sind Gates für S3 bzw. S2B ([`17`](17-known-issues-and-planned-waves.md) H.1).
 
 Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
