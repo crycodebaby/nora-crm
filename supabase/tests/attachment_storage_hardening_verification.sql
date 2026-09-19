@@ -92,10 +92,14 @@ $$;
 -- ---------------------------------------------------------------------------
 do $$
 begin
+    -- The removed cleanup triggers were on_{contact,deal}_notes_*_delete_note_attachments.
+    -- The pattern is anchored on that name: the W8-C S3B projection triggers
+    -- (project_*_note_attachments_*) are a different, database-only mechanism
+    -- and are verified in attachment_note_projection_verification.sql.
     if exists (select 1 from pg_trigger t
                where not t.tgisinternal
                  and t.tgrelid in ('public.contact_notes'::regclass, 'public.deal_notes'::regclass)
-                 and (t.tgname like '%note_attachments%'
+                 and (t.tgname like '%delete\_note\_attachments%'
                       or pg_get_triggerdef(t.oid) like '%cleanup_note_attachments%')) then
         raise exception 'FAIL: attachment cleanup trigger still installed';
     end if;
@@ -136,6 +140,11 @@ declare
     v_attachment jsonb := jsonb_build_object(
         'src', 'http://127.0.0.1:54321/storage/v1/object/public/attachments/0.8262106278726917.pdf',
         'path', '0.8262106278726917.pdf', 'title', 'legacy.pdf', 'type', 'application/pdf');
+    -- W8-C S3B: every note write is projected into public.attachments, where a
+    -- storage key belongs to exactly one note and a removed key cannot be
+    -- re-referenced (S3A admission). Each note therefore gets its own key,
+    -- and each element keeps path and src consistent (S3B grammar).
+    c_src_base constant text := 'http://127.0.0.1:54321/storage/v1/object/public/attachments/';
 begin
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values
@@ -215,10 +224,11 @@ begin
     perform set_config('request.jwt.claims', json_build_object('role', 'authenticated', 'sub', v_office::text, 'session_id', v_office::text)::text, true);
     set local role authenticated;
     insert into public.contact_notes (contact_id, text, date, attachments)
-    values (v_contact, 'mit Anhang', now(), array[v_attachment, v_attachment || '{"path":"second.pdf"}'])
+    values (v_contact, 'mit Anhang', now(), array[v_attachment,
+            v_attachment || jsonb_build_object('path', 'w8b-second.pdf', 'src', c_src_base || 'w8b-second.pdf')])
     returning id into v_cnote;
     insert into public.deal_notes (deal_id, text, date, attachments)
-    values (v_deal, 'mit Anhang', now(), array[v_attachment])
+    values (v_deal, 'mit Anhang', now(), array[v_attachment || jsonb_build_object('path', 'w8b-deal.pdf', 'src', c_src_base || 'w8b-deal.pdf')])
     returning id into v_dnote;
     update public.contact_notes set attachments = array[v_attachment] where id = v_cnote;
     get diagnostics v_n = row_count;
@@ -238,8 +248,10 @@ begin
     get diagnostics v_n = row_count;
     if v_n <> 1 then raise exception 'FAIL: admin deal note delete'; end if;
 
-    insert into public.contact_notes (contact_id, text, date, attachments) values (v_contact, 'cascade', now(), array[v_attachment]);
-    insert into public.deal_notes (deal_id, text, date, attachments) values (v_deal, 'cascade', now(), array[v_attachment]);
+    insert into public.contact_notes (contact_id, text, date, attachments)
+        values (v_contact, 'cascade', now(), array[v_attachment || jsonb_build_object('path', 'w8b-cascade-contact.pdf', 'src', c_src_base || 'w8b-cascade-contact.pdf')]);
+    insert into public.deal_notes (deal_id, text, date, attachments)
+        values (v_deal, 'cascade', now(), array[v_attachment || jsonb_build_object('path', 'w8b-cascade-deal.pdf', 'src', c_src_base || 'w8b-cascade-deal.pdf')]);
     delete from public.contacts where id = v_contact;
     get diagnostics v_n = row_count;
     if v_n <> 1 then raise exception 'FAIL: admin contact delete (cascade to notes)'; end if;
@@ -255,7 +267,8 @@ begin
 
     -- company cascade (as postgres: the admin company delete path is covered elsewhere)
     insert into public.contacts (first_name, last_name, company_id, sales_id) values ('Kas', 'Kade', v_company, v_o) returning id into v_contact;
-    insert into public.contact_notes (contact_id, text, date, attachments) values (v_contact, 'company cascade', now(), array[v_attachment]);
+    insert into public.contact_notes (contact_id, text, date, attachments)
+        values (v_contact, 'company cascade', now(), array[v_attachment || jsonb_build_object('path', 'w8b-company-cascade.pdf', 'src', c_src_base || 'w8b-company-cascade.pdf')]);
     delete from public.companies where id = v_company;
     if exists (select 1 from public.contact_notes where contact_id = v_contact) then
         raise exception 'FAIL: company cascade left notes behind';

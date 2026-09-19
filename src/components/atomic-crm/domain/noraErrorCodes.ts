@@ -41,6 +41,24 @@ export const NORA_ERROR_CODES = {
    * was refused and rolled back so a newer primary is never replaced silently.
    */
   PRIMARY_CONTACT_CHANGED: "NORA_PRIMARY_CONTACT_CHANGED",
+  /**
+   * W8-C S3A/S3B (2026-09-19): a note write tried to (re)reference an
+   * attachment whose storage object has a deletion intent or was deleted —
+   * typically a stale form re-adding a file someone else removed meanwhile.
+   * Raised by the S3A admission guard inside the S3B note projection; the
+   * whole note write is rolled back. Retrying does not help.
+   */
+  ATTACHMENT_STORAGE_KEY_PENDING_DELETION:
+    "NORA_ATTACHMENT_STORAGE_KEY_PENDING_DELETION",
+  /**
+   * W8-C S3B (2026-09-19): a note attachment element is not a valid Nora
+   * attachment reference (no storage key / title / type, a src that does not
+   * match its key, a repeated key, or a changed title / type of an existing
+   * attachment). Raised by the note projection (the whole note write is
+   * rolled back) and, for an undownloadable pathless import element, by the
+   * Supabase provider before the write.
+   */
+  ATTACHMENT_REFERENCE_INVALID: "NORA_ATTACHMENT_REFERENCE_INVALID",
 } as const;
 
 export type NoraErrorCode =
@@ -104,6 +122,14 @@ export const NORA_ERROR_DEFINITIONS: Record<
   [NORA_ERROR_CODES.PRIMARY_CONTACT_CHANGED]: {
     category: "conflict",
     messageKey: "crm.errors.primary_contact_changed",
+  },
+  [NORA_ERROR_CODES.ATTACHMENT_STORAGE_KEY_PENDING_DELETION]: {
+    category: "conflict",
+    messageKey: "crm.errors.attachment_pending_deletion",
+  },
+  [NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID]: {
+    category: "validation",
+    messageKey: "crm.errors.attachment_reference_invalid",
   },
 };
 

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeCrmError } from "./normalizeCrmError";
+import type { DataProvider } from "ra-core";
+
+import { normalizeCrmError, toCrmError } from "./normalizeCrmError";
+import { withCrmErrorHandler } from "./withCrmErrorHandler";
 import { NORA_ERROR_CODES } from "../domain/noraErrorCodes";
 
 /**
@@ -200,5 +203,87 @@ describe("normalizeCrmError — Atomic Contact Primary Intent", () => {
         'duplicate key value violates unique constraint "uq_companies_self_contact_individual"',
     });
     expect(privat.code).toBe(NORA_ERROR_CODES.PRIVATE_CUSTOMER_ALREADY_EXISTS);
+  });
+});
+
+describe("W8-C S3B note attachment projection codes", () => {
+  it("maps DETAIL = NORA_ATTACHMENT_STORAGE_KEY_PENDING_DELETION to its stable key, whatever the message says", () => {
+    const fromGuard = normalizeCrmError({
+      code: "55000",
+      message:
+        "attachment reference rejected: the storage object has a deletion intent or was confirmed deleted",
+      details: NORA_ERROR_CODES.ATTACHMENT_STORAGE_KEY_PENDING_DELETION,
+      status: 400,
+    });
+    const reworded = normalizeCrmError({
+      code: "55000",
+      message: "ganz anders formuliert",
+      details: NORA_ERROR_CODES.ATTACHMENT_STORAGE_KEY_PENDING_DELETION,
+      status: 400,
+    });
+    expect(fromGuard.code).toBe(
+      NORA_ERROR_CODES.ATTACHMENT_STORAGE_KEY_PENDING_DELETION,
+    );
+    expect(fromGuard.messageKey).toBe("crm.errors.attachment_pending_deletion");
+    expect(reworded.messageKey).toBe(fromGuard.messageKey);
+  });
+
+  it("maps DETAIL = NORA_ATTACHMENT_REFERENCE_INVALID to its stable key, whatever the element or field", () => {
+    const path = normalizeCrmError({
+      code: "22023",
+      message:
+        "note attachment reference rejected: element 2 is invalid (path)",
+      details: NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID,
+      status: 400,
+    });
+    const duplicate = normalizeCrmError({
+      code: "22023",
+      message:
+        "note attachment reference rejected: element 3 repeats the storage key of an earlier element",
+      details: NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID,
+      status: 400,
+    });
+    expect(path.code).toBe(NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID);
+    expect(path.messageKey).toBe("crm.errors.attachment_reference_invalid");
+    expect(duplicate.messageKey).toBe(path.messageKey);
+  });
+
+  it("keeps a cross-note storage_key unique violation generic — no business code, no key in the message key", () => {
+    const normalized = normalizeCrmError({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "uq__attachments__storage_key"',
+      details: "Key (storage_key)=(0.8262106278726917.pdf) already exists.",
+      status: 409,
+    });
+    expect(normalized.code).toBeUndefined();
+    expect(normalized.messageKey).not.toMatch(/attachment|storage_key|0\.826/);
+  });
+
+  it("surfaces a rejected note write through the global data-provider handler as the i18n key only", async () => {
+    const rejectingProvider = {
+      update: async () => {
+        throw {
+          code: "55000",
+          message:
+            "attachment reference rejected: the storage object has a deletion intent or was confirmed deleted",
+          details: NORA_ERROR_CODES.ATTACHMENT_STORAGE_KEY_PENDING_DELETION,
+        };
+      },
+    } as unknown as DataProvider;
+    await expect(
+      withCrmErrorHandler(rejectingProvider).update("contact_notes", {
+        id: 1,
+        data: {},
+        previousData: { id: 1 },
+      }),
+    ).rejects.toThrow("crm.errors.attachment_pending_deletion");
+    expect(
+      toCrmError({
+        details: NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID,
+        message:
+          "note attachment reference rejected: element 1 is invalid (src)",
+      }).message,
+    ).toBe("crm.errors.attachment_reference_invalid");
   });
 });

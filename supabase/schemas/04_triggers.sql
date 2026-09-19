@@ -231,3 +231,36 @@ create or replace trigger guard_attachment_storage_key_immutable_before_update_t
     for each row
     when (old.storage_key is distinct from new.storage_key)
     execute function nora_private.guard_attachment_storage_key_immutable();
+
+-- Nora CRM W8-C S3B (2026-09-19): atomic note-attachment projection. The
+-- database is the one writer of public.attachments: every note write that
+-- changes the attachment array reconciles that note's rows in the same
+-- statement (minimal delta against the actual rows). AFTER triggers so the note
+-- row exists for the FK and a failure aborts the whole note statement. The
+-- UPDATE triggers deliberately carry no UPDATE OF list: a BEFORE trigger that
+-- rewrites the array must still be projected. No note DELETE trigger: the FK
+-- ON DELETE CASCADE deletes the rows and fires the S2A1/S3A capture.
+-- Migration: 20260919180000_nora_attachment_note_projection.sql
+create or replace trigger project_contact_note_attachments_after_insert_trigger
+    after insert on public.contact_notes
+    for each row
+    when (cardinality(new.attachments) > 0)
+    execute function nora_private.project_note_attachments();
+
+create or replace trigger project_contact_note_attachments_after_update_trigger
+    after update on public.contact_notes
+    for each row
+    when (coalesce(old.attachments, '{}'::jsonb[]) is distinct from coalesce(new.attachments, '{}'::jsonb[]))
+    execute function nora_private.project_note_attachments();
+
+create or replace trigger project_deal_note_attachments_after_insert_trigger
+    after insert on public.deal_notes
+    for each row
+    when (cardinality(new.attachments) > 0)
+    execute function nora_private.project_note_attachments();
+
+create or replace trigger project_deal_note_attachments_after_update_trigger
+    after update on public.deal_notes
+    for each row
+    when (coalesce(old.attachments, '{}'::jsonb[]) is distinct from coalesce(new.attachments, '{}'::jsonb[]))
+    execute function nora_private.project_note_attachments();

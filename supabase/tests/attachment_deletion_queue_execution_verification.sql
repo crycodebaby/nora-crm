@@ -1001,6 +1001,10 @@ begin
     delete from nora_private.attachment_storage_deletion_queue where storage_key = 's2a22-live-a.pdf' and state = 'pending';
 
     -- ---- 9b. LIVE via a legacy note array -> skipped_live -----------------
+    -- W8-C S3B: a LEGACY array (pre-S3B history: JSON reference, no
+    -- public.attachments row) is exactly what 9b classifies, so it is stored
+    -- with the note projection switched off for this rolled-back block.
+    alter table public.contact_notes disable trigger project_contact_note_attachments_after_update_trigger;
     update public.contact_notes set attachments = array[jsonb_build_object('path', 's2a22-live-b.pdf', 'title', 'b.pdf')]
         where id = v_cnote;
     insert into nora_private.attachment_storage_deletion_queue (storage_key) values ('s2a22-live-b.pdf') returning id into v_id;
@@ -1011,6 +1015,7 @@ begin
         v_failures := v_failures || format('9b LIVE (legacy note array) -> %s / %s', row_to_json(ins), pg_temp.s2a22_row(v_id));
     end if;
     update public.contact_notes set attachments = null where id = v_cnote;
+    alter table public.contact_notes enable trigger project_contact_note_attachments_after_update_trigger;
 
     -- ---- 9c. UNKNOWN (residual config tripwire): retry, then terminal ------
     update public.configuration set config = jsonb_build_object('heroImage', jsonb_build_object('path', 's2a22-unknown-c.png'));

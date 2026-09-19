@@ -4,9 +4,15 @@ import {
   ATTACHMENT_ACCEPT,
   ATTACHMENT_ACCEPT_ATTRIBUTE,
   ATTACHMENT_MAX_FILE_SIZE_BYTES,
+  assertStoredAttachment,
   createAttachmentObjectKey,
   getAttachmentFileRejection,
 } from "./attachments";
+import {
+  NORA_ERROR_CODES,
+  extractNoraErrorCode,
+} from "../../domain/noraErrorCodes";
+import { normalizeCrmError } from "../../misc/normalizeCrmError";
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/;
@@ -133,4 +139,30 @@ describe("createAttachmentObjectKey", () => {
     expect(key).toMatch(new RegExp(`${UUID.source}\\.png$`));
     expect(key).not.toContain("/");
   });
+});
+
+describe("assertStoredAttachment (W8-C S3B)", () => {
+  it("keeps an element that already is a Nora storage object", () => {
+    expect(() =>
+      assertStoredAttachment({ path: "0.8262106278726917.pdf" }),
+    ).not.toThrow();
+  });
+
+  it.each([undefined, null, ""])(
+    "rejects an element without a storage key (%s) with NORA_ATTACHMENT_REFERENCE_INVALID",
+    (path) => {
+      let caught: unknown;
+      try {
+        assertStoredAttachment({ path });
+      } catch (error) {
+        caught = error;
+      }
+      expect(extractNoraErrorCode(caught)).toBe(
+        NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID,
+      );
+      expect(normalizeCrmError(caught).messageKey).toBe(
+        "crm.errors.attachment_reference_invalid",
+      );
+    },
+  );
 });

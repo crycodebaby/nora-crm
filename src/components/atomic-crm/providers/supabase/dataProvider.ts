@@ -87,6 +87,7 @@ import {
 } from "../../operations/operationTransport";
 import {
   ATTACHMENTS_BUCKET,
+  assertStoredAttachment,
   createAttachmentObjectKey,
 } from "../commons/attachments";
 import { getIsInitialized } from "./authProvider";
@@ -960,9 +961,11 @@ const uploadToBucket = async (fi: RAFile) => {
 
   if (dataContent == null) {
     // We weren't able to download the file from its src (e.g. user must be signed in on another website to access it)
-    // or the file has no content (not probable)
-    // In that case, just return it as is: when trying to download it, users should be redirected to the other website
-    // and see they need to be signed in. It will then be their responsibility to upload the file back to the note.
+    // or the file has no content (not probable).
+    // An element that already is a Nora storage object (it has a path) is kept as is. One without a storage key
+    // cannot be stored as a note attachment (W8-C S3B): the note write fails with NORA_ATTACHMENT_REFERENCE_INVALID
+    // instead of persisting an external link.
+    assertStoredAttachment(fi);
     return fi;
   }
 

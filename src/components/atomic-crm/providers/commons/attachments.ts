@@ -1,3 +1,5 @@
+import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
+
 export const ATTACHMENTS_BUCKET =
   import.meta.env.VITE_ATTACHMENTS_BUCKET || "attachments";
 
@@ -57,4 +59,23 @@ export const createAttachmentObjectKey = (fileName: string): string => {
   const baseName = fileName.split(/[/\\]/).pop() ?? "";
   const extension = /\.([a-z0-9]{1,10})$/i.exec(baseName)?.[1];
   return `${crypto.randomUUID()}${extension ? `.${extension.toLowerCase()}` : ""}`;
+};
+
+/**
+ * W8-C S3B: a note attachment is a Nora storage object, identified by its
+ * storage key (`path`). An element whose file could not be downloaded and that
+ * has no storage key — e.g. a JSON import pointing at an unreachable external
+ * URL — is not a Nora attachment. It is rejected with the same contract code
+ * the database projection raises, instead of being stored as an external link
+ * or silently dropped.
+ */
+export const assertStoredAttachment = (attachment: {
+  path?: string | null;
+}): void => {
+  if (!attachment.path) {
+    throwNoraError(
+      "note attachment has no Nora storage key",
+      NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID,
+    );
+  }
 };

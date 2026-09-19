@@ -426,6 +426,14 @@ begin
     insert into public.deal_notes (deal_id, text, date, sales_id)
         values (v_deal, 'Liveness', now(), v_sales) returning id into v_dnote;
 
+    -- W8-C S3B: sections 6, 7 and 11 store LEGACY note arrays on purpose -
+    -- pre-S3B history, including malformed, pathless and conflicting forms the
+    -- S3B grammar rejects for new writes - so the resolver can classify them.
+    -- Model that history with the note projection switched off for this
+    -- rolled-back block only (the ROLLBACK below re-enables both triggers).
+    alter table public.contact_notes disable trigger project_contact_note_attachments_after_update_trigger;
+    alter table public.deal_notes disable trigger project_deal_note_attachments_after_update_trigger;
+
     -- the fixtures themselves reference nothing
     v_failures := v_failures || pg_temp.s2a21_expect('5a clean fixture universe', 's2a21-k1.pdf', 'dead');
 

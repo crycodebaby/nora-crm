@@ -1082,6 +1082,10 @@ export const frenchCrmMessages = {
       primary_contact_already_exists: "Ce client a déjà un contact principal.",
       primary_contact_changed:
         "Le contact principal a changé entre-temps. Veuillez vérifier votre sélection.",
+      attachment_pending_deletion:
+        "Une pièce jointe de cette note a été supprimée entre-temps et ne peut plus être réutilisée. Veuillez recharger la page et vérifier les pièces jointes.",
+      attachment_reference_invalid:
+        "Une pièce jointe de cette note est invalide ou n'a pas pu être reprise. Veuillez la retirer et téléverser à nouveau le fichier.",
     },
     pwa: {
       available_title: "Nouvelle version de Nora disponible",

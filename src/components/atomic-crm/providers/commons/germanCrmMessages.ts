@@ -1078,6 +1078,10 @@ export const germanCrmMessages = {
         "Dieser Kunde hat bereits einen Hauptansprechpartner.",
       primary_contact_changed:
         "Der Hauptansprechpartner wurde inzwischen geändert. Bitte prüfen Sie die Auswahl erneut.",
+      attachment_pending_deletion:
+        "Ein Anhang dieser Notiz wurde inzwischen entfernt und kann nicht erneut verwendet werden. Bitte laden Sie die Seite neu und prüfen Sie die Anhänge.",
+      attachment_reference_invalid:
+        "Ein Anhang dieser Notiz ist ungültig oder konnte nicht übernommen werden. Bitte entfernen Sie ihn und laden Sie die Datei erneut hoch.",
     },
     pwa: {
       // Presentation Contract V2: ein Titel, hoechstens eine ruhige Zeile,

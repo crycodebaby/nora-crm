@@ -5328,3 +5328,252 @@ revoke all on function nora_private.guard_attachment_storage_key_immutable() fro
 revoke all on function nora_private.guard_attachment_storage_key_immutable() from anon;
 revoke all on function nora_private.guard_attachment_storage_key_immutable() from authenticated;
 revoke all on function nora_private.guard_attachment_storage_key_immutable() from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W8-C S3B (2026-09-19) Atomic note-attachment projection
+-- Migration: 20260919180000_nora_attachment_note_projection.sql
+-- The database is the one writer of public.attachments: AFTER INSERT / UPDATE
+-- row triggers on contact_notes / deal_notes (04_triggers.sql) reconcile the
+-- note's rows with its attachment array (minimal delta against the ACTUAL
+-- rows; grammar v1; REMOVE -> ADD in storage_key COLLATE "C" order).
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 1. Grammar v1 validator / extractor (pure: reads no table)
+--
+-- Returns one row per element (element_no, storage_key, file_name, mime_type)
+-- in array order, or raises 22023 NORA_ATTACHMENT_REFERENCE_INVALID for the
+-- first invalid element (then for the first repeated path). NULL and '{}' are
+-- the empty set. STABLE because it calls the STABLE URL helper; it writes
+-- nothing. S4 will run the same grammar over the historical rows.
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.note_attachment_reference_rows(p_attachments jsonb[])
+returns table (element_no bigint, storage_key text, file_name text, mime_type text)
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+    v_element bigint;
+    v_field   text;
+begin
+    if p_attachments is null or cardinality(p_attachments) = 0 then
+        return;
+    end if;
+
+    if array_ndims(p_attachments) <> 1 then
+        raise exception 'note attachment reference rejected: the attachment list is not a one-dimensional array'
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_REFERENCE_INVALID';
+    end if;
+
+    -- the first element that breaks the grammar (all checks in one pass)
+    select e.ord, c.field
+      into v_element, v_field
+      from unnest(p_attachments) with ordinality as e(item, ord)
+      cross join lateral (
+          select case
+              when e.item is null or jsonb_typeof(e.item) <> 'object'
+                  then 'not a JSON object'
+              when jsonb_typeof(e.item -> 'path') is distinct from 'string'
+                   or char_length(e.item ->> 'path') > 512
+                   or (e.item ->> 'path') !~ '^[A-Za-z0-9._-]+$'
+                   or (e.item ->> 'path') in ('.', '..')
+                  then 'path'
+              when jsonb_typeof(e.item -> 'title') is distinct from 'string'
+                   or btrim(e.item ->> 'title') = ''
+                   or char_length(e.item ->> 'title') > 255
+                  then 'title'
+              when jsonb_typeof(e.item -> 'type') is distinct from 'string'
+                   or btrim(e.item ->> 'type') = ''
+                   or char_length(e.item ->> 'type') > 255
+                  then 'type'
+              when e.item -> 'src' is not null
+                   and jsonb_typeof(e.item -> 'src') <> 'null'
+                   and (jsonb_typeof(e.item -> 'src') <> 'string'
+                        or nora_private.attachment_url_liveness(e.item ->> 'src', e.item ->> 'path') <> 'live')
+                  then 'src'
+          end as field
+      ) as c
+     where c.field is not null
+     order by e.ord
+     limit 1;
+
+    if v_element is not null then
+        raise exception 'note attachment reference rejected: element % is invalid (%)', v_element, v_field
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_REFERENCE_INVALID',
+                  hint = 'Every note attachment needs a Nora storage key (path), a title and a type; a src must be the canonical attachments URL of that path.';
+    end if;
+
+    -- the same storage key twice in one note is ambiguous: reject, never dedupe
+    select d.ord
+      into v_element
+      from (select e.ord,
+                   row_number() over (partition by e.item ->> 'path' order by e.ord) as occurrence
+              from unnest(p_attachments) with ordinality as e(item, ord)) as d
+     where d.occurrence > 1
+     order by d.ord
+     limit 1;
+
+    if v_element is not null then
+        raise exception 'note attachment reference rejected: element % repeats the storage key of an earlier element', v_element
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_REFERENCE_INVALID';
+    end if;
+
+    return query
+        select e.ord, e.item ->> 'path', e.item ->> 'title', e.item ->> 'type'
+          from unnest(p_attachments) with ordinality as e(item, ord)
+         order by e.ord;
+end;
+$$;
+
+alter function nora_private.note_attachment_reference_rows(jsonb[]) owner to postgres;
+
+comment on function nora_private.note_attachment_reference_rows(jsonb[]) is
+    'W8-C S3B: grammar v1 of a note attachment array. Returns (element_no, storage_key, file_name, mime_type) per element in array order, or raises 22023 NORA_ATTACHMENT_REFERENCE_INVALID for the first element that is not a JSON object, has no valid path (^[A-Za-z0-9._-]+$, <= 512, not . / ..), no non-blank title / type (<= 255), or a src other than absent / null / the canonical attachments URL of that path on an allowlisted origin (attachment_url_liveness = live); a repeated path is rejected too. NULL and {} are the empty set. storage_key = path verbatim; rawFile and other fields are ignored. Reads no table, writes nothing. No API role may execute it.';
+
+revoke all on function nora_private.note_attachment_reference_rows(jsonb[]) from public;
+revoke all on function nora_private.note_attachment_reference_rows(jsonb[]) from anon;
+revoke all on function nora_private.note_attachment_reference_rows(jsonb[]) from authenticated;
+revoke all on function nora_private.note_attachment_reference_rows(jsonb[]) from service_role;
+
+-- ---------------------------------------------------------------------------
+-- 2. Core reconcile: one note, minimal delta against the ACTUAL rows
+--
+-- VOLATILE is required: it writes, and every statement must take a fresh READ
+-- COMMITTED snapshot - a same-note update that waited on the note row and was
+-- re-checked must see the rows the previous writer committed.
+-- The caller must hold the note row (the triggering UPDATE does; a new INSERT
+-- is invisible to others; S4 must lock the note row FOR UPDATE first).
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.reconcile_note_attachments(
+    p_contact_note_id bigint,
+    p_deal_note_id    bigint,
+    p_attachments     jsonb[]
+)
+returns void
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+set row_security = off
+as $$
+declare
+    v_keys    text[];
+    v_names   text[];
+    v_mimes   text[];
+    v_element bigint;
+    v_remove  bigint[];
+begin
+    if num_nonnulls(p_contact_note_id, p_deal_note_id) <> 1 then
+        raise exception 'note attachment reconciliation: exactly one owner note id is required'
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_INVALID_ARGUMENT';
+    end if;
+
+    -- D: validated desired set, in element order
+    select coalesce(array_agg(r.storage_key order by r.element_no), '{}'),
+           coalesce(array_agg(r.file_name   order by r.element_no), '{}'),
+           coalesce(array_agg(r.mime_type   order by r.element_no), '{}')
+      into v_keys, v_names, v_mimes
+      from nora_private.note_attachment_reference_rows(p_attachments) as r;
+
+    -- KEEP: a key the note already has must keep its title and type. Rows are
+    -- immutable (S1): no metadata UPDATE, and no silently diverging JSON.
+    select d.element_no
+      into v_element
+      from unnest(v_keys, v_names, v_mimes) with ordinality as d(storage_key, file_name, mime_type, element_no)
+      join public.attachments a
+        on a.storage_key = d.storage_key
+       and (a.contact_note_id = p_contact_note_id or a.deal_note_id = p_deal_note_id)
+     where a.file_name is distinct from d.file_name
+        or a.mime_type is distinct from d.mime_type
+     order by d.element_no
+     limit 1;
+
+    if v_element is not null then
+        raise exception 'note attachment reference rejected: element % changes the title or type of an attachment the note already has', v_element
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_REFERENCE_INVALID';
+    end if;
+
+    -- REMOVE = E - D: plain DELETE, so the S2A1/S3A capture runs per row
+    select coalesce(array_agg(a.id), '{}')
+      into v_remove
+      from public.attachments a
+     where (a.contact_note_id = p_contact_note_id or a.deal_note_id = p_deal_note_id)
+       and a.storage_key <> all (v_keys);
+
+    if cardinality(v_remove) > 0 then
+        delete from public.attachments a
+         where a.id = any (v_remove);
+    end if;
+
+    -- ADD = D - E: plain INSERT, so S3A admission runs per row. Deterministic
+    -- storage_key COLLATE "C" order: concurrent multi-key adds wait on the
+    -- unique index in the same order instead of deadlocking.
+    if cardinality(v_keys) > 0 then
+        insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type)
+        select p_contact_note_id, p_deal_note_id, d.storage_key, d.file_name, d.mime_type
+          from unnest(v_keys, v_names, v_mimes) as d(storage_key, file_name, mime_type)
+         where not exists (select 1
+                             from public.attachments a
+                            where a.storage_key = d.storage_key
+                              and (a.contact_note_id = p_contact_note_id or a.deal_note_id = p_deal_note_id))
+         order by d.storage_key collate "C";
+    end if;
+end;
+$$;
+
+alter function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) owner to postgres;
+
+comment on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) is
+    'W8-C S3B: reconciles the public.attachments rows of ONE note (exactly one of contact_note_id / deal_note_id, else 22023 NORA_ATTACHMENT_INVALID_ARGUMENT) with its attachment array. D = grammar v1 rows (note_attachment_reference_rows), E = the rows the note owns now. KEEP (E n D) is never written and must keep title / type (else 22023 NORA_ATTACHMENT_REFERENCE_INVALID); REMOVE (E - D) is a plain DELETE (capture); ADD (D - E) a plain INSERT in storage_key COLLATE "C" order (admission). Never takes the key lock itself, never calls claim / inspect / fail / the resolver, no exception handler. VOLATILE (fresh snapshot per statement). Caller holds the note row; S4 reuses it under a note row lock. No API role may execute it.';
+
+revoke all on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) from public;
+revoke all on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) from anon;
+revoke all on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) from authenticated;
+revoke all on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) from service_role;
+
+-- ---------------------------------------------------------------------------
+-- 3. Trigger dispatcher
+--
+-- SECURITY DEFINER because the note writer (authenticated / service_role)
+-- holds no write privilege on public.attachments and no EXECUTE on the core.
+-- row_security = off makes RLS drift on public.attachments raise instead of
+-- hiding rows from E. The owner is derived from the triggering table and
+-- NEW.id only.
+-- ---------------------------------------------------------------------------
+create or replace function nora_private.project_note_attachments()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+set row_security = off
+as $$
+begin
+    if tg_when <> 'AFTER' or tg_level <> 'ROW' or tg_op not in ('INSERT', 'UPDATE') then
+        raise exception 'note attachment projection must run as an AFTER INSERT / UPDATE row trigger (got % % %)', tg_when, tg_level, tg_op
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_INVALID_ARGUMENT';
+    end if;
+
+    if tg_table_schema = 'public' and tg_table_name = 'contact_notes' then
+        perform nora_private.reconcile_note_attachments(new.id, null, new.attachments);
+    elsif tg_table_schema = 'public' and tg_table_name = 'deal_notes' then
+        perform nora_private.reconcile_note_attachments(null, new.id, new.attachments);
+    else
+        raise exception 'note attachment projection is not defined for %.%', tg_table_schema, tg_table_name
+            using errcode = '22023', detail = 'NORA_ATTACHMENT_INVALID_ARGUMENT';
+    end if;
+
+    return null;
+end;
+$$;
+
+alter function nora_private.project_note_attachments() owner to postgres;
+
+comment on function nora_private.project_note_attachments() is
+    'W8-C S3B: AFTER INSERT / UPDATE row trigger on public.contact_notes and public.deal_notes. Calls nora_private.reconcile_note_attachments(NEW.id as the owner of the triggering table, NEW.attachments); any failure aborts the note statement, so the JSON never commits without its projection. SECURITY DEFINER (writers hold only SELECT on public.attachments), search_path = '''', row_security = off. No DELETE trigger: the note FK CASCADE deletes the rows and fires the S2A1/S3A capture. No API role may execute it.';
+
+revoke all on function nora_private.project_note_attachments() from public;
+revoke all on function nora_private.project_note_attachments() from anon;
+revoke all on function nora_private.project_note_attachments() from authenticated;
+revoke all on function nora_private.project_note_attachments() from service_role;

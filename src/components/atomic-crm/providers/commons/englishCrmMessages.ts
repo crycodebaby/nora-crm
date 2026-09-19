@@ -1063,6 +1063,10 @@ export const englishCrmMessages = {
         "This customer already has a primary contact.",
       primary_contact_changed:
         "The primary contact has changed in the meantime. Please review your selection.",
+      attachment_pending_deletion:
+        "An attachment of this note has been removed in the meantime and cannot be used again. Please reload the page and check the attachments.",
+      attachment_reference_invalid:
+        "An attachment of this note is invalid or could not be taken over. Please remove it and upload the file again.",
     },
     pwa: {
       available_title: "New Nora version available",
