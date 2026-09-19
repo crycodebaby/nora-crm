@@ -12,9 +12,10 @@
 --   1. table shape: columns, types, nullability, created_at default, primary key,
 --      and the absence of columns S1 deliberately does not have (uploaded_by,
 --      updated_at, status/deleted_at/archived_at/provider/bucket/metadata)
---   2. declarative access contract: RLS enabled, exactly three policies
---      (SELECT/INSERT/DELETE), no UPDATE policy, no ALL policy, and the exact
---      table privilege matrix for anon / authenticated / service_role
+--   2. declarative access contract: RLS enabled, exactly ONE policy (SELECT,
+--      is_active_user) since W8-C S3A (20260919120000) removed the two writer
+--      policies, no INSERT/DELETE/UPDATE/ALL policy, and the exact table
+--      privilege matrix for anon / authenticated (SELECT only) / service_role
 --   3. owner invariant: contact-only PASS, deal-only PASS, neither FAIL, both FAIL
 --   4. storage identity: non-empty accepted, duplicate rejected by the DATABASE,
 --      empty / whitespace-only / over-long rejected
@@ -28,12 +29,16 @@
 --   7. behavioural role matrix with API claim transport (request.jwt.claims) and
 --      live sessions: admin / office / viewer / disabled-with-valid-JWT /
 --      active-office-WITHOUT-a-live-session / anon, plus a control proving that
---      the last one is denied by the session binding itself and not by
---      sales.role or sales.disabled
+--      the read denial of the last one comes from the session binding itself
+--      and not from sales.role or sales.disabled. Since W8-C S3A no API role
+--      may INSERT or DELETE directly (the table privilege denies it, 42501);
+--      the only writers are database-owned (FK cascade, later the S3B projection)
 --   8. scope: the table is empty (no backfill), the legacy note JSON arrays are
---      untouched, and the only trigger on it is the W8-C S2A1 capture hook
---      (20260917120000); the only queue consumer is the postgres-only W8-C
---      S2A2.2 set (claim_next / inspect / fail) — no physical storage delete path
+--      untouched, and the triggers on it are exactly the W8-C S2A1 capture hook
+--      (20260917120000) plus the two W8-C S3A guards (20260919120000: reference
+--      admission, storage_key immutability); the only queue consumer is the
+--      postgres-only W8-C S2A2.2 set (claim_next / inspect / fail) — no
+--      physical storage delete path
 --   9. no GUC or role leak
 --
 -- NOT proven here (out of S1 scope by design): physical storage deletion,
@@ -172,40 +177,42 @@ begin
         v_failures := array_append(v_failures, 'RLS is not enabled on public.attachments');
     end if;
 
+    -- W8-C S3A (20260919120000) dropped attachments_insert_writer and
+    -- attachments_delete_writer together with the INSERT / DELETE privileges:
+    -- the SELECT policy is the only one left.
     select string_agg(format('%s (%s, roles=%s)', p.policyname, p.cmd, p.roles::text), ', ' order by p.policyname)
       into v_unexpected
     from pg_policies p
     where p.schemaname = 'public' and p.tablename = 'attachments'
-      and (p.policyname, p.cmd) not in (('attachments_select_active_user', 'SELECT'),
-                                        ('attachments_insert_writer', 'INSERT'),
-                                        ('attachments_delete_writer', 'DELETE'));
+      and (p.policyname, p.cmd) not in (('attachments_select_active_user', 'SELECT'));
     if v_unexpected is not null then
         v_failures := v_failures || format('unexpected policies: %s', v_unexpected);
     end if;
 
-    -- explicit: no UPDATE policy and no ALL policy may ever appear here
+    -- explicit: no write policy of any kind may ever appear here
     if exists (select 1 from pg_policies p
                where p.schemaname = 'public' and p.tablename = 'attachments'
-                 and p.cmd in ('UPDATE', 'ALL')) then
-        v_failures := array_append(v_failures, 'an UPDATE or ALL policy exists on public.attachments');
+                 and p.cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')) then
+        v_failures := array_append(v_failures, 'an INSERT, UPDATE, DELETE or ALL policy exists on public.attachments');
     end if;
 
     if (select count(*) from pg_policies p
         where p.schemaname = 'public' and p.tablename = 'attachments'
-          and p.permissive = 'PERMISSIVE' and p.roles = array['authenticated']::name[]) <> 3 then
-        v_failures := array_append(v_failures, 'expected exactly three PERMISSIVE policies to authenticated');
+          and p.permissive = 'PERMISSIVE' and p.roles = array['authenticated']::name[]) <> 1 then
+        v_failures := array_append(v_failures, 'expected exactly one PERMISSIVE policy to authenticated');
     end if;
 
     -- helper functions: consumed, not copied
-    if (select count(*) from pg_policies p
-        where p.schemaname = 'public' and p.tablename = 'attachments'
-          and (coalesce(p.qual, '') || coalesce(p.with_check, '')) like '%nora_private.%') <> 3 then
-        v_failures := array_append(v_failures, 'the policies do not all use the canonical nora_private helpers');
+    if not exists (select 1 from pg_policies p
+                   where p.schemaname = 'public' and p.tablename = 'attachments'
+                     and p.policyname = 'attachments_select_active_user'
+                     and p.qual = 'nora_private.is_active_user()' and p.with_check is null) then
+        v_failures := array_append(v_failures, 'the SELECT policy does not use exactly nora_private.is_active_user()');
     end if;
 
     for r in
         select * from (values
-            ('authenticated', 'SELECT,INSERT,DELETE'),
+            ('authenticated', 'SELECT'),
             ('anon',          ''),
             ('service_role',  '')
         ) as t(grantee, privs)
@@ -242,7 +249,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL: access contract:\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  2. RLS on, exactly SELECT/INSERT/DELETE policies, no UPDATE/ALL policy, privilege matrix exact';
+    raise notice 'OK  2. RLS on, exactly the SELECT policy, no write/ALL policy, privilege matrix exact (authenticated SELECT only)';
 end;
 $$;
 
@@ -465,17 +472,21 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 7. Behavioural role matrix (real claims + live sessions, rolled back)
 --
--- Expected per role:
---   admin  / office : SELECT yes, INSERT yes, DELETE yes, UPDATE denied
---   viewer          : SELECT yes, INSERT denied, DELETE 0 rows, UPDATE denied
---   disabled (valid JWT) : SELECT 0 rows, INSERT denied, DELETE 0 rows
---   office WITHOUT a live owned session : SELECT 0 rows, INSERT denied,
---                     DELETE 0 rows  (see the session-binding control below)
+-- Expected per role (since W8-C S3A, 20260919120000):
+--   admin  / office : SELECT yes; INSERT, UPDATE, DELETE denied (privilege)
+--   viewer          : SELECT yes; INSERT, UPDATE, DELETE denied (privilege)
+--   disabled (valid JWT) : SELECT 0 rows; writes denied (privilege)
+--   office WITHOUT a live owned session : SELECT 0 rows; writes denied
+--                     (privilege)  (see the session-binding control below)
 --   anon            : no capability at all (no privilege)
 --
 -- Two different denial shapes are asserted on purpose:
---   * UPDATE is denied by the missing table PRIVILEGE -> 42501 error
---   * a DELETE/SELECT a role may issue but no row passes RLS -> 0 rows, no error
+--   * INSERT / UPDATE / DELETE are denied by the missing table PRIVILEGE ->
+--     42501 error for EVERY role. Before S3A, admin/office could INSERT and
+--     DELETE (can_write policies); S3A makes public.attachments database-
+--     written only (FK cascade now, the S3B projection later), so a direct
+--     API write that could diverge from the note JSON is impossible.
+--   * a SELECT a role may issue but no row passes RLS -> 0 rows, no error
 --
 -- The "no session" row exists because public.attachments is a NEW security
 -- surface: it must be shown that its authorization really rides on
@@ -537,13 +548,13 @@ begin
         values (v_contact, 'Matrix', now(), v_o) returning id into v_cnote;
 
     for v_row in select * from (values
-        ('anon',       null::uuid, 'anon',          false, false, false),
-        ('disabled',   v_disabled, 'authenticated', false, false, false),
-        ('no session', v_nosess,   'authenticated', false, false, false),
-        ('viewer',   v_viewer,   'authenticated', true,  false, false),
-        ('office',   v_office,   'authenticated', true,  true,  true),
-        ('admin',    v_admin,    'authenticated', true,  true,  true)
-    ) as t(label, uid, api_role, reads, writes, deletes) loop
+        ('anon',       null::uuid, 'anon',          false),
+        ('disabled',   v_disabled, 'authenticated', false),
+        ('no session', v_nosess,   'authenticated', false),
+        ('viewer',   v_viewer,   'authenticated', true),
+        ('office',   v_office,   'authenticated', true),
+        ('admin',    v_admin,    'authenticated', true)
+    ) as t(label, uid, api_role, reads) loop
 
         -- seeded as postgres so every role has a row it could see/delete
         insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
@@ -568,15 +579,15 @@ begin
             v_failures := v_failures || format('%s SELECT = %s (expected %s)', v_row.label, v_ok, v_row.reads);
         end if;
 
-        -- INSERT
+        -- INSERT must be denied for every role by the missing privilege (S3A)
         v_ok := true;
         begin
             insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
                 values (v_cnote, 'w8c-s1-insert-' || v_row.label || '.pdf', 'neu.pdf', 'application/pdf');
         exception when insufficient_privilege then v_ok := false;
         end;
-        if v_ok <> v_row.writes then
-            v_failures := v_failures || format('%s INSERT = %s (expected %s)', v_row.label, v_ok, v_row.writes);
+        if v_ok then
+            v_failures := v_failures || format('%s was not denied INSERT by the table privilege', v_row.label);
         end if;
 
         -- UPDATE must be denied for every role: no privilege, no policy
@@ -593,16 +604,18 @@ begin
             v_failures := v_failures || format('%s was not denied UPDATE by the table privilege', v_row.label);
         end if;
 
-        -- DELETE
+        -- DELETE must be denied for every role by the missing privilege (S3A)
         v_ok := true;
         begin
             delete from public.attachments where id = v_seed;
             get diagnostics v_n = row_count;
-            v_ok := (v_n = 1);
+            if v_n <> 0 then
+                v_failures := v_failures || format('%s DELETE removed %s row(s)', v_row.label, v_n);
+            end if;
         exception when insufficient_privilege then v_ok := false;
         end;
-        if v_ok <> v_row.deletes then
-            v_failures := v_failures || format('%s DELETE = %s (expected %s)', v_row.label, v_ok, v_row.deletes);
+        if v_ok then
+            v_failures := v_failures || format('%s was not denied DELETE by the table privilege', v_row.label);
         end if;
 
         reset role;
@@ -610,11 +623,12 @@ begin
     end loop;
 
     -- ---- R-3 control: the SAME employee, now with a live owned session -----
-    -- v_nosess was denied everything above. It is active, it is office, and its
+    -- v_nosess could not read above. It is active, it is office, and its
     -- claims were structurally valid — so if giving it nothing but an
-    -- auth.sessions row makes it fully capable, the denial can only have come
+    -- auth.sessions row makes it read, the read denial can only have come
     -- from nora_private.jwt_session_is_live(). Without this control the "no
-    -- session" row above would not prove WHICH gate denied it.
+    -- session" row above would not prove WHICH gate denied it. Its writes stay
+    -- denied by the table privilege even with a live session (W8-C S3A).
     insert into auth.sessions (id, user_id, created_at, updated_at, aal)
         values (v_nosess, v_nosess, now(), now(), 'aal1');
     insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
@@ -632,30 +646,37 @@ begin
             'session-binding control: office WITH a live session could not SELECT');
     end if;
 
+    v_ok := true;
     begin
         insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
             values (v_cnote, 'w8c-s1-session-control-insert.pdf', 'control2.pdf', 'application/pdf');
-    exception when insufficient_privilege then
-        v_failures := array_append(v_failures,
-            'session-binding control: office WITH a live session was denied INSERT');
+    exception when insufficient_privilege then v_ok := false;
     end;
-
-    delete from public.attachments where id = v_seed;
-    get diagnostics v_n = row_count;
-    if v_n <> 1 then
+    if v_ok then
         v_failures := array_append(v_failures,
-            'session-binding control: office WITH a live session could not DELETE');
+            'session-binding control: office WITH a live session was allowed a direct INSERT (S3A: privilege revoked)');
+    end if;
+
+    v_ok := true;
+    begin
+        delete from public.attachments where id = v_seed;
+    exception when insufficient_privilege then v_ok := false;
+    end;
+    if v_ok then
+        v_failures := array_append(v_failures,
+            'session-binding control: office WITH a live session was allowed a direct DELETE (S3A: privilege revoked)');
     end if;
 
     reset role;
+    delete from public.attachments where id = v_seed;
 
     perform set_config('request.jwt.claims', '', true);
 
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL: role matrix:\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  7. role matrix: admin/office read+insert+delete, viewer read-only, disabled JWT blind, active office WITHOUT a live session blind, anon without capability, UPDATE denied for all';
-    raise notice 'OK  7b. session binding: the same active office employee is denied without an auth.sessions row and fully capable with one (jwt_session_is_live, not role/disabled)';
+    raise notice 'OK  7. role matrix: admin/office/viewer read, disabled JWT blind, active office WITHOUT a live session blind, anon without capability; INSERT/UPDATE/DELETE denied by privilege for every role (S3A)';
+    raise notice 'OK  7b. session binding: the same active office employee cannot read without an auth.sessions row and reads with one (jwt_session_is_live, not role/disabled); direct writes stay denied';
 
     raise exception 'ROLLBACK_W8C_S1_TEST';
 exception
@@ -692,18 +713,30 @@ begin
         v_failures := array_append(v_failures, 'the legacy note attachment columns were changed by S1');
     end if;
 
-    -- Deletion machinery: since W8-C S2A1 (20260917120000) exactly ONE trigger
-    -- is expected here — the capture hook that writes a deletion INTENT into
-    -- the private outbox. It is still true that S1 itself carries no deletion
-    -- path; this assertion therefore no longer demands "no trigger", it demands
-    -- "no trigger BEYOND the agreed capture hook". Anything else on this table
-    -- is an unreviewed deletion path and must fail.
+    -- Deletion machinery: since W8-C S2A1 (20260917120000) the capture hook
+    -- writes a deletion INTENT into the private outbox; since W8-C S3A
+    -- (20260919120000) two guards join it — reference admission (AFTER INSERT,
+    -- rejects a key with an active / done intent) and storage_key immutability
+    -- (BEFORE UPDATE). None of them deletes anything. It is still true that S1
+    -- itself carries no deletion path; this assertion demands "no trigger
+    -- BEYOND the agreed three hooks, each on its agreed function". Anything
+    -- else on this table is an unreviewed path and must fail.
     select string_agg(t.tgname, ', ' order by t.tgname) into v_extra
     from pg_trigger t
     where t.tgrelid = 'public.attachments'::regclass and not t.tgisinternal
-      and t.tgname <> 'enqueue_attachment_storage_deletion_after_delete_trigger';
+      and (t.tgname, t.tgfoid) not in (
+          ('enqueue_attachment_storage_deletion_after_delete_trigger',
+           to_regprocedure('nora_private.enqueue_attachment_storage_deletion()')),
+          ('guard_attachment_reference_admission_after_insert_trigger',
+           to_regprocedure('nora_private.guard_attachment_reference_admission()')),
+          ('guard_attachment_storage_key_immutable_before_update_trigger',
+           to_regprocedure('nora_private.guard_attachment_storage_key_immutable()')));
     if v_extra is not null then
-        v_failures := v_failures || format('unexpected trigger on public.attachments beyond the S2A1 capture hook: %s', v_extra);
+        v_failures := v_failures || format('unexpected trigger on public.attachments beyond the S2A1 capture hook and the S3A guards: %s', v_extra);
+    end if;
+    if (select count(*) from pg_trigger t
+        where t.tgrelid = 'public.attachments'::regclass and not t.tgisinternal) <> 3 then
+        v_failures := array_append(v_failures, 'public.attachments does not carry exactly the capture hook and the two S3A guards');
     end if;
 
     -- The capture hook enqueues only. The consumer contract exists ONLY as the
@@ -754,7 +787,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL: scope:\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  8. metadata only: table empty, legacy note JSON untouched, only the S2A1 capture hook, consumer = exactly the postgres-only S2A2.2 set, W8-B storage contract unchanged';
+    raise notice 'OK  8. metadata only: table empty, legacy note JSON untouched, only the S2A1 capture hook + the two S3A guards, consumer = exactly the postgres-only S2A2.2 set, W8-B storage contract unchanged';
 end;
 $$;
 

@@ -105,8 +105,10 @@ begin
             ('authenticated','public.deal_notes',                 'SELECT,INSERT,UPDATE,DELETE'),
             -- W8-C S1 (2026-09-16): attachment metadata. No UPDATE — the rows are
             -- immutable and carry no UPDATE policy; nothing for service_role —
-            -- there is no traced, deployed backend caller.
-            ('authenticated','public.attachments',                'SELECT,INSERT,DELETE'),
+            -- there is no traced, deployed backend caller. W8-C S3A (2026-09-19)
+            -- revoked the direct INSERT / DELETE: the table is written only by
+            -- the database (FK cascade now, the S3B projection later).
+            ('authenticated','public.attachments',                'SELECT'),
             ('authenticated','public.tasks',                    'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.tags',                       'SELECT,INSERT,UPDATE,DELETE'),
             ('authenticated','public.favicons_excluded_domains',  'SELECT,INSERT,UPDATE,DELETE'),
@@ -485,7 +487,9 @@ begin
             ('authenticated','public.checklist_templates'),
             ('authenticated','public.saved_text_snippets'),
             ('authenticated','public.audit_events'),
-            ('authenticated','public.configuration')
+            ('authenticated','public.configuration'),
+            -- revoked later by W8-C S3A (2026-09-19): no direct metadata DELETE
+            ('authenticated','public.attachments')
         ) as t(grantee, obj)
     loop
         v_ok := false;

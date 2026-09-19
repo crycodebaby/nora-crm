@@ -21,17 +21,22 @@
 --   3. capture function: SECURITY DEFINER, owner postgres, search_path = '',
 --      no EXECUTE for public/anon/authenticated/service_role, and a body that
 --      contains no HTTP / pg_net / Storage / Edge Function call whatsoever
---   4. exactly one trigger on public.attachments: AFTER DELETE FOR EACH ROW
+--   4. the capture hook is the only DELETE trigger on public.attachments:
+--      AFTER DELETE FOR EACH ROW; besides it only the two W8-C S3A guards
+--      (reference admission AFTER INSERT, storage_key immutability BEFORE UPDATE)
 --   5. CASCADE PROOF — one deleted attachment row yields exactly one active
 --      job for its storage_key along all six deletion paths:
 --         direct / contact_note / deal_note / contact / deal / company
 --   6. idempotency: first enqueue creates one pending job; a repeated intent
 --      while an active job exists is a NO-OP and does NOT abort the business
---      DELETE; a terminal (done / failed_terminal) row does NOT permanently
---      block a future job for the same key
+--      DELETE (pre-existing intent, reference created first); a terminal
+--      (done / failed_terminal) row does NOT permanently block a future job
+--      for the same key. Since W8-C S3A a NEW reference to a key with an
+--      active intent or a done tombstone is rejected (I1)
 --   7. negatives: INSERT creates no job, UPDATE creates no job, a blank
---      storage_key is rejected by the backstop check, and S1's privilege
---      matrix on public.attachments is unchanged (service_role gains nothing)
+--      storage_key is rejected by the backstop check, and the privilege
+--      matrix on public.attachments is exactly the S3A one (authenticated
+--      SELECT only; service_role gains nothing)
 --   9. CONFLICT PRECISION — the two conflict classes behave DIFFERENTLY: a
 --      duplicate ACTIVE storage_key is suppressed and the DELETE succeeds,
 --      while an unrelated PRIMARY KEY conflict propagates and rolls the
@@ -39,13 +44,17 @@
 --      both and silently lose the deletion intent
 --  10. THE SECURITY DEFINER BOUNDARY, exercised by a real `authenticated`
 --      caller with a live auth.sessions binding: it holds no queue privilege
---      and no EXECUTE, cannot touch either directly, yet its DELETE captures
---      exactly one pending job — and the same office identity WITHOUT a live
---      session captures none. Sections 5–7 run as postgres and prove nothing
---      about this boundary
+--      and no EXECUTE, cannot touch either directly, yet deleting the owning
+--      note captures exactly one pending job — and the same admin identity
+--      WITHOUT a live session captures none. Since W8-C S3A (20260919120000)
+--      a direct DELETE on public.attachments is denied to every API role by
+--      the table privilege (42501) and captures nothing; the note delete
+--      (FK cascade) is the remaining API-reachable capture path. Sections 5–7
+--      run as postgres and prove nothing about this boundary
 --  11. FAIL-CLOSED ATOMICITY: when capture fails for a reason that is NOT the
---      intended duplicate, the business DELETE rolls back and the attachment
---      row survives — no silent loss of deletion intent
+--      intended duplicate, the business DELETE (an admin's note delete that
+--      cascades) rolls back and note + attachment row survive — no silent loss
+--      of deletion intent
 --
 -- NOT proven here (out of S2A1 scope by design): claim/inspect/fail semantics
 -- (attachment_deletion_queue_execution_verification.sql), the live-reference
@@ -317,13 +326,29 @@ declare
     v_extra    text;
     v_failures text[] := '{}';
 begin
+    -- Since W8-C S3A (20260919120000) the capture hook shares the table with
+    -- exactly two guards (reference admission AFTER INSERT, storage_key
+    -- immutability BEFORE UPDATE). Neither fires on DELETE, so the capture
+    -- hook is still the ONLY delete-time trigger.
     select string_agg(t.tgname, ', ' order by t.tgname) into v_extra
     from pg_trigger t
     where t.tgrelid = 'public.attachments'::regclass
       and not t.tgisinternal
-      and t.tgname <> 'enqueue_attachment_storage_deletion_after_delete_trigger';
+      and t.tgname not in ('enqueue_attachment_storage_deletion_after_delete_trigger',
+                           'guard_attachment_reference_admission_after_insert_trigger',
+                           'guard_attachment_storage_key_immutable_before_update_trigger');
     if v_extra is not null then
         v_failures := v_failures || format('unexpected triggers on public.attachments: %s', v_extra);
+    end if;
+
+    select string_agg(t.tgname, ', ' order by t.tgname) into v_extra
+    from pg_trigger t
+    where t.tgrelid = 'public.attachments'::regclass
+      and not t.tgisinternal
+      and (t.tgtype & 8) = 8
+      and t.tgname <> 'enqueue_attachment_storage_deletion_after_delete_trigger';
+    if v_extra is not null then
+        v_failures := v_failures || format('a trigger other than the capture hook fires on DELETE: %s', v_extra);
     end if;
 
     if not exists (
@@ -344,7 +369,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (trigger):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 4. exactly one trigger: AFTER DELETE FOR EACH ROW on public.attachments';
+    raise notice 'OK 4. capture = the only DELETE trigger (AFTER DELETE FOR EACH ROW); besides it only the two S3A guards';
 end;
 $$;
 
@@ -361,6 +386,7 @@ declare
     v_a        bigint;
     v_n        bigint;
     v_state    text;
+    v_detail   text;
     v_failures text[] := '{}';
 begin
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -472,18 +498,36 @@ begin
     end if;
 
     -- ---- 6a. duplicate intent while an active job exists = NO-OP -----------
-    -- The key is free again in public.attachments (its row is gone), so the
-    -- same object can be referenced and deleted a second time while the first
-    -- job is still active. That must NOT create a second job and must NOT
-    -- abort the DELETE.
+    -- Before W8-C S3A (20260919120000) the key of 5a was free again in
+    -- public.attachments, so the same object could be re-referenced while its
+    -- first job was still active. Reference admission (I1) now rejects that
+    -- re-reference - asserted first. The capture suppression itself must still
+    -- hold for a PRE-EXISTING active intent whose key is still referenced (a
+    -- legacy / manual producer, i.e. pre-S3 state): the reference exists first,
+    -- the intent is recorded directly as postgres, then the reference is
+    -- deleted. That must NOT create a second job and must NOT abort the DELETE.
     insert into public.companies (name, sales_id)
         values ('W8-C S2A1 Kunde 2', v_sales) returning id into v_company;
     insert into public.contacts (first_name, last_name, company_id, sales_id)
         values ('Dup', 'Likat', v_company, v_sales) returning id into v_contact;
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Dup', now(), v_sales) returning id into v_cnote;
+
+    v_state := 'admitted'; v_detail := null;
+    begin
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
+            values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf');
+    exception when others then
+        get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
+    end;
+    if v_state <> '55000' or v_detail is distinct from 'NORA_ATTACHMENT_STORAGE_KEY_PENDING_DELETION' then
+        v_failures := v_failures || format('6a S3A: re-referencing a key with an active intent -> %s %s, expected 55000 NORA_ATTACHMENT_STORAGE_KEY_PENDING_DELETION',
+            v_state, coalesce(v_detail, ''));
+    end if;
+
     insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+        values (v_cnote, 's2a1-dup.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into nora_private.attachment_storage_deletion_queue (storage_key) values ('s2a1-dup.pdf');
     delete from public.attachments where id = v_a;
 
     if not found then
@@ -495,44 +539,64 @@ begin
     end if;
 
     select count(*) into v_n
-    from nora_private.attachment_storage_deletion_queue where storage_key = 's2a1-direct.pdf';
+    from nora_private.attachment_storage_deletion_queue where storage_key = 's2a1-dup.pdf';
     if v_n <> 1 then
         v_failures := v_failures || format('6a duplicate intent: expected 1 job, got %s', v_n);
     end if;
 
     -- ---- 6b. a terminal row does not block a future job --------------------
-    -- Simulate what S2A2 will do on success, then delete the same key again.
+    -- done: since W8-C S3A a done tombstone makes the key non-referencable
+    -- (I1) - the object is confirmed gone. At the QUEUE level the done row
+    -- still does not block a future intent: the partial unique index ignores
+    -- terminal rows (shown with a direct insert, the only producer that can
+    -- target a key without a reference).
     update nora_private.attachment_storage_deletion_queue
        set state = 'done', completed_at = now()
      where storage_key = 's2a1-direct.pdf';
 
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
-    delete from public.attachments where id = v_a;
+    v_state := 'admitted'; v_detail := null;
+    begin
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
+            values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf');
+    exception when others then
+        get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
+    end;
+    if v_state <> '55000' or v_detail is distinct from 'NORA_ATTACHMENT_STORAGE_KEY_PENDING_DELETION' then
+        v_failures := v_failures || format('6b S3A: referencing a key with a done tombstone -> %s %s, expected rejection',
+            v_state, coalesce(v_detail, ''));
+    end if;
+
+    insert into nora_private.attachment_storage_deletion_queue (storage_key) values ('s2a1-direct.pdf');
 
     select count(*) into v_n
     from nora_private.attachment_storage_deletion_queue where storage_key = 's2a1-direct.pdf';
     if v_n <> 2 then
-        v_failures := v_failures || format('6b terminal row blocked a new job: expected 2 rows, got %s', v_n);
+        v_failures := v_failures || format('6b done row blocked a new job: expected 2 rows, got %s', v_n);
     end if;
 
     if (select count(*) from nora_private.attachment_storage_deletion_queue
         where storage_key = 's2a1-direct.pdf' and state = 'pending') <> 1 then
-        v_failures := array_append(v_failures, '6b expected exactly one fresh pending job after the terminal row');
+        v_failures := array_append(v_failures, '6b expected exactly one fresh pending job after the done row');
     end if;
 
-    -- the same must hold for failed_terminal
+    -- failed_terminal (historical only): the key may be referenced again, and
+    -- deleting that reference captures a fresh job through the ordinary path
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
+        values (v_cnote, 's2a1-terminal.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    delete from public.attachments where id = v_a;
     update nora_private.attachment_storage_deletion_queue
        set state = 'failed_terminal', completed_at = now(),
            last_error_code = 'storage_forbidden', last_error_at = now()
-     where storage_key = 's2a1-direct.pdf' and state = 'pending';
+     where storage_key = 's2a1-terminal.pdf' and state = 'pending';
 
     insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+        values (v_cnote, 's2a1-terminal.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
     delete from public.attachments where id = v_a;
 
     if (select count(*) from nora_private.attachment_storage_deletion_queue
-        where storage_key = 's2a1-direct.pdf') <> 3 then
+        where storage_key = 's2a1-terminal.pdf') <> 2
+       or (select count(*) from nora_private.attachment_storage_deletion_queue
+           where storage_key = 's2a1-terminal.pdf' and state = 'pending') <> 1 then
         v_failures := array_append(v_failures, '6b failed_terminal blocked a new job for the same key');
     end if;
 
@@ -610,7 +674,7 @@ begin
     end if;
 
     raise notice 'OK 5. cascade proof: direct, contact_note, deal_note, contact, deal, company';
-    raise notice 'OK 6. idempotency: duplicate intent is a NO-OP, terminal rows do not block';
+    raise notice 'OK 6. idempotency: duplicate intent is a NO-OP, terminal rows do not block a future intent; S3A: re-reference under an active intent or a done tombstone is rejected';
     raise notice 'OK 7. negatives: INSERT/UPDATE enqueue nothing, invariants enforced';
 
     raise exception 'ROLLBACK_W8C_S2A1_TEST';
@@ -666,11 +730,15 @@ begin
 
     -- ---- 9A. the INTENDED conflict: duplicate ACTIVE storage_key ----------
     -- An active job already holds this key, so the intent is already captured.
-    insert into nora_private.attachment_storage_deletion_queue (storage_key)
-        values ('s2a1-conflict-active.pdf');
-
+    -- Since W8-C S3A (20260919120000) reference admission rejects a NEW
+    -- reference to a key with an active intent, so the pre-existing state is
+    -- built in the only admissible order (pre-S3 / manual producer): the
+    -- reference first, then the intent recorded directly as postgres.
     insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
         values (v_cnote, 's2a1-conflict-active.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+
+    insert into nora_private.attachment_storage_deletion_queue (storage_key)
+        values ('s2a1-conflict-active.pdf');
 
     v_raised := false;
     begin
@@ -770,7 +838,7 @@ declare
     v_office uuid := gen_random_uuid();
     v_nosess uuid := gen_random_uuid();
     v_ad bigint; v_o bigint; v_ns bigint;
-    v_company bigint; v_contact bigint; v_cnote bigint; v_a bigint;
+    v_company bigint; v_contact bigint; v_cnote bigint; v_cnote2 bigint; v_a bigint;
     v_n bigint; v_deleted int;
     v_ok boolean; v_state text;
     v_failures text[] := '{}';
@@ -786,18 +854,22 @@ begin
     select id into v_ns from public.sales where user_id = v_nosess;
     perform nora_private.apply_sales_role_change(v_ad, 'admin',  false);
     perform nora_private.apply_sales_role_change(v_o,  'office', false);
-    -- active office employee, identical to v_office; the ONLY difference is
-    -- that it deliberately receives no auth.sessions row.
-    perform nora_private.apply_sales_role_change(v_ns, 'office', false);
+    -- active admin, identical to v_admin; the ONLY difference is that it
+    -- deliberately receives no auth.sessions row. Admin, because since W8-C
+    -- S3A the API-reachable capture path is the note DELETE (is_admin).
+    perform nora_private.apply_sales_role_change(v_ns, 'admin', false);
 
     insert into auth.sessions (id, user_id, created_at, updated_at, aal)
-        values (v_office, v_office, now(), now(), 'aal1');
+        values (v_office, v_office, now(), now(), 'aal1'),
+               (v_admin,  v_admin,  now(), now(), 'aal1');
 
     insert into public.companies (name, sales_id) values ('W8-C S2A1 Definer', v_o) returning id into v_company;
     insert into public.contacts (first_name, last_name, company_id, sales_id)
         values ('Def', 'Iner', v_company, v_o) returning id into v_contact;
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Definer', now(), v_o) returning id into v_cnote;
+    insert into public.contact_notes (contact_id, text, date, sales_id)
+        values (v_contact, 'Definer ohne Sitzung', now(), v_o) returning id into v_cnote2;
 
     -- ---- 10a. the caller holds nothing, in the catalog ---------------------
     if has_table_privilege('authenticated','nora_private.attachment_storage_deletion_queue','SELECT')
@@ -808,12 +880,12 @@ begin
         v_failures := array_append(v_failures, '10a authenticated holds EXECUTE on the capture function');
     end if;
 
-    -- ---- 10b. the real authenticated DELETE --------------------------------
+    -- ---- 10b. the real authenticated capture path ---------------------------
     insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
         values (v_cnote, 's2a1-definer.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
 
     perform set_config('request.jwt.claims',
-        json_build_object('role','authenticated','sub',v_office::text,'session_id',v_office::text)::text, true);
+        json_build_object('role','authenticated','sub',v_admin::text,'session_id',v_admin::text)::text, true);
     set local role authenticated;
 
     -- the queue is unreachable directly ...
@@ -838,15 +910,30 @@ begin
         v_failures := v_failures || format('10b the direct function call failed with %s, expected 42501 (no EXECUTE)', v_state);
     end if;
 
-    -- ... yet the business DELETE works and captures through the definer
-    delete from public.attachments where id = v_a;
+    -- ... and since W8-C S3A so is a direct metadata DELETE, even for an admin
+    v_ok := true; v_state := null;
+    begin
+        delete from public.attachments where id = v_a;
+    exception when others then v_ok := false; v_state := sqlstate;
+    end;
+    if v_ok then
+        v_failures := array_append(v_failures, '10b authenticated could DELETE from public.attachments directly (S3A revoked it)');
+    elsif v_state <> '42501' then
+        v_failures := v_failures || format('10b the direct attachment DELETE failed with %s, expected 42501 (no privilege)', v_state);
+    end if;
+
+    -- ... yet deleting the owning note works and captures through the definer
+    delete from public.contact_notes where id = v_cnote;
     get diagnostics v_deleted = row_count;
 
     reset role;
     perform set_config('request.jwt.claims', null, true);
 
     if v_deleted <> 1 then
-        v_failures := v_failures || format('10b the authenticated DELETE removed %s row(s), expected 1', v_deleted);
+        v_failures := v_failures || format('10b the authenticated note DELETE removed %s row(s), expected 1', v_deleted);
+    end if;
+    if (select count(*) from public.attachments where id = v_a) <> 0 then
+        v_failures := array_append(v_failures, '10b the note DELETE did not cascade to the attachment row');
     end if;
 
     select count(*) into v_n from nora_private.attachment_storage_deletion_queue
@@ -855,33 +942,33 @@ begin
         v_failures := v_failures || format('10b expected exactly 1 pending job through the definer boundary, got %s', v_n);
     end if;
 
-    -- ---- 10c. the negative: same identity, no live session -----------------
+    -- ---- 10c. the negative: same admin identity, no live session -----------
     insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-definer-nosession.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+        values (v_cnote2, 's2a1-definer-nosession.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
 
     perform set_config('request.jwt.claims',
         json_build_object('role','authenticated','sub',v_nosess::text,'session_id',v_nosess::text)::text, true);
     set local role authenticated;
-    delete from public.attachments where id = v_a;
+    delete from public.contact_notes where id = v_cnote2;
     get diagnostics v_deleted = row_count;
     reset role;
     perform set_config('request.jwt.claims', null, true);
 
     if v_deleted <> 0 then
-        v_failures := v_failures || format('10c a writer without a live session deleted %s row(s)', v_deleted);
+        v_failures := v_failures || format('10c an admin without a live session deleted %s note(s)', v_deleted);
     end if;
     if (select count(*) from public.attachments where id = v_a) <> 1 then
         v_failures := array_append(v_failures, '10c the attachment row did not survive the blind delete');
     end if;
     if (select count(*) from nora_private.attachment_storage_deletion_queue
         where storage_key = 's2a1-definer-nosession.pdf') <> 0 then
-        v_failures := array_append(v_failures, '10c a no-session writer produced a queue job');
+        v_failures := array_append(v_failures, '10c a no-session admin produced a queue job');
     end if;
 
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (definer boundary):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 10. definer boundary: privilege-less authenticated caller captures exactly one job; no live session captures none';
+    raise notice 'OK 10. definer boundary: privilege-less authenticated admin captures exactly one job via the note DELETE cascade, a direct attachment DELETE is denied (S3A); no live session captures none';
 
     raise exception 'ROLLBACK_W8C_S2A1_TEST';
 exception
@@ -902,7 +989,10 @@ $$;
 -- induced with a temporary CHECK constraint — deliberately NOT a unique
 -- violation, so it cannot be confused with the intended active-key conflict of
 -- section 9A — and the constraint is dropped again inside this rolled-back
--- block. No runtime object is modified to make this test pass.
+-- block. No runtime object is modified to make this test pass. Since W8-C S3A
+-- (20260919120000) no API role may DELETE from public.attachments directly;
+-- the business delete is therefore a real admin deleting the owning note, whose
+-- FK cascade fires the capture - the note must survive together with the row.
 -- ---------------------------------------------------------------------------
 do $$
 declare
@@ -923,7 +1013,8 @@ begin
     perform nora_private.apply_sales_role_change(v_ad, 'admin',  false);
     perform nora_private.apply_sales_role_change(v_o,  'office', false);
     insert into auth.sessions (id, user_id, created_at, updated_at, aal)
-        values (v_office, v_office, now(), now(), 'aal1');
+        values (v_office, v_office, now(), now(), 'aal1'),
+               (v_admin,  v_admin,  now(), now(), 'aal1');
 
     insert into public.companies (name, sales_id) values ('W8-C S2A1 Atomar', v_o) returning id into v_company;
     insert into public.contacts (first_name, last_name, company_id, sales_id)
@@ -939,12 +1030,12 @@ begin
         values (v_cnote, 's2a1-atomicity.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
 
     perform set_config('request.jwt.claims',
-        json_build_object('role','authenticated','sub',v_office::text,'session_id',v_office::text)::text, true);
+        json_build_object('role','authenticated','sub',v_admin::text,'session_id',v_admin::text)::text, true);
 
     v_raised := false; v_state := null;
     begin
         set local role authenticated;
-        delete from public.attachments where id = v_a;
+        delete from public.contact_notes where id = v_cnote;
         reset role;
     exception when others then
         v_raised := true; v_state := sqlstate;
@@ -963,6 +1054,10 @@ begin
         v_failures := array_append(v_failures,
             '11 the attachment row was lost although its deletion intent could not be captured');
     end if;
+    if (select count(*) from public.contact_notes where id = v_cnote) <> 1 then
+        v_failures := array_append(v_failures,
+            '11 the owning note was deleted although the cascaded capture failed');
+    end if;
 
     execute 'alter table nora_private.attachment_storage_deletion_queue
              drop constraint tmp_s2a1_atomicity_probe_check';
@@ -976,7 +1071,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (fail-closed atomicity):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 11. fail-closed: a failed capture aborts the business DELETE and the attachment row survives';
+    raise notice 'OK 11. fail-closed: a failed capture aborts the business DELETE (admin note delete -> cascade) and note + attachment row survive';
 
     raise exception 'ROLLBACK_W8C_S2A1_TEST';
 exception
@@ -998,10 +1093,13 @@ declare
     v_priv     text;
     v_failures text[] := '{}';
 begin
-    -- the S1 privilege matrix on public.attachments is unchanged
+    -- the privilege matrix on public.attachments is exactly the current one:
+    -- S1 granted SELECT, INSERT, DELETE; W8-C S3A (20260919120000) revoked the
+    -- direct INSERT / DELETE (database-owned writers only). service_role and
+    -- anon never gained anything.
     for r in
         select * from (values
-            ('authenticated', 'SELECT,INSERT,DELETE'),
+            ('authenticated', 'SELECT'),
             ('anon',          ''),
             ('service_role',  '')
         ) as t(grantee, privs)
@@ -1009,7 +1107,7 @@ begin
         foreach v_priv in array array['SELECT','INSERT','UPDATE','DELETE'] loop
             if has_table_privilege(r.grantee, 'public.attachments', v_priv)
                is distinct from (v_priv = any (string_to_array(r.privs, ','))) then
-                v_failures := v_failures || format('S1 regression: %s on public.attachments for %s',
+                v_failures := v_failures || format('privilege regression: %s on public.attachments for %s',
                     v_priv, r.grantee);
             end if;
         end loop;
@@ -1038,7 +1136,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (S1/W8-B boundary):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 8. S1 privilege matrix unchanged, queue empty, W8-B boundary intact';
+    raise notice 'OK 8. public.attachments privilege matrix = S3A (authenticated SELECT only), queue empty, W8-B boundary intact';
 end;
 $$;
 

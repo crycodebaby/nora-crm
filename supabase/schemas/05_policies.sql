@@ -136,11 +136,10 @@ create policy "Operation errors read admin only" on public.operation_errors for 
 -- W8-B storage policies; policy names are per table, so the identically named
 -- SELECT/INSERT policies on storage.objects are separate objects.
 --
--- DELETE = can_write() is intentional and not privilege widening: office
--- already removes an attachment reference today by UPDATE-ing the note's
--- attachments array (note UPDATE = can_write()). Office still may NOT delete
--- the note itself (note DELETE = is_admin()).
+-- W8-C S3A (2026-09-19, 20260919120000_nora_attachment_reference_serialization)
+-- dropped the two S1 writer policies (attachments_insert_writer /
+-- attachments_delete_writer, can_write()) together with the INSERT / DELETE
+-- privileges: public.attachments is written only by the database (FK cascade,
+-- later the S3B projection). Only the SELECT policy remains.
 alter table public.attachments enable row level security;
 create policy "attachments_select_active_user" on public.attachments for select to authenticated using (nora_private.is_active_user());
-create policy "attachments_insert_writer" on public.attachments for insert to authenticated with check (nora_private.can_write());
-create policy "attachments_delete_writer" on public.attachments for delete to authenticated using (nora_private.can_write());

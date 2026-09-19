@@ -632,17 +632,21 @@ begin
     v_failures := v_failures || pg_temp.s2a21_expect('10g universe clean again', 's2a21-k1.pdf', 'dead');
 
     -- ---- 11. result composition ---------------------------------------------
-    -- LIVE dominates UNKNOWN, even when the ambiguity sits on another surface
+    -- LIVE dominates UNKNOWN, even when the ambiguity sits on another surface.
+    -- Own key: the 5b metadata delete captured a pending deletion intent for
+    -- s2a21-k1.pdf, and since W8-C S3A (20260919120000) reference admission
+    -- rejects a NEW public.attachments row for a key with an active intent.
+    -- The resolver contract under test is key-agnostic.
     insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 's2a21-k1.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+        values (v_dnote, 's2a21-k11.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
     update public.companies set logo = '[]'::jsonb where id = v_company;
-    v_failures := v_failures || pg_temp.s2a21_expect('11a live + unrelated unknown -> live', 's2a21-k1.pdf', 'live');
+    v_failures := v_failures || pg_temp.s2a21_expect('11a live + unrelated unknown -> live', 's2a21-k11.pdf', 'live');
     v_failures := v_failures || pg_temp.s2a21_expect('11b no live + unknown -> unknown',     's2a21-k2.pdf', 'unknown');
     delete from public.attachments where id = v_a;
     -- a single malformed registered value is enough to prevent a false 'dead'
-    v_failures := v_failures || pg_temp.s2a21_expect('11c malformed value prevents false dead', 's2a21-k1.pdf', 'unknown');
+    v_failures := v_failures || pg_temp.s2a21_expect('11c malformed value prevents false dead', 's2a21-k11.pdf', 'unknown');
     update public.companies set logo = null where id = v_company;
-    v_failures := v_failures || pg_temp.s2a21_expect('11d clean -> dead', 's2a21-k1.pdf', 'dead');
+    v_failures := v_failures || pg_temp.s2a21_expect('11d clean -> dead', 's2a21-k11.pdf', 'dead');
 
     -- CROSS-SURFACE LIVE over UNKNOWN. Resolver order: S1, S2 contact_notes,
     -- S3 deal_notes, S4 companies, S5 branding, S6 contacts, S7 sales, S5r.

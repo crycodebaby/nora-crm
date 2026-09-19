@@ -215,3 +215,19 @@ create or replace trigger audit_saved_text_snippet_changes_trigger
 create or replace trigger enqueue_attachment_storage_deletion_after_delete_trigger
     after delete on public.attachments
     for each row execute function nora_private.enqueue_attachment_storage_deletion();
+
+-- Nora CRM W8-C S3A (2026-09-19): reference admission (I1) and storage_key
+-- immutability. Admission is an AFTER row trigger on purpose: the new row and
+-- its unique-index entry are held BEFORE the storage-key lock (the same
+-- row -> key order as capture). Taking the key lock before the INSERT would
+-- deadlock against capture.
+-- Migration: 20260919120000_nora_attachment_reference_serialization.sql
+create or replace trigger guard_attachment_reference_admission_after_insert_trigger
+    after insert on public.attachments
+    for each row execute function nora_private.guard_attachment_reference_admission();
+
+create or replace trigger guard_attachment_storage_key_immutable_before_update_trigger
+    before update on public.attachments
+    for each row
+    when (old.storage_key is distinct from new.storage_key)
+    execute function nora_private.guard_attachment_storage_key_immutable();

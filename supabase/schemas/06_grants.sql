@@ -154,14 +154,17 @@ revoke all on table public.number_counters from anon, authenticated, service_rol
 
 -- Nora CRM W8-C S1 (2026-09-16): attachment metadata
 -- Migration: 20260916120000_nora_attachment_foundation.sql
--- `authenticated` gets exactly what the three policies express: SELECT
--- (is_active_user), INSERT and DELETE (can_write) — no UPDATE, because
+-- S1 gave `authenticated` exactly what its three policies expressed: SELECT
+-- (is_active_user), INSERT and DELETE (can_write) — never UPDATE, because
 -- attachment metadata is immutable and carries no UPDATE policy.
 -- `service_role` gets nothing: there is no traced, deployed backend caller for
 -- attachment metadata. A future one needs its own justification, this matrix
 -- entry and an assertion in public_privilege_hardening_verification.sql.
+-- W8-C S3A (2026-09-19, 20260919120000_nora_attachment_reference_serialization):
+-- the direct INSERT / DELETE is revoked - the table is written only by the
+-- database (FK cascade now, the S3B projection later). SELECT stays.
 revoke all on table public.attachments from anon, authenticated, service_role;
-grant select, insert, delete on table public.attachments to authenticated;
+grant select on table public.attachments to authenticated;
 
 -- View grants
 -- None of these views is auto-updatable, but they were never meant to carry
