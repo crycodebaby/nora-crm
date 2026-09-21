@@ -242,7 +242,7 @@ Stand seit W8-C S1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260916120000_
 | deaktivierter Mitarbeiter mit noch gültigem JWT | ❌ | ❌ | ❌ | ❌ |
 | `service_role` | ❌ (kein Grant) | ❌ | ❌ | ❌ |
 
-**W8-C S5 hat diese Matrix nicht verändert.** Das Lese-Gate (Abschnitt 6.12) nutzt genau das hier bereits vorhandene `SELECT`-Recht aktiver Mitarbeiter über die bestehende Fremdschlüsselbeziehung — kein neuer Grant, keine neue Policy, keine neue Rolle, kein `service_role`-Pfad. Ein deaktivierter Mitarbeiter sieht die Zeilen unverändert nicht; für ihn ist jeder Notiz-Lesevorgang damit fail-closed nicht verbürgt.
+**W8-C S5 hat diese Matrix nicht verändert.** Das Lese-Gate (Abschnitt 6.12) nutzt genau das hier bereits vorhandene `SELECT`-Recht aktiver Mitarbeiter über die bestehende Fremdschlüsselbeziehung — kein neuer Grant, keine neue Policy, keine neue Rolle, kein `service_role`-Pfad. Ein deaktivierter Mitarbeiter sieht die Zeilen unverändert nicht — **und kommt am Lese-Gate gar nicht erst an**: `public.contact_notes` und `public.deal_notes` sind im `SELECT` über dieselbe Bedingung `nora_private.is_active_user()` verriegelt wie die Anhangzeilen. Er liest also schon die **Notiz** nicht; die Anfrage wird abgewiesen, bevor ein Notizdatensatz den Mapper aus Abschnitt 6.12 erreichen kann. Es gibt damit **keinen** gewöhnlichen Notiz-Lesevorgang eines deaktivierten Mitarbeiters, der lediglich zu `unverified` herabstuft. Unabhängig davon gilt generisch: erreicht ein Datensatz den Lese-Mapper ohne relationale Evidenz, stuft S5 ihn **nie** auf `ok` hoch.
 
 Technische Grundlage — **beide Gates sind gesetzt** (Abschnitt 6.2):
 
@@ -493,7 +493,7 @@ Stand seit W8-C S5 (`PRODUCTION VERIFIED` 2026-09-21, Laufzeit `3f9dd9ed`, **kei
 |---|---|---|---|
 | `ok` | die Zeilen verbürgen das Array (Mitgliedschaft beidseitig über `path` ↔ `storage_key`, Titel und Typ gleich) | das Legacy-Array **wörtlich**; verifiziert leer = `[]` | ist die Anhangliste |
 | `drift` | relational angereichert gelesen, Zeilen und JSON stimmen nicht überein | `null` | nur noch Wiederherstellungsdaten |
-| `unverified` | der Lesevorgang trug **gar keine** relationalen Zeilen | `null` | nur noch Wiederherstellungsdaten, soweit vorhanden |
+| `unverified` | der Lesevorgang trug die Anhang-Relation **gar nicht** mit — die relationale Evidenz war im Leseergebnis nicht enthalten (eine mitgelesene, aber leere Relation ist etwas anderes: sie ist gültige Evidenz und ergibt `ok` mit `[]`) | `null` | nur noch Wiederherstellungsdaten, soweit vorhanden |
 
 **`[]` ist nicht `null`.** `[]` heißt *verifiziert leer*, `null` heißt *nicht verbürgt*. Die beiden werden nirgends ineinander normalisiert; sie gleichzusetzen macht aus einer degradierten Notiz eine scheinbar anhanglose. Alles, was nicht verbürgt werden kann — ein Element ohne Objektschlüssel, ein doppelter Schlüssel auf einer der beiden Seiten —, fällt fail-closed auf `drift`.
 
