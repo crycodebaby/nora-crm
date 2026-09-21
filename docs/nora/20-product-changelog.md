@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-16
+Stand: 2026-09-21
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,27 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-09-21 — Anhänge: Nora prüft jetzt, ob die Dateiangaben einer Notiz stimmen
+
+**Was ändert sich für Sie:** Bevor Nora die Anhänge einer Notiz als gesichert anzeigt, prüft es sie jetzt zusätzlich
+gegen den eigenen Dateibestand. Im Normalfall merken Sie davon nichts — Notizen, Bilder und Dokumente sehen aus und
+funktionieren wie bisher.
+
+Lässt sich eine Angabe **nicht** prüfen, bleibt die Notiz vollständig lesbar, und die betroffenen Dateien werden in
+einer schreibgeschützten Liste mit einem Hinweis angezeigt; öffnen können Sie sie weiterhin. Solange dieser Hinweis
+steht, lassen sich die **Anhänge** dieser Notiz nicht ändern — Text, Status, Datum und die Zuordnung zu Kunde oder
+Vorgang können Sie ganz normal weiter bearbeiten. Neue Notizen können wie gewohnt Dateien enthalten.
+
+Wenn Ihnen dieser Hinweis an einer Notiz begegnet, melden Sie das bitte der technischen Betreuung: Nora repariert
+solche Fälle bewusst nicht von selbst, damit nichts stillschweigend überschrieben wird.
+
+**Technischer Hinweis:** Die Anhang-Darstellung selbst ist damit **nicht** abgeschlossen — Bildergalerie, Vorschau,
+Dokumentdarstellung und die Bedienung auf dem Smartphone sind weiterhin für eine spätere Welle offen. Auf dem
+Smartphone wird eine Notizänderung jetzt erst nach Bestätigung durch den Server angezeigt, damit eine abgelehnte
+Änderung nie kurzzeitig als gespeichert erscheint. Zwei bekannte Punkte bleiben unverändert offen: eine gelöschte
+Notiz entfernt die zugehörige Datei nicht aus der Ablage, und wer eine direkte Datei-Adresse kennt, kann sie weiterhin
+ohne Anmeldung öffnen. Details: `releases/2026-09.md` „Relational Attachment Read Gate W8-C S5".
 
 ## 2026-09-16 — Anhänge: klare Regeln, welche Dateien an eine Notiz dürfen
 

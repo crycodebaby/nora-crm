@@ -1,6 +1,6 @@
 # 22 – Security und Access (global)
 
-Stand: 2026-09-20 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-21 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **globale Security- und Access-Contract** von Nora: Authentifizierung vs. Autorisierung, Rollen und Capabilities, Trust Boundaries, Datenbank-Enforcement (RLS, Grants, Default-Privilegien, `SECURITY DEFINER`), Session- und Executor-Integrität.
 
@@ -231,7 +231,7 @@ Technische Grundlage:
 
 Stand seit W8-C S1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260916120000_nora_attachment_foundation`); Zugriffsvertrag und Schreibregeln seit W8-C S3A (`PRODUCTION VERIFIED` 2026-09-19, Migration `20260919120000_nora_attachment_reference_serialization`, Abschnitt 6.10); einziger Schreiber seit W8-C S3B (`PRODUCTION VERIFIED` 2026-09-19, Abschnitt 6.11). **Zwei verschiedene Flächen, zwei verschiedene Contracts:** Abschnitt 6.5 regelt den **Storage-Bucket** (die Binärdateien), dieser Abschnitt die **Metadatentabelle** in `public`. Sie sind unabhängig — die Tabelle macht den Bucket weder privater noch offener.
 
-> **Die Tabelle ist eine datenbankeigene, abgeleitete Projektionsfläche — eine Fähigkeit auf Persistenzebene, keine Oberfläche.** Seit S3B schreibt ausschließlich die Datenbank sie, abgeleitet aus den Notiz-JSON-Arrays (Abschnitt 6.11). **Kein Code in `src/**` liest oder schreibt sie**; Schreib- und Lesepfad der Anwendung bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments` ([`16`](16-current-state.md) Abschnitt „Anhänge / Storage"). Aus ihrer Existenz folgt **kein** Viewer, keine Leseseite, keine Audit-Spur und kein Löschpfad. Die Bestandsnotizen hat W8-C S4 nachprojiziert ([`17`](17-known-issues-and-planned-waves.md) H.1) — **das war eine einmalige Datenoperation, kein Vertragsmerkmal**: die Zeilenzahl bleibt ohne Aussagekraft, und dass die Tabelle zu einem Zeitpunkt vollständig war, erzwingt kein Constraint.
+> **Die Tabelle ist eine datenbankeigene, abgeleitete Projektionsfläche — für die Anwendung ausschließlich lesbar.** Seit S3B schreibt ausschließlich die Datenbank sie, abgeleitet aus den Notiz-JSON-Arrays (Abschnitt 6.11). **Kein Code in `src/**` schreibt sie**; der **Schreibpfad** der Anwendung bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`. Seit W8-C S5 (`PRODUCTION VERIFIED` 2026-09-21) **liest** `src/**` sie — als relationale Beziehung am Notiz-Lesevorgang und ausschließlich als **Vertrauensquelle** des Lese-Gates, nicht als vollständige Anhang-Nutzlast (Abschnitt 6.12, [`16`](16-current-state.md) Abschnitt „Anhänge / Storage"). Aus ihrer Existenz folgt weiterhin **kein** abgenommener Viewer, keine Audit-Spur und kein Löschpfad. Die Bestandsnotizen hat W8-C S4 nachprojiziert ([`17`](17-known-issues-and-planned-waves.md) H.1) — **das war eine einmalige Datenoperation, kein Vertragsmerkmal**: die Zeilenzahl bleibt ohne Aussagekraft, und dass die Tabelle zu einem Zeitpunkt vollständig war, erzwingt kein Constraint.
 
 **Zugriffsmatrix (Ist-Zustand Production, seit S3A):**
 
@@ -241,6 +241,8 @@ Stand seit W8-C S1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260916120000_
 | `viewer` / `office` / `admin`, aktiv | ✅ | ❌ | ❌ | ❌ |
 | deaktivierter Mitarbeiter mit noch gültigem JWT | ❌ | ❌ | ❌ | ❌ |
 | `service_role` | ❌ (kein Grant) | ❌ | ❌ | ❌ |
+
+**W8-C S5 hat diese Matrix nicht verändert.** Das Lese-Gate (Abschnitt 6.12) nutzt genau das hier bereits vorhandene `SELECT`-Recht aktiver Mitarbeiter über die bestehende Fremdschlüsselbeziehung — kein neuer Grant, keine neue Policy, keine neue Rolle, kein `service_role`-Pfad. Ein deaktivierter Mitarbeiter sieht die Zeilen unverändert nicht; für ihn ist jeder Notiz-Lesevorgang damit fail-closed nicht verbürgt.
 
 Technische Grundlage — **beide Gates sind gesetzt** (Abschnitt 6.2):
 
@@ -471,9 +473,49 @@ Reihenfolge: validieren → `KEEP` prüfen → `REMOVE` → `ADD`. **Minimal ist
 
 **Historisch: das Fenster S3B → S4.** S3B hat bewusst keine historische Notiz projiziert; zwischen dem S3B-Apply und dem S4-Backfill gab es deshalb keine globale Parität, und ein Anhang, der aus einer Bestandsnotiz entfernt wurde, **bevor** sie je projiziert war, erzeugte mangels Zeile kein Löschvorhaben. Dieses Fenster ist mit S4 geschlossen; die Beschreibung steht hier nur noch als Einordnung älterer Evidenz ([`17`](17-known-issues-and-planned-waves.md) H.1).
 
-**S4 — der Bestand ist nachgezogen.** Der Backfill hat den **vorhandenen** Kern `nora_private.reconcile_note_attachments(...)` unter einer Sperre der Notizzeile aufgerufen (der Kern setzt voraus, dass der Aufrufer sie hält) und **keinen** zweiten Abgleich-Algorithmus und keine zweite Grammatik eingeführt. Er hat das Notiz-JSON nicht verändert, kein Schema angefasst, keine Storage-Datei berührt und keinen Warteschlangeneintrag geschrieben; ausgeliefert wurde Operator-Werkzeug unter `supabase/maintenance/`, keine Migration und keine Anwendungsfläche. **Die Umschaltung der Leseseite (S5) ist damit an ihrer Datenvoraussetzung nicht mehr blockiert — begonnen ist sie nicht.** S5 bleibt eine eigene Welle mit eigenem Entwurf, eigener Review und eigenem Release; S6 (Rückbau des Legacy-JSON) und S2B (physische Löschung) ebenfalls.
+**S4 — der Bestand ist nachgezogen.** Der Backfill hat den **vorhandenen** Kern `nora_private.reconcile_note_attachments(...)` unter einer Sperre der Notizzeile aufgerufen (der Kern setzt voraus, dass der Aufrufer sie hält) und **keinen** zweiten Abgleich-Algorithmus und keine zweite Grammatik eingeführt. Er hat das Notiz-JSON nicht verändert, kein Schema angefasst, keine Storage-Datei berührt und keinen Warteschlangeneintrag geschrieben; ausgeliefert wurde Operator-Werkzeug unter `supabase/maintenance/`, keine Migration und keine Anwendungsfläche. **Die Umschaltung der Leseseite hat danach W8-C S5 gebracht** — als eigene Welle mit eigenem Entwurf, eigener Review und eigenem Release (Abschnitt 6.12). S6 (Rückbau des Legacy-JSON) und S2B (physische Löschung) bleiben davon unberührte eigene Wellen; **S5 hat die Projektion aus diesem Abschnitt nicht verändert** und bleibt vollständig von ihr abhängig.
 
 > **S2B-Designgate — veraltetes Formular.** Notiz-Schreibvorgänge haben keine optimistische Nebenläufigkeitskontrolle: ein veraltetes Formular kann eine neuere Anhangliste überschreiben. S3B projiziert diesen Überschreibvorgang getreu und erfasst für die verdrängten Anhänge ein Löschvorhaben. Solange nichts physisch löscht, ist das ein rückholbarer Lost Update; **mit** physischer Löschung würde er unumkehrbar. S2B muss dieses Szenario bewusst lösen oder mit einem sicheren Entwurf tragen, bevor ein Storage-`DELETE` aktiv wird ([`17`](17-known-issues-and-planned-waves.md) H.1).
+
+Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
+
+### 6.12 Lese-Gate und Schreibwächter der Notiz-Anhänge (S5)
+
+Stand seit W8-C S5 (`PRODUCTION VERIFIED` 2026-09-21, Laufzeit `3f9dd9ed`, **keine Migration**). **Achte Fläche, achter Contract:** wie die Anwendung die projizierten Zeilen aus 6.11 als **Vertrauensaussage** über die Notiz-Anhänge verwendet — und was sie tut, wenn diese Aussage fehlt.
+
+> **S5 ist kein neues Autorisierungssystem.** Es führt keine Rolle, kein Grant, keine Policy, keinen `SECURITY DEFINER`-Pfad und keine Migration ein. Es ist ein **Integritäts-Gate auf einer bereits autorisierten Leseberechtigung**: `public.attachments` verbürgt, dass eine Anhangliste zu dieser Notiz gehört — es entscheidet nicht, **wer** sie sehen darf. Wer die Notiz lesen darf, entscheiden unverändert RLS und Grants der Notiztabellen; wer die Zeilen lesen darf, unverändert 6.6.
+
+**Was die Relation verbürgt — und was nicht.** Verbürgt sind Mitgliedschaft, `storage_key`, der Notiz-Besitz über den Fremdschlüssel sowie Titel (`file_name`) und Typ (`mime_type`). **Nicht** verbürgt und bis S6 weiterhin allein im Notiz-JSON: Array-Reihenfolge, `src`, `rawFile` und geduldete Legacy-Felder. **S5 verifiziert die Legacy-Nutzlast, es rekonstruiert sie nicht** — aus den Zeilen wird keine Anhangliste gebaut. Die Reihenfolge wird deshalb bewusst **nicht** verglichen.
+
+**Drei Zustände, fail-closed:**
+
+| Zustand | Bedeutung | Anhangliste der Anwendung | Legacy-Array |
+|---|---|---|---|
+| `ok` | die Zeilen verbürgen das Array (Mitgliedschaft beidseitig über `path` ↔ `storage_key`, Titel und Typ gleich) | das Legacy-Array **wörtlich**; verifiziert leer = `[]` | ist die Anhangliste |
+| `drift` | relational angereichert gelesen, Zeilen und JSON stimmen nicht überein | `null` | nur noch Wiederherstellungsdaten |
+| `unverified` | der Lesevorgang trug **gar keine** relationalen Zeilen | `null` | nur noch Wiederherstellungsdaten, soweit vorhanden |
+
+**`[]` ist nicht `null`.** `[]` heißt *verifiziert leer*, `null` heißt *nicht verbürgt*. Die beiden werden nirgends ineinander normalisiert; sie gleichzusetzen macht aus einer degradierten Notiz eine scheinbar anhanglose. Alles, was nicht verbürgt werden kann — ein Element ohne Objektschlüssel, ein doppelter Schlüssel auf einer der beiden Seiten —, fällt fail-closed auf `drift`.
+
+**Lesepfad.** `getList` und `getOne` auf `contact_notes` / `deal_notes` lesen die Relation mit; `getMany` und `getManyReference` bewusst **nicht**. Weil **jeder** Notiz-Lesevorgang durch denselben fail-closed Mapper läuft, ergibt ein nicht angereicherter Lesevorgang `unverified` — nie `ok`. Ein Gate mit einem Umweg ist kein Gate.
+
+> **Warnung für künftige Implementierung:** Wer eine neue `getMany`- oder `getManyReference`-Nutzung zur **Anzeigefläche für Anhänge** macht, stellt die relationale Evidenz bewusst her. Sonst zeigt die Fläche dauerhaft die schreibgeschützte Wiederherstellungsdarstellung — korrekt, aber unbeabsichtigt. Die heutigen Nutzungen sind keine Anzeigeflächen und ohne Benutzerwirkung: der Zusammenführen-Dialog liest nur `total`, und das Zusammenführen selbst hängt Notizen mit einem reinen `{ contact_id }`-Patch um — ein Patch **ohne** `attachments`-Schlüssel ist keine Anhangänderung und wird deshalb nicht abgewiesen.
+
+**Schreibwächter.** Ein **anhangändernder** Schreibvorgang an einer bestehenden Notiz ist nur zulässig, wenn ihr Lesezustand `ok` ist. Bei `drift` oder `unverified` wird er mit `NORA_ATTACHMENT_STATE_UNVERIFIED` abgewiesen — **vor** jeder Storage-Arbeit, damit ein abgewiesener Schreibvorgang kein Objekt im Bucket zurücklässt. **Nicht-anhangbezogene Änderungen bleiben zulässig** (Text, Status, Datum, Kontakt-/Vorgangsbezug); ein Datenfeld, das der Schreibvorgang gar nicht mitschickt, ist nie eine Anhangänderung. Eine **neue** Notiz wird nicht bewacht — sie hat keinen Vorzustand —, ihr Ergebnis wird aber relational nachgelesen. **Ein degradierter Zustand erwirbt nie Schreibautorität**, und `drift` wird nirgends automatisch repariert.
+
+**Nach dem Schreiben.** Ein anhangändernder Schreibvorgang wird relational nachgelesen; eine Änderung ohne Anhangbezug übernimmt normalerweise den vorhandenen kanonischen Zustand ohne zusätzlichen Lesevorgang, verifiziert aber, wenn ein vertrauenswürdiger Vorzustand fehlt oder das Legacy-Array sich unerwartet bewegt hat. Eine bereits **committete** Mutation wird nie nachträglich zum Fehler: scheitert die Verifikation, degradiert der Datensatz ehrlich nach `unverified`.
+
+**Darstellungsgrenze — eine Trust Boundary, keine Stilfrage.** Verifizierte Daten und Wiederherstellungsdaten sind **zwei getrennte Pfade**. Der normale Renderer nimmt ausschließlich verifizierte Anhang-Arrays entgegen und kann Vertrauen nicht selbst entscheiden. Die Wiederherstellungsdarstellung ist schreibgeschützt: **keine** Bildvorschau (eine nicht verbürgte Objektreferenz wird nicht als vertrauenswürdiger Inhalt eingebettet), kein Eingabefeld, kein Entfernen, kein Weg zurück ins Formular, keine Schreibquelle. **Anzeigen ist keine Verifikation** — gerendert zu werden macht `drift` oder `unverified` nie zu `ok`.
+
+**Ausdrücklich nicht Teil von S5:**
+
+- **keine** Änderung an Schema, Migration, RLS, Grants, Default-Privilegien oder Storage-Policies; der Ledger blieb bei 66,
+- **keine** Ablösung des Legacy-Schreibpfads (S6) und keine vollständige Nutzlast-Autorität der Zeilen,
+- **keine** physische Storage-Löschung (S2B), kein Worker, kein Pfad zu `done`,
+- **keine** Änderung an der Öffentlichkeit des Buckets (W8-E) — 6.5 gilt unverändert,
+- **kein** abgenommener Anhang-Viewer: die heutige Bild-/Dokumentdarstellung ist funktional und darf von einer späteren Produkt-/UX-Welle neu entworfen werden, solange sie denselben Vertrag aus verifizierten Daten und Wiederherstellungsdaten konsumiert ([`17`](17-known-issues-and-planned-waves.md) H.1).
+
+Read-Model-Metadaten sind ein **Lesevertrag**, keine Spalten: sie werden vor jedem Schreibvorgang entfernt und nie persistiert. Die Demo-/FakeRest-Parität spricht denselben Lesevertrag, simuliert aber weder Projektion noch relationale Prüfung ([`05`](05-demo-data-guidelines.md)) — sie beweist Anwendungsverträge, **nie** Production-Konsistenz.
 
 Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 

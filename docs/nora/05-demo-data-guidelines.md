@@ -133,6 +133,28 @@ Für Kontakte kann ein CSV im Atomic-/Nora-Exportformat verwendet werden (`demo-
 
 Für relationale Demo-Daten ist die TypeScript-Seed-Datei die Quelle der Wahrheit; JSON dient als lesbare Dokumentation.
 
+## Notiz-Anhänge im Demo-Modus — die Paritätsgrenze (W8-C S5, 2026-09-21)
+
+FakeRest spricht seit W8-C S5 denselben **Lesevertrag** für Notiz-Anhänge wie der Supabase-Provider, simuliert aber
+**nicht** die Datenbankseite dahinter. Diese Grenze ist bewusst und muss bekannt sein, bevor jemand aus einem grünen
+Demo-Lauf auf Production schließt:
+
+- **FakeRest bildet `public.attachments` nicht nach.** Es gibt keine Metadatentabelle, keine Projektion, keine
+  Anhang-Grammatik, keine Referenz-Zulassung und keine Löschintent-Warteschlange. Demo-Anhänge tragen keinen
+  Objektschlüssel (`path`).
+- **FakeRest führt keine relationale Paritätsprüfung durch.** Es gibt nichts, wogegen geprüft werden könnte.
+- **Jede Demo-Notiz wird mit dem Lesezustand `ok` ausgeliefert** — damit die Demo-Oberfläche nicht dauerhaft
+  degradiert wirkt. **Das ist eine Setzung, kein geprüfter Zustand:** Demo-Daten verbürgen sich selbst.
+- **Eine Teilaktualisierung erfindet keine Anhänge.** Ein Schreibvorgang, der das Anhangfeld gar nicht mitschickt,
+  bleibt eine Teilaktualisierung; er setzt es nicht auf „leer" und löscht damit keine Demo-Anhänge.
+- **Die Read-Model-Metadaten sind kein Demo-Geschäftsdatum** und werden nicht in den Demo-Datenbestand geschrieben.
+  Sie gehören zum Lesevertrag, nicht zum Datensatz.
+
+**Was die Demo damit beweist und was nicht:** sie beweist **UI- und Anwendungsverträge** (dass die Oberfläche mit dem
+Read Model korrekt umgeht), **nie relationale Production-Konsistenz**. Ein `ok` aus FakeRest ist kein Beleg dafür,
+dass eine Notiz in Production verbürgt wäre. Vollständiger Contract: [`22`](22-security-and-access.md) Abschnitt 6.12;
+Invarianten: [`03`](03-data-model-guardrails.md) §1.8; offene Demo-Schuld: [`17`](17-known-issues-and-planned-waves.md) H.1.
+
 ## Onboarding-Simulation im Demo-Modus (V1B, 2026-09-04)
 
 `/set-password?access_token=demo&refresh_token=demo` durchläuft im Demo-Modus den kompletten Mitarbeiter-Onboarding-Ablauf ohne Backend (Persona „Otto Office", 0,7 s simulierte Latenz). Szenarien: `&demo=weak` (Passwort abgelehnt), `&demo=profile-error`, `&demo=blocked`, `&demo=unverified`; ohne Token der ungültige Link. Nur hinter `VITE_IS_DEMO=true`, nicht im Production-Bundle — Details in `02-design-system.md` („Demo-Simulation").
