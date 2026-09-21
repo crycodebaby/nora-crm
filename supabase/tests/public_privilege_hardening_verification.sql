@@ -428,6 +428,76 @@ $$;
 rollback;
 
 -- ---------------------------------------------------------------------------
+-- 6d. W-A Work Read Model (2026-09-22): the two objects of the Work Application
+--     Query carry exactly one grant each.
+--
+--     public.get_work_items is a browser-facing RPC and SECURITY INVOKER, so
+--     `authenticated` MUST hold EXECUTE — the negative assertions of 6c would
+--     be wrong here. nora_private.current_sales_id() is the SECURITY DEFINER
+--     actor resolver; the INVOKER RPC calls it as the caller, so authenticated
+--     needs EXECUTE on it too, and nothing else may.
+--
+--     This is asserted against the database (pg_proc.proacl,
+--     has_function_privilege), never against 06_grants.sql (22 §6.2). PUBLIC is
+--     checked as an ACL entry in its own right because a new function is born
+--     PUBLIC-executable (22 §6.3) and a missing `revoke` would otherwise hide
+--     behind the anon/service_role assertions.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+    r          record;
+    v_oid      oid;
+    v_role     text;
+    v_failures text[] := '{}';
+begin
+    for r in
+        select * from (values
+            ('public.get_work_items(text,text,integer,timestamptz,uuid)'),
+            ('nora_private.current_sales_id()')
+        ) as t(sig)
+    loop
+        v_oid := to_regprocedure(r.sig);
+        if v_oid is null then
+            v_failures := v_failures || format('expected %s to exist', r.sig);
+            continue;
+        end if;
+
+        if not has_function_privilege('authenticated', v_oid, 'EXECUTE') then
+            v_failures := v_failures || format('authenticated cannot EXECUTE %s — the Work Query is unreachable', r.sig);
+        end if;
+        foreach v_role in array array['anon', 'service_role'] loop
+            if has_function_privilege(v_role, v_oid, 'EXECUTE') then
+                v_failures := v_failures || format('%s can EXECUTE %s', v_role, r.sig);
+            end if;
+        end loop;
+        if (select p.proacl is null from pg_proc p where p.oid = v_oid) then
+            v_failures := v_failures || format('%s carries the default NULL ACL — its explicit revoke is missing', r.sig);
+        elsif exists (select 1 from pg_proc p, unnest(p.proacl) a where p.oid = v_oid and a::text like '=%') then
+            v_failures := v_failures || format('PUBLIC still holds EXECUTE on %s', r.sig);
+        end if;
+
+        -- neither object may be reachable other than as itself: no overload
+        if (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+             where n.nspname || '.' || p.proname = split_part(r.sig, '(', 1)) <> 1 then
+            v_failures := v_failures || format('%s is overloaded — a second signature would carry its own ACL', r.sig);
+        end if;
+    end loop;
+
+    -- the resolver lives in nora_private, which config.toml does not expose to
+    -- PostgREST: it must not have a public twin (22 §6.1)
+    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'current_sales_id') then
+        v_failures := array_append(v_failures, 'public.current_sales_id exists — the Work actor resolver must stay internal');
+    end if;
+
+    if cardinality(v_failures) > 0 then
+        raise exception E'FAIL: W-A Work Read Model privilege surface:\n%', array_to_string(v_failures, E'\n');
+    end if;
+    raise notice 'OK  6d. W-A: get_work_items and current_sales_id are authenticated-only (no PUBLIC, anon or service_role)';
+end
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 7. Behavioural refusals — actually attempted, actually denied
 --    (no fixtures are inserted in this transaction, so a TRUNCATE that got past
 --     the privilege check would fail on data, not on "pending trigger events")

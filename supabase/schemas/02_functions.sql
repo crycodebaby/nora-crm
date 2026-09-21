@@ -5577,3 +5577,217 @@ revoke all on function nora_private.project_note_attachments() from public;
 revoke all on function nora_private.project_note_attachments() from anon;
 revoke all on function nora_private.project_note_attachments() from authenticated;
 revoke all on function nora_private.project_note_attachments() from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W-A (2026-09-22) Universal Work Model v1 — Work Read Model
+-- Migration: 20260922120000_nora_work_read_model.sql
+-- Contract:  docs/nora/25-universal-work-model.md (FROZEN 2026-09-21) §21.3
+-- The first server-side Work Application Query: public.tasks projected as Work
+-- under the existing RLS boundary. nora_private.current_sales_id() is the
+-- session -> employee resolver (SECURITY DEFINER, the only privileged element);
+-- public.get_work_items(...) is SECURITY INVOKER, so Team scope is answered by
+-- the existing policy "Tasks select active" instead of by a second predicate.
+-- No table, view, index, trigger, policy or write path belongs to W-A.
+-- ---------------------------------------------------------------------------
+
+create or replace function nora_private.current_sales_id()
+returns bigint
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+    select s.id
+    from public.sales s
+    where s.user_id = nora_private.safe_auth_uid()
+      and s.disabled = false
+      and nora_private.jwt_session_is_live()
+    limit 1;
+$$;
+
+alter function nora_private.current_sales_id() owner to postgres;
+
+comment on function nora_private.current_sales_id() is
+    'W-A (2026-09-22): the Nora employee (public.sales.id) behind the current authenticated session, or NULL. Identity source is nora_private.safe_auth_uid() joined on the UNIQUE public.sales.user_id; the employee must not be disabled and nora_private.jwt_session_is_live() must hold. Never accepts an actor argument and never reads nora.audit_actor_user_id — that GUC belongs to resolve_audit_actor() and is incompatible with the Work actor contract (docs/nora/25 §10.1). Callers turn NULL into DETAIL = NORA_PERMISSION_DENIED. Internal, not API-exposed.';
+
+revoke all on function nora_private.current_sales_id() from public;
+revoke all on function nora_private.current_sales_id() from anon;
+revoke all on function nora_private.current_sales_id() from authenticated;
+revoke all on function nora_private.current_sales_id() from service_role;
+grant execute on function nora_private.current_sales_id() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 3. The Work Application Query
+-- ---------------------------------------------------------------------------
+create or replace function public.get_work_items(
+    p_scope text default 'mine',
+    p_state_scope text default 'open',
+    p_limit integer default 50,
+    p_cursor_due_at timestamptz default null,
+    p_cursor_work_id uuid default null
+)
+returns jsonb
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+    -- An omitted argument and an explicit JSON null both mean the documented
+    -- default; only a value outside the closed vocabulary is "unknown".
+    v_scope       text    := coalesce(p_scope, 'mine');
+    v_state_scope text    := coalesce(p_state_scope, 'open');
+    v_limit       integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+    v_actor       bigint;
+    -- The business day is Europe/Berlin, server-side, evaluated once per call
+    -- so every row of one page is judged against the same day (7, D-18).
+    v_today       date    := (now() at time zone 'Europe/Berlin')::date;
+    v_rows        jsonb;
+    v_has_more    boolean;
+    v_tail        jsonb;
+begin
+    -- Authorization first: an unresolvable actor learns nothing about the
+    -- parameter vocabulary.
+    v_actor := nora_private.current_sales_id();
+    if v_actor is null then
+        raise exception 'forbidden'
+            using errcode = '42501', detail = 'NORA_PERMISSION_DENIED';
+    end if;
+
+    if v_scope not in ('mine', 'team') then
+        raise exception 'unknown work scope: %', v_scope
+            using errcode = '22023';
+    end if;
+
+    if v_state_scope not in ('open', 'done', 'all') then
+        raise exception 'unknown work state scope: %', v_state_scope
+            using errcode = '22023';
+    end if;
+
+    -- A half cursor is a client defect, never "start from the beginning":
+    -- silently restarting would hand the consumer duplicate rows. The reverse
+    -- (NULL due_at, non-null work_id) IS valid — it is a position inside the
+    -- NULLS LAST tail.
+    if p_cursor_due_at is not null and p_cursor_work_id is null then
+        raise exception 'malformed work cursor: p_cursor_due_at without p_cursor_work_id'
+            using errcode = '22023';
+    end if;
+
+    with base as (
+        select
+            public.nora_entity_uuid('task', t.id) as work_id,
+            t.text       as raw_title,
+            t.type       as work_type,
+            t.due_date   as due_at,
+            t.done_date  as done_date,
+            t.sales_id   as holder_id,
+            t.company_id as customer_id,
+            t.contact_id as contact_id
+        from public.tasks t
+        where (
+                  v_state_scope = 'all'
+               or (v_state_scope = 'open' and t.done_date is null)
+               or (v_state_scope = 'done' and t.done_date is not null)
+              )
+          -- 'team' adds no predicate: RLS already answers "what may this actor
+          -- see" (15, D-38). 'mine' filters on the holder, and a NULL holder is
+          -- never mine.
+          and (v_scope = 'team' or t.sales_id = v_actor)
+    ),
+    -- One extra row decides whether a next page exists, so the final page
+    -- always reports next_cursor = null instead of a cursor onto nothing.
+    windowed as (
+        select b.*,
+               row_number() over (order by b.due_at asc nulls last, b.work_id asc) as rn
+        from base b
+        where p_cursor_work_id is null
+           or case
+                when p_cursor_due_at is null
+                    then (
+                        b.due_at is null
+                        and b.work_id > p_cursor_work_id
+                    )
+                else (
+                        b.due_at is null
+                     or b.due_at > p_cursor_due_at
+                     or (
+                            b.due_at = p_cursor_due_at
+                        and b.work_id > p_cursor_work_id
+                        )
+                )
+              end
+        order by b.due_at asc nulls last, b.work_id asc
+        limit v_limit + 1
+    ),
+    emitted as (
+        select w.* from windowed w where w.rn <= v_limit
+    ),
+    projected as (
+        select
+            e.rn,
+            e.due_at,
+            e.work_id,
+            jsonb_build_object(
+                'work_id',        e.work_id,
+                'carrier',        'task'::text,
+                'title',          case when e.raw_title is null or btrim(e.raw_title) = ''
+                                       then null else e.raw_title end,
+                'work_type',      e.work_type,
+                'validity',       case when e.raw_title is null or btrim(e.raw_title) = ''
+                                       then 'incomplete'::text else 'valid'::text end,
+                'invalid_reason', case when e.raw_title is null or btrim(e.raw_title) = ''
+                                       then 'missing_title'::text else null end,
+                'state',          case when e.done_date is null then 'open'::text else 'done'::text end,
+                'context',        jsonb_build_object(
+                                      'customer', e.customer_id,
+                                      'contact',  e.contact_id
+                                  ),
+                'holder',         case when e.holder_id is null then null
+                                       else jsonb_build_object(
+                                                'sales_id',     e.holder_id,
+                                                'display_name', nullif(btrim(
+                                                    coalesce(si.first_name, '') || ' ' || coalesce(si.last_name, '')
+                                                ), '')
+                                            )
+                                  end,
+                'is_mine',        e.holder_id is not null and e.holder_id = v_actor,
+                'is_unassigned',  e.holder_id is null,
+                'due_at',         e.due_at,
+                'due_precision',  'unknown'::text,
+                'actionable',     e.done_date is null
+                                  and not (e.raw_title is null or btrim(e.raw_title) = ''),
+                'overdue',        coalesce((e.due_at at time zone 'Europe/Berlin')::date < v_today, false),
+                'due_today',      coalesce((e.due_at at time zone 'Europe/Berlin')::date = v_today, false)
+            ) as item
+        from emitted e
+        left join public.sales_identities si on si.id = e.holder_id
+    )
+    select
+        coalesce(jsonb_agg(p.item order by p.rn), '[]'::jsonb),
+        (select count(*) from windowed) > v_limit,
+        (select jsonb_build_object('due_at', x.due_at, 'work_id', x.work_id)
+           from projected x order by x.rn desc limit 1)
+    into v_rows, v_has_more, v_tail
+    from projected p;
+
+    return jsonb_build_object(
+        'data',        v_rows,
+        'limit',       v_limit,
+        'scope',       v_scope,
+        'state_scope', v_state_scope,
+        'next_cursor', case when v_has_more then v_tail else null end
+    );
+end;
+$$;
+
+alter function public.get_work_items(text, text, integer, timestamptz, uuid) owner to postgres;
+
+comment on function public.get_work_items(text, text, integer, timestamptz, uuid) is
+    'W-A (2026-09-22): the Work Application Query of Universal Work Model v1 (docs/nora/25 §21.3). SECURITY INVOKER — public.tasks is read under the existing RLS policy "Tasks select active", so the query never widens the authorization surface. The actor comes from nora_private.current_sales_id() (session only, never an argument); an unresolvable actor raises 42501 with DETAIL = NORA_PERMISSION_DENIED. p_scope mine|team (mine = holder is the actor; team = everything Nora security shows the actor), p_state_scope open|done|all (default open — the Arbeitskorb default scope, validity-independent), p_limit clamped to [1,200], keyset cursor (p_cursor_due_at, p_cursor_work_id) over the total order due_at ASC NULLS LAST, work_id ASC; a NULL p_cursor_due_at with a non-null p_cursor_work_id is a position inside the NULLS LAST tail, the reverse is malformed (22023). An unknown scope value raises 22023. Returns {data, limit, scope, state_scope, next_cursor}; every row carries exactly work_id, carrier, title, work_type, validity, invalid_reason, state, context{customer,contact}, holder{sales_id,display_name}, is_mine, is_unassigned, due_at, due_precision, actionable, overdue, due_today. due_precision is always "unknown" (§7.6) and overdue/due_today follow the Europe/Berlin business-day rule server-side. No allowed_actions, no carrier_capabilities, no deal/case context, no write.';
+
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from public;
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from anon;
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from authenticated;
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from service_role;
+grant execute on function public.get_work_items(text, text, integer, timestamptz, uuid) to authenticated;
+

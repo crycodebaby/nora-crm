@@ -564,3 +564,29 @@ revoke all on function nora_private.guard_auth_email_change() from public;
 revoke all on function nora_private.guard_auth_email_change() from anon;
 revoke all on function nora_private.guard_auth_email_change() from authenticated;
 revoke all on function nora_private.guard_auth_email_change() from service_role;
+
+-- ---------------------------------------------------------------------------
+-- W-A Universal Work Model v1 — Work Read Model (2026-09-22)
+-- Migration: 20260922120000_nora_work_read_model.sql
+--
+-- Two functions, one grant each. public.get_work_items is the browser-facing
+-- Work Application Query (SECURITY INVOKER, so it reads public.tasks under the
+-- existing policy "Tasks select active"); nora_private.current_sales_id() is
+-- the SECURITY DEFINER session -> employee resolver it calls as the caller, so
+-- `authenticated` needs EXECUTE on it as well.
+--
+-- No service_role EXECUTE: W-A has no backend caller (22 §6.3). A function is
+-- born with PUBLIC EXECUTE, so both carry an explicit revoke from public.
+-- No table, view, sequence or column grant belongs to W-A.
+-- ---------------------------------------------------------------------------
+revoke all on function nora_private.current_sales_id() from public;
+revoke all on function nora_private.current_sales_id() from anon;
+revoke all on function nora_private.current_sales_id() from authenticated;
+revoke all on function nora_private.current_sales_id() from service_role;
+grant execute on function nora_private.current_sales_id() to authenticated;
+
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from public;
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from anon;
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from authenticated;
+revoke all on function public.get_work_items(text, text, integer, timestamptz, uuid) from service_role;
+grant execute on function public.get_work_items(text, text, integer, timestamptz, uuid) to authenticated;
