@@ -85,11 +85,22 @@ import {
   readOperationIdFromMeta,
   withOperationIdParams,
 } from "../../operations/operationTransport";
+import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 import {
   ATTACHMENTS_BUCKET,
   assertStoredAttachment,
   createAttachmentObjectKey,
 } from "../commons/attachments";
+import {
+  NOTE_META_COLUMNS,
+  degradeNoteAttachmentReadModel,
+  isNoteAttachmentChange,
+  isNoteResource,
+  mapNoteAttachmentReadModel,
+  planNoteUpdateResult,
+  preserveNoteAttachmentReadModel,
+  stripNoteReadModelMetadata,
+} from "../commons/noteAttachmentReadModel";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
 
@@ -120,6 +131,78 @@ const processCompanyLogo = async (params: any) => {
       logo,
     },
   };
+};
+
+type BaseDataProvider = ReturnType<typeof getBaseDataProvider>;
+
+/**
+ * W8-C S5 — the explicit post-commit verification read.
+ *
+ * It runs against the BASE provider on purpose: lifecycle callbacks receive
+ * the unwrapped provider, so this read bypasses `beforeGetOne`/`afterRead`
+ * and must therefore carry the exact META_COLUMNS selector and apply the
+ * mapper by hand. `update`/`create` only ever call `getOne` here, so the
+ * orchestration can never recurse into itself.
+ *
+ * A mutation that has already committed is never turned into a failure: if
+ * the verification read fails, the record degrades honestly instead.
+ */
+const readVerifiedNote = async (
+  baseDataProvider: BaseDataProvider,
+  resource: string,
+  committedRow: any,
+) => {
+  try {
+    const { data } = await baseDataProvider.getOne(resource, {
+      id: committedRow.id,
+      meta: { columns: NOTE_META_COLUMNS[resource] },
+    });
+    return { data: mapNoteAttachmentReadModel(data as any) as any };
+  } catch (error) {
+    console.error("noteAttachmentVerification.error", error);
+    return { data: degradeNoteAttachmentReadModel(committedRow) as any };
+  }
+};
+
+/**
+ * W8-C S5 — a note UPDATE returns a canonical read model in every branch.
+ *
+ * A raw PostgREST mutation row carries the legacy DB JSON and no relational
+ * truth, so it must never escape as one: a harmless text edit on a degraded
+ * note would otherwise resurrect its legacy array under the verified
+ * `attachments` field. The no-change branch therefore carries the PREVIOUS
+ * canonical state over — but only after proving the legacy JSON did not move
+ * underneath us meanwhile.
+ */
+export const updateNoteWithReadModel = async (
+  baseDataProvider: BaseDataProvider,
+  resource: string,
+  params: any,
+) => {
+  const previousData = params?.previousData;
+
+  const result = await baseDataProvider.update(resource, params);
+  const committed = result.data as any;
+
+  if (
+    planNoteUpdateResult(params?.data, previousData, committed) === "preserve"
+  ) {
+    return {
+      ...result,
+      data: preserveNoteAttachmentReadModel(committed, previousData) as any,
+    };
+  }
+
+  return readVerifiedNote(baseDataProvider, resource, committed);
+};
+
+export const createNoteWithReadModel = async (
+  baseDataProvider: BaseDataProvider,
+  resource: string,
+  params: any,
+) => {
+  const result = await baseDataProvider.create(resource, params);
+  return readVerifiedNote(baseDataProvider, resource, result.data as any);
 };
 
 const contactCommandRpc: ContactCommandRpcFn = (fn, args) =>
@@ -202,6 +285,12 @@ const getDataProviderWithCustomMethods = () => {
           return { data: result.contact as any };
         }
       }
+      // W8-C S5: a new note has no prior read state, so the write is never
+      // guarded — but its result is never trusted either. The enriched read
+      // establishes ok/drift.
+      if (isNoteResource(resource)) {
+        return createNoteWithReadModel(baseDataProvider, resource, params);
+      }
       return baseDataProvider.create(resource, params);
     },
 
@@ -253,6 +342,9 @@ const getDataProviderWithCustomMethods = () => {
         return executeDealUpdate(params, (res, nextParams) =>
           baseDataProvider.update(res, nextParams as any),
         );
+      }
+      if (isNoteResource(resource)) {
+        return updateNoteWithReadModel(baseDataProvider, resource, params);
       }
       return baseDataProvider.update(resource, params);
     },
@@ -782,6 +874,57 @@ const processConfigLogo = async (logo: any): Promise<string> => {
   return logo?.src ?? "";
 };
 
+/**
+ * W8-C S5 — the note read gate and write guard, identical for both note
+ * families apart from the FK the relation is embedded through.
+ *
+ * Reads: `getList`/`getOne` are enriched with the exact META_COLUMNS
+ * selector; `getMany`/`getManyReference` are deliberately NOT, and the shared
+ * `afterRead` mapper therefore renders them `unverified` rather than letting
+ * an un-enriched read pass as verified.
+ *
+ * Writes: the guard sits in `beforeUpdate` — the only hook that still sees
+ * `previousData` and, crucially, the last one before `beforeSave` uploads
+ * anything, so a refused write performs zero Storage work. `beforeSave` then
+ * strips the read-model metadata, which is not a database column.
+ */
+export const noteAttachmentCallbacks = (
+  resource: "contact_notes" | "deal_notes",
+): ResourceCallbacks => ({
+  resource,
+  beforeGetList: async (params) => ({
+    ...params,
+    meta: { ...params.meta, columns: NOTE_META_COLUMNS[resource] },
+  }),
+  beforeGetOne: async (params) => ({
+    ...params,
+    meta: { ...params.meta, columns: NOTE_META_COLUMNS[resource] },
+  }),
+  afterRead: async (record) => mapNoteAttachmentReadModel(record as any) as any,
+  beforeUpdate: async (params) => {
+    if (
+      isNoteAttachmentChange(params.data, params.previousData) &&
+      (params.previousData as ContactNote | DealNote | undefined)
+        ?.attachments_state !== "ok"
+    ) {
+      throwNoraError(
+        "note attachment state is not verified",
+        NORA_ERROR_CODES.ATTACHMENT_STATE_UNVERIFIED,
+      );
+    }
+    return params;
+  },
+  beforeSave: async (data: ContactNote | DealNote, _, __) => {
+    const payload = stripNoteReadModelMetadata(data) as ContactNote | DealNote;
+    if (payload.attachments) {
+      payload.attachments = await Promise.all(
+        payload.attachments.map((fi) => uploadToBucket(fi)),
+      );
+    }
+    return payload as any;
+  },
+});
+
 const lifeCycleCallbacks: ResourceCallbacks[] = [
   {
     resource: "configuration",
@@ -794,28 +937,8 @@ const lifeCycleCallbacks: ResourceCallbacks[] = [
       return params;
     },
   },
-  {
-    resource: "contact_notes",
-    beforeSave: async (data: ContactNote, _, __) => {
-      if (data.attachments) {
-        data.attachments = await Promise.all(
-          data.attachments.map((fi) => uploadToBucket(fi)),
-        );
-      }
-      return data;
-    },
-  },
-  {
-    resource: "deal_notes",
-    beforeSave: async (data: DealNote, _, __) => {
-      if (data.attachments) {
-        data.attachments = await Promise.all(
-          data.attachments.map((fi) => uploadToBucket(fi)),
-        );
-      }
-      return data;
-    },
-  },
+  noteAttachmentCallbacks("contact_notes"),
+  noteAttachmentCallbacks("deal_notes"),
   {
     resource: "sales",
     beforeSave: async (data: Sale, _, __) => {

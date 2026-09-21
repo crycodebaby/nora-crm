@@ -25,7 +25,12 @@ import { RelativeDate } from "../misc/RelativeDate";
 import { Status } from "../misc/Status";
 import type { ContactNote, DealNote } from "../types";
 import { NoteAttachments } from "./NoteAttachments";
+import { NoteAttachmentsRecovery } from "./NoteAttachmentsRecovery";
 import { NoteInputs } from "./NoteInputs";
+import {
+  recoveryAttachments,
+  verifiedAttachments,
+} from "../providers/commons/noteAttachmentReadModel";
 import { useGetSalesName } from "../sales/useGetSalesName";
 
 export const Note = ({
@@ -59,6 +64,13 @@ export const Note = ({
   }, [note.text]);
 
   const [update, { isPending }] = useUpdate();
+
+  // W8-C S5: the host — never the renderer — decides whether this note is
+  // trusted. `null` means nothing is vouched for, so the verified renderer is
+  // not called at all and the read-only recovery view takes over.
+  const verified = verifiedAttachments(note);
+  const recovery = recoveryAttachments(note);
+  const attachmentsEditable = note.attachments_state === "ok";
 
   const [deleteNote] = useDelete(resource, undefined, {
     mutationMode: "undoable",
@@ -166,7 +178,13 @@ export const Note = ({
       </div>
       {isEditing ? (
         <Form onSubmit={handleNoteUpdate} record={note} className="mt-1">
-          <NoteInputs showStatus={showStatus} />
+          <NoteInputs
+            showStatus={showStatus}
+            attachmentsEditable={attachmentsEditable}
+          />
+          {!attachmentsEditable && (
+            <NoteAttachmentsRecovery attachments={recovery} />
+          )}
           <div className="flex justify-end mt-2 space-x-4">
             <Button
               variant="ghost"
@@ -214,7 +232,11 @@ export const Note = ({
             </button>
           )}
 
-          {note.attachments && <NoteAttachments note={note} />}
+          {verified ? (
+            <NoteAttachments attachments={verified} />
+          ) : (
+            <NoteAttachmentsRecovery attachments={recovery} />
+          )}
         </div>
       )}
     </div>

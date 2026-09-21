@@ -17,7 +17,10 @@ import {
 
 import { EditSheet } from "../misc/EditSheet";
 import { foreignKeyMapping } from "./foreignKeyMapping";
+import { NoteAttachmentsRecovery } from "./NoteAttachmentsRecovery";
 import { NoteInputsMobile } from "./NoteInputsMobile";
+import { recoveryAttachments } from "../providers/commons/noteAttachmentReadModel";
+import type { ContactNote } from "../types";
 
 export interface NoteEditSheetProps {
   open: boolean;
@@ -45,6 +48,10 @@ export const NoteEditSheet = ({
     <EditSheet
       resource="contact_notes"
       id={noteId}
+      // W8-C S5: an attachment-changing note write must be refused before it
+      // is optimistically shown as done — the shared undoable default of
+      // EditSheet stays untouched for every other resource.
+      mutationMode="pessimistic"
       title={
         <ReferenceField
           source={foreignKeyMapping["contacts"]}
@@ -70,8 +77,29 @@ export const NoteEditSheet = ({
         />
       }
     >
-      <NoteInputsMobile />
+      <NoteEditAttachmentsGate />
     </EditSheet>
+  );
+};
+
+/**
+ * W8-C S5. `NoteInputsMobile` is shared verbatim by the create sheet and this
+ * edit sheet, so the host has to say which one it is. An existing note is
+ * editable only when `public.attachments` vouched for it; a record that is
+ * still loading is `undefined` here and therefore fail-closed — create is
+ * never inferred from an absent record.
+ */
+const NoteEditAttachmentsGate = () => {
+  const record = useRecordContext<ContactNote>();
+  const attachmentsEditable = record?.attachments_state === "ok";
+
+  return (
+    <>
+      <NoteInputsMobile attachmentsEditable={attachmentsEditable} />
+      {!attachmentsEditable && (
+        <NoteAttachmentsRecovery attachments={recoveryAttachments(record)} />
+      )}
+    </>
   );
 };
 

@@ -29,11 +29,19 @@ export const NoteInputs = ({
   showStatus,
   selectReference,
   reference,
+  attachmentsEditable,
 }: {
   defaultStatus?: string;
   showStatus?: boolean;
   selectReference?: boolean;
   reference?: "contacts" | "deals";
+  /**
+   * W8-C S5. Presentation never inspects `attachments_state` itself — the
+   * host decides: `true` on CREATE (a new note has no prior read state, and
+   * creating attachments must stay possible), `attachments_state === "ok"`
+   * on an existing note.
+   */
+  attachmentsEditable: boolean;
 }) => {
   const { noteStatuses } = useConfigurationContext();
   const translate = useTranslate();
@@ -201,15 +209,17 @@ export const NoteInputs = ({
             defaultValue={getCurrentDate()}
           />
         </div>
-        <FileInput
-          source="attachments"
-          label="resources.notes.fields.attachments"
-          multiple
-          accept={ATTACHMENT_ACCEPT}
-          options={attachmentDropzoneOptions}
-        >
-          <AttachmentField source="src" title="title" target="_blank" />
-        </FileInput>
+        {attachmentsEditable && (
+          <FileInput
+            source="attachments"
+            label="resources.notes.fields.attachments"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            options={attachmentDropzoneOptions}
+          >
+            <AttachmentField source="src" title="title" target="_blank" />
+          </FileInput>
+        )}
       </div>
     </div>
   );

@@ -19,7 +19,12 @@ import { RelativeDate } from "../misc/RelativeDate";
 import { Status } from "../misc/Status";
 import type { ContactNote } from "../types";
 import { NoteAttachments } from "./NoteAttachments";
+import { NoteAttachmentsRecovery } from "./NoteAttachmentsRecovery";
 import { NoteEditSheet } from "./NoteEditSheet";
+import {
+  recoveryAttachments,
+  verifiedAttachments,
+} from "../providers/commons/noteAttachmentReadModel";
 import { useGetSalesName } from "../sales/useGetSalesName";
 
 export const NoteShowPage = () => {
@@ -41,6 +46,10 @@ export const NoteShowPage = () => {
   });
 
   if (isPending || !note) return null;
+
+  // W8-C S5: `null` means nothing is vouched for — the verified renderer is
+  // then not called at all.
+  const verified = verifiedAttachments(note);
 
   return (
     <>
@@ -100,11 +109,15 @@ export const NoteShowPage = () => {
 
         {note.text && <Markdown className="text-sm">{note.text}</Markdown>}
 
-        {note.attachments && (
-          <div className="mt-4">
-            <NoteAttachments note={note} />
-          </div>
-        )}
+        {/* W8-C S5: the host decides trust; the verified renderer only ever
+            receives already-verified attachments. */}
+        <div className="mt-4">
+          {verified ? (
+            <NoteAttachments attachments={verified} />
+          ) : (
+            <NoteAttachmentsRecovery attachments={recoveryAttachments(note)} />
+          )}
+        </div>
       </MobileContent>
     </>
   );

@@ -26,6 +26,7 @@ import { getActivityLog } from "../commons/activity";
 import { getCompanyAvatar } from "../commons/getCompanyAvatar";
 import { getContactAvatar } from "../commons/getContactAvatar";
 import { mergeContacts } from "../commons/mergeContacts";
+import { stripNoteReadModelMetadata } from "../commons/noteAttachmentReadModel";
 import {
   nextCaseNumberForFakeRest,
   nextCustomerNumberForFakeRest,
@@ -629,17 +630,54 @@ const processConfigLogo = async (logo: any): Promise<string> => {
   return logo?.src ?? "";
 };
 
-const preserveAttachmentMimeType = <
-  NoteType extends { attachments?: Array<{ rawFile?: File; type?: string }> },
+/**
+ * FakeRest note write normalization.
+ *
+ * W8-C S5: a partial patch that carries no `attachments` key must stay a
+ * partial patch — coercing the missing key into `[]` would wipe the stored
+ * attachments of the demo note. Only a payload that actually mentions
+ * attachments is normalized. The S5 read-model metadata is never persisted:
+ * it is a read contract, not a stored field.
+ */
+const prepareNoteWrite = <
+  NoteType extends {
+    attachments?: Array<{ rawFile?: File; type?: string }> | null;
+  },
 >(
   note: NoteType,
-): NoteType => ({
-  ...note,
-  attachments: (note.attachments ?? []).map((attachment) => ({
-    ...attachment,
-    type: attachment.type ?? attachment.rawFile?.type,
-  })),
-});
+): NoteType => {
+  const payload = stripNoteReadModelMetadata(note) as NoteType;
+
+  if (!Object.prototype.hasOwnProperty.call(payload, "attachments")) {
+    return payload;
+  }
+  if (!Array.isArray(payload.attachments)) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    attachments: payload.attachments.map((attachment) => ({
+      ...attachment,
+      type: attachment.type ?? attachment.rawFile?.type,
+    })),
+  };
+};
+
+/**
+ * FakeRest is not a projection. It has no `public.attachments`, no grammar
+ * and no relational parity — demo data simply vouches for itself, so every
+ * note it hands out is `ok`. It must still speak the canonical S5 read
+ * contract, otherwise the demo UI would read as permanently degraded.
+ */
+const stampNoteReadModel = <T extends Record<string, any>>(record: T): T => {
+  if (record == null || typeof record !== "object") return record;
+  return {
+    ...record,
+    attachments: Array.isArray(record.attachments) ? record.attachments : [],
+    attachments_state: "ok" as const,
+  };
+};
 
 export const createDataProvider = ({
   db = generateData(),
@@ -1985,11 +2023,15 @@ export const createDataProvider = ({
       } satisfies ResourceCallbacks<Deal>,
       {
         resource: "contact_notes",
-        beforeSave: async (params) => preserveAttachmentMimeType(params),
+        beforeSave: async (params) => prepareNoteWrite(params),
+        afterRead: async (record) => stampNoteReadModel(record),
+        afterSave: async (record) => stampNoteReadModel(record),
       } satisfies ResourceCallbacks<ContactNote>,
       {
         resource: "deal_notes",
-        beforeSave: async (params) => preserveAttachmentMimeType(params),
+        beforeSave: async (params) => prepareNoteWrite(params),
+        afterRead: async (record) => stampNoteReadModel(record),
+        afterSave: async (record) => stampNoteReadModel(record),
       } satisfies ResourceCallbacks<DealNote>,
     ],
   ) as CrmDataProvider;

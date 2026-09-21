@@ -377,6 +377,10 @@ export const englishCrmMessages = {
         contact_id: "Contact",
         deal_id: "Deal",
       },
+      attachments_recovery: {
+        unverified_hint:
+          "These attachments could not be verified. They are shown read-only and cannot be changed right now.",
+      },
       action: {
         add: "Add note",
         add_first: "Add your first note",
@@ -1067,6 +1071,8 @@ export const englishCrmMessages = {
         "An attachment of this note has been removed in the meantime and cannot be used again. Please reload the page and check the attachments.",
       attachment_reference_invalid:
         "An attachment of this note is invalid or could not be taken over. Please remove it and upload the file again.",
+      attachment_state_unverified:
+        "The attachments of this note could not be verified. You can still edit the text; attachments can be changed again once the note has been reloaded and verified.",
     },
     pwa: {
       available_title: "New Nora version available",

@@ -10,14 +10,22 @@ type NoteInputsStoryProps = React.ComponentProps<typeof NoteInputs> & {
   withSaveButton?: boolean;
 };
 
+/**
+ * W8-C S5: `attachmentsEditable` defaults to `true` here because it is what
+ * a CREATE host passes — the harness itself carries no record context, so it
+ * must never be allowed to imply an attachment state.
+ */
 export const NoteInputsStory = ({
   defaultValues,
   withSaveButton = false,
+  attachmentsEditable = true,
   ...props
-}: NoteInputsStoryProps) => (
+}: Omit<NoteInputsStoryProps, "attachmentsEditable"> & {
+  attachmentsEditable?: boolean;
+}) => (
   <StoryWrapper>
     <Form defaultValues={defaultValues}>
-      <NoteInputs {...props} />
+      <NoteInputs {...props} attachmentsEditable={attachmentsEditable} />
       {withSaveButton ? <SaveButton type="button" /> : null}
     </Form>
   </StoryWrapper>
@@ -25,7 +33,12 @@ export const NoteInputsStory = ({
 
 const meta = {
   title: "Atomic CRM/Notes/Note Inputs",
-  includeStories: ["Default", "WithSaveButton", "WithAttachmentDefault"],
+  includeStories: [
+    "Default",
+    "WithSaveButton",
+    "WithAttachmentDefault",
+    "AttachmentsNotEditable",
+  ],
   render: (args) => <NoteInputsStory {...args} />,
 } satisfies Meta<typeof NoteInputsStory>;
 
@@ -47,5 +60,12 @@ export const WithAttachmentDefault: Story = {
       attachments: [{ src: "blob:test", title: "evidence.pdf" }],
     },
     withSaveButton: true,
+  },
+};
+
+/** An existing note whose attachments could not be verified (W8-C S5). */
+export const AttachmentsNotEditable: Story = {
+  args: {
+    attachmentsEditable: false,
   },
 };

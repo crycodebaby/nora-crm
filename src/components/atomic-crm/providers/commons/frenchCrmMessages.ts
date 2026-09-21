@@ -387,6 +387,10 @@ export const frenchCrmMessages = {
         contact_id: "Contact",
         deal_id: "Affaire",
       },
+      attachments_recovery: {
+        unverified_hint:
+          "Ces pièces jointes n'ont pas pu être vérifiées. Elles sont affichées en lecture seule et ne peuvent pas être modifiées pour le moment.",
+      },
       action: {
         add: "Ajouter une note",
         add_first: "Ajoutez votre première note",
@@ -1086,6 +1090,8 @@ export const frenchCrmMessages = {
         "Une pièce jointe de cette note a été supprimée entre-temps et ne peut plus être réutilisée. Veuillez recharger la page et vérifier les pièces jointes.",
       attachment_reference_invalid:
         "Une pièce jointe de cette note est invalide ou n'a pas pu être reprise. Veuillez la retirer et téléverser à nouveau le fichier.",
+      attachment_state_unverified:
+        "Les pièces jointes de cette note n'ont pas pu être vérifiées. Vous pouvez continuer à modifier le texte ; les pièces jointes pourront être modifiées de nouveau une fois la note rechargée et vérifiée.",
     },
     pwa: {
       available_title: "Nouvelle version de Nora disponible",

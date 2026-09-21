@@ -40,7 +40,13 @@ export const NoteCreate = ({
     <CreateBase resource={resource} redirect={false}>
       <Form>
         <div className={cn("space-y-3", className)}>
-          <NoteInputs defaultStatus={defaultStatus} showStatus={showStatus} />
+          {/* W8-C S5: a new note has no prior verified read state — CREATE is
+              a write flow and must keep attachment creation available. */}
+          <NoteInputs
+            defaultStatus={defaultStatus}
+            showStatus={showStatus}
+            attachmentsEditable
+          />
           <NoteCreateButton
             defaultStatus={defaultStatus}
             record={record}

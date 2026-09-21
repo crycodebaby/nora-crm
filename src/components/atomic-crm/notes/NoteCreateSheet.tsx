@@ -90,7 +90,8 @@ export const NoteCreateSheet = ({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <NoteInputsMobile selectContact={selectContact} />
+      {/* W8-C S5: CREATE has no prior read state — attachments stay editable. */}
+      <NoteInputsMobile selectContact={selectContact} attachmentsEditable />
     </CreateSheet>
   );
 };

@@ -9,13 +9,20 @@ type NoteInputsMobileStoryProps = React.ComponentProps<
   typeof NoteInputsMobile
 > & { defaultValues?: Record<string, unknown> };
 
+/**
+ * W8-C S5: `attachmentsEditable` defaults to `true` — what a CREATE host
+ * passes. The harness has no record context and must never imply a state.
+ */
 export const NoteInputsMobileStory = ({
   defaultValues,
+  attachmentsEditable = true,
   ...props
-}: NoteInputsMobileStoryProps) => (
+}: Omit<NoteInputsMobileStoryProps, "attachmentsEditable"> & {
+  attachmentsEditable?: boolean;
+}) => (
   <StoryWrapper>
     <Form defaultValues={defaultValues}>
-      <NoteInputsMobile {...props} />
+      <NoteInputsMobile {...props} attachmentsEditable={attachmentsEditable} />
       <SaveButton type="button" className="mt-6" />
     </Form>
   </StoryWrapper>
@@ -28,6 +35,7 @@ const meta = {
     "WithSaveButton",
     "WithSelectContact",
     "WithAttachmentDefault",
+    "AttachmentsNotEditable",
   ],
   render: (args) => <NoteInputsMobileStory {...args} />,
 } satisfies Meta<typeof NoteInputsMobileStory>;
@@ -44,6 +52,16 @@ export const WithSelectContact: Story = {
 
 export const WithAttachmentDefault: Story = {
   args: {
+    defaultValues: {
+      attachments: [{ src: "blob:test", title: "evidence.pdf" }],
+    },
+  },
+};
+
+/** An existing note whose attachments could not be verified (W8-C S5). */
+export const AttachmentsNotEditable: Story = {
+  args: {
+    attachmentsEditable: false,
     defaultValues: {
       attachments: [{ src: "blob:test", title: "evidence.pdf" }],
     },

@@ -59,6 +59,15 @@ export const NORA_ERROR_CODES = {
    * Supabase provider before the write.
    */
   ATTACHMENT_REFERENCE_INVALID: "NORA_ATTACHMENT_REFERENCE_INVALID",
+  /**
+   * W8-C S5 (2026-09-21): a note write tried to change the attachments of a
+   * note whose relational attachment state could not be vouched for by
+   * `public.attachments` (drift, or a read that carried no relational rows).
+   * Raised by the Supabase provider BEFORE any Storage work; the write never
+   * reaches the database. Reading such a note is a passive degraded state and
+   * raises nothing — only an attachment-changing write is refused.
+   */
+  ATTACHMENT_STATE_UNVERIFIED: "NORA_ATTACHMENT_STATE_UNVERIFIED",
 } as const;
 
 export type NoraErrorCode =
@@ -130,6 +139,10 @@ export const NORA_ERROR_DEFINITIONS: Record<
   [NORA_ERROR_CODES.ATTACHMENT_REFERENCE_INVALID]: {
     category: "validation",
     messageKey: "crm.errors.attachment_reference_invalid",
+  },
+  [NORA_ERROR_CODES.ATTACHMENT_STATE_UNVERIFIED]: {
+    category: "conflict",
+    messageKey: "crm.errors.attachment_state_unverified",
   },
 };
 

@@ -3,8 +3,12 @@ import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import * as stories from "./NoteInputsMobile.stories";
 
-const { Default, WithAttachmentDefault, WithSelectContact } =
-  composeStories(stories);
+const {
+  AttachmentsNotEditable,
+  Default,
+  WithAttachmentDefault,
+  WithSelectContact,
+} = composeStories(stories);
 
 describe("NoteInputsMobile", () => {
   it("renders the note textarea", async () => {
@@ -73,6 +77,40 @@ describe("NoteInputsMobile", () => {
     await expect
       .element(screen.getByText("A note or an attachment is required"))
       .not.toBeInTheDocument();
+  });
+
+  // W8-C S5 — this component is shared verbatim by the create sheet and the
+  // edit sheet, so the host prop is the only thing that tells them apart.
+  describe("attachment editability (W8-C S5)", () => {
+    it("offers the attach button when the host allows it (CREATE)", async () => {
+      const screen = await render(<Default />);
+
+      await expect
+        .element(screen.getByRole("button", { name: "Attach document" }))
+        .toBeVisible();
+    });
+
+    it("hides the attach button and previews for an unverified note", async () => {
+      const screen = await render(<AttachmentsNotEditable />);
+
+      await expect
+        .element(screen.getByRole("button", { name: "Attach document" }))
+        .not.toBeInTheDocument();
+      expect(screen.container.querySelector('input[type="file"]')).toBeNull();
+      // the stored attachment is not offered through the normal preview
+      await expect
+        .element(screen.getByRole("link", { name: "evidence.pdf" }))
+        .not.toBeInTheDocument();
+    });
+
+    it("keeps text editing available while attachments are blocked", async () => {
+      const screen = await render(<AttachmentsNotEditable />);
+
+      const textarea = screen.getByPlaceholder("Add a note");
+      await textarea.fill("Text edit stays possible");
+
+      await expect.element(textarea).toHaveValue("Text edit stays possible");
+    });
   });
 
   it("restricts the file picker to the attachment allowlist", async () => {

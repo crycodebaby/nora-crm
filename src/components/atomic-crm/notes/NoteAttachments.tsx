@@ -1,24 +1,33 @@
 import { Paperclip } from "lucide-react";
 
-import type { AttachmentNote, ContactNote, DealNote } from "../types";
+import type { AttachmentNote } from "../types";
 
 /**
- * Displays persisted note attachments in note show/list views.
+ * Displays VERIFIED note attachments in note show/list views.
  *
- * This component receives a full note record and renders all attachments.
+ * W8-C S5: this renderer deliberately accepts only already-verified
+ * presentation data — never a whole note record. Deciding whether a note is
+ * trusted is the host's job (`verifiedAttachments(note)`); a raw note
+ * resource is not type-compatible with this component, so unverified legacy
+ * data cannot reach the inline image renderer below. Quarantined data goes to
+ * `NoteAttachmentsRecovery` instead.
  *
- * @param props.note - Note record containing attachments to render.
+ * @param props.attachments - Verified attachments to render.
  * @returns `null` when there are no attachments, otherwise attachment previews and links.
  */
-export const NoteAttachments = ({ note }: { note: ContactNote | DealNote }) => {
-  if (!note.attachments || note.attachments.length === 0) {
+export const NoteAttachments = ({
+  attachments,
+}: {
+  attachments: AttachmentNote[];
+}) => {
+  if (!attachments || attachments.length === 0) {
     return null;
   }
 
-  const imageAttachments = note.attachments.filter(
-    (attachment: AttachmentNote) => isImageMimeType(attachment.type),
+  const imageAttachments = attachments.filter((attachment: AttachmentNote) =>
+    isImageMimeType(attachment.type),
   );
-  const otherAttachments = note.attachments.filter(
+  const otherAttachments = attachments.filter(
     (attachment: AttachmentNote) => !isImageMimeType(attachment.type),
   );
 

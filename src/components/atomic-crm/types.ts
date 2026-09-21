@@ -8,6 +8,7 @@ import type {
   DEAL_CREATED,
   DEAL_NOTE_CREATED,
 } from "./consts";
+import type { NoteAttachmentsState } from "./providers/commons/noteAttachmentReadModel";
 
 export type SignUpData = {
   email: string;
@@ -184,7 +185,15 @@ export type ContactNote = {
   date: string;
   sales_id: Identifier;
   status: string;
-  attachments?: AttachmentNote[];
+  /**
+   * W8-C S5: `[]` means VERIFIED EMPTY, `null` means NOT VERIFIED. The two
+   * never normalize into one another — see `attachments_state`.
+   */
+  attachments?: AttachmentNote[] | null;
+  /** W8-C S5 read-model state. Never persisted — stripped before write. */
+  attachments_state?: NoteAttachmentsState;
+  /** W8-C S5 quarantine: legacy JSON kept for the read-only recovery view. */
+  attachments_unverified_legacy?: AttachmentNote[] | null;
 } & Pick<RaRecord, "id">;
 
 export type Deal = {
@@ -209,7 +218,12 @@ export type DealNote = {
   text: string;
   date: string;
   sales_id: Identifier;
-  attachments?: AttachmentNote[];
+  /** W8-C S5: `[]` is VERIFIED EMPTY, `null` is NOT VERIFIED. */
+  attachments?: AttachmentNote[] | null;
+  /** W8-C S5 read-model state. Never persisted — stripped before write. */
+  attachments_state?: NoteAttachmentsState;
+  /** W8-C S5 quarantine: legacy JSON kept for the read-only recovery view. */
+  attachments_unverified_legacy?: AttachmentNote[] | null;
 
   // This is defined for compatibility with `ContactNote`
   status?: undefined;

@@ -385,6 +385,10 @@ export const germanCrmMessages = {
         contact_id: "Kontakt",
         deal_id: "Vorgang",
       },
+      attachments_recovery: {
+        unverified_hint:
+          "Diese Anhänge konnten nicht geprüft werden. Sie werden schreibgeschützt angezeigt und lassen sich derzeit nicht ändern.",
+      },
       action: {
         add: "Notiz hinzufügen",
         add_first: "Erste Notiz hinzufügen",
@@ -1082,6 +1086,8 @@ export const germanCrmMessages = {
         "Ein Anhang dieser Notiz wurde inzwischen entfernt und kann nicht erneut verwendet werden. Bitte laden Sie die Seite neu und prüfen Sie die Anhänge.",
       attachment_reference_invalid:
         "Ein Anhang dieser Notiz ist ungültig oder konnte nicht übernommen werden. Bitte entfernen Sie ihn und laden Sie die Datei erneut hoch.",
+      attachment_state_unverified:
+        "Die Anhänge dieser Notiz konnten nicht geprüft werden. Sie können den Text weiter bearbeiten; Anhänge lassen sich erst wieder ändern, wenn die Notiz erneut geladen und geprüft werden konnte.",
     },
     pwa: {
       // Presentation Contract V2: ein Titel, hoechstens eine ruhige Zeile,

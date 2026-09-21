@@ -27,8 +27,16 @@ import type { ContactNote } from "../types";
 
 export const NoteInputsMobile = ({
   selectContact,
+  attachmentsEditable,
 }: {
   selectContact?: boolean;
+  /**
+   * W8-C S5. Presentation never inspects `attachments_state` itself — the
+   * host decides: `true` on CREATE, `attachments_state === "ok"` on an
+   * existing note. This component is shared by the create sheet and the edit
+   * sheet, so the prop is the only thing that tells them apart.
+   */
+  attachmentsEditable: boolean;
 }) => {
   const translate = useTranslate();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -81,10 +89,12 @@ export const NoteInputsMobile = ({
           </ReferenceInput>
         </div>
       )}
-      <div className="px-4">
-        <AttachmentPreviewsMobile />
-        <AttachButton />
-      </div>
+      {attachmentsEditable && (
+        <div className="px-4">
+          <AttachmentPreviewsMobile />
+          <AttachButton />
+        </div>
+      )}
     </div>
   );
 };

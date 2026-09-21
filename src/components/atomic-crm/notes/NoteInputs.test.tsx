@@ -4,8 +4,12 @@ import { render } from "vitest-browser-react";
 import * as stories from "./NoteInputs.stories";
 import { NoteInputsStory } from "./NoteInputs.stories";
 
-const { Default, WithAttachmentDefault, WithSaveButton } =
-  composeStories(stories);
+const {
+  AttachmentsNotEditable,
+  Default,
+  WithAttachmentDefault,
+  WithSaveButton,
+} = composeStories(stories);
 
 describe("NoteInputs", () => {
   it("renders the note textarea", async () => {
@@ -155,6 +159,49 @@ describe("NoteInputs", () => {
     await expect
       .element(screen.getByText("A note or an attachment is required"))
       .not.toBeInTheDocument();
+  });
+
+  // W8-C S5 — the create/edit boundary. The component never inspects
+  // `attachments_state`; the host tells it whether attachments may be edited.
+  describe("attachment editability (W8-C S5)", () => {
+    it("offers the attachment input when the host allows it (CREATE)", async () => {
+      const screen = await render(<Default />);
+
+      await screen.getByRole("button", { name: "Show options" }).click();
+
+      await expect.element(screen.getByText("Attachments")).toBeVisible();
+      expect(
+        screen.container.querySelector('input[type="file"]'),
+      ).not.toBeNull();
+    });
+
+    it("hides the attachment input for an unverified existing note", async () => {
+      const screen = await render(<AttachmentsNotEditable />);
+
+      await screen.getByRole("button", { name: "Show options" }).click();
+
+      await expect
+        .element(screen.getByText("Attachments"))
+        .not.toBeInTheDocument();
+      expect(screen.container.querySelector('input[type="file"]')).toBeNull();
+    });
+
+    it("keeps text editing available while attachments are blocked", async () => {
+      const screen = await render(<AttachmentsNotEditable />);
+
+      const textarea = screen.getByPlaceholder("Add a note");
+      await textarea.fill("Text edit stays possible");
+
+      await expect.element(textarea).toHaveValue("Text edit stays possible");
+    });
+
+    it("still offers status and date while attachments are blocked", async () => {
+      const screen = await render(<AttachmentsNotEditable />);
+
+      await screen.getByRole("button", { name: "Show options" }).click();
+
+      await expect.element(screen.getByText("Date")).toBeVisible();
+    });
   });
 
   it("refuses disallowed attachment types with a message and keeps allowed ones", async () => {
