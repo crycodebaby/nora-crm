@@ -1,6 +1,6 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-21. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-22. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
 
@@ -209,7 +209,7 @@ Nach den beiden Blocker-Fixes (RC `0fb3d6ba`, zwei unabhängige Reviews 2026-09-
 - **Mobile „Aufgaben"-Bereich auf der Kundenakte** — der Tab existiert nur im Desktop-`CompanyShow`; `CompanyShowContentMobile` hat keine Tab-Struktur. `PLANNED FOLLOW-UP`.
 - **`deals.contact_ids bigint[]`** als Vorgang-Domain-Debt (keine FK-Integrität pro Element, keine Rollen-/Zeitdimension) — `PLANNED DOMAIN WAVE`, nicht designt.
 - **Kontakterstellung UI-Polish**: förmliche Rollen-UX-Abnahme nach `12-role-ux-acceptance.md` nie durchlaufen (technisch deployed). `NEEDS RE-VERIFICATION`.
-- **Application Queries / Read Models** für künftige KI-/Automatisierungs-Konsumenten (Falle 36) — Richtung dokumentiert, nichts implementiert.
+- **Application Queries / Read Models** für künftige KI-/Automatisierungs-Konsumenten (Falle 36) — Richtung dokumentiert; die **erste** Umsetzung ist seit W-A live (`public.get_work_items(...)`, G.7). Weitere Flächen (Kunden, Vorgänge, Kontakte) sind weiterhin **nicht** implementiert.
 - **Mobile-Ladezustand der Startseite live nachprüfen** — `PLANNED FOLLOW-UP` aus dem W7-R1A-Release (2026-09-08): der Ein-Sekunden-Vorlauf ist im ausgelieferten Build konstruktiv entfernt und durch Tests abgedeckt, eine Sichtprüfung auf einem echten mobilen Viewport steht aber aus (die Release-Session erreichte den ≤ 767-px-Breakpoint nicht).
 
 ### G.5 Mobile Vorgang-Routing — offen nach W7-M1 (2026-09-13)
@@ -226,6 +226,18 @@ W7-M1 (mobile Vorgang-Detailroute) ist `PRODUCTION VERIFIED` und hier **nicht** 
 W7-R1B (`deals.company_id NOT NULL`) ist `PRODUCTION VERIFIED` und hier **nicht** offen — Invariante [`03`](03-data-model-guardrails.md) §1.7, Entscheidung [`06`](06-decision-log.md) „2026-09-13 – W7-R1B", Evidenz `releases/2026-09.md`.
 
 - **FakeRest `updateMany("deals", …)` umgeht die Kunden-Paritätsprüfung** — `OPEN (LOW)`. Der FakeRest-Guard für `company_id` hängt an `beforeCreate`/`beforeUpdate`; `updateMany` läuft nicht durch `beforeUpdate`, ein `updateMany("deals", { data: { company_id: null } })` würde in der Demo also nicht abgewiesen. Heute schreibt kein Aufrufer `company_id` über diesen Pfad (der einzige gefundene `updateMany`-Aufrufer für Vorgänge ändert `sales_id`). Supabase/Production ist nicht betroffen — dort erzwingt `NOT NULL` die Regel. Beheben, sobald ein Pfad zur Sammel-Umhängung von Kunden entsteht, oder in einer kleinen Paritätsbereinigung.
+
+### G.7 Work / Arbeitskorb — offen nach W-A (2026-09-22)
+
+**Status: W-A selbst ist `PRODUCTION VERIFIED` / `CLOSED` und hier nicht offen** — Contract [`25`](25-universal-work-model.md), Entscheidung [`06`](06-decision-log.md) „2026-09-22 – W-A", Security [`22`](22-security-and-access.md) Abschnitt 6.13, Evidenz `releases/2026-09.md`. Es bleibt **keine** W-A-Implementierungsarbeit offen. Hier stehen die bewusst nicht in W-A gezogenen Punkte; sie öffnen W-A nicht wieder.
+
+- **Es gibt keine Work-Oberfläche** — `PLANNED` (Produktwelle, nicht begonnen). W-A liefert ausschließlich den serverseitigen Query-Contract. Der Arbeitskorb existiert nicht, und das Hotboard liest Aufgaben unverändert über rohes CRUD mit clientseitigem Filter und Browser-Zeitzone. Die Ablösung der bestehenden Flächen ist Gate G-10.
+- **Die elf Decision Gates G-1 … G-11 sind sämtlich unbegonnen** — `PARKED` bzw. `PLANNED DOMAIN WAVE`, Liste und Voraussetzungen in [`25`](25-universal-work-model.md) Abschnitt 23. Der nächste **Planungskandidat** ist **G-1 Lifecycle Persistence** (`deferred`, `reappear_at`, `deferral_reason`, `due_precision` auf `tasks`; behebt zugleich das 02:00-Artefakt aus `create_quick_capture_task`). Der W-A-PASS erfüllt lediglich dessen Voraussetzung „nach W-A-PASS" — **eine G-1-Architektur-/Planungsreview hat nicht stattgefunden**, und bis dahin gilt für G-1 nie `IMPLEMENTATION READY`.
+- **Vier Vertragsfälle sind am Produktionsbestand nicht beobachtbar** — `ACCEPTED LIMITATION`: `is_unassigned = true`, der `NULLS LAST`-Schwanz bei fehlender Fälligkeit, die Tie-Break-Ordnung bei gleicher Fälligkeit und die unvollständige Zeile (`validity = incomplete`). Production hatte zum Releasezeitpunkt 15 Tasks ohne eine einzige solche Zeile. Belegt sind sie durch die lokale Contract-Suite ([`25`](25-universal-work-model.md) Abschnitt 22.2). Kein Defekt — aber niemand darf daraus „in Production bewiesen" machen. `is_unassigned` wird erst mit Gate G-3 fachlich relevant.
+- **Für die serverseitige Application Query existiert kein FakeRest-Äquivalent** — `ACCEPTED LIMITATION`, im Freeze benannt und bewusst in Kauf genommen ([`03`](03-data-model-guardrails.md) §5). Eine künftige Work-Oberfläche im Demo-Modus braucht dafür eine eigene Entscheidung.
+- **Zwei stille Work-Löschpfade bestehen unverändert** — `ACCEPTED LIMITATION`, vorbestehend, nicht durch W-A entstanden: `tasks_company_id_fkey ON DELETE CASCADE` löscht Aufgaben bei einer Kundenlöschung mit, und `delete_contact_only_tasks_before_contact_delete_trigger` löscht bei einer Kontaktlöschung die kontaktgebundenen Aufgaben ohne Kundenkontext. **Kein Work-Pfad darf Aufgaben als dauerhaft annehmen.**
+- **`public.nora_entity_uuid(text, bigint)` behält seine breitere Privilegienlage** (`PUBLIC`- und `anon`-`EXECUTE`) — der Punkt bleibt bei seinem Owner **A.8/A.10** und ist durch W-A **nicht** gelöst. W-A nutzt die Function für die Work-Identität, hat sie aber weder eingeführt noch ihre Rechte erweitert. Eine `work_id` ist berechenbar und **kein** Autorisierungstoken.
+- **Die W-A-Suiten laufen nicht in CI** — derselbe offene Punkt wie die übrigen SQL-Suiten (Abschnitt B, Eintrag W9). Zusätzlich gilt für die Zwei-Sessions-Suite die Reset-Pflicht aus [`21`](21-agent-runbooks.md) Sektion 5: sie legt lokale Auth-/Mitarbeiter-Identitäten an, die nach W6-B nicht mehr normal löschbar sind (I.6), und verlangt danach ein `npx supabase db reset --local`.
 
 ## H. Anhänge, Storage und weitere bekannte Themen
 

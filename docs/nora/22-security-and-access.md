@@ -1,6 +1,6 @@
 # 22 – Security und Access (global)
 
-Stand: 2026-09-21 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-22 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **globale Security- und Access-Contract** von Nora: Authentifizierung vs. Autorisierung, Rollen und Capabilities, Trust Boundaries, Datenbank-Enforcement (RLS, Grants, Default-Privilegien, `SECURITY DEFINER`), Session- und Executor-Integrität.
 
@@ -518,6 +518,31 @@ Stand seit W8-C S5 (`PRODUCTION VERIFIED` 2026-09-21, Laufzeit `3f9dd9ed`, **kei
 Read-Model-Metadaten sind ein **Lesevertrag**, keine Spalten: sie werden vor jedem Schreibvorgang entfernt und nie persistiert. Die Demo-/FakeRest-Parität spricht denselben Lesevertrag, simuliert aber weder Projektion noch relationale Prüfung ([`05`](05-demo-data-guidelines.md)) — sie beweist Anwendungsverträge, **nie** Production-Konsistenz.
 
 Regressionsprobe und operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
+
+### 6.13 Die Work Application Query `public.get_work_items(...)` (W-A)
+
+Stand seit W-A (`PRODUCTION VERIFIED` 2026-09-22, Migration `20260922120000_nora_work_read_model`, Ledger 67). **Erste serverseitige Work-Lesefläche.** Der fachliche Vertrag — was Work ist, welche Felder die Zeile trägt, wie sortiert wird — steht in [`25`](25-universal-work-model.md); hier steht ausschließlich die **Durchsetzungsseite**.
+
+> **W-A führt keine Work-spezifische Autorisierungsschicht ein.** Keine neue Rolle, keine neue Policy, keine neue Tabelle, kein neues Grant auf eine Domain-Tabelle. Wer welche Aufgaben sehen darf, entscheidet unverändert die bestehende RLS-Grenze auf `public.tasks`.
+
+**Zwei Objekte, zwei verschiedene Sicherheitsrollen:**
+
+| Objekt | Modus | Warum |
+|---|---|---|
+| `public.get_work_items(p_scope text, p_state_scope text, p_limit integer, p_cursor_due_at timestamptz, p_cursor_work_id uuid)` | **`SECURITY INVOKER`**, `STABLE`, Owner `postgres`, `search_path = ''` | `public.tasks` wird unter der Policy `Tasks select active` (`nora_private.is_active_user()`) des **aufrufenden** Mitarbeiters gelesen. Kein zweiter, parallel zu pflegender Autorisierungs-Body; `is_active_user()` wird nicht umgangen; die Fläche der offenen Security-Welle ([`17`](17-known-issues-and-planned-waves.md) Abschnitt A) wächst nicht |
+| `nora_private.current_sales_id()` | **`SECURITY DEFINER`**, `STABLE`, Owner `postgres`, `search_path = ''` | nur hier ist ein erhöhtes Recht nötig: Lesen von `public.sales` und — über `jwt_session_is_live()` — der Sitzungstabelle. Die Function gibt **keine Geschäftsdaten** zurück, sondern genau eine `sales.id` |
+
+**Grants (Production verifiziert).** Beide Functions: `revoke all … from public, anon, authenticated, service_role`, danach **genau ein** `grant execute … to authenticated`. `anon` ist abgewiesen, `service_role` ebenfalls (kein deployter Backend-Aufrufer, Regel 6.3), `PUBLIC` ebenfalls — der eingebaute Function-Default ist damit explizit entfernt.
+
+**Actor-Regel.** Der Mitarbeiter wird **ausschließlich aus der Sitzung** abgeleitet: `safe_auth_uid()` → die `UNIQUE`-Spalte `sales.user_id`, `sales.disabled = false`, und `nora_private.jwt_session_is_live()` muss halten (Abschnitt 8.1 gilt unverändert). **Es gibt keinen Actor-Parameter.** Der GUC `nora.audit_actor_user_id` wird nie gelesen — `nora_private.resolve_audit_actor()` darf für Work **nicht** wiederverwendet werden, weil sein Executor-Pfad einen von außen gesetzten Actor zulässt; für Audit ist das der gewollte Vertrag, für Work wäre es ein Actor-als-Parameter. Ist der Actor nicht auflösbar, endet der Aufruf in `42501` mit `DETAIL = NORA_PERMISSION_DENIED` — **nie** in einer stillen leeren Ergebnismenge.
+
+**Was unverändert bleibt.** `public.tasks` behält Struktur, RLS, Policies, Trigger und Indexe unverändert (Production 2026-09-22: 8 Spalten, 4 Trigger, 4 Policies, 6 Indexe, RLS aktiv). Es gibt keine Work-Tabelle, keine Work-View und keinen Work-Schreibpfad.
+
+> **Holder ist Domain State, nicht Autorisierung.** Dass eine Zeile `is_mine = true` trägt, ist eine fachliche Aussage über die Zuständigkeit, **kein** Zugriffsprädikat: `tasks UPDATE USING can_write()` hat weiterhin kein Ownership-Prädikat, jeder schreibberechtigte Mitarbeiter darf jede Aufgabe ändern. Ob Holder je zur Autorisierung wird, ist eine eigene Security-Welle ([`25`](25-universal-work-model.md) Gate G-7) — **nicht** in W-A und nicht in diesem Dokument vorweggenommen.
+
+**Vorbestehende Abhängigkeit, von W-A nicht verändert.** Die Work-Identität entsteht über `public.nora_entity_uuid(text, bigint)`. Diese Function hält in Production weiterhin ihre breitere Privilegienlage inklusive `PUBLIC`- und `anon`-`EXECUTE`. Das ist ein **vorbestehender** Punkt der offenen Security-Welle ([`17`](17-known-issues-and-planned-waves.md) A.8/A.10) — W-A hat ihn weder eingeführt noch vergrößert und **schließt ihn nicht**. Die Function ist `IMMUTABLE` und deterministisch; eine daraus berechnete `work_id` ist bekanntlich **kein Autorisierungstoken**.
+
+Operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4 und 5.
 
 ---
 

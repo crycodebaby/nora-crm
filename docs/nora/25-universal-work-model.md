@@ -1,6 +1,6 @@
 # 25 – Universal Work Model v1 (Domain Contract)
 
-Stand: 2026-09-21 · Status: **FROZEN** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-22 · Status: **FROZEN** · Umsetzungsstand W-A: **CLOSED / PRODUCTION VERIFIED** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **kanonische, eingefrorene Domain- und Application-Contract für Work** in Nora: was ein Arbeitsgegenstand ist, welche Persistenz ihn tragen darf, welchen Lebenszyklus er hat, wie Fälligkeit und Zuständigkeit bewertet werden, wer als Akteur gilt, was der Arbeitskorb standardmäßig liefert — und was die erste Umsetzungswelle **W-A** beweisen muss.
 
@@ -10,6 +10,8 @@ Der Freeze wurde am **2026-09-21** nach unabhängigem Architecture Review mit **
 
 > **Re-publication.** Dieses Dokument wurde am **2026-09-21** nach einem unabhängigen Re-publication Review unverändert im Contract, aber mit vier belegten Präzisierungen (F-1 bis F-4: Abschnitt 18.2, 21.5, 21.3, 9.1) erneut kanonisch abgelegt. **Der Domain Freeze wurde dabei nicht neu beschlossen** — Freeze-Datum und Status oben bleiben unverändert; die Präzisierungen korrigieren bzw. vervollständigen ausschließlich Evidenzaussagen, keine Entscheidung.
 
+> **Umsetzungsstand W-A (2026-09-22).** Die erste Umsetzungswelle **W-A** ist **abgeschlossen und `PRODUCTION VERIFIED`**: die Migration `20260922120000_nora_work_read_model` ist in Production angewendet (Ledger 67, Kopf `20260922120000`), `public.get_work_items(...)` und `nora_private.current_sales_id()` sind live, ein Mitarbeiter-Smoke des Product Owners auf echten Produktionsdaten ist `PASS`. **Der Domain Freeze wird dadurch nicht geöffnet** — Freeze-Status und -Datum oben bleiben unverändert; W-A-Abschluss und Domain Freeze sind zwei verschiedene Fakten. Durch den Abschluss sind genau **zwei** vormals `DEFERRED`-Entscheidungen geschlossen: **D-57** (`SECURITY INVOKER`, Abschnitt 21.5) und **D-53** (kein neuer Index, Abschnitt 21.4). Der konkrete Umsetzungsstand steht jeweils dort und in Abschnitt 22.2; die Release-Evidenz in `releases/2026-09.md`, die Begründung in [`06`](06-decision-log.md) „2026-09-22 – W-A". **W-A liefert keine Work-Oberfläche** — es gibt weiterhin keinen Arbeitskorb in der Anwendung. Die späteren Gates in Abschnitt 23 bleiben unverändert **unbegonnen**; der nächste Planungskandidat ist G-1.
+
 > **Geltung.** Dieses Dokument ist **eigenständig und vollständig**. Es ersetzt die nicht im Repository abgelegten Arbeitsfassungen „Domain Design Freeze Candidate" v1, v2 und v3 vollständig. Frühere Formulierungen aus diesen Fassungen, die hier nicht stehen, gelten **nicht** als Contract. Was hier steht, ist der Contract.
 
 ---
@@ -18,7 +20,7 @@ Der Freeze wurde am **2026-09-21** nach unabhängigem Architecture Review mit **
 
 **Er tut:** den fachlichen Begriff *Work* definieren, seine Träger benennen, seine Zustände, Zeit- und Zuständigkeitssemantik festlegen und den Scope der ersten Read-Model-Welle W-A objektiv prüfbar machen.
 
-**Er tut nicht:** implementieren. Dieses Dokument enthält keine Migration, kein SQL, keinen RPC-Namen und keine Signatur. W-A ist zum Zeitpunkt dieses Freeze **freigegeben, aber nicht begonnen**.
+**Er tut nicht:** implementieren. Dieses Dokument enthält keine Migration, kein SQL und keine Query-Implementation. W-A war zum Zeitpunkt dieses Freeze **freigegeben, aber nicht begonnen**; seit dem 2026-09-22 ist es umgesetzt und `PRODUCTION VERIFIED` (Kopfhinweis oben, Abschnitte 21 und 22.2). Die dabei entstandenen konkreten Objektnamen und Signaturen sind **Umsetzungsstand, nicht Domain-Contract** — sie stehen hier nur als Nachweis, dass der Contract trägt.
 
 **Nicht Scope:** Communication/E-Mail, Kalender, Anhänge, MCP-Transport, Hotboard-Redesign, Security-Remediation, Error-Observatory-Altlasten.
 
@@ -376,7 +378,9 @@ Der Actor ist **niemals**:
 
 Der heute ausgelieferte Pfad — `HotboardOpenTasks.tsx` (`filter: identity?.id ? { sales_id: identity.id } : {}`), gespeist aus dem `localStorage`-Cache `RaStore.auth.current_sale` (`authProvider.ts`), inklusive stillem `{}`-Fallback, der bei fehlender Identität **alle** Tasks als „meine" zeigt — ist **kein Präzedenzfall** für den Work Contract und wird von ihm nicht fortgeschrieben.
 
-Der gültige Präzedenzfall existiert in Nora bereits: `public.get_global_audit_events` prüft die Autorisierung aus der Session (`nora_private.is_admin()` → `safe_auth_uid()`, gespeist nur aus `request.jwt.claim.sub`) und behandelt `p_actor_sales_id` als reinen Filter.
+Der gültige Präzedenzfall existiert in Nora bereits: `public.get_global_audit_events` prüft die Autorisierung aus der Session (`nora_private.is_admin()` → `safe_auth_uid()`) und behandelt `p_actor_sales_id` als reinen Filter.
+
+> **Präzisierung der Evidenz (2026-09-22).** `nora_private.safe_auth_uid()` liest den `sub` **aus der PostgREST-Sitzung**, und zwar aus zwei Quellen: zuerst der Legacy-GUC `request.jwt.claim.sub`, und wenn der leer ist, das `sub`-Feld aus `request.jwt.claims` — beides schreibt PostgREST aus dem verifizierten JWT, beides ist fail-closed (jeder Parse-Fehler ergibt `NULL`). Die frühere Formulierung „gespeist **nur** aus `request.jwt.claim.sub`" war ungenau. **An der Actor-Semantik ändert das nichts:** beide Quellen sind Sitzungszustand, keine davon ist vom Client setzbar, und D-26 (Actor ausschließlich aus der authentifizierten Session) bleibt unberührt.
 
 > Der Begriff „akteursparametrisiert" ist **ersatzlos entfernt**. Er ließ die unzulässige Lesart *Actor-als-Parameter* zu.
 
@@ -706,6 +710,19 @@ Insbesondere: keine Lifecycle-Persistenz, keine Spaltenänderung an `public.task
 
 **Im Freeze bewusst noch nicht festgelegt** (gehört in die W-A-Implementierungsplanung): finaler RPC-Name · exakte SQL-Signatur · `SECURITY INVOKER` vs. `SECURITY DEFINER` · konkrete Query-Implementation · Parametername für den expliziten `done`-Scope · Indexe ohne belegten Bedarf.
 
+> **Umsetzungsstand (W-A, `PRODUCTION VERIFIED` 2026-09-22).** Alle sechs Punkte sind entschieden — als **Umsetzung**, nicht als nachträgliche Contract-Erweiterung:
+>
+> | Offener Punkt | Umsetzung in W-A |
+> |---|---|
+> | RPC-Name und Signatur | `public.get_work_items(p_scope text, p_state_scope text, p_limit integer, p_cursor_due_at timestamptz, p_cursor_work_id uuid)` |
+> | `SECURITY INVOKER` vs. `SECURITY DEFINER` | **`SECURITY INVOKER`** — siehe Abschnitt 21.5 (D-57) |
+> | Query-Implementation | eine Migration, `20260922120000_nora_work_read_model`; keine View, keine Tabelle, kein Trigger |
+> | Parametername für den `done`-Scope | `p_state_scope` mit `open` (Default) \| `done` \| `all`; validity-unabhängig (D-41/D-42) |
+> | Indexe | **keiner neu** — siehe Abschnitt 21.4 (D-53) |
+> | Actor-Resolver | `nora_private.current_sales_id()` — siehe Abschnitt 21.2 |
+>
+> Diese Namen sind **Implementierungsfakten**. Sie werden hier festgehalten, damit ein künftiger Konsument sie findet; sie sind nicht Teil des eingefrorenen Domain-Contracts und dürfen in einer späteren Welle mit eigener Begründung geändert werden.
+
 ### 21.2 Eine minimale DB-Migration ist zulässig
 
 > Eine **minimale DB-Migration** zur Bereitstellung dieses read-only Contracts und seiner **notwendigen Grants** ist zulässig.
@@ -713,6 +730,10 @@ Insbesondere: keine Lifecycle-Persistenz, keine Spaltenänderung an `public.task
 Die frühere Forderung „W-A ist migrationsfrei" **entfällt**. An ihre Stelle tritt die Regel aus Abschnitt 20.2.
 
 > **Bekannte Implementierungsvoraussetzung, keine Freeze-Entscheidung.** Ein Resolver `auth.uid() → sales.id` existiert heute nicht (`nora_private` kennt `safe_auth_uid`, `current_role`, `is_admin`, `can_write`, `has_role`, `is_active_user` — aber kein `current_sales_id()`). Er gehört zum read-only Contract und fällt unter die zulässige minimale Migration.
+
+> **Umsetzungsstand (W-A).** Der Resolver existiert seit dem 2026-09-22 als `nora_private.current_sales_id()` — **der kanonische Weg von der Sitzung zum Mitarbeiter für Work**. Eigenschaften: `STABLE`, `SECURITY DEFINER`, Owner `postgres`, `search_path = ''`, `EXECUTE` **nur** für `authenticated` (`anon`, `service_role` und `PUBLIC` entzogen). Er leitet den Mitarbeiter **ausschließlich aus der Sitzung** ab (`safe_auth_uid()` → die `UNIQUE`-Spalte `sales.user_id`), nimmt **kein Actor-Argument** entgegen, schließt deaktivierte Mitarbeiter aus (`sales.disabled = false`) und verlangt eine lebende Sitzung (`nora_private.jwt_session_is_live()`, [`22`](22-security-and-access.md) §8.1). Ist der Actor nicht auflösbar, endet der Aufruf in `42501` / `NORA_PERMISSION_DENIED` — nie in einer leeren Ergebnismenge.
+>
+> **Architektonisches Verbot, in W-A belegt:** `nora_private.resolve_audit_actor()` darf **nicht** als Work-Actor-Quelle wiederverwendet werden. Fehlt der Sitzungs-`sub`, greift dort ein **von außen gesetzter Actor-Pfad** (`nora.audit_actor_user_id`, nur für `service_role`- bzw. JWT-lose Executor-Sitzungen). Für Audit ist das der gewollte Vertrag — ein Executor schreibt im Namen des verifizierten Administrators ([`13`](13-crm-audit-retention.md), [`19`](19-user-lifecycle-architecture.md) §6). Für Work wäre es genau die von D-26 ausgeschlossene Lesart *Actor-als-Parameter*. Die Aussage gilt **ausschließlich für die Work-Actor-Auflösung** und ist kein Urteil über den Audit-Actor-Vertrag. `current_sales_id()` liest diesen GUC deshalb nie.
 
 Wer diese Migration schreibt, liest zusätzlich [`21`](21-agent-runbooks.md) Sektion 1 (Ledger-Hazard) sowie [`22`](22-security-and-access.md) und [`21`](21-agent-runbooks.md) Sektion 4/5.
 
@@ -754,7 +775,9 @@ Total, weil `work_id` je Zeile eindeutig ist. `NULLS LAST` ist fachlich gewollt:
 
 > Sortierung und Pagination werden über die **Default-Zeilenmenge** der jeweiligen Sicht geprüft (Abschnitt 17), nicht über den Gesamtbestand.
 
-> **Zu Indexen.** Der bestehende Teilindex `tasks_due_date_open_idx on public.tasks (due_date) where done_date is null` (`supabase/schemas/01_tables.sql`) deckt genau den Default-Zugriffspfad ab — und trägt *kein* Validity-Prädikat. Die Zustandsgrenze liegt damit dort, wo Nora sie heute schon zieht. Ein **Indexbedarf ist dennoch nicht belegt und wird im Freeze nicht entschieden.**
+> **Zu Indexen.** Der bestehende Teilindex `tasks_due_date_open_idx on public.tasks (due_date) where done_date is null` (`supabase/schemas/01_tables.sql`) liegt auf **derselben Zustandsgrenze** wie die Default-Zeilenmenge (`state = open`) und trägt *kein* Validity-Prädikat — die Grenze liegt damit dort, wo Nora sie heute schon zieht. Ein **Indexbedarf ist dennoch nicht belegt und wird im Freeze nicht entschieden.**
+
+> **D-53 geschlossen (W-A, `PRODUCTION VERIFIED` 2026-09-22): kein neuer Index.** `public.tasks` trägt in Production unverändert seine sechs Indexe; W-A hat keinen angelegt. **Der bestehende Teilindex deckt die Work-Zugriffspfade ausdrücklich nicht vollständig ab, und das wird hier nicht behauptet:** er führt nur `due_date` auf der offenen Zeilenmenge. Die Meine-Sicht filtert zusätzlich auf den Halter (`sales_id`), der `work_id`-Tie-Break (D-52) ist ein berechneter Ausdruck und damit ohnehin nicht indexgedeckt, und der explizite `done`-Scope liegt außerhalb des Teilprädikats. Begründung für „kein Index": bei 15 Zeilen Gesamtbestand ist **kein** Bedarf messbar — ein Index ohne belegten Bedarf wäre eine Wette, keine Optimierung ([`01`](01-domain-model.md): kein neues DB-Objekt ohne belegten Bedarf). Wann das neu zu bewerten ist: wenn die Work-Fläche in Betrieb geht (G-10) oder der Bestand um Größenordnungen wächst — dann mit gemessenen Plänen, nicht mit einer Vermutung. **D-52 bleibt unverändert**: die Ordnung ist eine Semantikentscheidung, keine Indexentscheidung.
 
 ### 21.5 Security-Grenze
 
@@ -766,7 +789,13 @@ Der spätere RPC **muss**:
 - **keine** `service_role`-Semantik an den Client geben,
 - **keine** Rohdaten außerhalb des Work Contracts leaken.
 
-`SECURITY INVOKER` vs. `SECURITY DEFINER` wird **jetzt nicht entschieden** — das gehört in den W-A-Implementierungs- und Security-Review. Falls `SECURITY DEFINER` gewählt wird, muss die Function ihre Authorization vollständig selbst durchsetzen und die Grants explizit begrenzen (`revoke all` vor `grant`, [`03`](03-data-model-guardrails.md) §4; [`22`](22-security-and-access.md)).
+`SECURITY INVOKER` vs. `SECURITY DEFINER` wurde im Freeze **nicht entschieden** — das gehörte in den W-A-Implementierungs- und Security-Review. Falls `SECURITY DEFINER` gewählt würde, müsste die Function ihre Authorization vollständig selbst durchsetzen und die Grants explizit begrenzen (`revoke all` vor `grant`, [`03`](03-data-model-guardrails.md) §4; [`22`](22-security-and-access.md)).
+
+> **D-57 geschlossen (W-A, `PRODUCTION VERIFIED` 2026-09-22): `public.get_work_items(...)` ist `SECURITY INVOKER`.** Damit wird `public.tasks` unter der bestehenden RLS-Policy `Tasks select active` des aufrufenden Mitarbeiters gelesen, statt die Autorisierung in einer privilegierten Function ein zweites Mal nachzubauen.
+>
+> **Begründung.** (1) Nora behält **eine** Durchsetzungsstelle für die Sichtbarkeit von Aufgaben — die vorhandene RLS-Grenze, nicht ein zweiter, parallel zu pflegender Function-Body. (2) `is_active_user()` wird **nicht** umgangen. (3) Die Fläche, die die offene Security-Welle ([`17`](17-known-issues-and-planned-waves.md) Abschnitt A) vorfindet, wird nicht vergrößert — genau die oben benannte Kollision. (4) Die Actor-Auflösung, die tatsächlich ein erhöhtes Recht braucht (Lesen von `public.sales` und `auth.sessions`), bleibt in dem **einen schmalen** `SECURITY DEFINER`-Helfer `nora_private.current_sales_id()` gekapselt, der keine Geschäftsdaten zurückgibt (Abschnitt 21.2).
+>
+> **Production-Fakten:** `public.get_work_items(text, text, integer, timestamptz, uuid)` — `STABLE`, `SECURITY INVOKER`, Owner `postgres`, `search_path = ''`, `EXECUTE` **nur** für `authenticated`; `anon`, `service_role` und `PUBLIC` sind entzogen. Der Security-Contract dazu steht in [`22`](22-security-and-access.md) Abschnitt 6.13.
 
 > **Benannte Kollision mit offenen Tracks.** Eine `SECURITY DEFINER` Application Query umgeht `is_active_user()` und **vergrößert** die Fläche, die die offene Security-Welle ([`17`](17-known-issues-and-planned-waves.md) A) vorfindet. W-A muss so gebaut werden, dass es sie nicht vergrößert. Ebenfalls benannt: für eine serverseitige Application Query existiert heute **kein** FakeRest-Äquivalent ([`03`](03-data-model-guardrails.md) §5) — eine reale, bewusst akzeptierte W-A-Kost. Und: es gibt **zwei** belegte stille Work-Löschpfade — `tasks_company_id_fkey ON DELETE CASCADE` löscht Arbeit bei einer **Kundenlöschung** still mit, und `delete_contact_only_tasks_before_contact_delete_trigger` (BEFORE DELETE auf `public.contacts` → `nora_private.delete_contact_only_tasks()`) löscht bei einer **Kontaktlöschung** die kontaktgebundenen Aufgaben **ohne** Customer-Kontext (`company_id IS NULL`); Aufgaben mit `company_id` überleben und behalten diesen historischen Kontext. Normativ unverändert: **kein Work-Pfad darf Aufgaben als dauerhaft annehmen.**
 
@@ -817,11 +846,33 @@ Arithmetisch geschlossen: 11 offen + 4 erledigt = 15 gesamt.
 
 **Einschränkung, bewusst akzeptiert.** Da der Bestand null unassigned Tasks hat, kann `is_unassigned` in W-A nur durch die **Vertragsform** bewiesen werden, nicht durch Bestandsdaten. Freie Arbeit **anzulegen** ist nicht migrationsfrei (Abschnitt 9.1) und W-A schreibt nicht.
 
+### 22.2 Ergebnis: W-A PASS (2026-09-22)
+
+**Alle 21 Kriterien erfüllt. W-A ist `CLOSED` / `PRODUCTION VERIFIED`.** Die vollständige Evidenz (RC-SHA, Migrations-Hash, Ledger, ACL-Beweise, Smoke) steht in `releases/2026-09.md`; hier nur, **wodurch** die Kriterien belegt sind.
+
+| Belegquelle | Was sie trägt |
+|---|---|
+| Production, read-only verifiziert | Kriterien 1–3 und 18–21: die Query existiert serverseitig, kam über **eine** minimale Migration (`20260922120000`, Ledger 67, Kopf `20260922120000`, genau eine Zeile, keine Drift), und `public.tasks` ist strukturell unverändert (8 Spalten, 4 Trigger, 4 Policies, 6 Indexe, RLS aktiv, kein neuer Index, keine Work-Persistenz) |
+| Lokale Zwei-Sessions-Suite `supabase/tests/work_read_model_session_verification.mjs` | Kriterium 4 in seiner strengen Lesart (D-28): **zwei getrennt authentifizierte** echte Mitarbeiter-Sessions über GoTrue und PostgREST, nicht zwei GUC-Werte in einer Sitzung |
+| Lokale Contract-Suite `supabase/tests/work_read_model_verification.sql` | Kriterien 5–17: Actor-Ableitung, Default-Zeilenmengen beider Sichten, totale Ordnung, Keyset-Pagination, Kontext- und Fälligkeitssemantik, `validity`/`actionable` |
+| Mitarbeiter-Smoke des Product Owners auf Production | die Query ist unter einer **echten** Mitarbeiter-Session über den regulären API-Pfad nutzbar: `PASS` |
+
+**Was Production nicht beweisen kann — ehrlich ausgewiesen.** Der Produktionsbestand zum Releasezeitpunkt war: 15 Tasks (11 offen, 4 erledigt), **0** unassigned offene Tasks, **0** unvollständige Titel, **0** `due_at = null`, **0** Gruppen gleicher Fälligkeit. Vier Vertragsfälle sind damit in Production **strukturell nicht beobachtbar** und ausschließlich durch die lokale, unabhängig geprüfte Contract-Suite belegt:
+
+1. `is_unassigned = true`,
+2. der `NULLS LAST`-Schwanz der Pagination bei `due_at = null`,
+3. die Tie-Break-Ordnung über `work_id` bei gleicher Fälligkeit,
+4. das Verhalten bei unvollständigem Titel (`validity = incomplete`, Kriterium 15).
+
+**Nicht** zu schreiben ist deshalb „alle Work-Semantik in Production bewiesen". Richtig ist: der Contract ist vollständig geprüft, vier seiner Fälle jedoch nicht am Produktionsbestand, weil dieser sie nicht enthält. Das ist eine **Aussage über die Datenlage**, kein Mangel der Welle — und es ändert sich von selbst, sobald solche Zeilen entstehen.
+
 ---
 
 ## 23. Spätere Decision Gates
 
 Bewusst offene Punkte. Jedes Gate braucht eigenen Entwurf, eigene Review und eigenen Release. Keines ist durch diesen Freeze begonnen.
+
+> **Stand nach W-A (2026-09-22).** **Keines** der elf Gates ist begonnen. Der W-A-PASS erfüllt lediglich die Voraussetzung „Nach W-A-PASS" von **G-1**; damit ist G-1 der nächste **Planungskandidat** — nicht mehr. Eine eigene G-1-Architektur-/Planungsreview hat **nicht** stattgefunden, es gibt keinen G-1-Entwurf und keine G-1-Migration. Bis eine solche Review vorliegt, gilt für G-1 ausschließlich `PLANNING CANDIDATE`, nie `IMPLEMENTATION READY`.
 
 | Gate | Gegenstand | Voraussetzung |
 |---|---|---|
@@ -897,11 +948,11 @@ Der vollständige Stand der eingefrorenen Entscheidungen. `FROZEN` = geschlossen
 | D-50 | GUC-Hintertür `nora.skip_task_context_check` für Work Commands | **REJECTED** | Ein `set local` schaltete die Kontextinvariante still ab |
 | D-51 | Work-Identität = `nora_entity_uuid('task', id)` | **FROZEN** | `IMMUTABLE`, deterministisch, bereits Audit-Entity-Id. Keine neue ID-Welt |
 | D-52 | Sortierung `due_at ASC NULLS LAST, work_id ASC`; Keyset über `(due_at, work_id)`, nie Offset | **FROZEN** | Total, weil `work_id` eindeutig ist; `NULLS LAST` fachlich gewollt |
-| D-53 | Indexbedarf für W-A | **DEFERRED** | Nicht belegt; im Freeze nicht entschieden |
+| D-53 | Indexbedarf für W-A | **FROZEN** (2026-09-22, W-A) | **Kein neuer Index.** Bedarf bei 15 Zeilen nicht messbar; `public.tasks` behält seine sechs Indexe. Der bestehende Teilindex deckt die Work-Pfade *nicht* vollständig ab — das ist bekannt und akzeptiert (Abschnitt 21.4) |
 | D-54 | **W-A = serverseitige PostgreSQL Application Query / RPC** | **FROZEN** | Nora ist ein statisches SPA; die Kombination aus v1 war in Noras Runtime nicht realisierbar. Keine Edge Function zur Migrationsvermeidung |
 | D-55 | **Minimale DB-Migration für Read Contract + Grants zulässig** | **FROZEN** | Read Contract ist ohne Migration nicht serverseitig herstellbar; „W-A ist migrationsfrei" entfällt |
 | D-56 | W-A verändert keine Domain-Tabelle und keine Work-Persistenz | **FROZEN** | Work bleibt Vertrag, keine neue Tabelle |
-| D-57 | `SECURITY INVOKER` vs. `SECURITY DEFINER` für W-A | **DEFERRED** | Gehört in den W-A-Implementierungs- und Security-Review |
+| D-57 | `SECURITY INVOKER` vs. `SECURITY DEFINER` für W-A | **FROZEN** (2026-09-22, W-A) | **`SECURITY INVOKER`.** Erhält die bestehende RLS-Grenze (`Tasks select active`), umgeht `is_active_user()` nicht und vergrößert die offene Security-Fläche nicht; das erhöhte Recht bleibt im schmalen Resolver gekapselt (Abschnitt 21.5) |
 | D-58 | LLM/MCP über dieselben Application Queries/Commands | **FROZEN** | Bereits entschieden ([`03`](03-data-model-guardrails.md) §5 Falle 36, [`17`](17-known-issues-and-planned-waves.md) G.2) |
 | D-59 | MCP-spezifische Architektur in W-A | **REJECTED** (G-11) | W-A schafft nur den Query Contract |
 | D-60 | Namen: Work / Arbeitskorb / Hotboard-Arbeitsboard als Legacy | **FROZEN** | Ist-Begriffe bestimmen die Domain-Sprache nicht |

@@ -1,6 +1,6 @@
 # 21 – Agent Runbooks (conditional)
 
-Stand: 2026-09-21 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
+Stand: 2026-09-22 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
 
 Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für Änderungen an Nora: Testsequenzen, Verifikationsschritte, wiederkehrende Fallstricke. Sie standen früher als `Bei <X> zusätzlich:`-Blöcke in [`07`](07-agent-change-checklist.md) und wurden damit bei **jeder** Aufgabe mitgeladen, auch bei einer reinen Label-Änderung. [`07`](07-agent-change-checklist.md) behält nur das universelle Change Protocol; hier liegt alles Bedingte.
 
@@ -18,7 +18,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Kunden-/Vorgangsnummern, Nummernlogik | [2. Nummern und Nummernlogik](#2-nummern-und-nummernlogik) |
 | Checklisten, Textbausteine, Checklisten-Audit | [3. Checklisten, Textbausteine und Checklisten-Audit](#3-checklisten-textbausteine-und-checklisten-audit) |
 | `SECURITY DEFINER`, `security_invoker`, Grants, RLS, neue Tabelle/View/Function in `public`, Storage-Policies, Bucket `attachments`, Tabelle `public.attachments`, die Löschintent-Warteschlange, der Anhang-Liveness-Resolver, die Serialisierung je Objektschlüssel und die Projektion der Notiz-Anhänge | [4. Security und Zugriff](#4-security-und-zugriff) |
-| RBAC-/RLS-Änderung lokal verifizieren | [5. Kanonische lokale SQL-Testsequenz](#5-kanonische-lokale-sql-testsequenz) |
+| RBAC-/RLS-Änderung lokal verifizieren; Work-Read-Model- und Zwei-Sessions-Suiten | [5. Kanonische lokale SQL-Testsequenz](#5-kanonische-lokale-sql-testsequenz) |
 | `sales`, `users` Edge Function, Auth, Rolle, Zugang, Anmeldeadresse, Offboarding, Kontolöschung | [6. Mitarbeiter-Lifecycle W1–W6-B](#6-mitarbeiter-lifecycle-w1w6-b) |
 | CRM-Audit-Verlauf, `audit_events` | [7. CRM-Audit-Verlauf](#7-crm-audit-verlauf) |
 | Google Kalender, Kalender-RBAC, OAuth | [8. Google Kalender](#8-google-kalender) |
@@ -126,6 +126,13 @@ Reihenfolge:
 - [ ] `rbac_rls_verification.sql` gehört wie `rbac_rls_production_check.sql` auf die **leere** Datenbank (vor `setup` oder nach `teardown`): ihre erste Assertion lautet „`nora_rls_test` must not exist after production migrations only". Nach `setup` schlägt sie fehl — das ist Reihenfolge, kein Regressionsbefund
 - [ ] `public_privilege_hardening_verification.sql` an beliebiger Stelle nach einem `db reset` — self-contained, rollt zurück, hinterlässt keine Testrolle
 - [ ] die Lifecycle-Suiten W1 → W6-B laufen **je zweimal** (leere DB **und** mit Fixtures) in der Reihenfolge aus Sektion 6
+- [ ] **Die W-A-Zwei-Sessions-Suite `supabase/tests/work_read_model_session_verification.mjs` läuft nur auf einem frisch zurückgesetzten Wegwerf-Stack — und danach wird erneut zurückgesetzt.** Sie legt echte lokale Auth-Benutzer, `sales`-Zeilen und GoTrue-Sitzungen an, um Kriterium 4 des Work Contracts ([`25`](25-universal-work-model.md) Abschnitt 22) in seiner strengen Lesart zu erfüllen (zwei getrennt authentifizierte Sessions, nicht zwei GUC-Werte). **Diese Identitäten lassen sich nach W6-B nicht mehr normal löschen** — der Guard, der ein unkontrolliertes `DELETE` auf `sales`/`auth.users` verweigert, gilt auch lokal und auch für Testfixturen ([`17`](17-known-issues-and-planned-waves.md) I.6). Verbindlich:
+  1. vorher `npx supabase db reset --local`,
+  2. Suite laufen lassen,
+  3. **danach erneut `npx supabase db reset --local`** — **bevor** eine identitäts- oder lifecycle-sensible Suite läuft (Lifecycle W1–W6-B aus Sektion 6, `rbac_rls_production_check.sql`, `rbac_rls_verification.sql`, `first_admin_parallel`).
+
+  Wer Schritt 3 auslässt, sieht in der nächsten Suite Fremdzeilen und liest Reihenfolge als Regressionsbefund. **Die Suite ist local-only** — sie verweigert jede Nicht-`localhost`-URL und wird nie gegen Production gerichtet; ein Production-Risiko entsteht durch sie nicht.
+- [ ] **Work-Read-Model-Änderung (`public.get_work_items`, `nora_private.current_sales_id`)?** Zusätzlich zur Contract-Suite `supabase/tests/work_read_model_verification.sql` gilt der Security-Contract [`22`](22-security-and-access.md) Abschnitt 6.13: `SECURITY INVOKER` für die öffentliche Query (die RLS-Grenze **nicht** durch einen eigenen Autorisierungs-Body ersetzen), `SECURITY DEFINER` nur für den schmalen Actor-Resolver, `EXECUTE` ausschließlich für `authenticated`. Ein Actor-Parameter, ein Lesen von `nora.audit_actor_user_id` oder eine leere Ergebnismenge statt `42501` bei nicht auflösbarem Actor sind Defekte, keine Varianten
 - [ ] Bekannter Windows-Tooling-Bug in `rbac_rls_first_admin_parallel_runner.ps1` (die Vorbedingungs-Regex parst die mehrzeilige `psql`-Ausgabe falsch — kein SQL-/Produktfehler) samt Workaround: [`17`](17-known-issues-and-planned-waves.md) Abschnitt B, Eintrag W9. Der Workaround bildet die im Skript enthaltene SQL manuell nach (zwei parallele `docker exec … psql`-Sessions gegen `auth.users`, danach die Verifikation „exakt 1 Admin + 1 Viewer", dann Cleanup) — das Skript **nicht** nebenbei patchen. Achtung: das `DELETE`-Cleanup des Skripts auf `sales`/`auth.users` ist seit W6-B verweigert ([`17`](17-known-issues-and-planned-waves.md) I.6) — Fixtures im Workaround per Rollback entfernen
 
 ## 6. Mitarbeiter-Lifecycle W1–W6-B
