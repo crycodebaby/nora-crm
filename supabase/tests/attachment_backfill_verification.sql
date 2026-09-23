@@ -53,7 +53,7 @@
 --      rows even though its report statement still executes, measured as rows
 --      received (:ROW_COUNT), against a success in the same session that hands
 --      back exactly one
---   8. the verifier: the blocking set is exactly the twelve S5-gate classes,
+--   8. the verifier: the blocking set is exactly the fourteen S5-gate classes,
 --      each goes non-zero on its own injected drift, and STORAGE_OBJECT_MISSING
 --      is INFO that never turns the verdict RED
 --   9. queue: pending / claimed / failed_retryable / done are reported as a
@@ -68,7 +68,7 @@
 --      and 20_report.sql both run to completion inside one, and a session
 --      without the helper stores no verdict and so can never answer GO
 -- 12e. the CENSUS CONTRACT: a helper that exists but does not deliver the
---      canonical thirteen classes - none, too few, renamed, duplicated, one too
+--      canonical sixteen classes - none, too few, renamed, duplicated, one too
 --      many, or a blocking class turned non-blocking - is refused before a
 --      single count is consumed, so an incomplete classification never becomes
 --      GO, not even in a session that just held one
@@ -156,10 +156,10 @@ create function pg_temp.s4_plant_rows(p_table text, p_id bigint, p_arr jsonb[])
 returns void language plpgsql as $$
 begin
     alter table public.attachments disable trigger guard_attachment_reference_admission_after_insert_trigger;
-    insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type)
+    insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type, ordinal)
     select case when p_table = 'contact_notes' then p_id end,
            case when p_table = 'deal_notes' then p_id end,
-           r.storage_key, r.file_name, r.mime_type
+           r.storage_key, r.file_name, r.mime_type, r.element_no::integer
       from nora_private.note_attachment_reference_rows(p_arr) as r;
     alter table public.attachments enable trigger guard_attachment_reference_admission_after_insert_trigger;
 end;
@@ -702,18 +702,20 @@ begin
         raise exception 'FAIL 8 precondition: the corpus is not clean: %', v_set;
     end if;
 
-    -- the blocking set IS the S5 gate: exactly these twelve, no more, no fewer
+    -- the blocking set IS the S5 gate: exactly these fourteen, no more, no fewer
     select string_agg(f.problem_class, ',' order by f.problem_class) into v_set
       from pg_temp.attachment_backfill_findings() f where f.blocking;
     if v_set <> 'BACKFILL_CANDIDATE_REMAINING,BYTE_SIZE_NOT_NULL,CROSS_SOURCE_KEY,DUPLICATE_KEY_ACROSS_NOTES,'
-              || 'DUPLICATE_KEY_IN_NOTE,INVALID_GRAMMAR,JSON_KEY_WITHOUT_ROW,METADATA_MISMATCH,QUEUE_CONFLICT,'
-              || 'ROW_FOR_EMPTY_NOTE,ROW_WITHOUT_JSON_KEY,WRONG_OWNER' then
+              || 'DUPLICATE_KEY_IN_NOTE,INVALID_GRAMMAR,JSON_KEY_WITHOUT_ROW,METADATA_MISMATCH,ORDINAL_DUPLICATE_PER_NOTE,'
+              || 'ORDINAL_NULL,QUEUE_CONFLICT,ROW_FOR_EMPTY_NOTE,ROW_WITHOUT_JSON_KEY,WRONG_OWNER' then
         v_failures := v_failures || format('8a the blocking class set is not the S5 gate: %s', v_set);
     end if;
+    -- S6-A: ORDINAL_VS_ARRAY_ORDER is INFO on purpose - an append sequence and
+    -- an array order may legally diverge (front-insert, zero-write reorder).
     select string_agg(f.problem_class, ',' order by f.problem_class) into v_set
       from pg_temp.attachment_backfill_findings() f where not f.blocking;
-    if v_set <> 'STORAGE_OBJECT_MISSING' then
-        v_failures := v_failures || format('8a the INFO class set is not exactly STORAGE_OBJECT_MISSING: %s', v_set);
+    if v_set <> 'ORDINAL_VS_ARRAY_ORDER,STORAGE_OBJECT_MISSING' then
+        v_failures := v_failures || format('8a the INFO class set is not exactly ORDINAL_VS_ARRAY_ORDER + STORAGE_OBJECT_MISSING: %s', v_set);
     end if;
 
     -- one injection per class; the probe rolls each one back again
@@ -738,8 +740,10 @@ begin
     if v_res not like '%JSON_KEY_WITHOUT_ROW=1%' then v_failures := v_failures || format('8e JSON_KEY_WITHOUT_ROW: %s', v_res); end if;
 
     v_res := pg_temp.s4_probe(format(
-        'insert into public.attachments (contact_note_id, storage_key, file_name, mime_type) '
-        || 'values (%s, ''s4-ghost.pdf'', ''g.pdf'', ''application/pdf'')', v_note));
+        'insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal) '
+        || 'values (%s, ''s4-ghost.pdf'', ''g.pdf'', ''application/pdf'', '
+        || '(select coalesce(max(a.ordinal), 0) + 1 from public.attachments a where a.contact_note_id = %s))',
+        v_note, v_note));
     if v_res not like '%ROW_WITHOUT_JSON_KEY=1%' then v_failures := v_failures || format('8f ROW_WITHOUT_JSON_KEY: %s', v_res); end if;
 
     v_res := pg_temp.s4_probe(format(
@@ -776,6 +780,44 @@ begin
     v_res := pg_temp.s4_probe(format('delete from public.attachments where contact_note_id = %s', v_note));
     if v_res not like '%BACKFILL_CANDIDATE_REMAINING=1%' then v_failures := v_failures || format('8m BACKFILL_CANDIDATE_REMAINING: %s', v_res); end if;
 
+    -- S6-A. Both injections have to RELAX the database guarantee first: a NULL
+    -- ordinal is impossible while the column is NOT NULL, and a duplicate one
+    -- is impossible while uq__attachments__owner_ordinal exists. That is the
+    -- point - the classes exist to catch a corpus where those guarantees were
+    -- lost. The probe is a subtransaction, so both relaxations roll back.
+    v_res := pg_temp.s4_probe(format(
+        'alter table public.attachments alter column ordinal drop not null; '
+        || 'update public.attachments set ordinal = null where contact_note_id = %s and storage_key = ''s4-a1.pdf''', v_note));
+    if v_res not like '%ORDINAL_NULL=1%' then v_failures := v_failures || format('8o ORDINAL_NULL: %s', v_res); end if;
+
+    v_res := pg_temp.s4_probe(format(
+        'alter table public.attachments drop constraint uq__attachments__owner_ordinal; '
+        || 'update public.attachments set ordinal = (select a2.ordinal from public.attachments a2 '
+        || 'where a2.contact_note_id = %s and a2.storage_key = ''s4-a1.pdf'') '
+        || 'where contact_note_id = %s and storage_key = ''s4-a2.png''', v_note, v_note));
+    if v_res not like '%ORDINAL_DUPLICATE_PER_NOTE=1%' then v_failures := v_failures || format('8p ORDINAL_DUPLICATE_PER_NOTE: %s', v_res); end if;
+
+    -- and the INFO class: a pure reorder of the note's array writes NOTHING,
+    -- yet the relational order is no longer the array order. It has to be
+    -- OBSERVED while the verdict stays GREEN - so it is measured IN PLACE
+    -- (s4_probe reports class counts but rolls back before a verdict can be
+    -- read), and then undone.
+    perform pg_temp.s4_plant_legacy('contact_notes', v_note::bigint,
+        array[pg_temp.s4_el('s4-a2.png', 'Foto.png', 'image/png'),
+              pg_temp.s4_el('s4-a1.pdf', 'Angebot.pdf')]);
+    if pg_temp.s4_class('ORDINAL_VS_ARRAY_ORDER') <> 1 or pg_temp.s4_verdict() <> 'GREEN'
+       or pg_temp.s4_class('ORDINAL_NULL') <> 0 or pg_temp.s4_class('ORDINAL_DUPLICATE_PER_NOTE') <> 0 then
+        v_failures := v_failures || format('8q ORDINAL_VS_ARRAY_ORDER after a pure reorder: class=%s verdict=%s',
+                                           pg_temp.s4_class('ORDINAL_VS_ARRAY_ORDER'), pg_temp.s4_verdict());
+    end if;
+    perform pg_temp.s4_plant_legacy('contact_notes', v_note::bigint,
+        array[pg_temp.s4_el('s4-a1.pdf', 'Angebot.pdf', 'application/pdf'),
+              pg_temp.s4_el('s4-a2.png', 'Foto.png', 'image/png')
+                || jsonb_build_object('src', 'http://127.0.0.1:54321/storage/v1/object/public/attachments/s4-a2.png')]);
+    if pg_temp.s4_class('ORDINAL_VS_ARRAY_ORDER') <> 0 then
+        v_failures := array_append(v_failures, '8q the reorder was not undone');
+    end if;
+
     -- every injection was undone
     select string_agg(f.problem_class || '=' || f.finding_count::text, ',' order by f.problem_class) into v_set
       from pg_temp.attachment_backfill_findings() f where f.blocking and f.finding_count > 0;
@@ -786,7 +828,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (verifier coverage):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  8. verifier coverage: the blocking set is exactly the twelve S5-gate classes plus INFO STORAGE_OBJECT_MISSING; each of the twelve goes non-zero on its own injected drift and back to zero when it is undone';
+    raise notice 'OK  8. verifier coverage: the blocking set is exactly the fourteen S5-gate classes plus the two INFO classes (STORAGE_OBJECT_MISSING, ORDINAL_VS_ARRAY_ORDER); each of the fourteen goes non-zero on its own injected drift and back to zero when it is undone, and a pure reorder is observed by the INFO class without turning the verdict RED';
 end;
 $$;
 
@@ -1225,8 +1267,10 @@ $$;
 
 do $$
 begin
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-    values (current_setting('nora.s4_pf_note')::bigint, 's4-pf-ghost.pdf', 'g.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+    values (current_setting('nora.s4_pf_note')::bigint, 's4-pf-ghost.pdf', 'g.pdf', 'application/pdf',
+            (select coalesce(max(a.ordinal), 0) + 1 from public.attachments a
+              where a.contact_note_id = current_setting('nora.s4_pf_note')::bigint));
 end;
 $$;
 
@@ -1445,7 +1489,8 @@ create function pg_temp.s4_canon() returns text[] language sql immutable as $$
                  'METADATA_MISMATCH:true', 'DUPLICATE_KEY_IN_NOTE:true', 'DUPLICATE_KEY_ACROSS_NOTES:true',
                  'WRONG_OWNER:true', 'ROW_FOR_EMPTY_NOTE:true', 'QUEUE_CONFLICT:true',
                  'BYTE_SIZE_NOT_NULL:true', 'CROSS_SOURCE_KEY:true', 'BACKFILL_CANDIDATE_REMAINING:true',
-                 'STORAGE_OBJECT_MISSING:false']
+                 'ORDINAL_NULL:true', 'ORDINAL_DUPLICATE_PER_NOTE:true',
+                 'STORAGE_OBJECT_MISSING:false', 'ORDINAL_VS_ARRAY_ORDER:false']
 $$;
 -- replace one canonical pair with something else; '' drops it entirely
 create function pg_temp.s4_swap(p_class text, p_with text) returns text[] language sql immutable as $$
@@ -1474,35 +1519,35 @@ select pg_temp.s4_census(array['BACKFILL_CANDIDATE_REMAINING:true']);
 delete from s4_probe_err where label = 'CENSUS_ONLY_WORK';
 insert into s4_probe_err values ('CENSUS_ONLY_WORK', :'err', coalesce(nullif(current_setting('nora.s4_preflight', true), '')::jsonb ->> 'verdict', ''));
 
--- C. 12 of 13
+-- C. 15 of 16
 select pg_temp.s4_census(pg_temp.s4_swap('QUEUE_CONFLICT', ''));
 \i :preflight
 \set err :ERROR
 delete from s4_probe_err where label = 'CENSUS_SHORT';
 insert into s4_probe_err values ('CENSUS_SHORT', :'err', coalesce(nullif(current_setting('nora.s4_preflight', true), '')::jsonb ->> 'verdict', ''));
 
--- D. 13 rows, one expected class replaced by an unknown one
+-- D. 16 rows, one expected class replaced by an unknown one
 select pg_temp.s4_census(pg_temp.s4_swap('QUEUE_CONFLICT', 'LOOKS_FINE_TO_ME:true'));
 \i :preflight
 \set err :ERROR
 delete from s4_probe_err where label = 'CENSUS_UNKNOWN';
 insert into s4_probe_err values ('CENSUS_UNKNOWN', :'err', coalesce(nullif(current_setting('nora.s4_preflight', true), '')::jsonb ->> 'verdict', ''));
 
--- E. 13 rows, but a duplicate has displaced one expected class
+-- E. 16 rows, but a duplicate has displaced one expected class
 select pg_temp.s4_census(pg_temp.s4_swap('QUEUE_CONFLICT', 'WRONG_OWNER:true'));
 \i :preflight
 \set err :ERROR
 delete from s4_probe_err where label = 'CENSUS_DUP';
 insert into s4_probe_err values ('CENSUS_DUP', :'err', coalesce(nullif(current_setting('nora.s4_preflight', true), '')::jsonb ->> 'verdict', ''));
 
--- F. 14 rows: an unexpected extra class
+-- F. 17 rows: an unexpected extra class
 select pg_temp.s4_census(pg_temp.s4_canon() || 'SOMETHING_NEW:true'::text);
 \i :preflight
 \set err :ERROR
 delete from s4_probe_err where label = 'CENSUS_EXTRA';
 insert into s4_probe_err values ('CENSUS_EXTRA', :'err', coalesce(nullif(current_setting('nora.s4_preflight', true), '')::jsonb ->> 'verdict', ''));
 
--- G. all thirteen names, but a BLOCKING class quietly turned non-blocking -
+-- G. all sixteen names, but a BLOCKING class quietly turned non-blocking -
 -- the shape that would let a real STOP class pass as INFO
 select pg_temp.s4_census(pg_temp.s4_swap('QUEUE_CONFLICT', 'QUEUE_CONFLICT:false'));
 \i :preflight
@@ -1557,13 +1602,13 @@ begin
 
     select * into r from s4_probe_err where label = 'CENSUS_OK';
     if r.state <> 'false' or r.msg is distinct from 'GO' then
-        v_failures := v_failures || format('12e the canonical 13-class census was rejected (%s / %s) - the assertion is over-strict', r.state, coalesce(r.msg, '<none>'));
+        v_failures := v_failures || format('12e the canonical 16-class census was rejected (%s / %s) - the assertion is over-strict', r.state, coalesce(r.msg, '<none>'));
     end if;
 
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL (census contract):\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK 12e. census contract: a present-but-wrong classifier can never produce GO. Zero rows, only BACKFILL_CANDIDATE_REMAINING, 12 of 13, an unknown class, a duplicate displacing a class, a 14th class and a blocking class flipped to non-blocking each raise 55000 NORA_S4_CLASSIFICATION_CENSUS_INVALID and write NO verdict - including immediately after a GO. The canonical thirteen-class shape still reaches GO, so the gate checks the contract and not the answer';
+    raise notice 'OK 12e. census contract: a present-but-wrong classifier can never produce GO. Zero rows, only BACKFILL_CANDIDATE_REMAINING, 15 of 16, an unknown class, a duplicate displacing a class, a 17th class and a blocking class flipped to non-blocking each raise 55000 NORA_S4_CLASSIFICATION_CENSUS_INVALID and write NO verdict - including immediately after a GO. The canonical sixteen-class shape still reaches GO, so the gate checks the contract and not the answer';
 end;
 $$;
 

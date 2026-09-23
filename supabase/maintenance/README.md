@@ -60,7 +60,7 @@ deliberately **not** "read-only":
 | strict SQL read-only | **no** — `CREATE FUNCTION` is DDL |
 | runs inside `BEGIN TRANSACTION READ ONLY` | **no** — PostgreSQL refuses it there |
 | survives disconnect | **no** |
-| returns one row per class, all thirteen, every time | **yes — and `00_preflight.sql` asserts it** |
+| returns one row per class, all sixteen, every time | **yes — and `00_preflight.sql` asserts it** |
 
 The `pg_temp` function is not a convenience. `note_attachment_reference_rows`
 raises on an array outside grammar v1, so classifying such a note instead of
@@ -74,7 +74,7 @@ parser. Keep the mechanism; state it accurately.
    verifier first**. A session that never ran the verifier fails closed with a
    `55000` naming the missing helper; it never produces a false GO. Neither
    does a session whose classifier answered but answered short: the preflight
-   asserts the full thirteen-class census before it counts anything, and a
+   asserts the full sixteen-class census before it counts anything, and a
    census that is not the contract raises `55000`
    `NORA_S4_CLASSIFICATION_CENSUS_INVALID` rather than reading "nothing was
    classified" as "nothing is wrong".

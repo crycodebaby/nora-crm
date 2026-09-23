@@ -343,8 +343,8 @@ begin
     -- admission under RR fails closed (the whole INSERT)
     v_state := 'no error'; v_detail := null;
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, 's3a-rr.pdf', 'rr.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, 's3a-rr.pdf', 'rr.pdf', 'application/pdf', 1);
     exception when others then
         get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
     end;
@@ -355,8 +355,8 @@ begin
 
     -- capture under RR fails closed: the note delete rolls back as a whole
     alter table public.attachments disable trigger guard_attachment_reference_admission_after_insert_trigger;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-rr-cap.pdf', 'rr.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-rr-cap.pdf', 'rr.pdf', 'application/pdf', 2) returning id into v_a;
     alter table public.attachments enable trigger guard_attachment_reference_admission_after_insert_trigger;
     v_state := 'no error'; v_detail := null;
     begin
@@ -454,8 +454,10 @@ begin
 
         v_state := 'admitted'; v_detail := null; v_msg := null;
         begin
-            insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-                values (v_cnote, 's3a-state-' || r.label, 'x.pdf', 'application/pdf');
+            insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+                values (v_cnote, 's3a-state-' || r.label, 'x.pdf', 'application/pdf',
+                        (select coalesce(max(a2.ordinal), 0) + 1 from public.attachments a2
+                          where a2.contact_note_id = v_cnote));
         exception when others then
             get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail, v_msg = message_text;
         end;
@@ -490,8 +492,8 @@ begin
     insert into nora_private.attachment_storage_deletion_queue (storage_key) values ('s3a-mixed.pdf');
     v_state := 'admitted';
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, 's3a-mixed.pdf', 'x.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, 's3a-mixed.pdf', 'x.pdf', 'application/pdf', 4);
     exception when others then v_state := sqlstate;
     end;
     if v_state <> '55000' then
@@ -501,9 +503,9 @@ begin
     -- a multi-row INSERT with one rejected key is rejected as a whole
     v_state := 'admitted';
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-multi-ok.pdf', 'x.pdf', 'application/pdf'),
-               (v_cnote, 's3a-state-pending', 'x.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-multi-ok.pdf', 'x.pdf', 'application/pdf', 5),
+               (v_cnote, 's3a-state-pending', 'x.pdf', 'application/pdf', 6);
     exception when others then v_state := sqlstate;
     end;
     if v_state <> '55000' or exists (select 1 from public.attachments where storage_key = 's3a-multi-ok.pdf') then
@@ -513,16 +515,16 @@ begin
     -- ---- 6. participation: each path holds exactly its key lock -----------
     -- (the locks taken by section 5 are still held in this transaction, so
     -- every probe below uses a key that nothing above touched)
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-part-admit.pdf', 'x.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-part-admit.pdf', 'x.pdf', 'application/pdf', 7) returning id into v_a;
     if not exists (select 1 from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()
                    and classid::bigint = v_ns and objid::bigint = (hashtext('s3a-part-admit.pdf')::bigint & 4294967295)) then
         v_failures := array_append(v_failures, '6a admission did not take the key lock');
     end if;
 
     alter table public.attachments disable trigger guard_attachment_reference_admission_after_insert_trigger;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-part-capture.pdf', 'x.pdf', 'application/pdf') returning id into v_b;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-part-capture.pdf', 'x.pdf', 'application/pdf', 8) returning id into v_b;
     alter table public.attachments enable trigger guard_attachment_reference_admission_after_insert_trigger;
     if exists (select 1 from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()
                and classid::bigint = v_ns and objid::bigint = (hashtext('s3a-part-capture.pdf')::bigint & 4294967295)) then
@@ -571,8 +573,8 @@ begin
     end if;
 
     -- ---- 7. storage_key immutability ---------------------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-imm-a.pdf', 'x.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-imm-a.pdf', 'x.pdf', 'application/pdf', 9) returning id into v_a;
     v_state := 'no error'; v_detail := null;
     begin
         update public.attachments set storage_key = 's3a-imm-b.pdf' where id = v_a;
@@ -597,8 +599,8 @@ begin
     end if;
     -- the note-id FK ON UPDATE CASCADE rewrites contact_note_id, not the key
     update public.contact_notes set id = id + 1000000 where id = v_cnote2;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote2 + 1000000, 's3a-imm-fk.pdf', 'x.pdf', 'application/pdf') returning id into v_b;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote2 + 1000000, 's3a-imm-fk.pdf', 'x.pdf', 'application/pdf', 10) returning id into v_b;
     update public.contact_notes set id = v_cnote2 where id = v_cnote2 + 1000000;
     if (select contact_note_id from public.attachments where id = v_b) <> v_cnote2 then
         v_failures := array_append(v_failures, '7d the note-id FK ON UPDATE CASCADE did not reach the attachment row');
@@ -607,8 +609,8 @@ begin
     v_state := 'no error';
     begin
         delete from public.attachments where id = v_a;
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote2, 's3a-imm-a.pdf', 'x.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote2, 's3a-imm-a.pdf', 'x.pdf', 'application/pdf', 11);
     exception when others then
         get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
     end;
@@ -618,26 +620,26 @@ begin
     end if;
     -- logical move to a NEW key: capture of A + admission of B
     delete from public.attachments where id = v_a;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote2, 's3a-imm-b.pdf', 'x.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote2, 's3a-imm-b.pdf', 'x.pdf', 'application/pdf', 12);
     if (select count(*) from nora_private.attachment_storage_deletion_queue where storage_key = 's3a-imm-a.pdf' and state = 'pending') <> 1
        or not exists (select 1 from public.attachments where storage_key = 's3a-imm-b.pdf') then
         v_failures := array_append(v_failures, '7f DELETE A + INSERT B did not capture A and admit B');
     end if;
 
     -- ---- 9. cascades --------------------------------------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-    values (v_cnote2, 's3a-cas-n1.pdf', 'x.pdf', 'application/pdf'),
-           (v_cnote2, 's3a-cas-n2.pdf', 'x.pdf', 'application/pdf'),
-           (v_cnote2, 's3a-cas-n3.pdf', 'x.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+    values (v_cnote2, 's3a-cas-n1.pdf', 'x.pdf', 'application/pdf', 13),
+           (v_cnote2, 's3a-cas-n2.pdf', 'x.pdf', 'application/pdf', 14),
+           (v_cnote2, 's3a-cas-n3.pdf', 'x.pdf', 'application/pdf', 15);
     delete from public.contact_notes where id = v_cnote2;
     if (select count(*) from nora_private.attachment_storage_deletion_queue
         where storage_key in ('s3a-cas-n1.pdf', 's3a-cas-n2.pdf', 's3a-cas-n3.pdf', 's3a-imm-b.pdf', 's3a-imm-fk.pdf') and state = 'pending') <> 5 then
         v_failures := array_append(v_failures, '9a note delete did not capture every attachment row');
     end if;
 
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-cas-c1.pdf', 'x.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-cas-c1.pdf', 'x.pdf', 'application/pdf', 16);
     delete from public.contacts where id = v_contact;
     if (select count(*) from nora_private.attachment_storage_deletion_queue
         where storage_key in ('s3a-cas-c1.pdf', 's3a-part-admit.pdf', 's3a-state-skipped_live', 's3a-state-failed_terminal', 's3a-state-none')
@@ -648,10 +650,10 @@ begin
     -- 200-key company cascade: contacts -> notes and deals -> deal notes
     insert into public.contacts (first_name, last_name, company_id) values ('Bulk', 'Kontakt', v_company) returning id into v_contact;
     insert into public.contact_notes (contact_id, text) values (v_contact, 'bulk') returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        select v_cnote, format('s3a-bulk-c-%s.pdf', g), 'x.pdf', 'application/pdf' from generate_series(1, 100) g;
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        select v_dnote, format('s3a-bulk-d-%s.pdf', g), 'x.pdf', 'application/pdf' from generate_series(1, 100) g;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        select v_cnote, format('s3a-bulk-c-%s.pdf', g), 'x.pdf', 'application/pdf', g from generate_series(1, 100) g;
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        select v_dnote, format('s3a-bulk-d-%s.pdf', g), 'x.pdf', 'application/pdf', g from generate_series(1, 100) g;
     update public.companies set self_contact_id = null where id = v_company;
     delete from public.companies where id = v_company;
     if (select count(*) from nora_private.attachment_storage_deletion_queue
@@ -727,8 +729,8 @@ begin
     insert into public.companies (name, sales_id) values ('W8-C S3A Zugriff', v_o) returning id into v_company;
     insert into public.contacts (first_name, last_name, company_id, sales_id) values ('Zu', 'Griff', v_company, v_o) returning id into v_contact;
     insert into public.contact_notes (contact_id, text, date, sales_id) values (v_contact, 'Zugriff', now(), v_o) returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's3a-acl.pdf', 'x.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's3a-acl.pdf', 'x.pdf', 'application/pdf', 17) returning id into v_a;
 
     for r in select * from (values ('admin', v_admin, 'authenticated'), ('office', v_office, 'authenticated'),
                                    ('service_role', null::uuid, 'service_role'), ('anon', null::uuid, 'anon')) as t(label, uid, api_role)
@@ -750,8 +752,8 @@ begin
 
         v_state := 'ok';
         begin
-            insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-                values (v_cnote, 's3a-acl-' || r.label || '.pdf', 'x.pdf', 'application/pdf');
+            insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+                values (v_cnote, 's3a-acl-' || r.label || '.pdf', 'x.pdf', 'application/pdf', 18);
         exception when others then v_state := sqlstate;
         end;
         if v_state <> '42501' then

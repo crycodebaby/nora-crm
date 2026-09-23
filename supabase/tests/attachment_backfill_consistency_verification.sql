@@ -50,12 +50,15 @@
 -- IT DOES NOT RAISE. A verifier that aborts cannot report the class that made
 -- it abort, and the backfill preflight has to read a RED corpus to decide what
 -- to do about it. The verdict is a row, and the GREEN rule is data:
---   `blocking = true` classes are the S5 gate; all twelve must be 0.
+--   `blocking = true` classes are the S5 gate; all fourteen must be 0.
 --   STORAGE_OBJECT_MISSING is INFO: reference consistency and physical object
 --   existence are separate contracts (S4 decision E), so a missing object is
 --   reported and never turns the verdict RED.
+--   ORDINAL_VS_ARRAY_ORDER is INFO too, and for a sharper reason: an append
+--   sequence and an array order are allowed to diverge on a legal, zero-write
+--   action (S6-A / contract 344). It retires at S6-B1.
 --
--- CLASSES (12 blocking + 1 INFO)
+-- CLASSES (14 blocking + 2 INFO)
 --   INVALID_GRAMMAR             note array outside grammar v1
 --   JSON_KEY_WITHOUT_ROW        PARTIAL: a projected note misses one key's row
 --   ROW_WITHOUT_JSON_KEY        EXTRA: a row nobody's JSON asks for
@@ -68,9 +71,14 @@
 --   BYTE_SIZE_NOT_NULL          a row carries a fabricated size (S4 writes NULL)
 --   CROSS_SOURCE_KEY            a note key is also a logo / avatar / branding key
 --   BACKFILL_CANDIDATE_REMAINING  a note with attachments owns no row at all
+--   ORDINAL_NULL                a row without an append position (S6-A)
+--   ORDINAL_DUPLICATE_PER_NOTE  two rows of one note share an ordinal (S6-A)
 --   STORAGE_OBJECT_MISSING      INFO: no object in the bucket for a desired key
+--   ORDINAL_VS_ARRAY_ORDER      INFO: the relational order of a note's rows is
+--                               no longer its legacy array order (S6-A; legal
+--                               after a front-insert or a pure reorder)
 --
--- ALL THIRTEEN ARE ALWAYS RETURNED, one row each, zero-count or not: the census
+-- ALL SIXTEEN ARE ALWAYS RETURNED, one row each, zero-count or not: the census
 -- is a fixed shape, not a list of what happens to be wrong. 00_preflight.sql
 -- ASSERTS that shape (name, uniqueness and blocking flag) before it counts
 -- anything, because a short census reads downstream exactly like a clean
@@ -116,6 +124,16 @@ declare
     v_key         text[] := '{}';
     v_name        text[] := '{}';
     v_mime        text[] := '{}';
+    -- S6-A: the three ordinal classes are the only ones that depend on a
+    -- column the database may not carry yet. The gate that decides whether
+    -- S6-A may be applied runs this same file against a database where
+    -- `ordinal` does not exist, so the classes report 0 with an explicit
+    -- evidence text there instead of aborting the whole census.
+    v_has_ordinal boolean := exists (select 1 from pg_attribute a
+                                      where a.attrelid = 'public.attachments'::regclass
+                                        and a.attname = 'ordinal'
+                                        and a.attnum > 0 and not a.attisdropped);
+    c_pre_s6a     constant text := 'not applicable: public.attachments carries no ordinal column yet (pre-S6-A)';
 begin
     -- ---- D: grammar v1 over every note that carries attachments --------------
     for r in
@@ -444,6 +462,93 @@ begin
     select 'STORAGE_OBJECT_MISSING'::text, false, count(*)::bigint,
            left(coalesce((select string_agg(distinct missing.label, ', ') from missing), ''), 400)
       from missing;
+
+    -- ---- 14. ORDINAL_NULL (S6-A) --------------------------------------------
+    -- A row without an append position. Unreachable while the column is NOT
+    -- NULL, which is exactly why it is worth asserting: it is the class that
+    -- goes non-zero if that guarantee is ever relaxed or a write bypasses the
+    -- reconcile core.
+    if v_has_ordinal then
+        return query
+        with bad as (
+            select 'attachments:' || a.id::text as label
+              from public.attachments a
+             where a.ordinal is null
+        )
+        select 'ORDINAL_NULL'::text, true, count(*)::bigint,
+               left(coalesce(string_agg(bad.label, ', ' order by bad.label), ''), 400)
+          from bad;
+    else
+        return query select 'ORDINAL_NULL'::text, true, 0::bigint, c_pre_s6a;
+    end if;
+
+    -- ---- 15. ORDINAL_DUPLICATE_PER_NOTE (S6-A) ------------------------------
+    -- Two rows of ONE note claiming the same append position. Counted per
+    -- note, not per row: one note with a collision is one finding.
+    if v_has_ordinal then
+        return query
+        with dup as (
+            select case when a.contact_note_id is not null
+                        then 'contact_notes:' || a.contact_note_id::text
+                        else 'deal_notes:' || a.deal_note_id::text end as label
+              from public.attachments a
+             group by a.contact_note_id, a.deal_note_id, a.ordinal
+            having count(*) > 1
+        )
+        select 'ORDINAL_DUPLICATE_PER_NOTE'::text, true, count(*)::bigint,
+               left(coalesce(string_agg(distinct dup.label, ', '), ''), 400)
+          from dup;
+    else
+        return query select 'ORDINAL_DUPLICATE_PER_NOTE'::text, true, 0::bigint, c_pre_s6a;
+    end if;
+
+    -- ---- 16. ORDINAL_VS_ARRAY_ORDER (S6-A, INFO) ----------------------------
+    -- NOT BLOCKING, and that is a contract decision, not an oversight. The
+    -- ordinal is an APPEND sequence, the legacy array is an ORDER. Two legal,
+    -- defect-free actions make them diverge: the deliberate insert-at-front
+    -- (contract 9) and a pure reorder, which writes NOTHING at all (REMOVE and
+    -- ADD are both empty, so no row is touched and no ordinal changes). A
+    -- blocking class here would turn a zero-write action RED and would make
+    -- S6-B1's own exit gate - "verifier GREEN including the ordinal classes" -
+    -- unsatisfiable. Membership defects are caught by ORDINAL_NULL,
+    -- ORDINAL_DUPLICATE_PER_NOTE, the unique constraint and the nine standing
+    -- membership classes; this class observes the TRANSITION and retires at B1.
+    --
+    -- It is driven from the legacy side (D), like every other class here, and
+    -- compares the two orders over the keys a note actually owns relationally:
+    -- a note that owns no row at all is BACKFILL_CANDIDATE_REMAINING and a key
+    -- without a row is JSON_KEY_WITHOUT_ROW - neither is an ORDER observation.
+    if v_has_ordinal then
+        return query
+        with d as (
+            select t.tbl, t.note_id, t.storage_key, t.ord as element_pos
+              from unnest(v_tbl, v_note, v_key) with ordinality as t(tbl, note_id, storage_key, ord)
+        ),
+        owned as (
+            select case when a.contact_note_id is not null then 'contact_notes' else 'deal_notes' end as tbl,
+                   coalesce(a.contact_note_id, a.deal_note_id) as note_id,
+                   a.storage_key, a.ordinal, a.id
+              from public.attachments a
+        ),
+        paired as (
+            select d.tbl, d.note_id,
+                   row_number() over (partition by d.tbl, d.note_id order by d.element_pos) as legacy_no,
+                   row_number() over (partition by d.tbl, d.note_id order by o.ordinal, o.id) as relational_no
+              from d
+              join owned o
+                on o.tbl = d.tbl and o.note_id = d.note_id and o.storage_key = d.storage_key
+        ),
+        diverged as (
+            select distinct paired.tbl || ':' || paired.note_id::text as label
+              from paired
+             where paired.legacy_no is distinct from paired.relational_no
+        )
+        select 'ORDINAL_VS_ARRAY_ORDER'::text, false, count(*)::bigint,
+               left(coalesce(string_agg(diverged.label, ', ' order by diverged.label), ''), 400)
+          from diverged;
+    else
+        return query select 'ORDINAL_VS_ARRAY_ORDER'::text, false, 0::bigint, c_pre_s6a;
+    end if;
 end;
 $fn$;
 

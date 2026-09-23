@@ -405,8 +405,8 @@ begin
     -- ---- 5a. direct attachment DELETE --------------------------------------
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Notiz', now(), v_sales) returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf', 1) returning id into v_a;
 
     -- the INSERT itself must not enqueue anything (negative 7a)
     if (select count(*) from nora_private.attachment_storage_deletion_queue
@@ -423,8 +423,8 @@ begin
     end if;
 
     -- ---- 5b. contact_note DELETE -> cascade --------------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-cnote.pdf', 'plan.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-cnote.pdf', 'plan.pdf', 'application/pdf', 2);
     delete from public.contact_notes where id = v_cnote;
 
     select count(*), min(state) into v_n, v_state
@@ -436,8 +436,8 @@ begin
     -- ---- 5c. deal_note DELETE -> cascade -----------------------------------
     insert into public.deal_notes (deal_id, text, date, sales_id)
         values (v_deal, 'Notiz', now(), v_sales) returning id into v_dnote;
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 's2a1-dnote.pdf', 'angebot.pdf', 'application/pdf');
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_dnote, 's2a1-dnote.pdf', 'angebot.pdf', 'application/pdf', 3);
     delete from public.deal_notes where id = v_dnote;
 
     select count(*), min(state) into v_n, v_state
@@ -449,8 +449,8 @@ begin
     -- ---- 5d. contact DELETE -> contact_note -> attachment ------------------
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Notiz 2', now(), v_sales) returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-contact.pdf', 'plan.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-contact.pdf', 'plan.pdf', 'application/pdf', 4);
     delete from public.contacts where id = v_contact;
 
     select count(*), min(state) into v_n, v_state
@@ -462,8 +462,8 @@ begin
     -- ---- 5e. deal DELETE -> deal_note -> attachment ------------------------
     insert into public.deal_notes (deal_id, text, date, sales_id)
         values (v_deal, 'Notiz 2', now(), v_sales) returning id into v_dnote;
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 's2a1-deal.pdf', 'angebot.pdf', 'application/pdf');
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_dnote, 's2a1-deal.pdf', 'angebot.pdf', 'application/pdf', 5);
     delete from public.deals where id = v_deal;
 
     select count(*), min(state) into v_n, v_state
@@ -477,15 +477,15 @@ begin
         values ('Kas', 'Kade', v_company, v_sales) returning id into v_contact;
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Notiz 3', now(), v_sales) returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-company-c.pdf', 'plan.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-company-c.pdf', 'plan.pdf', 'application/pdf', 6);
 
     insert into public.deals (name, company_id, stage, sales_id)
         values ('W8-C S2A1 Vorgang 2', v_company, 'opportunity', v_sales) returning id into v_deal;
     insert into public.deal_notes (deal_id, text, date, sales_id)
         values (v_deal, 'Notiz 3', now(), v_sales) returning id into v_dnote;
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 's2a1-company-d.pdf', 'angebot.pdf', 'application/pdf');
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_dnote, 's2a1-company-d.pdf', 'angebot.pdf', 'application/pdf', 7);
 
     update public.companies set self_contact_id = null where id = v_company;
     delete from public.companies where id = v_company;
@@ -515,8 +515,8 @@ begin
 
     v_state := 'admitted'; v_detail := null;
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf', 8);
     exception when others then
         get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
     end;
@@ -525,8 +525,8 @@ begin
             v_state, coalesce(v_detail, ''));
     end if;
 
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-dup.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-dup.pdf', 'plan.pdf', 'application/pdf', 9) returning id into v_a;
     insert into nora_private.attachment_storage_deletion_queue (storage_key) values ('s2a1-dup.pdf');
     delete from public.attachments where id = v_a;
 
@@ -556,8 +556,8 @@ begin
 
     v_state := 'admitted'; v_detail := null;
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, 's2a1-direct.pdf', 'plan.pdf', 'application/pdf', 10);
     exception when others then
         get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
     end;
@@ -581,16 +581,16 @@ begin
 
     -- failed_terminal (historical only): the key may be referenced again, and
     -- deleting that reference captures a fresh job through the ordinary path
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-terminal.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-terminal.pdf', 'plan.pdf', 'application/pdf', 11) returning id into v_a;
     delete from public.attachments where id = v_a;
     update nora_private.attachment_storage_deletion_queue
        set state = 'failed_terminal', completed_at = now(),
            last_error_code = 'storage_forbidden', last_error_at = now()
      where storage_key = 's2a1-terminal.pdf' and state = 'pending';
 
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-terminal.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-terminal.pdf', 'plan.pdf', 'application/pdf', 12) returning id into v_a;
     delete from public.attachments where id = v_a;
 
     if (select count(*) from nora_private.attachment_storage_deletion_queue
@@ -601,8 +601,8 @@ begin
     end if;
 
     -- ---- 7b. UPDATE creates no job -----------------------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-update.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-update.pdf', 'plan.pdf', 'application/pdf', 13) returning id into v_a;
     -- public.attachments has no UPDATE policy and no UPDATE privilege for any
     -- API role; postgres can still write, which is exactly the harshest case.
     update public.attachments set file_name = 'plan-neu.pdf' where id = v_a;
@@ -734,8 +734,8 @@ begin
     -- reference to a key with an active intent, so the pre-existing state is
     -- built in the only admissible order (pre-S3 / manual producer): the
     -- reference first, then the intent recorded directly as postgres.
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-conflict-active.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-conflict-active.pdf', 'plan.pdf', 'application/pdf', 14) returning id into v_a;
 
     insert into nora_private.attachment_storage_deletion_queue (storage_key)
         values ('s2a1-conflict-active.pdf');
@@ -776,8 +776,8 @@ begin
     perform setval(pg_get_serial_sequence('nora_private.attachment_storage_deletion_queue','id'), 999998, true);
 
     -- a DISTINCT storage key: the partial active-key index cannot be the arbiter
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-conflict-distinct.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-conflict-distinct.pdf', 'plan.pdf', 'application/pdf', 15) returning id into v_a;
 
     v_raised := false; v_state := null;
     begin
@@ -881,8 +881,8 @@ begin
     end if;
 
     -- ---- 10b. the real authenticated capture path ---------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-definer.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-definer.pdf', 'plan.pdf', 'application/pdf', 16) returning id into v_a;
 
     perform set_config('request.jwt.claims',
         json_build_object('role','authenticated','sub',v_admin::text,'session_id',v_admin::text)::text, true);
@@ -943,8 +943,8 @@ begin
     end if;
 
     -- ---- 10c. the negative: same admin identity, no live session -----------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote2, 's2a1-definer-nosession.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote2, 's2a1-definer-nosession.pdf', 'plan.pdf', 'application/pdf', 17) returning id into v_a;
 
     perform set_config('request.jwt.claims',
         json_build_object('role','authenticated','sub',v_nosess::text,'session_id',v_nosess::text)::text, true);
@@ -1026,8 +1026,8 @@ begin
              add constraint tmp_s2a1_atomicity_probe_check
              check (storage_key <> ''s2a1-atomicity.pdf'')';
 
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a1-atomicity.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a1-atomicity.pdf', 'plan.pdf', 'application/pdf', 18) returning id into v_a;
 
     perform set_config('request.jwt.claims',
         json_build_object('role','authenticated','sub',v_admin::text,'session_id',v_admin::text)::text, true);

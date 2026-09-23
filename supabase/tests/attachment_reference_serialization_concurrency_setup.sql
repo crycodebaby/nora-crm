@@ -155,8 +155,10 @@ begin
     returns void language plpgsql as $f$
     declare v_state text; v_detail text;
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (p_note, p_key, 'race.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (p_note, p_key, 'race.pdf', 'application/pdf',
+                    (select coalesce(max(a.ordinal), 0) + 1 from public.attachments a
+                      where a.contact_note_id = p_note));
         perform public.ars_log(p_s, p_w, 'INSERT_OK', p_key);
     exception when others then
         get stacked diagnostics v_state = returned_sqlstate, v_detail = pg_exception_detail;
@@ -215,8 +217,9 @@ begin
 
     if v_kind in ('C1', 'C2') then
         -- live row-backed reference K + active claimed intent J for K (pre-S3 order)
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_note, v_k, 'race.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_note, v_k, 'race.pdf', 'application/pdf',
+                    (select coalesce(max(a.ordinal), 0) + 1 from public.attachments a where a.contact_note_id = v_note));
         insert into nora_private.attachment_storage_deletion_queue (storage_key, state, attempt_count, claimed_at, claimed_by)
             values (v_k, 'claimed', 1, now(), v_tok) returning id into v_job;
     elsif v_kind in ('C3', 'C4') then
@@ -225,13 +228,16 @@ begin
             values (v_k, 'claimed', 1, now(), v_tok) returning id into v_job;
     elsif v_kind = 'C5' then
         -- live reference K, no intent yet
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_note, v_k, 'race.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_note, v_k, 'race.pdf', 'application/pdf',
+                    (select coalesce(max(a.ordinal), 0) + 1 from public.attachments a where a.contact_note_id = v_note));
     elsif v_kind = 'C6' then
         -- two live references on DIFFERENT keys
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_note, v_k, 'race.pdf', 'application/pdf'),
-                   (v_note, v_k2, 'race.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_note, v_k, 'race.pdf', 'application/pdf',
+                    (select coalesce(max(a.ordinal), 0) + 1 from public.attachments a where a.contact_note_id = v_note)),
+                   (v_note, v_k2, 'race.pdf', 'application/pdf',
+                    (select coalesce(max(a.ordinal), 0) + 2 from public.attachments a where a.contact_note_id = v_note));
     else
         raise exception 'unknown scenario kind %', v_kind;
     end if;

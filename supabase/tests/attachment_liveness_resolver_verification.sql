@@ -438,8 +438,8 @@ begin
     v_failures := v_failures || pg_temp.s2a21_expect('5a clean fixture universe', 's2a21-k1.pdf', 'dead');
 
     -- ---- 5b. S1 public.attachments ------------------------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a21-k1.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a21-k1.pdf', 'plan.pdf', 'application/pdf', 1) returning id into v_a;
     v_failures := v_failures || pg_temp.s2a21_expect('5b S1 matching storage_key',  's2a21-k1.pdf',    'live');
     v_failures := v_failures || pg_temp.s2a21_expect('5b S1 different clean key',  's2a21-other.pdf', 'dead');
     v_failures := v_failures || pg_temp.s2a21_expect('5b S1 exact, not prefix',    's2a21-k1',        'dead');
@@ -645,8 +645,8 @@ begin
     -- s2a21-k1.pdf, and since W8-C S3A (20260919120000) reference admission
     -- rejects a NEW public.attachments row for a key with an active intent.
     -- The resolver contract under test is key-agnostic.
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 's2a21-k11.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_dnote, 's2a21-k11.pdf', 'plan.pdf', 'application/pdf', 2) returning id into v_a;
     update public.companies set logo = '[]'::jsonb where id = v_company;
     v_failures := v_failures || pg_temp.s2a21_expect('11a live + unrelated unknown -> live', 's2a21-k11.pdf', 'live');
     v_failures := v_failures || pg_temp.s2a21_expect('11b no live + unknown -> unknown',     's2a21-k2.pdf', 'unknown');
@@ -722,8 +722,8 @@ begin
 
     -- queue-domain compatibility: a padded non-blank key is valid and is
     -- compared EXACTLY, never trimmed
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, ' s2a21-pad.pdf ', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, ' s2a21-pad.pdf ', 'plan.pdf', 'application/pdf', 3) returning id into v_a;
     v_failures := v_failures || pg_temp.s2a21_expect('11g padded key, exact match', ' s2a21-pad.pdf ', 'live');
     v_failures := v_failures || pg_temp.s2a21_expect('11g trimmed key is a different key', 's2a21-pad.pdf', 'dead');
     begin
@@ -1136,8 +1136,8 @@ begin
 
     insert into nora_private.attachment_storage_deletion_queue (storage_key, state, completed_at)
         values ('s2a21-q7.pdf', 'skipped_live', now());
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a21-q7.pdf', 'plan.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a21-q7.pdf', 'plan.pdf', 'application/pdf', 4) returning id into v_a;
     delete from public.attachments where id = v_a;
     select count(*) into v_n from nora_private.attachment_storage_deletion_queue
         where storage_key = 's2a21-q7.pdf' and state = 'pending' and completed_at is null;

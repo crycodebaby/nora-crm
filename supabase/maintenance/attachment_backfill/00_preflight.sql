@@ -42,12 +42,12 @@
 --   otherwise be waved through as "nothing is wrong".
 --
 --   Section E therefore reads the census ONCE and asserts, BEFORE consuming a
---   single count, that it is exactly the canonical contract: the thirteen
+--   single count, that it is exactly the canonical contract: the sixteen
 --   class names, each present once, each with its documented blocking flag,
 --   each with a non-negative count. Anything else raises 55000
 --   NORA_S4_CLASSIFICATION_CENSUS_INVALID and no verdict is written - so an
 --   incomplete classification can never become GO. The class set itself is
---   the verifier's (12 blocking + 1 INFO); this file only insists on getting
+--   the verifier's (14 blocking + 2 INFO); this file only insists on getting
 --   all of it.
 --
 --   psql -v ON_ERROR_STOP=1 \
@@ -68,7 +68,7 @@
 --                                what makes it Production-safe.
 --
 -- THE GO RULE IS NOT THE VERIFIER'S GREEN RULE.
---   verifier GREEN  = all twelve blocking classes are 0   (the S5 gate)
+--   verifier GREEN  = all fourteen blocking classes are 0  (the S5 gate)
 --   preflight GO    = all blocking classes are 0 EXCEPT
 --                     BACKFILL_CANDIDATE_REMAINING, which is the WORK
 -- Before S4 runs, BACKFILL_CANDIDATE_REMAINING is exactly the set of notes to
@@ -83,6 +83,13 @@
 --   active or done deletion intent        STOP
 --   cross-source storage key              STOP - escalate, do not continue
 --   STORAGE_OBJECT_MISSING                INFO only - reported, never a STOP
+--   ORDINAL_NULL / ORDINAL_DUPLICATE_PER_NOTE   STOP - S6-A, and they do
+--     NOT join the BACKFILL_CANDIDATE_REMAINING exemption below: a row
+--     without an append position, or two rows of one note claiming the
+--     same one, is a defect and never "the work that is left"
+--   ORDINAL_VS_ARRAY_ORDER                INFO only - S6-A; an append
+--     sequence may legally diverge from the legacy array order (a
+--     front-insert, a zero-write reorder); retires at S6-B1
 --
 -- OUTPUT: one row per check and per census figure, then a verdict row. The
 -- last statement raises 55000 on STOP so the file also fails closed under
@@ -127,8 +134,8 @@ declare
         'W8-C S4 preflight: pg_temp.attachment_backfill_findings() is not defined in this session. '
         || 'Run supabase/tests/attachment_backfill_consistency_verification.sql FIRST, in the same session.';
 
-    -- The canonical census contract: `<problem_class>:<blocking>`, 12 blocking
-    -- classes plus the one INFO class. Order is irrelevant - both sides are
+    -- The canonical census contract: `<problem_class>:<blocking>`, 14 blocking
+    -- classes plus the two INFO classes. Order is irrelevant - both sides are
     -- sorted before they are compared - but PRESENCE, UNIQUENESS and the
     -- BLOCKING FLAG are all part of it.
     c_census constant text[] := array[
@@ -136,7 +143,8 @@ declare
         'METADATA_MISMATCH:true',    'DUPLICATE_KEY_IN_NOTE:true', 'DUPLICATE_KEY_ACROSS_NOTES:true',
         'WRONG_OWNER:true',          'ROW_FOR_EMPTY_NOTE:true',    'QUEUE_CONFLICT:true',
         'BYTE_SIZE_NOT_NULL:true',   'CROSS_SOURCE_KEY:true',      'BACKFILL_CANDIDATE_REMAINING:true',
-        'STORAGE_OBJECT_MISSING:false'];
+        'ORDINAL_NULL:true',         'ORDINAL_DUPLICATE_PER_NOTE:true',
+        'STORAGE_OBJECT_MISSING:false', 'ORDINAL_VS_ARRAY_ORDER:false'];
 begin
     if to_regprocedure('pg_temp.attachment_backfill_findings()') is null then
         raise exception '%', c_missing using errcode = '55000';
@@ -316,7 +324,7 @@ begin
                   detail = 'NORA_S4_CLASSIFICATION_CENSUS_INVALID',
                   hint = 'Run supabase/tests/attachment_backfill_consistency_verification.sql - the canonical '
                       || 'verifier - FIRST in this same session, unmodified. A census that is not the '
-                      || 'thirteen-class contract is not an all-zero corpus, and this gate never reads it as one.';
+                      || 'sixteen-class contract is not an all-zero corpus, and this gate never reads it as one.';
     end if;
     if exists (select 1 from jsonb_to_recordset(v_census)
                  as x(problem_class text, blocking boolean, finding_count bigint, evidence text)
@@ -339,6 +347,8 @@ begin
                         when r.finding_count > 0 then 'STOP'
                         else 'OK' end,
             'detail', r.finding_count::text || case when r.evidence = '' then '' else ' — ' || r.evidence end);
+        -- S6-A: the exemption is BACKFILL_CANDIDATE_REMAINING and nothing else.
+        -- ORDINAL_NULL and ORDINAL_DUPLICATE_PER_NOTE are ordinary STOP classes.
         if r.blocking and r.finding_count > 0 and r.problem_class <> 'BACKFILL_CANDIDATE_REMAINING' then
             v_stop := v_stop || format('%s = %s (%s)', r.problem_class, r.finding_count,
                                        coalesce(nullif(r.evidence, ''), 'no evidence label'));

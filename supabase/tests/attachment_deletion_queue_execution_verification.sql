@@ -966,8 +966,8 @@ begin
         values (v_contact, 'Queue', now(), v_sales) returning id into v_cnote;
 
     -- ---- 9a. LIVE via public.attachments -> skipped_live, history kept -----
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a22-live-a.pdf', 'a.pdf', 'application/pdf') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a22-live-a.pdf', 'a.pdf', 'application/pdf', 1) returning id into v_a;
     insert into nora_private.attachment_storage_deletion_queue
             (storage_key, state, attempt_count, available_at, last_error_code, last_error_at)
         values ('s2a22-live-a.pdf', 'failed_retryable', 1, now() - interval '1 minute',
@@ -1049,8 +1049,8 @@ begin
     end loop;
 
     -- ---- 10b. after failed_terminal a new capture creates a fresh intent ---
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a22-unknown-c.png', 'c.png', 'image/png') returning id into v_a;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a22-unknown-c.png', 'c.png', 'image/png', 2) returning id into v_a;
     delete from public.attachments where id = v_a;
     if (select count(*) from nora_private.attachment_storage_deletion_queue
         where storage_key = 's2a22-unknown-c.png' and state = 'pending') <> 1 then
@@ -1098,8 +1098,8 @@ begin
 
     -- ---- 9f. LIVE dominates UNKNOWN -> skipped_live ------------------------
     update public.configuration set config = jsonb_build_object('heroImage', jsonb_build_object('path', 's2a22-both-f.pdf'));
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 's2a22-both-f.pdf', 'f.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 's2a22-both-f.pdf', 'f.pdf', 'application/pdf', 3);
     insert into nora_private.attachment_storage_deletion_queue (storage_key) values ('s2a22-both-f.pdf') returning id into v_id;
     select * into r from nora_private.attachment_deletion_claim_next();
     select * into ins from nora_private.attachment_deletion_inspect(v_id, r.lease_token);

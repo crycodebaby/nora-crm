@@ -74,7 +74,8 @@ begin
             ('file_name',       'text',                     false),
             ('mime_type',       'text',                     false),
             ('byte_size',       'bigint',                   true),
-            ('created_at',      'timestamp with time zone', false)
+            ('created_at',      'timestamp with time zone', false),
+            ('ordinal',         'integer',                  false)
         ) as t(col, typ, nullable)
     loop
         if not exists (
@@ -89,14 +90,15 @@ begin
         end if;
     end loop;
 
-    -- S1 has exactly these eight columns: no uploaded_by/created_by/sales_id
-    -- (P-2 deferred), no updated_at (metadata is immutable), no generic
-    -- lifecycle or provider columns.
+    -- S1 + S6-A have exactly these nine columns: no uploaded_by/created_by/
+    -- sales_id (P-2 deferred), no updated_at (metadata is immutable), no
+    -- generic lifecycle or provider columns. `ordinal` is S6-A's append
+    -- sequence within the owning note (20260922140000).
     select string_agg(a.attname, ', ' order by a.attname) into v_extra
     from pg_attribute a
     where a.attrelid = 'public.attachments'::regclass and a.attnum > 0 and not a.attisdropped
       and a.attname not in ('id','contact_note_id','deal_note_id','storage_key','file_name',
-                            'mime_type','byte_size','created_at');
+                            'mime_type','byte_size','created_at','ordinal');
     if v_extra is not null then
         v_failures := v_failures || format('unexpected columns: %s', v_extra);
     end if;
@@ -121,7 +123,8 @@ begin
             ('attachments_mime_type_check',      'c'),
             ('attachments_byte_size_check',      'c'),
             ('attachments_contact_note_id_fkey', 'f'),
-            ('attachments_deal_note_id_fkey',    'f')
+            ('attachments_deal_note_id_fkey',    'f'),
+            ('uq__attachments__owner_ordinal',   'u')
         ) as t(conname, contype)
     loop
         if not exists (select 1 from pg_constraint con
@@ -152,7 +155,7 @@ begin
     if cardinality(v_failures) > 0 then
         raise exception E'FAIL: table shape:\n%', array_to_string(v_failures, E'\n');
     end if;
-    raise notice 'OK  1. table shape: 8 columns, owner/storage/file/mime/size checks, 2 CASCADE FKs, UNIQUE(storage_key)';
+    raise notice 'OK  1. table shape: 9 columns, owner/storage/file/mime/size checks, 2 CASCADE FKs, UNIQUE(storage_key), UNIQUE NULLS NOT DISTINCT(owner, ordinal)';
 end;
 $$;
 
@@ -284,25 +287,25 @@ begin
         values (v_deal, 'Notiz', now(), v_sales) returning id into v_dnote;
 
     -- ---- 3. owner invariant ------------------------------------------------
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 'w8c-s1-contact.pdf', 'plan.pdf', 'application/pdf') returning id into v_a1;
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 'w8c-s1-contact.pdf', 'plan.pdf', 'application/pdf', 1) returning id into v_a1;
     if v_a1 is null then raise exception 'FAIL: contact-note-owned attachment was not accepted'; end if;
 
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, byte_size)
-        values (v_dnote, 'w8c-s1-deal.pdf', 'angebot.pdf', 'application/pdf', 1234);
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, byte_size, ordinal)
+        values (v_dnote, 'w8c-s1-deal.pdf', 'angebot.pdf', 'application/pdf', 1234, 1);
 
     v_state := 'accepted';
     begin
-        insert into public.attachments (storage_key, file_name, mime_type)
-            values ('w8c-s1-noowner.pdf', 'x.pdf', 'application/pdf');
+        insert into public.attachments (storage_key, file_name, mime_type, ordinal)
+            values ('w8c-s1-noowner.pdf', 'x.pdf', 'application/pdf', 2);
     exception when check_violation then v_state := 'rejected';
     end;
     if v_state <> 'rejected' then raise exception 'FAIL: an attachment without an owner was accepted'; end if;
 
     v_state := 'accepted';
     begin
-        insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, v_dnote, 'w8c-s1-twoowners.pdf', 'x.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, v_dnote, 'w8c-s1-twoowners.pdf', 'x.pdf', 'application/pdf', 2);
     exception when check_violation then v_state := 'rejected';
     end;
     if v_state <> 'rejected' then raise exception 'FAIL: an attachment with two owners was accepted'; end if;
@@ -311,8 +314,8 @@ begin
     -- ---- 4. storage identity ----------------------------------------------
     v_state := 'accepted';
     begin
-        insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-            values (v_dnote, 'w8c-s1-contact.pdf', 'kopie.pdf', 'application/pdf');
+        insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_dnote, 'w8c-s1-contact.pdf', 'kopie.pdf', 'application/pdf', 2);
     exception when unique_violation then v_state := 'rejected';
     end;
     if v_state <> 'rejected' then
@@ -324,8 +327,8 @@ begin
         declare v_inner text := 'accepted';
         begin
             begin
-                insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-                    values (v_cnote, v_state, 'x.pdf', 'application/pdf');
+                insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+                    values (v_cnote, v_state, 'x.pdf', 'application/pdf', 3);
             exception when check_violation then v_inner := 'rejected';
             end;
             if v_inner <> 'rejected' then
@@ -336,26 +339,26 @@ begin
 
     v_state := 'accepted';
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, repeat('k', 513), 'x.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, repeat('k', 513), 'x.pdf', 'application/pdf', 3);
     exception when check_violation then v_state := 'rejected';
     end;
     if v_state <> 'rejected' then raise exception 'FAIL: an unbounded storage_key was accepted'; end if;
 
     v_state := 'accepted';
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, null, 'x.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, null, 'x.pdf', 'application/pdf', 3);
     exception when not_null_violation then v_state := 'rejected';
     end;
     if v_state <> 'rejected' then raise exception 'FAIL: a NULL storage_key was accepted'; end if;
 
     -- today's two real key layouts must both remain valid: the invariant is
     -- identity, not a format (W8-E may choose another layout)
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, '0.8262106278726917.pdf', 'legacy.pdf', 'application/pdf');
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, gen_random_uuid()::text || '.pdf', 'neu.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, '0.8262106278726917.pdf', 'legacy.pdf', 'application/pdf', 3);
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, gen_random_uuid()::text || '.pdf', 'neu.pdf', 'application/pdf', 4);
     raise notice 'OK  4. storage identity: unique enforced by the database, empty/blank/over-long/NULL rejected, legacy + UUID layouts accepted';
 
     -- ---- 5. file metadata --------------------------------------------------
@@ -365,7 +368,7 @@ begin
         begin
             begin
                 execute format(
-                    'insert into public.attachments (contact_note_id, storage_key, file_name, mime_type) values (%L, %L, %L, %L)',
+                    'insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal) values (%L, %L, %L, %L, 5)',
                     v_cnote, 'w8c-s1-empty-' || v_state || '.pdf',
                     case when v_state = 'file_name' then '  ' else 'x.pdf' end,
                     case when v_state = 'mime_type' then '' else 'application/pdf' end);
@@ -376,7 +379,7 @@ begin
             v_inner := 'accepted';
             begin
                 execute format(
-                    'insert into public.attachments (contact_note_id, storage_key, file_name, mime_type) values (%L, %L, %s, %s)',
+                    'insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal) values (%L, %L, %s, %s, 5)',
                     v_cnote, 'w8c-s1-null-' || v_state || '.pdf',
                     case when v_state = 'file_name' then 'null' else quote_literal('x.pdf') end,
                     case when v_state = 'mime_type' then 'null' else quote_literal('application/pdf') end);
@@ -387,17 +390,17 @@ begin
     end loop;
 
     -- byte_size: NULL (legacy, never fabricated), 0 and positive accepted
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size)
-        values (v_cnote, 'w8c-s1-size-null.pdf', 'a.pdf', 'application/pdf', null);
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size)
-        values (v_cnote, 'w8c-s1-size-zero.pdf', 'b.pdf', 'application/pdf', 0);
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size)
-        values (v_cnote, 'w8c-s1-size-big.pdf', 'c.pdf', 'application/pdf', 52428800);
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size, ordinal)
+        values (v_cnote, 'w8c-s1-size-null.pdf', 'a.pdf', 'application/pdf', null, 5);
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size, ordinal)
+        values (v_cnote, 'w8c-s1-size-zero.pdf', 'b.pdf', 'application/pdf', 0, 6);
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size, ordinal)
+        values (v_cnote, 'w8c-s1-size-big.pdf', 'c.pdf', 'application/pdf', 52428800, 7);
 
     v_state := 'accepted';
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size)
-            values (v_cnote, 'w8c-s1-size-negative.pdf', 'd.pdf', 'application/pdf', -1);
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, byte_size, ordinal)
+            values (v_cnote, 'w8c-s1-size-negative.pdf', 'd.pdf', 'application/pdf', -1, 8);
     exception when check_violation then v_state := 'rejected';
     end;
     if v_state <> 'rejected' then raise exception 'FAIL: a negative byte_size was accepted'; end if;
@@ -418,8 +421,8 @@ begin
     -- contact -> contact_notes -> attachments
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Notiz 2', now(), v_sales) returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 'w8c-s1-cascade-contact.pdf', 'e.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 'w8c-s1-cascade-contact.pdf', 'e.pdf', 'application/pdf', 9);
     delete from public.contacts where id = v_contact;
     if exists (select 1 from public.attachments where storage_key = 'w8c-s1-cascade-contact.pdf') then
         raise exception 'FAIL: contact deletion did not cascade into attachment metadata';
@@ -428,8 +431,8 @@ begin
     -- deal -> deal_notes -> attachments
     insert into public.deal_notes (deal_id, text, date, sales_id)
         values (v_deal, 'Notiz 2', now(), v_sales) returning id into v_dnote;
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 'w8c-s1-cascade-deal.pdf', 'f.pdf', 'application/pdf');
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_dnote, 'w8c-s1-cascade-deal.pdf', 'f.pdf', 'application/pdf', 2);
     delete from public.deals where id = v_deal;
     if exists (select 1 from public.attachments where storage_key = 'w8c-s1-cascade-deal.pdf') then
         raise exception 'FAIL: deal deletion did not cascade into attachment metadata';
@@ -441,14 +444,14 @@ begin
         values ('Kas', 'Kade', v_company, v_sales) returning id into v_contact;
     insert into public.contact_notes (contact_id, text, date, sales_id)
         values (v_contact, 'Notiz 3', now(), v_sales) returning id into v_cnote;
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 'w8c-s1-cascade-company-contact.pdf', 'g.pdf', 'application/pdf');
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 'w8c-s1-cascade-company-contact.pdf', 'g.pdf', 'application/pdf', 1);
     insert into public.deals (name, company_id, stage, sales_id)
         values ('W8-C Vorgang 2', v_company, 'opportunity', v_sales) returning id into v_deal;
     insert into public.deal_notes (deal_id, text, date, sales_id)
         values (v_deal, 'Notiz 3', now(), v_sales) returning id into v_dnote;
-    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type)
-        values (v_dnote, 'w8c-s1-cascade-company-deal.pdf', 'h.pdf', 'application/pdf');
+    insert into public.attachments (deal_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_dnote, 'w8c-s1-cascade-company-deal.pdf', 'h.pdf', 'application/pdf', 1);
 
     update public.companies set self_contact_id = null where id = v_company;
     delete from public.companies where id = v_company;
@@ -557,8 +560,10 @@ begin
     ) as t(label, uid, api_role, reads) loop
 
         -- seeded as postgres so every role has a row it could see/delete
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, 'w8c-s1-matrix-' || v_row.label || '.pdf', 'matrix.pdf', 'application/pdf')
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, 'w8c-s1-matrix-' || v_row.label || '.pdf', 'matrix.pdf', 'application/pdf',
+                    (select coalesce(max(a2.ordinal), 0) + 1 from public.attachments a2
+                      where a2.contact_note_id = v_cnote))
             returning id into v_seed;
 
         perform set_config('request.jwt.claims',
@@ -582,8 +587,8 @@ begin
         -- INSERT must be denied for every role by the missing privilege (S3A)
         v_ok := true;
         begin
-            insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-                values (v_cnote, 'w8c-s1-insert-' || v_row.label || '.pdf', 'neu.pdf', 'application/pdf');
+            insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+                values (v_cnote, 'w8c-s1-insert-' || v_row.label || '.pdf', 'neu.pdf', 'application/pdf', 1);
         exception when insufficient_privilege then v_ok := false;
         end;
         if v_ok then
@@ -631,8 +636,10 @@ begin
     -- denied by the table privilege even with a live session (W8-C S3A).
     insert into auth.sessions (id, user_id, created_at, updated_at, aal)
         values (v_nosess, v_nosess, now(), now(), 'aal1');
-    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-        values (v_cnote, 'w8c-s1-session-control.pdf', 'control.pdf', 'application/pdf')
+    insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+        values (v_cnote, 'w8c-s1-session-control.pdf', 'control.pdf', 'application/pdf',
+                (select coalesce(max(a2.ordinal), 0) + 1 from public.attachments a2
+                      where a2.contact_note_id = v_cnote))
         returning id into v_seed;
 
     perform set_config('request.jwt.claims',
@@ -648,8 +655,8 @@ begin
 
     v_ok := true;
     begin
-        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type)
-            values (v_cnote, 'w8c-s1-session-control-insert.pdf', 'control2.pdf', 'application/pdf');
+        insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal)
+            values (v_cnote, 'w8c-s1-session-control-insert.pdf', 'control2.pdf', 'application/pdf', 1);
     exception when insufficient_privilege then v_ok := false;
     end;
     if v_ok then

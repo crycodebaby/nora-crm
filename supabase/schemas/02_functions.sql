@@ -5464,6 +5464,7 @@ declare
     v_mimes   text[];
     v_element bigint;
     v_remove  bigint[];
+    v_base    integer;
 begin
     if num_nonnulls(p_contact_note_id, p_deal_note_id) <> 1 then
         raise exception 'note attachment reconciliation: exactly one owner note id is required'
@@ -5478,7 +5479,8 @@ begin
       from nora_private.note_attachment_reference_rows(p_attachments) as r;
 
     -- KEEP: a key the note already has must keep its title and type. Rows are
-    -- immutable (S1): no metadata UPDATE, and no silently diverging JSON.
+    -- immutable (S1): no metadata UPDATE, and no silently diverging JSON. Its
+    -- ordinal is never rewritten either (S6-A): KEEP is read, never written.
     select d.element_no
       into v_element
       from unnest(v_keys, v_names, v_mimes) with ordinality as d(storage_key, file_name, mime_type, element_no)
@@ -5507,13 +5509,26 @@ begin
          where a.id = any (v_remove);
     end if;
 
+    -- S6-A: the append base is the highest ordinal this note still owns AFTER
+    -- the REMOVE phase. It must be read HERE - between REMOVE and ADD - so a
+    -- removed row cannot hold the sequence up while every surviving KEEP row
+    -- keeps its ordinal. v_base + element_no (never element_no alone) is what
+    -- makes an insert at the FRONT of an existing array legal: element_no is
+    -- the position in the full desired array and KEEP rows are not renumbered,
+    -- so the naive form collides with a kept row (23505).
+    select coalesce(max(a.ordinal), 0)
+      into v_base
+      from public.attachments a
+     where (a.contact_note_id = p_contact_note_id or a.deal_note_id = p_deal_note_id);
+
     -- ADD = D - E: plain INSERT, so S3A admission runs per row. Deterministic
     -- storage_key COLLATE "C" order: concurrent multi-key adds wait on the
-    -- unique index in the same order instead of deadlocking.
+    -- unique index in the same order instead of deadlocking. Gaps in the
+    -- resulting sequence are accepted by contract - there is no compaction.
     if cardinality(v_keys) > 0 then
-        insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type)
-        select p_contact_note_id, p_deal_note_id, d.storage_key, d.file_name, d.mime_type
-          from unnest(v_keys, v_names, v_mimes) as d(storage_key, file_name, mime_type)
+        insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type, ordinal)
+        select p_contact_note_id, p_deal_note_id, d.storage_key, d.file_name, d.mime_type, (v_base + d.element_no)::integer
+          from unnest(v_keys, v_names, v_mimes) with ordinality as d(storage_key, file_name, mime_type, element_no)
          where not exists (select 1
                              from public.attachments a
                             where a.storage_key = d.storage_key
@@ -5526,7 +5541,7 @@ $$;
 alter function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) owner to postgres;
 
 comment on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) is
-    'W8-C S3B: reconciles the public.attachments rows of ONE note (exactly one of contact_note_id / deal_note_id, else 22023 NORA_ATTACHMENT_INVALID_ARGUMENT) with its attachment array. D = grammar v1 rows (note_attachment_reference_rows), E = the rows the note owns now. KEEP (E n D) is never written and must keep title / type (else 22023 NORA_ATTACHMENT_REFERENCE_INVALID); REMOVE (E - D) is a plain DELETE (capture); ADD (D - E) a plain INSERT in storage_key COLLATE "C" order (admission). Never takes the key lock itself, never calls claim / inspect / fail / the resolver, no exception handler. VOLATILE (fresh snapshot per statement). Caller holds the note row; S4 reuses it under a note row lock. No API role may execute it.';
+    'W8-C S3B/S6-A: reconciles the public.attachments rows of ONE note (exactly one of contact_note_id / deal_note_id, else 22023 NORA_ATTACHMENT_INVALID_ARGUMENT) with its attachment array. D = grammar v1 rows (note_attachment_reference_rows), E = the rows the note owns now. KEEP (E n D) is never written and must keep title / type (else 22023 NORA_ATTACHMENT_REFERENCE_INVALID); REMOVE (E - D) is a plain DELETE (capture); ADD (D - E) a plain INSERT in storage_key COLLATE "C" order (admission), and since S6-A every added row gets ordinal = v_base + element_no, where v_base is the highest ordinal the note still owns after REMOVE. Ordinals are append-only: KEEP rows are never renumbered, nothing is compacted, gaps are normal. Never takes the key lock itself, never calls claim / inspect / fail / the resolver, no exception handler. VOLATILE (fresh snapshot per statement). Caller holds the note row; S4 reuses it under a note row lock. No API role may execute it.';
 
 revoke all on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) from public;
 revoke all on function nora_private.reconcile_note_attachments(bigint, bigint, jsonb[]) from anon;

@@ -144,6 +144,15 @@ returns text language sql as $$
         or (p_table = 'deal_notes' and a.deal_note_id = p_id)
 $$;
 
+-- S6-A: `key=ordinal` in append order. A reorder must NOT move anything here.
+create function pg_temp.s3b_ordinals(p_table text, p_id bigint)
+returns text language sql as $$
+    select coalesce(string_agg(a.storage_key || '=' || a.ordinal::text, ',' order by a.ordinal, a.id), '')
+      from public.attachments a
+     where (p_table = 'contact_notes' and a.contact_note_id = p_id)
+        or (p_table = 'deal_notes' and a.deal_note_id = p_id)
+$$;
+
 -- id:xmin per row - an UPDATE changes xmin, a DELETE + INSERT changes id
 create function pg_temp.s3b_rowids(p_table text, p_id bigint)
 returns text language sql as $$
@@ -207,9 +216,9 @@ returns void language plpgsql as $$
 begin
     perform pg_temp.s3b_plant_legacy(p_table, p_id, p_arr);
     alter table public.attachments disable trigger guard_attachment_reference_admission_after_insert_trigger;
-    insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type)
+    insert into public.attachments (contact_note_id, deal_note_id, storage_key, file_name, mime_type, ordinal)
     select case when p_table = 'contact_notes' then p_id end, case when p_table = 'deal_notes' then p_id end,
-           r.storage_key, r.file_name, r.mime_type
+           r.storage_key, r.file_name, r.mime_type, r.element_no::integer
       from nora_private.note_attachment_reference_rows(p_arr) as r;
     alter table public.attachments enable trigger guard_attachment_reference_admission_after_insert_trigger;
 end;
@@ -289,6 +298,29 @@ begin
        or position('delete from public.attachments' in v_src) > position('insert into public.attachments' in v_src)
        or position('order by d.storage_key collate "C"' in v_src) = 0 then
         v_failures := array_append(v_failures, '1d the core is not REMOVE (DELETE) -> ADD (INSERT, COLLATE "C") without UPDATE');
+    end if;
+
+    -- 1d2 (S6-A). The check above cannot tell the S6-A body from the S3B one,
+    -- and it cannot tell it from the NAIVE `ordinal := element_no` body either
+    -- - which applies green and then raises 23505 on a user's next note save.
+    -- So: the append base is read exactly once, BETWEEN the REMOVE delete and
+    -- the ADD insert, and the ADD inserts v_base + element_no.
+    if (select count(*) from regexp_matches(v_src, 'select coalesce\(max\(a\.ordinal\), 0\)', 'g')) <> 1
+       or position('select coalesce(max(a.ordinal), 0)' in v_src) < position('delete from public.attachments' in v_src)
+       or position('select coalesce(max(a.ordinal), 0)' in v_src) > position('insert into public.attachments' in v_src)
+       or position('(v_base + d.element_no)::integer' in v_src) = 0
+       or position('with ordinality' in substr(v_src, position('insert into public.attachments' in v_src))) = 0 then
+        v_failures := array_append(v_failures,
+            '1d2 the core does not append v_base + element_no with v_base read between REMOVE and ADD');
+    end if;
+
+    -- 1d3 (S6-A, contract 18 SCOPE). From the ADD onwards there is EXACTLY one
+    -- ORDER BY and it is the collation-pinned one: a second ordering would make
+    -- the insert order - and with it the ordinals - depend on something else.
+    if (select count(*) from regexp_matches(substr(v_src, position('insert into public.attachments' in v_src)),
+                                            'order by', 'g')) <> 1
+       or position('order by d.storage_key collate "C"' in substr(v_src, position('insert into public.attachments' in v_src))) = 0 then
+        v_failures := array_append(v_failures, '1d3 the ADD does not end in exactly one ORDER BY d.storage_key COLLATE "C"');
     end if;
 
     -- 1e. trigger inventory: exactly four, AFTER ROW, INSERT / UPDATE, no column list
@@ -539,6 +571,7 @@ declare
     v_ids      text;
     v_row_b    text;
     v_a text; v_b text; v_c text;
+    v_ord      text;
     v_failures text[] := '{}';
 begin
     foreach v_table in array array['contact_notes', 'deal_notes'] loop
@@ -567,17 +600,29 @@ begin
         v_res := pg_temp.s3b_set(v_table, v_id, array[pg_temp.s3b_el(v_a), pg_temp.s3b_el(v_b)]);
         if v_res <> 'ok' or pg_temp.s3b_keys(v_table, v_id) <> v_a || ',' || v_b
            or pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()) not like '% ins=1 del=0 upd=0 queue=0 %'
-           or position(v_ids in pg_temp.s3b_rowids(v_table, v_id)) <> 1 then
-            v_failures := v_failures || format('4c %s [A] -> [A,B]: %s %s', v_table, v_res, pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()));
+           or position(v_ids in pg_temp.s3b_rowids(v_table, v_id)) <> 1
+           -- S6-A: A keeps 1; B appends at v_base(=1) + element_no(=2) = 3.
+           -- Not 2: element_no is the position in the FULL desired array, and
+           -- KEEP rows are never renumbered.
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_a || '=1,' || v_b || '=3' then
+            v_failures := v_failures || format('4c %s [A] -> [A,B]: %s %s %s', v_table, v_res,
+                pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()), pg_temp.s3b_ordinals(v_table, v_id));
         end if;
 
-        -- [A,B] -> [B,A]: order only - no row write, same ids and versions
+        -- [A,B] -> [B,A]: order only - no row write, same ids and versions.
+        -- S6-A: and no ordinal moves either. The relational order and the array
+        -- order now DIFFER, which is legal (ORDINAL_VS_ARRAY_ORDER is INFO):
+        -- the ordinal is an append sequence, not the array position.
         v_ids := pg_temp.s3b_rowids(v_table, v_id);
+        v_ord := pg_temp.s3b_ordinals(v_table, v_id);
         v_before := pg_temp.s3b_counters();
         v_res := pg_temp.s3b_set(v_table, v_id, array[pg_temp.s3b_el(v_b), pg_temp.s3b_el(v_a)]);
         if v_res <> 'ok' or pg_temp.s3b_rowids(v_table, v_id) <> v_ids
-           or pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()) not like '% ins=0 del=0 upd=0 queue=0 %' then
-            v_failures := v_failures || format('4d %s [A,B] -> [B,A]: %s %s', v_table, v_res, pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()));
+           or pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()) not like '% ins=0 del=0 upd=0 queue=0 %'
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_ord
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_a || '=1,' || v_b || '=3' then
+            v_failures := v_failures || format('4d %s [A,B] -> [B,A]: %s %s %s', v_table, v_res,
+                pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()), pg_temp.s3b_ordinals(v_table, v_id));
         end if;
 
         -- [B,A] -> [B,C]: DELETE A (captured), INSERT C, KEEP B untouched
@@ -588,8 +633,12 @@ begin
            or pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()) not like '% ins=1 del=1 upd=0 queue=1 %'
            or position(v_row_b in pg_temp.s3b_rowids(v_table, v_id)) = 0
            or (select count(*) from nora_private.attachment_storage_deletion_queue where storage_key = v_a and state = 'pending') <> 1
-           or exists (select 1 from nora_private.attachment_storage_deletion_queue where storage_key in (v_b, v_c)) then
-            v_failures := v_failures || format('4e %s [B,A] -> [B,C]: %s %s', v_table, v_res, pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()));
+           or exists (select 1 from nora_private.attachment_storage_deletion_queue where storage_key in (v_b, v_c))
+           -- S6-A: B is KEEP and keeps 3; C is ADD at v_base(=3) + element_no(=2).
+           -- The gaps are the contract, not a defect: nothing is compacted.
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_b || '=3,' || v_c || '=5' then
+            v_failures := v_failures || format('4e %s [B,A] -> [B,C]: %s %s %s', v_table, v_res,
+                pg_temp.s3b_diff(v_before, pg_temp.s3b_counters()), pg_temp.s3b_ordinals(v_table, v_id));
         end if;
 
         -- metadata change on a kept key: rejected, nothing changes
@@ -662,6 +711,7 @@ declare
     v_before   bigint[];
     v_diff     text;
     v_p text; v_q text; v_r text;
+    v_ord      text;
     v_failures text[] := '{}';
 begin
     foreach v_table in array array['contact_notes', 'deal_notes'] loop
@@ -690,13 +740,19 @@ begin
             v_failures := v_failures || format('5b %s identical array: %s', v_table, v_diff);
         end if;
 
-        -- reorder: invoked (reads), but 0 writes, 0 captures, 0 key locks
+        -- reorder: invoked (reads), but 0 writes, 0 captures, 0 key locks -
+        -- and, S6-A, 0 ordinal movement. This is the action a BLOCKING
+        -- ORDINAL_VS_ARRAY_ORDER class would turn RED without a defect.
         v_before := pg_temp.s3b_counters();
+        v_ord := pg_temp.s3b_ordinals(v_table, v_id);
         v_res := pg_temp.s3b_set(v_table, v_id, array[pg_temp.s3b_el(v_q), pg_temp.s3b_el(v_p)]);
         v_diff := pg_temp.s3b_diff(v_before, pg_temp.s3b_counters());
         if v_res <> 'ok' or v_diff not like 'scans=% ins=0 del=0 upd=0 queue=0 locks=0' or v_diff like 'scans=0 %'
-           or pg_temp.s3b_locked(v_p) or pg_temp.s3b_locked(v_q) then
-            v_failures := v_failures || format('5c %s reorder: %s %s', v_table, v_res, v_diff);
+           or pg_temp.s3b_locked(v_p) or pg_temp.s3b_locked(v_q)
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_ord
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_p || '=1,' || v_q || '=2' then
+            v_failures := v_failures || format('5c %s reorder: %s %s %s', v_table, v_res, v_diff,
+                pg_temp.s3b_ordinals(v_table, v_id));
         end if;
 
         -- [Q,P] -> [Q,R]: exactly 1 DELETE (P), 1 INSERT (R), 1 capture, key locks P and R only
@@ -704,7 +760,9 @@ begin
         v_res := pg_temp.s3b_set(v_table, v_id, array[pg_temp.s3b_el(v_q), pg_temp.s3b_el(v_r)]);
         v_diff := pg_temp.s3b_diff(v_before, pg_temp.s3b_counters());
         if v_res <> 'ok' or v_diff not like '% ins=1 del=1 upd=0 queue=1 locks=2'
-           or not pg_temp.s3b_locked(v_p) or not pg_temp.s3b_locked(v_r) or pg_temp.s3b_locked(v_q) then
+           or not pg_temp.s3b_locked(v_p) or not pg_temp.s3b_locked(v_r) or pg_temp.s3b_locked(v_q)
+           -- S6-A: Q is KEEP and keeps 2; R appends at v_base(=2) + element_no(=2)
+           or pg_temp.s3b_ordinals(v_table, v_id) <> v_q || '=2,' || v_r || '=4' then
             v_failures := v_failures || format('5d %s [Q,P] -> [Q,R]: %s %s (P %s, Q %s, R %s)', v_table, v_res, v_diff,
                 pg_temp.s3b_locked(v_p), pg_temp.s3b_locked(v_q), pg_temp.s3b_locked(v_r));
         end if;
@@ -986,7 +1044,7 @@ begin
     update public.contact_notes set attachments = array[pg_temp.s3b_el('s3b-rbac-1.pdf'), pg_temp.s3b_el('s3b-rbac-2.pdf')] where id = v_note;
     -- ... while every direct write path to public.attachments and the core stays denied
     foreach v_sql in array array[
-        format('insert into public.attachments (contact_note_id, storage_key, file_name, mime_type) values (%s, %L, %L, %L)', v_note, 's3b-rbac-direct.pdf', 'x.pdf', 'application/pdf'),
+        format('insert into public.attachments (contact_note_id, storage_key, file_name, mime_type, ordinal) values (%s, %L, %L, %L, 1)', v_note, 's3b-rbac-direct.pdf', 'x.pdf', 'application/pdf'),
         'delete from public.attachments where storage_key = ''s3b-rbac-1.pdf''',
         'update public.attachments set file_name = ''x.pdf'' where storage_key = ''s3b-rbac-1.pdf''',
         format('select nora_private.reconcile_note_attachments(%s, null, null)', v_note)] loop
