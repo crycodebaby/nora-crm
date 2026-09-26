@@ -57,6 +57,7 @@ import { StartPage } from "../login/StartPage";
 import { useIsMobile } from "@/hooks/use-mobile.ts";
 import { MobileTasksList } from "../tasks/MobileTasksList.tsx";
 import { ContactListMobile } from "../contacts/ContactList.tsx";
+import { MobileCompanyList } from "../companies/MobileCompanyList";
 import { ContactShow } from "../contacts/ContactShow.tsx";
 import { CompanyShow } from "../companies/CompanyShow.tsx";
 import { DealShowMobile } from "../deals/DealShowMobile.tsx";
@@ -349,7 +350,7 @@ const MobileAdmin = (
       show: ContactShow,
       children: <Route path=":id/notes/:noteId" element={<NoteShowPage />} />,
     },
-    companies: { show: CompanyShow },
+    companies: { list: MobileCompanyList, show: CompanyShow },
     // W7-M1: show only. The mobile app deliberately has no Vorgangsliste,
     // Kanban, create or edit surface — registering more here would hand the
     // alias router routes that nothing on mobile can navigate back out of.
@@ -400,7 +401,7 @@ const MobileAdmin = (
       >
         <Route path=":id/notes/:noteId" element={<NoteShowPage />} />
       </Resource>
-      <Resource name="companies" show={CompanyShow} />
+      <Resource name="companies" list={MobileCompanyList} show={CompanyShow} />
       {/* Show only, so `hasList`/`hasEdit` stay false for deals on mobile and
           no generic react-admin surface offers a Vorgangsliste or Bearbeiten
           link that would go nowhere. This registration only supplies the

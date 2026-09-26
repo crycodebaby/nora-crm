@@ -9,6 +9,7 @@ import { DashboardStepper } from "./DashboardStepper";
 import { DealsChart } from "./DealsChart";
 
 import { NoraPageLoading } from "../misc/NoraPageLoading";
+import { NoraQueryError } from "../misc/NoraQueryError";
 
 import { Hotboard } from "./Hotboard";
 
@@ -23,16 +24,27 @@ export const Dashboard = () => {
     total: totalContact,
 
     isPending: isPendingContact,
+    error: contactError,
+    refetch: refetchContacts,
   } = useGetList<Contact>("contacts", {
     pagination: { page: 1, perPage: 1 },
   });
 
-  const { total: totalContactNotes, isPending: isPendingContactNotes } =
-    useGetList<ContactNote>("contact_notes", {
-      pagination: { page: 1, perPage: 1 },
-    });
+  const {
+    total: totalContactNotes,
+    isPending: isPendingContactNotes,
+    error: notesError,
+    refetch: refetchNotes,
+  } = useGetList<ContactNote>("contact_notes", {
+    pagination: { page: 1, perPage: 1 },
+  });
 
-  const { total: totalDeal, isPending: isPendingDeal } = useGetList<Contact>(
+  const {
+    total: totalDeal,
+    isPending: isPendingDeal,
+    error: dealsError,
+    refetch: refetchDeals,
+  } = useGetList<Contact>(
     "deals",
 
     {
@@ -41,6 +53,19 @@ export const Dashboard = () => {
   );
 
   const isPending = isPendingContact || isPendingContactNotes || isPendingDeal;
+
+  const error = contactError || notesError || dealsError;
+  if (error) {
+    return (
+      <NoraQueryError
+        error={error}
+        onRetry={() =>
+          Promise.all([refetchContacts(), refetchNotes(), refetchDeals()])
+        }
+        className="my-8"
+      />
+    );
+  }
 
   // Eine leere Seite liest sich wie ein Fehler. Solange die Startseite lädt,
   // zeigt Nora dieselbe Grobstruktur wie im geladenen Zustand.

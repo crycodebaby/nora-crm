@@ -22,6 +22,8 @@ Er dient der **betrieblichen Nachvollziehbarkeit** im Team — nicht der Mitarbe
 | Checklisten | bestehende `checklist.*`-Codes (unverändert) |
 | Google Kalender (v0.4c.1+) | `calendar.event_linked`, `calendar.event_unlinked` (Sync/Connect ab v0.4c.2) |
 
+Im vorbereiteten Einsatzadress-RC gehören die vier `deals.site_*`-Felder zum bestehenden `deal.updated`-Diff: eine Speicherung erzeugt höchstens ein bestehendes Deal-Änderungsereignis, No-op erzeugt keines, Rollback persistiert keines. Kein paralleles Audit-Modell.
+
 ## Was wird nicht protokolliert
 
 - Jeder Seitenaufruf oder Klick

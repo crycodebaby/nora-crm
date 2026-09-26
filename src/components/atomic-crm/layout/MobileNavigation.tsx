@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { Home, ListTodo, Plus, Settings, Users } from "lucide-react";
+import { Building2, Home, ListTodo, Plus, Settings } from "lucide-react";
 import { CanAccess, useTranslate } from "ra-core";
 import { Link, useLocation, useMatch } from "react-router";
 import { ContactCreateSheet } from "../contacts/ContactCreateSheet";
@@ -25,8 +25,8 @@ export const MobileNavigation = () => {
   let currentPath: string | boolean = "/";
   if (location.pathname === "/") {
     currentPath = "/";
-  } else if (activeResource === "contacts") {
-    currentPath = "contacts";
+  } else if (activeResource === "companies") {
+    currentPath = "companies";
   } else if (matchPathTasks(location.pathname)) {
     currentPath = "/tasks";
   } else {
@@ -39,29 +39,28 @@ export const MobileNavigation = () => {
   return (
     <nav
       aria-label={translate("crm.navigation.label")}
-      className="fixed bottom-0 left-0 right-0 z-50 bg-secondary h-16"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background h-16"
       style={{
         paddingBottom: isPwa && isWebiOS ? 15 : undefined,
-        height:
-          "calc(var(--spacing)) * 6" + (isPwa && isWebiOS ? " + 15px" : ""),
+        height: isPwa && isWebiOS ? "calc(4rem + 15px)" : "4rem",
       }}
     >
-      <div className="flex justify-center items-center gap-1 px-2">
+      <div className="mx-auto flex h-full max-w-screen-md justify-center items-center gap-1 px-2">
         <>
           <GlobalSearch variant="mobile" />
           <NavigationButton
             href="/"
             Icon={Home}
-            label={translate("ra.page.dashboard")}
+            label="Start"
             isActive={currentPath === "/"}
           />
           <NavigationButton
-            href={noraCreatePath({ resource: "contacts", type: "list" })}
-            Icon={Users}
-            label={translate("resources.contacts.name", {
+            href={noraCreatePath({ resource: "companies", type: "list" })}
+            Icon={Building2}
+            label={translate("resources.companies.name", {
               smart_count: 2,
             })}
-            isActive={currentPath === "contacts"}
+            isActive={currentPath === "companies"}
           />
           <MobileCreateButton />
           <NavigationButton
@@ -95,13 +94,17 @@ const NavigationButton = ({
     asChild
     variant="ghost"
     className={cn(
-      "nora-touch-target flex-col gap-1 h-auto py-2 px-2 rounded-md w-[4.5rem]",
-      isActive ? "text-[var(--nora-brand)]" : "text-muted-foreground",
+      "nora-touch-target flex min-h-11 min-w-11 flex-1 max-w-20 flex-col gap-1 h-auto py-2 px-1 rounded-md",
+      isActive
+        ? "bg-[var(--nora-brand-soft)] text-[var(--nora-brand-hover)]"
+        : "text-muted-foreground",
     )}
   >
     <Link to={href}>
-      <Icon className="size-6" />
-      <span className="text-[0.65rem] font-medium leading-tight">{label}</span>
+      <Icon className="size-5" />
+      <span className="text-[0.6875rem] font-medium leading-tight">
+        {label}
+      </span>
     </Link>
   </Button>
 );
@@ -138,7 +141,7 @@ const MobileCreateButton = () => {
           <DropdownMenuTrigger asChild>
             <Button
               size="icon"
-              className="h-16 w-16 rounded-full -mt-3 nora-primary-action shadow-md"
+              className="size-14 rounded-full -mt-3 nora-primary-action shadow-md"
               aria-label={translate("ra.action.create")}
             >
               <Plus className="size-10" />
@@ -194,13 +197,11 @@ const SettingsButton = () => {
   const isActive = location.pathname.startsWith("/settings");
 
   return (
-    <CanAccess resource="configuration" action="edit">
-      <NavigationButton
-        href="/settings"
-        Icon={Settings}
-        label={translate("crm.settings.title")}
-        isActive={isActive}
-      />
-    </CanAccess>
+    <NavigationButton
+      href="/settings"
+      Icon={Settings}
+      label={translate("crm.settings.title")}
+      isActive={isActive}
+    />
   );
 };

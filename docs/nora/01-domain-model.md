@@ -220,3 +220,7 @@ Vollständige Entscheidung inkl. Alternativen: `06-decision-log.md` „2026-08-2
 | Audit / Nachvollziehbarkeit | `audit_events` (append-only) | ✅ v0.3l (CRM + Checklisten) |
 | Servicebereich | `service_area_code` (`FENS`, `HAUS`, `IMMO`) | spezifiziert |
 | Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2 ✅ |
+
+## 2026-09-25 – Eigenständige Einsatzadresse am Vorgang (vorbereitet, nicht live)
+
+Der Vorgang besitzt einen eigenen gespeicherten Einsatzort in den nullable Textfeldern `site_street`, `site_city`, `site_floor` und `site_tenant_name`. Die Kundenanschrift ist nur eine Eingabehilfe bei Neuanlage: Straße und Ort dürfen beim ersten Kunden und bei Kundenwechsel vorgeschlagen werden, solange kein Site-Feld manuell verändert wurde. Jeder manuelle Eingriff, auch bewusstes Leeren, beendet alle automatischen Vorschläge für dieses Formular. Etage und Klingelschild werden niemals automatisch gesetzt oder geleert. Beim Bearbeiten findet keine Übernahme statt. Spätere Kundenadressänderungen verändern gespeicherte Vorgänge nicht; Renderer lesen ausschließlich Deal-Felder. Keine Synchronisierung und kein Bestands-Backfill. Die Schnellerfassung schreibt ohne sichtbare Site-Eingabe keine Site-Werte; NULL ist dort legitim. Der Mietername ist Ortsinformation, keine Kundenrelation. Änderungen laufen durch den bestehenden Deal-Audit-Pfad.

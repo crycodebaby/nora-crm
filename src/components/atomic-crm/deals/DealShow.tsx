@@ -33,6 +33,7 @@ import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import { useDealShowFacts } from "./useDealShowFacts";
 import { isNoraRecordId } from "../routing/noraRoutes";
+import { DealSiteAddress } from "./DealSiteAddress";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
@@ -102,6 +103,10 @@ const DealShowContent = () => {
               link="show"
             />
           </p>
+          <DealSiteAddress
+            deal={record}
+            className="text-sm text-muted-foreground"
+          />
         </div>
         <div
           className={`flex flex-wrap gap-2 shrink-0 justify-end ${record.archived_at ? "" : "pr-10"}`}

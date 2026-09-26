@@ -35,7 +35,7 @@ Eine Firma wird nie zusätzlich als Kontakt gespeichert. **Vorgangsstatus** (Sta
 
 - **Kundentyp** liegt in `companies.sector`. Nicht zusätzlich als Tag pflegen — außer der Tag ist bewusst eine eigenständige Markierung. *(Falle 3)*
 - **Nächstes Nachfassdatum** liegt in `deals.expected_closing_date`. Kein Ersatz-Nachfassfeld in Notizen oder Aufgaben, solange kein eigenes DB-Feld beschlossen ist. *(Falle 6)*
-- **Baustellenadressen** sind noch keine eigenen Objekte. Bis dahin Adressen nicht willkürlich in mehrere Textfelder kopieren. *(Falle 2)*
+- **Baustellenadressen** sind noch keine eigenen Objekte. Der vorbereitete RC speichert den Einsatzort ausschließlich in `deals.site_*`, unabhängig von der Kundenanschrift. Vorschläge aus der Kundenanschrift nur bei Neuanlage und bis zum ersten manuellen Site-Eingriff; Leeren bleibt leer, Edit synchronisiert nie. Keine unsichtbaren Quick-Capture-Writes, kein Backfill. Entscheidung: `06` „Eigenständige Einsatzadresse am Vorgang“. *(Falle 2)*
 - **Hersteller/Lieferanten** können als Firmen-Datensatz erscheinen, aber ein echtes Herstellerfeld am Vorgang existiert nicht. Nicht so tun, als sei das gelöst. *(Falle 5)*
 - **Privatpersonen:** `companies.name` wird beim Anlegen aus Vor-/Nachname abgeleitet (`buildCustomerCreatePayload.ts`) und ist im Edit-Formular die einzige führende Quelle — kein zweites Namensfeld, kein virtuelles Vor-/Nachname-Feld im Edit. Ein Empty-Name-Guard verhindert `companies.name = ''` bei Whitespace-only-Namen. *(Falle 28)*
 

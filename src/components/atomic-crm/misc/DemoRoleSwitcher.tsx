@@ -64,7 +64,7 @@ export const DemoRoleSwitcher = ({ className }: { className?: string }) => {
       >
         <SelectTrigger
           id="nora-demo-role-switcher"
-          className="h-8 w-[11rem] text-xs border-dashed"
+          className="min-h-11 w-full max-w-xs text-sm"
           aria-label={translate("crm.demo.role_switcher_label")}
         >
           <SelectValue
@@ -83,9 +83,6 @@ export const DemoRoleSwitcher = ({ className }: { className?: string }) => {
           ))}
         </SelectContent>
       </Select>
-      <p className="hidden lg:block text-[10px] text-muted-foreground mt-0.5 max-w-[11rem] leading-tight">
-        {translate("crm.demo.role_switcher_hint")}
-      </p>
     </div>
   );
 };

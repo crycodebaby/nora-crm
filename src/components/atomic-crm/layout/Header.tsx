@@ -15,17 +15,15 @@ import { UserMenu } from "@/components/admin/user-menu";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 import { GlobalSearch } from "./GlobalSearch";
-import { DemoRoleSwitcher } from "../misc/DemoRoleSwitcher";
 import { QuickCaptureTrigger } from "../quickCapture/QuickCaptureTrigger";
-import { useConfigurationContext } from "../root/ConfigurationContext";
 import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
 import { AuditPage } from "../audit/AuditPage";
 import { GoogleCalendarAdminPage } from "../calendar/GoogleCalendarAdminPage";
 import { getActiveNoraResource, noraCreatePath } from "../routing/noraRoutes";
+import noraMonogram from "@/assets/nora-monogram.png";
 
 const Header = () => {
-  const { darkModeLogo, lightModeLogo, title } = useConfigurationContext();
   const location = useLocation();
   const translate = useTranslate();
 
@@ -33,8 +31,6 @@ const Header = () => {
   const activeResource = getActiveNoraResource(location.pathname);
   if (matchPath("/", location.pathname)) {
     currentPath = "/";
-  } else if (activeResource === "contacts") {
-    currentPath = "contacts";
   } else if (activeResource === "companies") {
     currentPath = "companies";
   } else if (activeResource === "deals") {
@@ -45,40 +41,34 @@ const Header = () => {
 
   return (
     <>
-      <nav className="grow">
-        <header className="bg-secondary">
-          <div className="px-4">
-            <div className="flex justify-between items-center gap-3 flex-1 min-w-0">
+      <nav
+        className="sticky top-0 z-40 grow"
+        aria-label={translate("crm.navigation.label")}
+      >
+        <header className="border-b border-border bg-background">
+          <div className="px-4 md:px-6">
+            <div className="flex min-h-14 justify-between items-center gap-3 flex-1 min-w-0">
               <Link
                 to="/"
-                className="flex items-center gap-2 text-secondary-foreground no-underline shrink-0"
+                className="flex items-center gap-2 text-foreground no-underline shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nora-brand-ring)]"
+                aria-label="Nora – Startseite"
               >
                 <img
-                  className="[.light_&]:hidden h-6"
-                  src={darkModeLogo}
-                  alt={title}
+                  className="size-14 object-contain"
+                  src={noraMonogram}
+                  alt=""
+                  aria-hidden="true"
                 />
-                <img
-                  className="[.dark_&]:hidden h-6"
-                  src={lightModeLogo}
-                  alt={title}
-                />
-                <h1 className="hidden text-xl font-semibold lg:block">
-                  {title}
-                </h1>
+                <h1 className="text-base font-semibold tracking-tight">Nora</h1>
               </Link>
-              <nav className="hidden md:flex shrink-0">
+              <nav
+                aria-label="Hauptnavigation"
+                className="hidden md:flex shrink-0 items-center gap-1"
+              >
                 <NavigationTab
-                  label={translate("ra.page.dashboard")}
+                  label="Startseite"
                   to="/"
                   isActive={currentPath === "/"}
-                />
-                <NavigationTab
-                  label={translate("resources.contacts.name", {
-                    smart_count: 2,
-                  })}
-                  to={noraCreatePath({ resource: "contacts", type: "list" })}
-                  isActive={currentPath === "contacts"}
                 />
                 <NavigationTab
                   label={translate("resources.companies.name", {
@@ -98,9 +88,8 @@ const Header = () => {
               <GlobalSearch className="hidden min-w-[12rem] max-w-sm flex-1 xl:flex" />
               <QuickCaptureTrigger
                 variant="header"
-                className="w-11 px-0 xl:w-auto xl:px-4"
+                className="nora-touch-target w-11 px-0 xl:w-auto xl:px-4"
               />
-              <DemoRoleSwitcher className="hidden xl:flex" />
               <div className="flex items-center shrink-0">
                 <ThemeModeToggle />
                 <RefreshButton />
@@ -109,9 +98,7 @@ const Header = () => {
                   <CanAccess resource="sales" action="list">
                     <UsersMenu />
                   </CanAccess>
-                  <CanAccess resource="configuration" action="edit">
-                    <SettingsMenu />
-                  </CanAccess>
+                  <SettingsMenu />
                   <CanAccess
                     resource="google_calendar_connections"
                     action="list"
@@ -146,10 +133,11 @@ const NavigationTab = ({
 }) => (
   <Link
     to={to}
-    className={`px-2.5 py-3.5 text-sm font-medium transition-colors border-b-2 nora-touch-target md:py-3 xl:px-5 ${
+    aria-current={isActive ? "page" : undefined}
+    className={`min-h-11 rounded-md px-3 text-sm font-medium transition-colors inline-flex items-center justify-center nora-touch-target xl:px-4 ${
       isActive
-        ? "text-secondary-foreground border-[var(--nora-brand)]"
-        : "text-secondary-foreground/70 border-transparent hover:text-secondary-foreground/80"
+        ? "text-[var(--nora-brand-hover)] bg-[var(--nora-brand-soft)]"
+        : "text-muted-foreground hover:text-foreground hover:bg-muted"
     }`}
   >
     {label}

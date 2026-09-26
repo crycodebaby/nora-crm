@@ -1,9 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
-import { RotateCcw, Save } from "lucide-react";
+import { ArrowRight, RotateCcw, Save, Users } from "lucide-react";
 import type { RaRecord } from "ra-core";
 import {
   EditBase,
   Form,
+  useCanAccess,
   useGetList,
   useInput,
   useNotify,
@@ -11,6 +12,7 @@ import {
 } from "ra-core";
 import { useCallback, useMemo } from "react";
 import { useFormContext } from "react-hook-form";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -21,7 +23,10 @@ import { SimpleFormIterator } from "@/components/admin/simple-form-iterator";
 import { TextInput } from "@/components/admin/text-input";
 
 import ImageEditorField from "../misc/ImageEditorField";
+import { DemoRoleSwitcher } from "../misc/DemoRoleSwitcher";
+import { isNoraDemoMode } from "../misc/noraDemoMode";
 import { NoraAccessGuard } from "../misc/NoraEditGuard";
+import { noraCreatePath } from "../routing/noraRoutes";
 import {
   useConfigurationContext,
   useConfigurationUpdater,
@@ -135,30 +140,63 @@ const transformFormValues = (data: Record<string, any>) => ({
 export const SettingsPage = () => {
   const updateConfiguration = useConfigurationUpdater();
   const notify = useNotify();
+  const { canAccess, isPending } = useCanAccess({
+    resource: "configuration",
+    action: "edit",
+  });
 
   return (
-    <EditBase
-      resource="configuration"
-      id={1}
-      mutationMode="pessimistic"
-      redirect={false}
-      transform={transformFormValues}
-      mutationOptions={{
-        onSuccess: (data: any) => {
-          updateConfiguration(data.config);
-          notify("crm.settings.saved");
-        },
-        onError: () => {
-          notify("crm.settings.save_error", {
-            type: "error",
-          });
-        },
-      }}
-    >
-      <NoraAccessGuard resource="configuration" action="edit" fallbackPath="/">
-        <SettingsForm />
-      </NoraAccessGuard>
-    </EditBase>
+    <div className="mx-auto max-w-5xl space-y-6 pb-8 pt-3">
+      <h1 className="text-2xl font-semibold">Einstellungen</h1>
+      <Card>
+        <CardContent className="grid gap-5 pt-6 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 text-sm font-semibold">Kontakte</p>
+            <Link
+              to={noraCreatePath({ resource: "contacts", type: "list" })}
+              className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--nora-brand-hover)]"
+            >
+              <Users className="size-4" aria-hidden />
+              Kontaktliste öffnen <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          </div>
+          {isNoraDemoMode ? (
+            <div>
+              <p className="mb-2 text-sm font-semibold">Demo-Rolle</p>
+              <DemoRoleSwitcher />
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+      {!isPending && canAccess ? (
+        <EditBase
+          resource="configuration"
+          id={1}
+          mutationMode="pessimistic"
+          redirect={false}
+          transform={transformFormValues}
+          mutationOptions={{
+            onSuccess: (data: any) => {
+              updateConfiguration(data.config);
+              notify("crm.settings.saved");
+            },
+            onError: () => {
+              notify("crm.settings.save_error", {
+                type: "error",
+              });
+            },
+          }}
+        >
+          <NoraAccessGuard
+            resource="configuration"
+            action="edit"
+            fallbackPath="/"
+          >
+            <SettingsForm />
+          </NoraAccessGuard>
+        </EditBase>
+      ) : null}
+    </div>
   );
 };
 
@@ -252,9 +290,9 @@ const SettingsFormFields = () => {
       {/* Left navigation */}
       <nav className="hidden md:block w-48 shrink-0">
         <div className="sticky top-4 space-y-1">
-          <h1 className="text-2xl font-semibold px-3 mb-2">
-            {translate("crm.settings.title")}
-          </h1>
+          <p className="px-3 mb-2 text-sm font-semibold text-muted-foreground">
+            Bereiche
+          </p>
           {SECTIONS.map((section) => (
             <button
               key={section.id}

@@ -1559,6 +1559,14 @@ BEGIN
     IF part IS NOT NULL THEN v := v || jsonb_build_object('archived_at', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.description), to_jsonb(p_new.description), 'description');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('description', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_street), to_jsonb(p_new.site_street), 'site_street');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_street', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_city), to_jsonb(p_new.site_city), 'site_city');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_city', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_floor), to_jsonb(p_new.site_floor), 'site_floor');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_floor', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_tenant_name), to_jsonb(p_new.site_tenant_name), 'site_tenant_name');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_tenant_name', part); END IF;
     RETURN v;
 END;
 $$;

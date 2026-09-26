@@ -13,6 +13,7 @@ import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraUrgencyBadge } from "../misc/NoraUrgencyBadge";
 import { getFollowUpStatus, isDealTerminalStage } from "./dealUtils";
+import { DealSiteAddress } from "./DealSiteAddress";
 
 export const DealCard = ({ deal, index }: { deal: Deal; index: number }) => {
   if (!deal) return null;
@@ -82,13 +83,17 @@ export const DealCardContent = ({
             <p className="nora-deal-card-title leading-snug line-clamp-2">
               {deal.name}
             </p>
-            <p className="nora-deal-card-customer truncate">
+            <p className="nora-deal-card-customer break-words">
               <ReferenceField
                 source="company_id"
                 reference="companies"
                 link={false}
               />
             </p>
+            <DealSiteAddress
+              deal={deal}
+              className="text-[13px] text-muted-foreground"
+            />
             {(deal.category || deal.amount) && (
               <p className="nora-deal-card-meta">
                 {deal.category ? (
