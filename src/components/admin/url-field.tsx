@@ -3,6 +3,7 @@ import type { AnchorHTMLAttributes } from "react";
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { safeHref } from "@/lib/safeHref";
 import type { FieldProps } from "@/lib/field.type";
 
 /**
@@ -56,10 +57,21 @@ const UrlFieldImpl = <
     );
   }
 
+  // Only render an anchor for navigable schemes. An unsafe value (e.g.
+  // `javascript:`) is shown as plain text so it can never execute on click.
+  const href = safeHref(typeof value === "string" ? value : String(value));
+  if (href == null) {
+    return (
+      <span className={className} {...rest}>
+        {value}
+      </span>
+    );
+  }
+
   return (
     <a
       className={cn("underline hover:no-underline", className)}
-      href={value}
+      href={href}
       onClick={stopPropagation}
       {...rest}
     >

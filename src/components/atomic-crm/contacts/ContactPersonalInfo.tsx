@@ -12,6 +12,7 @@ import {
   translatePersonalInfoTypeLabel,
 } from "./contactModel";
 import { translateLinkTypeLabel } from "../misc/linksModel";
+import { safeHref } from "@/lib/safeHref";
 import type { Contact } from "../types";
 
 export const ContactPersonalInfo = () => {
@@ -41,9 +42,7 @@ export const ContactPersonalInfo = () => {
           primary={
             <a
               className="underline hover:no-underline text-sm text-muted-foreground"
-              href={
-                link.url.startsWith("http") ? link.url : `https://${link.url}`
-              }
+              href={safeHref(link.url)}
               target="_blank"
               rel="noopener noreferrer"
               title={link.url}
@@ -59,7 +58,7 @@ export const ContactPersonalInfo = () => {
           primary={
             <a
               className="underline hover:no-underline text-sm text-muted-foreground"
-              href={record.linkedin_url}
+              href={safeHref(record.linkedin_url)}
               target="_blank"
               rel="noopener noreferrer"
               title={record.linkedin_url}
