@@ -51,7 +51,7 @@ export const DealSiteAddressInputs = () => {
   const clear = () => {
     manuallyEdited.current = true;
     addressFields.forEach((field) =>
-      setValue(field, "", { shouldDirty: true, shouldTouch: true }),
+      setValue(field, null, { shouldDirty: true, shouldTouch: true }),
     );
     setDetailsExpanded(false);
   };

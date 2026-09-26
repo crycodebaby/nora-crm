@@ -61,25 +61,22 @@ export const MobileDashboard = () => {
   const isPending = isPendingContact || isPendingContactNotes;
 
   const error = contactError || notesError;
-  if (error) {
-    return (
-      <Wrapper>
-        <NoraQueryError
-          error={error}
-          onRetry={() => Promise.all([refetchContacts(), refetchNotes()])}
-          className="my-8"
-        />
-      </Wrapper>
-    );
-  }
+  const onboardingStep =
+    !error && !isPending
+      ? !totalContact
+        ? 1
+        : !totalContactNotes
+          ? 2
+          : null
+      : null;
 
   // Der bisherige Ein-Sekunden-Vorlauf zeigte genau während des üblichen
   // Ladevorgangs eine leere Seite. Der Ladezustand erscheint jetzt sofort.
-  if (isPending) {
+  if (isPending && !error) {
     return <Loading />;
   }
 
-  if (!totalContact) {
+  if (onboardingStep === 1) {
     return (
       <Wrapper>
         <DashboardStepper step={1} />
@@ -87,7 +84,7 @@ export const MobileDashboard = () => {
     );
   }
 
-  if (!totalContactNotes) {
+  if (onboardingStep === 2) {
     return (
       <Wrapper>
         <DashboardStepper step={2} contactId={dataContact?.[0]?.id} />
@@ -98,6 +95,17 @@ export const MobileDashboard = () => {
   return (
     <Wrapper>
       <div className="flex flex-col gap-8 mt-1">
+        {error ? (
+          <NoraQueryError
+            error={error}
+            onRetry={() =>
+              Promise.all([
+                ...(contactError ? [refetchContacts()] : []),
+                ...(notesError ? [refetchNotes()] : []),
+              ])
+            }
+          />
+        ) : null}
         <Hotboard />
         <DashboardActivityLog />
       </div>

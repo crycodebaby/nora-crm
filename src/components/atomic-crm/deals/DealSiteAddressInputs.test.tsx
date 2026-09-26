@@ -13,8 +13,9 @@ import type { Deal } from "../types";
 import { DealSiteAddressInputs } from "./DealSiteAddressInputs";
 import { DealSiteAddress } from "./DealSiteAddress";
 
+let formValues: Record<string, unknown> = {};
 const Controls = () => {
-  const { setValue } = useFormContext();
+  const { setValue, getValues } = useFormContext();
   const refresh = useRefresh();
   return (
     <>
@@ -29,6 +30,14 @@ const Controls = () => {
       </button>
       <button type="button" onClick={() => refresh()}>
         Kundendaten aktualisieren
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          formValues = getValues();
+        }}
+      >
+        Formularwerte prüfen
       </button>
     </>
   );
@@ -141,6 +150,15 @@ describe("Frozen deal site address contract", () => {
       page.getByRole("button", { name: "Einsatzadresse vollständig löschen" }),
     );
     await userEvent.click(page.getByRole("button", { name: "Anderer Kunde" }));
+    await userEvent.click(
+      page.getByRole("button", { name: "Formularwerte prüfen" }),
+    );
+    expect(formValues).toMatchObject({
+      site_street: null,
+      site_city: null,
+      site_floor: null,
+      site_tenant_name: null,
+    });
     await expect.element(street()).toHaveValue("");
     await expect.element(city()).toHaveValue("");
     await userEvent.click(

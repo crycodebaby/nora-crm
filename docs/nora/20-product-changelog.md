@@ -29,7 +29,7 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 
 ## In Vorbereitung — neue Oberfläche und Einsatzadressen
 
-Größere Navigationsflächen und eine mobile Kundenliste. Vorgänge zeigen Kunde und eigenen Einsatzort; Straße, Ort, Etage und Klingelschild lassen sich unabhängig von der Kundenanschrift speichern. Eigene Eingaben bleiben bei Kundenwechsel erhalten; Adressänderungen werden im bestehenden Verlauf erfasst. Das bestehende Hotboard bleibt erhalten. Wenn eine Startseiten-Abfrage scheitert, zeigt Nora einen Fehler mit erneutem Ladeversuch statt eines leeren Erfolgszustands. Noch nicht veröffentlicht.
+Größere Navigationsflächen und eine mobile Kundenliste. Vorgänge zeigen Kunde und eigenen Einsatzort; Straße, Ort, Etage und Klingelschild lassen sich unabhängig von der Kundenanschrift speichern. Eigene Eingaben bleiben bei Kundenwechsel erhalten; Adressänderungen werden im bestehenden Verlauf erfasst. Das bestehende Hotboard bleibt erhalten. Wenn eine Startseiten-Abfrage scheitert, zeigt Nora den Fehler im betroffenen Bereich mit erneutem Ladeversuch; andere Bereiche bleiben sichtbar. Noch nicht veröffentlicht.
 
 ## 2026-09-21 — Anhänge: Nora prüft jetzt, ob die Dateiangaben einer Notiz stimmen
 

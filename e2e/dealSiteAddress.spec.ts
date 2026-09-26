@@ -138,25 +138,123 @@ test("desktop create keeps the manually entered Einsatzort independent of custom
     editForm.getByRole("textbox", { name: "Straße und Hausnummer" }),
   ).toHaveValue("");
   await editForm.getByRole("button", { name: "Speichern" }).click();
-  await expect.poll(async () => (await readDeal()).site_street).toBe("");
+  await expect.poll(async () => (await readDeal()).site_street).toBeNull();
   expect(await readDeal()).toMatchObject({
-    site_street: "",
-    site_city: "",
-    site_floor: "",
-    site_tenant_name: "",
+    site_street: null,
+    site_city: null,
+    site_floor: null,
+    site_tenant_name: null,
   });
   const { data: audit, error: auditError } = await service
     .from("audit_events")
     .select("metadata")
     .eq("deal_id", deal.id)
-    .eq("event_type", "deal.updated")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+    .eq("event_type", "deal.updated");
   if (auditError) throw auditError;
-  expect(audit.metadata.changes).toMatchObject({
-    site_street: { old: "Einsatzstraße 9", new: "" },
-    site_city: { old: "Essen", new: "" },
+  expect(audit).toHaveLength(1);
+  expect(audit[0].metadata.changes).toMatchObject({
+    site_street: { old: "Einsatzstraße 9", new: null },
+    site_city: { old: "Essen", new: null },
+    site_floor: { old: "3", new: null },
+    site_tenant_name: { old: "Meyer", new: null },
+  });
+});
+
+test("editing a deal preserves untouched NULL sites and a single-field clear writes NULL", async ({
+  page,
+  isMobile,
+  e2eAdmin,
+  createCompany,
+  loginAsAdmin,
+}) => {
+  test.skip(isMobile, "Mobile has no registered Vorgang edit route");
+  const company = await createCompany({
+    name: "Null-Einsatzort",
+    salesId: e2eAdmin.id,
+  });
+  const { data: deal, error: createError } = await service
+    .from("deals")
+    .insert({
+      company_id: company.id,
+      name: "Unberührter Einsatzort",
+      stage: "neue-anfrage",
+      sales_id: e2eAdmin.id,
+      expected_closing_date: "2026-10-05",
+      amount: 0,
+      site_street: null,
+      site_city: null,
+      site_floor: null,
+      site_tenant_name: null,
+    })
+    .select("id")
+    .single();
+  if (createError) throw createError;
+  const readSite = async () => {
+    const { data, error } = await service
+      .from("deals")
+      .select("name,site_street,site_city,site_floor,site_tenant_name")
+      .eq("id", deal.id)
+      .single();
+    if (error) throw error;
+    return data;
+  };
+  const readAudit = async () => {
+    const { data, error } = await service
+      .from("audit_events")
+      .select("metadata")
+      .eq("deal_id", deal.id)
+      .eq("event_type", "deal.updated")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return data;
+  };
+  await loginAsAdmin(e2eAdmin);
+  await page.goto(`/#/vorgaenge/${deal.id}`);
+  let form = page.getByRole("dialog", { name: "Vorgang bearbeiten" });
+  await expect(form).toBeVisible();
+  await form
+    .getByRole("textbox", { name: "Titel", exact: true })
+    .fill("Nur Titel geändert");
+  await form.getByRole("button", { name: "Speichern" }).click();
+  await expect
+    .poll(async () => (await readSite()).name)
+    .toBe("Nur Titel geändert");
+  expect(await readSite()).toMatchObject({
+    site_street: null,
+    site_city: null,
+    site_floor: null,
+    site_tenant_name: null,
+  });
+  expect(await readAudit()).toHaveLength(1);
+  expect(Object.keys((await readAudit())[0].metadata.changes)).not.toContain(
+    "site_street",
+  );
+
+  await page.goto(`/#/vorgaenge/${deal.id}`);
+  form = page.getByRole("dialog", { name: "Vorgang bearbeiten" });
+  await form
+    .getByRole("textbox", { name: "Straße und Hausnummer" })
+    .fill("Nur dieses Feld");
+  await form.getByRole("button", { name: "Speichern" }).click();
+  await expect
+    .poll(async () => (await readSite()).site_street)
+    .toBe("Nur dieses Feld");
+
+  await page.goto(`/#/vorgaenge/${deal.id}`);
+  form = page.getByRole("dialog", { name: "Vorgang bearbeiten" });
+  await form.getByRole("textbox", { name: "Straße und Hausnummer" }).fill("");
+  await form.getByRole("button", { name: "Speichern" }).click();
+  await expect.poll(async () => (await readSite()).site_street).toBeNull();
+  expect(await readSite()).toMatchObject({
+    site_city: null,
+    site_floor: null,
+    site_tenant_name: null,
+  });
+  const audit = await readAudit();
+  expect(audit).toHaveLength(3);
+  expect(audit[2].metadata.changes.site_street).toEqual({
+    old: "Nur dieses Feld",
+    new: null,
   });
 });
 
