@@ -1,6 +1,6 @@
 # 03 – Datenmodell- und Persistenz-Guardrails
 
-Stand: 2026-09-21 · Load-Klasse: **ALWAYS**
+Stand: 2026-09-26 · Load-Klasse: **ALWAYS**
 
 Dieses Dokument hält die **universellen Daten- und Persistenzinvarianten** von Nora fest: Regeln, die bei praktisch jeder Datenmodell- oder Persistenzänderung gelten, unabhängig von Subsystem und Release.
 

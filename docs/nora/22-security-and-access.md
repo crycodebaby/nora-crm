@@ -1,6 +1,6 @@
 # 22 – Security und Access (global)
 
-Stand: 2026-09-22 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-26 · Status: **CURRENT** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **globale Security- und Access-Contract** von Nora: Authentifizierung vs. Autorisierung, Rollen und Capabilities, Trust Boundaries, Datenbank-Enforcement (RLS, Grants, Default-Privilegien, `SECURITY DEFINER`), Session- und Executor-Integrität.
 
@@ -229,7 +229,7 @@ Technische Grundlage:
 
 ### 6.6 Die Tabelle `public.attachments`
 
-Stand seit W8-C S1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260916120000_nora_attachment_foundation`); Zugriffsvertrag und Schreibregeln seit W8-C S3A (`PRODUCTION VERIFIED` 2026-09-19, Migration `20260919120000_nora_attachment_reference_serialization`, Abschnitt 6.10); einziger Schreiber seit W8-C S3B (`PRODUCTION VERIFIED` 2026-09-19, Abschnitt 6.11); relationale Ordnungsgrundlage seit W8-C S6-A (`PRODUCTION VERIFIED` 2026-09-22, Migration `20260922140000_nora_attachment_ordinal`). **Zwei verschiedene Flächen, zwei verschiedene Contracts:** Abschnitt 6.5 regelt den **Storage-Bucket** (die Binärdateien), dieser Abschnitt die **Metadatentabelle** in `public`. Sie sind unabhängig — die Tabelle macht den Bucket weder privater noch offener.
+Stand seit W8-C S1 (`PRODUCTION VERIFIED` 2026-09-17, Migration `20260916120000_nora_attachment_foundation`); Zugriffsvertrag und Schreibregeln seit W8-C S3A (`PRODUCTION VERIFIED` 2026-09-19, Migration `20260919120000_nora_attachment_reference_serialization`, Abschnitt 6.10); einziger Schreiber seit W8-C S3B (`PRODUCTION VERIFIED` 2026-09-19, Abschnitt 6.11); relationale Ordnungsgrundlage seit W8-C S6-A (Production Apply 2026-09-25, danach unabhängig `PRODUCTION VERIFIED`, Migration `20260922140000_nora_attachment_ordinal`). **Zwei verschiedene Flächen, zwei verschiedene Contracts:** Abschnitt 6.5 regelt den **Storage-Bucket** (die Binärdateien), dieser Abschnitt die **Metadatentabelle** in `public`. Sie sind unabhängig — die Tabelle macht den Bucket weder privater noch offener.
 
 > **Die Tabelle ist eine datenbankeigene, abgeleitete Projektionsfläche — für die Anwendung ausschließlich lesbar.** Seit S3B schreibt ausschließlich die Datenbank sie, abgeleitet aus den Notiz-JSON-Arrays (Abschnitt 6.11). **Kein Code in `src/**` schreibt sie**; der **Schreibpfad** der Anwendung bleiben die JSON-Arrays `contact_notes.attachments` / `deal_notes.attachments`. Seit W8-C S5 (`PRODUCTION VERIFIED` 2026-09-21) **liest** `src/**` sie — als relationale Beziehung am Notiz-Lesevorgang und ausschließlich als **Vertrauensquelle** des Lese-Gates, nicht als vollständige Anhang-Nutzlast (Abschnitt 6.12, [`16`](16-current-state.md) Abschnitt „Anhänge / Storage"). Aus ihrer Existenz folgt weiterhin **kein** abgenommener Viewer, keine Audit-Spur und kein Löschpfad. Die Bestandsnotizen hat W8-C S4 nachprojiziert ([`17`](17-known-issues-and-planned-waves.md) H.1) — **das war eine einmalige Datenoperation, kein Vertragsmerkmal**: die Zeilenzahl bleibt ohne Aussagekraft, und dass die Tabelle zu einem Zeitpunkt vollständig war, erzwingt kein Constraint.
 
