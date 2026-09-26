@@ -14,6 +14,7 @@ import { getExpectedAuthorization } from "./getExpectedAuthorization.ts";
 import { getNoteContent } from "./getNoteContent.ts";
 import { extractAndUploadAttachments } from "./extractAndUploadAttachments.ts";
 import { supabaseAdmin } from "../_shared/supabaseAdmin.ts";
+import { secureEquals } from "../_shared/secureCompare.ts";
 
 const webhookUser = Deno.env.get("POSTMARK_WEBHOOK_USER");
 const webhookPassword = Deno.env.get("POSTMARK_WEBHOOK_PASSWORD");
@@ -32,7 +33,7 @@ if (!rawAuthorizedIPs) {
 Deno.serve(async (req) => {
   let response: Response | undefined;
 
-  response = checkRequestTypeAndHeaders(req);
+  response = await checkRequestTypeAndHeaders(req);
   if (response) return response;
 
   const json = await req.json();
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
   return new Response("OK");
 });
 
-const checkRequestTypeAndHeaders = (req: Request) => {
+const checkRequestTypeAndHeaders = async (req: Request) => {
   // Only allow known IP addresses
   // We can use the x-forwarded-for header as it is populated by Supabase
   // https://supabase.com/docs/guides/api/securing-your-api#accessing-request-information
@@ -159,7 +160,9 @@ const checkRequestTypeAndHeaders = (req: Request) => {
     webhookPassword,
   );
   const authorization = req.headers.get("Authorization");
-  if (authorization !== expectedAuthorization) {
+  // Constant-time comparison so a wrong secret cannot be recovered byte by byte
+  // through response timing.
+  if (!(await secureEquals(authorization ?? "", expectedAuthorization))) {
     return new Response("Unauthorized", { status: 401 });
   }
 };
