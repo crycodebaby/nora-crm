@@ -296,23 +296,45 @@ begin
         perform nora_private.apply_sales_role_change(v_sale_id, 'viewer', false);
     end if;
 
+    -- Count the SAME event type the assertion below checks. This previously
+    -- counted EVERY event for the sale, which only matched because the fixture
+    -- happened to have produced none up to this point. Since the signup
+    -- admission guard (migration 20260927120000) a non-bootstrap identity is
+    -- created disabled, so the apply_sales_role_change(..., false) above
+    -- legitimately writes a `user.enabled` event first; a total-count baseline
+    -- then measures that unrelated event and the role-change assertion fails on
+    -- arithmetic rather than on behaviour.
     select count(*) into v_before from public.audit_events
-    where (metadata ->> 'sale_id')::bigint = v_sale_id;
+    where event_type = 'user.role_changed'
+      and (metadata ->> 'sale_id')::bigint = v_sale_id;
 
     perform nora_private.apply_sales_role_change(v_sale_id, 'office', false);
     select count(*) into v_count from public.audit_events
     where event_type = 'user.role_changed' and (metadata ->> 'sale_id')::bigint = v_sale_id;
     if v_count <> v_before + 1 then raise exception 'user.role_changed expected %, got %', v_before + 1, v_count; end if;
 
+    -- Each of the two checks below asserts "this operation emitted exactly one
+    -- more event of its own type", which is what they were always meant to
+    -- assert. They used to compare against the absolute value 1, which held
+    -- only while nothing earlier in the fixture had produced that type. The
+    -- signup admission guard (migration 20260927120000) creates a
+    -- non-bootstrap identity disabled, so releasing it above already emits a
+    -- `user.enabled`; an absolute count then measures the fixture's own setup.
+    select count(*) into v_before from public.audit_events
+    where event_type = 'user.disabled' and (metadata ->> 'sale_id')::bigint = v_sale_id;
+
     perform nora_private.apply_sales_role_change(v_sale_id, 'office', true);
     select count(*) into v_count from public.audit_events
     where event_type = 'user.disabled' and (metadata ->> 'sale_id')::bigint = v_sale_id;
-    if v_count <> 1 then raise exception 'user.disabled expected 1, got %', v_count; end if;
+    if v_count <> v_before + 1 then raise exception 'user.disabled expected %, got %', v_before + 1, v_count; end if;
+
+    select count(*) into v_before from public.audit_events
+    where event_type = 'user.enabled' and (metadata ->> 'sale_id')::bigint = v_sale_id;
 
     perform nora_private.apply_sales_role_change(v_sale_id, 'office', false);
     select count(*) into v_count from public.audit_events
     where event_type = 'user.enabled' and (metadata ->> 'sale_id')::bigint = v_sale_id;
-    if v_count <> 1 then raise exception 'user.enabled expected 1, got %', v_count; end if;
+    if v_count <> v_before + 1 then raise exception 'user.enabled expected %, got %', v_before + 1, v_count; end if;
 
     -- W6-B: a sales row is never removed by a direct DELETE (guard_sales_delete);
     -- the fixture disappears with the rollback of this block instead.

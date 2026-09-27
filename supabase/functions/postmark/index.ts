@@ -15,6 +15,7 @@ import { getNoteContent } from "./getNoteContent.ts";
 import { extractAndUploadAttachments } from "./extractAndUploadAttachments.ts";
 import { supabaseAdmin } from "../_shared/supabaseAdmin.ts";
 import { secureEquals } from "../_shared/secureCompare.ts";
+import { isAuthorizedSenderIp } from "./senderIp.ts";
 
 const webhookUser = Deno.env.get("POSTMARK_WEBHOOK_USER");
 const webhookPassword = Deno.env.get("POSTMARK_WEBHOOK_PASSWORD");
@@ -134,35 +135,32 @@ Deno.serve(async (req) => {
 });
 
 const checkRequestTypeAndHeaders = async (req: Request) => {
-  // Only allow known IP addresses
-  // We can use the x-forwarded-for header as it is populated by Supabase
-  // https://supabase.com/docs/guides/api/securing-your-api#accessing-request-information
-  const forwardedFor = req.headers.get("x-forwarded-for");
-  if (!forwardedFor) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  const ips = forwardedFor.split(",").map((ip) => ip.trim());
-  const authorizedIPs = rawAuthorizedIPs
-    .split(",")
-    .map((ip: string) => ip.trim());
-  if (!ips.some((ip) => authorizedIPs.includes(ip))) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
   // Only allow POST requests
   if (req.method !== "POST") {
     return new Response(null, { status: 405 });
   }
 
-  // Check the Authorization header
+  // THE GATE. Checked before anything the caller can influence, so that
+  // authorization never rests on a request header. Constant-time comparison so
+  // a wrong secret cannot be recovered byte by byte through response timing.
   const expectedAuthorization = getExpectedAuthorization(
     webhookUser,
     webhookPassword,
   );
   const authorization = req.headers.get("Authorization");
-  // Constant-time comparison so a wrong secret cannot be recovered byte by byte
-  // through response timing.
   if (!(await secureEquals(authorization ?? "", expectedAuthorization))) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
+  // Best-effort noise filter only — see isAuthorizedSenderIp. A caller that
+  // already proved the shared secret and fails this check is far more likely a
+  // Postmark IP-range change than an attacker, so the failure is logged.
+  if (
+    !isAuthorizedSenderIp(req.headers.get("x-forwarded-for"), rawAuthorizedIPs)
+  ) {
+    console.warn(
+      "postmark: authenticated request from an unlisted sender address",
+    );
     return new Response("Unauthorized", { status: 401 });
   }
 };

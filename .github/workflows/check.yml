@@ -39,6 +39,18 @@ jobs:
             - name: 🔬 ESLint
               run: npm run lint
 
+    secret-scan:
+        name: 🔐 Secret scan
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v4
+
+            - name: 🔐 Scan tracked files for secrets
+              run: node ./scripts/scan-secrets.mjs
+
     prettier:
         name: Prettier
         runs-on: ubuntu-latest

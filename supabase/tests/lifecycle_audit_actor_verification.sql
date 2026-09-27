@@ -120,6 +120,7 @@ declare
     v_detail text;
     v_count int;
     v_before int;
+    v_pre_ids uuid[];
     v_id uuid;
     r record;
 begin
@@ -152,6 +153,17 @@ begin
     -- 2. Browser JWTs (admin / office / viewer / anon) cannot write employee
     --    audit events through either RPC
     -- -----------------------------------------------------------------------
+    -- What this step proves is that the REFUSED CALLS BELOW write nothing, so
+    -- it measures the delta across them. It used to assert that no `user.*`
+    -- row existed for the target at all, which held only because the fixture
+    -- happened to have written none. Since the signup admission guard
+    -- (migration 20260927120000) a non-bootstrap identity is created disabled
+    -- and the apply_sales_role_change(v_t, 'viewer', false) above legitimately
+    -- writes a `user.enabled` row, so an existence check would report the
+    -- fixture's own setup as an authorization failure.
+    select count(*) into v_before from public.audit_events
+    where event_type like 'user.%' and metadata->>'sale_id' = v_t::text;
+
     for r in
         select * from (values
             ('authenticated', v_admin_a),
@@ -181,8 +193,10 @@ begin
         reset role;
     end loop;
 
-    if exists (select 1 from public.audit_events where event_type like 'user.%' and metadata->>'sale_id' = v_t::text) then
-        raise exception 'FAIL: a refused browser call must not write an audit row';
+    select count(*) into v_count from public.audit_events
+    where event_type like 'user.%' and metadata->>'sale_id' = v_t::text;
+    if v_count <> v_before then
+        raise exception 'FAIL: a refused browser call must not write an audit row (% -> %)', v_before, v_count;
     end if;
     raise notice 'OK  2. browser roles cannot write employee audit events';
 
@@ -194,6 +208,21 @@ begin
     perform set_config('request.jwt.claims', json_build_object('role', 'service_role')::text, true);
     set local role service_role;
 
+    -- Section 3 is about the rows THESE THREE CALLS write: how many, and who
+    -- they are attributed to. Snapshot the employee-access rows that already
+    -- exist for the target so they can be excluded below.
+    --
+    -- Since the signup admission guard (migration 20260927120000) a
+    -- non-bootstrap identity is created disabled, so the fixture's own
+    -- activation further up legitimately writes a System-attributed
+    -- `user.enabled`. Counting or iterating every row of these types would
+    -- measure the fixture's setup and then demand that the setup be attributed
+    -- to admin B — which it never was and never should be.
+    select coalesce(array_agg(id), '{}'::uuid[]) into v_pre_ids
+    from public.audit_events
+    where event_type in ('user.role_changed', 'user.disabled', 'user.enabled')
+      and metadata->>'sale_id' = v_t::text;
+
     v_json := public.set_sales_access_by_executor(v_admin_a, v_t, 'office', null, v_op);   -- role change
     v_json := public.set_sales_access_by_executor(v_admin_a, v_t, null, true, null);       -- disable
     v_json := public.set_sales_access_by_executor(v_admin_b, v_t, null, false, null);      -- enable, by B
@@ -201,7 +230,8 @@ begin
 
     select count(*) into v_count from public.audit_events
     where event_type in ('user.role_changed', 'user.disabled', 'user.enabled')
-      and metadata->>'sale_id' = v_t::text;
+      and metadata->>'sale_id' = v_t::text
+      and id <> all (v_pre_ids);
     if v_count <> 3 then
         raise exception 'FAIL: expected 3 executor audit rows, got %', v_count;
     end if;
@@ -210,6 +240,7 @@ begin
         select * from public.audit_events
         where event_type in ('user.role_changed', 'user.disabled', 'user.enabled')
           and metadata->>'sale_id' = v_t::text
+          and id <> all (v_pre_ids)
     loop
         if r.entity_type <> 'sales' or r.entity_id <> v_entity then
             raise exception 'FAIL: % entity_id must be nora_entity_uuid(sales, target)', r.event_type;
@@ -306,16 +337,21 @@ begin
         end if;
     end loop;
 
-    -- same employee → one entity id across all six user.* events
+    -- same employee → one entity id across every user.* event
     select count(distinct entity_id) into v_count from public.audit_events
     where event_type like 'user.%' and metadata->>'sale_id' = v_t::text;
     if v_count <> 1 then
         raise exception 'FAIL: expected one entity_id across all employee events, got %', v_count;
     end if;
+    -- Closed inventory for this scenario. Seven, not six, since the signup
+    -- admission guard (migration 20260927120000): the target identity is
+    -- created disabled and the fixture's activation is itself a real
+    -- `user.enabled` (System actor, because GoTrue/the fixture performs it,
+    -- not a human in the app), on top of the six events the scenario drives.
     select count(*) into v_count from public.audit_events
     where event_type like 'user.%' and metadata->>'sale_id' = v_t::text;
-    if v_count <> 6 then
-        raise exception 'FAIL: expected 6 employee events, got %', v_count;
+    if v_count <> 7 then
+        raise exception 'FAIL: expected 7 employee events, got %', v_count;
     end if;
     raise notice 'OK  4. edge-originated events: real actor, stable target, derived metadata';
 
@@ -446,6 +482,14 @@ begin
     -- -----------------------------------------------------------------------
     -- 7. Metadata hygiene and event-type validation on the record RPC
     -- -----------------------------------------------------------------------
+    -- Delta, not an absolute total: the claim is that every refused call below
+    -- writes nothing. A hardcoded total had to be revised whenever the fixture
+    -- legitimately produced one more event — as the signup admission guard
+    -- (migration 20260927120000) does — which turns an unrelated change into a
+    -- false authorization failure.
+    select count(*) into v_before from public.audit_events
+    where event_type like 'user.%' and metadata->>'sale_id' = v_t::text;
+
     set local role service_role;
     begin
         perform public.record_employee_admin_event(v_admin_a, v_t, 'user.role_changed', null, null);
@@ -486,8 +530,8 @@ begin
     reset role;
     select count(*) into v_count from public.audit_events
     where event_type like 'user.%' and metadata->>'sale_id' = v_t::text;
-    if v_count <> 7 then
-        raise exception 'FAIL: refused calls must not write rows (expected 7, got %)', v_count;
+    if v_count <> v_before then
+        raise exception 'FAIL: refused calls must not write rows (expected %, got %)', v_before, v_count;
     end if;
     raise notice 'OK  7. metadata hygiene and event-type validation';
 

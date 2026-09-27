@@ -147,3 +147,155 @@ describe("NoteAttachmentsRecovery", () => {
     expect(screen.container.querySelector("svg")).toBeNull();
   });
 });
+/**
+ * Security closure 2026-09-27 — stored XSS through a note attachment link.
+ *
+ * `attachment.src` is legacy note JSON. It is attacker-influenceable: anyone
+ * who could write a note, any import, and every historical row predating the
+ * relational attachment foundation can carry an arbitrary string. Rendering it
+ * straight into `href` meant a stored `javascript:` value executed in the
+ * signed-in employee's session on click — including in the RECOVERY view,
+ * whose input is by definition unverified.
+ *
+ * The rule: an unsafe scheme must not produce a clickable anchor anywhere. The
+ * title still renders, so nothing silently disappears from the UI.
+ *
+ * NOTE ON THE ASSERTIONS. `render()` resolves before React has committed, so a
+ * bare `container.querySelector(...)` runs against an empty div and would pass
+ * no matter what the component does. Every check below therefore first awaits
+ * something that must be on screen, and only then asserts what must be absent.
+ */
+const hostile = (src: string, title: string, type: string): AttachmentNote =>
+  ({ path: `p-${title}`, title, type, src }) as AttachmentNote;
+
+const UNSAFE_SCHEMES: [string, string][] = [
+  ["javascript:", "javascript:alert(document.cookie)"],
+  ["mixed-case JavaScript", "JaVaScRiPt:alert(1)"],
+  ["javascript: with padding", "   javascript:alert(1)   "],
+  ["data:", "data:text/html,<script>alert(1)</script>"],
+  ["vbscript:", "vbscript:msgbox(1)"],
+  ["file:", "file:///etc/passwd"],
+];
+
+const anchors = (screen: { container: HTMLElement }) =>
+  [...screen.container.querySelectorAll("a")].map((a) =>
+    a.getAttribute("href"),
+  );
+
+describe("attachment links never carry an unsafe scheme", () => {
+  describe("verified renderer", () => {
+    it.each(UNSAFE_SCHEMES)(
+      "renders a document with %s as text, not a link",
+      async (_label, src) => {
+        const screen = await render(
+          <StoryWrapper>
+            <NoteAttachments
+              attachments={[hostile(src, "rechnung.pdf", "application/pdf")]}
+            />
+          </StoryWrapper>,
+        );
+
+        // the title is on screen => the component has committed
+        await expect.element(screen.getByText("rechnung.pdf")).toBeVisible();
+        expect(anchors(screen)).toEqual([]);
+      },
+    );
+
+    it.each(UNSAFE_SCHEMES)(
+      "does not wrap an image with %s in a clickable anchor",
+      async (_label, src) => {
+        const screen = await render(
+          <StoryWrapper>
+            <NoteAttachments
+              attachments={[hostile(src, "bild.png", "image/png")]}
+            />
+          </StoryWrapper>,
+        );
+
+        // the preview is still shown, it just must not be clickable
+        await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+        expect(anchors(screen)).toEqual([]);
+      },
+    );
+
+    it("keeps a normal HTTPS attachment link working", async () => {
+      const screen = await render(
+        <StoryWrapper>
+          <NoteAttachments attachments={[DOCUMENT]} />
+        </StoryWrapper>,
+      );
+
+      await expect
+        .element(screen.getByRole("link", { name: "angebot.pdf" }))
+        .toBeVisible();
+      expect(anchors(screen)).toEqual(["https://cdn.test/k2.pdf"]);
+    });
+
+    it("keeps a legacy signed HTTPS URL with query parameters intact", async () => {
+      const url =
+        "https://project.supabase.co/storage/v1/object/sign/attachments/k9.pdf?token=abc.def-ghi";
+      const screen = await render(
+        <StoryWrapper>
+          <NoteAttachments
+            attachments={[hostile(url, "alt.pdf", "application/pdf")]}
+          />
+        </StoryWrapper>,
+      );
+
+      await expect
+        .element(screen.getByRole("link", { name: "alt.pdf" }))
+        .toBeVisible();
+      expect(anchors(screen)).toEqual([url]);
+    });
+
+    it("still links the safe attachment when a hostile one sits next to it", async () => {
+      const screen = await render(
+        <StoryWrapper>
+          <NoteAttachments
+            attachments={[
+              hostile("javascript:alert(1)", "boese.pdf", "application/pdf"),
+              DOCUMENT,
+            ]}
+          />
+        </StoryWrapper>,
+      );
+
+      await expect
+        .element(screen.getByRole("link", { name: "angebot.pdf" }))
+        .toBeVisible();
+      await expect.element(screen.getByText("boese.pdf")).toBeVisible();
+      expect(anchors(screen)).toEqual(["https://cdn.test/k2.pdf"]);
+    });
+  });
+
+  describe("recovery renderer", () => {
+    it.each(UNSAFE_SCHEMES)(
+      "renders quarantined %s as text, not a link",
+      async (_label, src) => {
+        const screen = await render(
+          <StoryWrapper>
+            <NoteAttachmentsRecovery
+              attachments={[hostile(src, "alt-anhang.pdf", "application/pdf")]}
+            />
+          </StoryWrapper>,
+        );
+
+        await expect.element(screen.getByText("alt-anhang.pdf")).toBeVisible();
+        expect(anchors(screen)).toEqual([]);
+      },
+    );
+
+    it("keeps a normal HTTPS recovery link working", async () => {
+      const screen = await render(
+        <StoryWrapper>
+          <NoteAttachmentsRecovery attachments={[DOCUMENT]} />
+        </StoryWrapper>,
+      );
+
+      await expect
+        .element(screen.getByRole("link", { name: "angebot.pdf" }))
+        .toBeVisible();
+      expect(anchors(screen)).toEqual(["https://cdn.test/k2.pdf"]);
+    });
+  });
+});
