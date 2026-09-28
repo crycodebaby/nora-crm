@@ -101,8 +101,13 @@ import {
   preserveNoteAttachmentReadModel,
   stripNoteReadModelMetadata,
 } from "../commons/noteAttachmentReadModel";
+import type {
+  WorkItemsPage,
+  WorkItemsRequest,
+} from "../../application/queries/getWorkItems";
 import { getIsInitialized } from "./authProvider";
 import { getSupabaseClient } from "./supabase";
+import { readWorkItemsViaRpc } from "./workItemsRpcAdapter";
 
 // Wave 3: wire Error Observatory once for the Supabase provider process.
 setDefaultOperationErrorRecorder(
@@ -812,6 +817,17 @@ const getDataProviderWithCustomMethods = () => {
       }
 
       return data as AuditStorageStats;
+    },
+    /**
+     * Work read port (Alpha Work 2). Callers go through the Application
+     * query `getWorkItems` (application/queries/getWorkItems.ts), never
+     * through this method's transport: the adapter is the only code that
+     * knows the W-A RPC, its arguments, its envelope and its cursor.
+     */
+    async getWorkItems(request: WorkItemsRequest): Promise<WorkItemsPage> {
+      return readWorkItemsViaRpc(request, (fn, args) =>
+        getSupabaseClient().rpc(fn, args),
+      );
     },
   } satisfies DataProvider;
 
