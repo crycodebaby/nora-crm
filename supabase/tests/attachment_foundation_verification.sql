@@ -276,6 +276,16 @@ begin
             '{"provider":"email","providers":["email"]}', '{"first_name":"Ole","last_name":"Owner"}', now(), now());
     select id into v_sales from public.sales where user_id = v_user;
 
+    -- Admission (Security Closure, migration 20260927120000): a non-bootstrap
+    -- identity is created disabled = true, so on a POPULATED database this
+    -- fixture employee is not assignable and the sales_id assignments below
+    -- would fail with NORA_EMPLOYEE_NOT_ASSIGNABLE. Establish the precondition
+    -- this suite needs — an active, assignable employee — through the single
+    -- supported executor, keeping the role the trigger assigned. On a pristine
+    -- stack the identity is the bootstrap admin and the call changes nothing.
+    perform nora_private.apply_sales_role_change(
+        v_sales, (select s.role from public.sales s where s.id = v_sales), false);
+
     insert into public.companies (name, sales_id) values ('W8-C Kunde', v_sales) returning id into v_company;
     insert into public.contacts (first_name, last_name, company_id, sales_id)
         values ('Kon', 'Takt', v_company, v_sales) returning id into v_contact;

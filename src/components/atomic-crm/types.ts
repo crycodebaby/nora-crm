@@ -199,6 +199,11 @@ export type ContactNote = {
 export type Deal = {
   name: string;
   company_id: Identifier;
+  /** Einsatzort des Vorgangs, unabhängig von der Adresse des Auftraggebers. */
+  site_street?: string | null;
+  site_city?: string | null;
+  site_floor?: string | null;
+  site_tenant_name?: string | null;
   contact_ids: Identifier[];
   category: string;
   stage: string;

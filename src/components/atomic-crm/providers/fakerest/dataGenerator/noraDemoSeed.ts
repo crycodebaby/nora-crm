@@ -121,6 +121,18 @@ export const generateNoraDeals = (): Deal[] => {
     id: seed.id,
     name: seed.name,
     company_id: seed.company_id,
+    site_street:
+      seed.id === 1
+        ? "Bilker Allee 126"
+        : (DUesseldorf_COMPANY_SEEDS.find(
+            (company) => company.id === seed.company_id,
+          )?.address ?? ""),
+    site_city:
+      DUesseldorf_COMPANY_SEEDS.find(
+        (company) => company.id === seed.company_id,
+      )?.city ?? "",
+    site_floor: seed.id === 1 ? "2. OG" : "",
+    site_tenant_name: seed.id === 1 ? "Familie Weber" : "",
     contact_ids: seed.contact_ids,
     category: seed.category,
     stage: seed.stage,

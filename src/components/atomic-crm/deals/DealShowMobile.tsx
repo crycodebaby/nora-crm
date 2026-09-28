@@ -15,6 +15,7 @@ import type { Deal } from "../types";
 import { ContactList } from "./ContactList";
 import { DealFollowUpBadge } from "./DealFollowUpBadge";
 import { useDealShowFacts } from "./useDealShowFacts";
+import { DealSiteAddress } from "./DealSiteAddress";
 
 /**
  * Mobile Vorgang detail page (W7-M1).
@@ -108,6 +109,10 @@ const DealShowMobileContent = () => {
               link="show"
             />
           </p>
+          <DealSiteAddress
+            deal={record}
+            className="text-sm text-muted-foreground"
+          />
         </div>
 
         {isAlert ? (

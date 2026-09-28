@@ -122,23 +122,38 @@ begin
     return new;
 end;$$;
 
+-- Security Closure (2026-09-27): signup admission guard. An auth identity
+-- becomes an ACTIVE employee only when its admission can be proven — either it
+-- is the bootstrap identity (public.sales still empty, so the advisory-locked
+-- resolver returns 'admin') or GoTrue stamped auth.users.invited_at for it,
+-- which only the admin invite endpoint does. Everything else (a direct
+-- /auth/v1/signup, a user added by hand in the dashboard) is created
+-- disabled = true, so nora_private.is_active_user() is false and every CRM and
+-- storage policy denies it. GoTrue sets invited_at in a follow-up UPDATE and
+-- never in the INSERT (measured 2026-09-27), so the release lives in
+-- handle_update_user() below.
+-- Migration: 20260927120000_nora_signup_admission_guard.sql
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO ''
     AS $$
 declare
   v_role text;
+  v_bootstrap boolean;
 begin
+  -- Advisory-locked: returns 'admin' only while public.sales is still empty.
   v_role := nora_private.resolve_first_signup_role();
+  v_bootstrap := (v_role = 'admin');
 
-  insert into public.sales (first_name, last_name, email, user_id, role, administrator)
+  insert into public.sales (first_name, last_name, email, user_id, role, administrator, disabled)
   values (
     coalesce(new.raw_user_meta_data ->> 'first_name', new.raw_user_meta_data -> 'custom_claims' ->> 'first_name', 'Pending'),
     coalesce(new.raw_user_meta_data ->> 'last_name', new.raw_user_meta_data -> 'custom_claims' ->> 'last_name', 'Pending'),
     new.email,
     new.id,
     v_role,
-    (v_role = 'admin')
+    v_bootstrap,
+    not v_bootstrap
   );
   return new;
 end;
@@ -150,12 +165,33 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_sale_id bigint;
+  v_role text;
+  v_disabled boolean;
 begin
   update public.sales
   set
     first_name = coalesce(new.raw_user_meta_data ->> 'first_name', new.raw_user_meta_data -> 'custom_claims' ->> 'first_name', 'Pending'),
     last_name = coalesce(new.raw_user_meta_data ->> 'last_name', new.raw_user_meta_data -> 'custom_claims' ->> 'last_name', 'Pending')
   where user_id = new.id;
+
+  -- Admission release: invited_at goes NULL -> NOT NULL exactly once, when an
+  -- administrator invited this address through the `users` Edge Function; no
+  -- client-reachable route can set it. Only a still-fail-closed row is
+  -- released, so a deliberate later deactivation is never undone.
+  -- sales.disabled is immutable for direct updates, so the single executor
+  -- (owner nora_role_manager) performs the write.
+  if old.invited_at is null and new.invited_at is not null then
+    select s.id, s.role, s.disabled
+      into v_sale_id, v_role, v_disabled
+      from public.sales s
+     where s.user_id = new.id;
+
+    if found and v_disabled then
+      perform nora_private.apply_sales_role_change(v_sale_id, v_role, false);
+    end if;
+  end if;
 
   return new;
 end;
@@ -1559,6 +1595,14 @@ BEGIN
     IF part IS NOT NULL THEN v := v || jsonb_build_object('archived_at', part); END IF;
     part := nora_private.audit_json_field(to_jsonb(p_old.description), to_jsonb(p_new.description), 'description');
     IF part IS NOT NULL THEN v := v || jsonb_build_object('description', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_street), to_jsonb(p_new.site_street), 'site_street');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_street', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_city), to_jsonb(p_new.site_city), 'site_city');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_city', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_floor), to_jsonb(p_new.site_floor), 'site_floor');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_floor', part); END IF;
+    part := nora_private.audit_json_field(to_jsonb(p_old.site_tenant_name), to_jsonb(p_new.site_tenant_name), 'site_tenant_name');
+    IF part IS NOT NULL THEN v := v || jsonb_build_object('site_tenant_name', part); END IF;
     RETURN v;
 END;
 $$;

@@ -49,3 +49,8 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Local Supabase Auth signing key (ES256 private key).
+# Generated per machine by `npm run signing-keys:ensure`; never committed.
+# Production uses a different key, managed by Supabase.
+supabase/signing_keys.json

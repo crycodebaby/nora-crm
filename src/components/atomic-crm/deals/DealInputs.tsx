@@ -22,6 +22,7 @@ import type { Deal } from "../types";
 
 import { AutocompleteCompanyInput } from "../companies/AutocompleteCompanyInput.tsx";
 import { SalesAssignmentInput } from "../sales/SalesAssignmentInput";
+import { DealSiteAddressInputs } from "./DealSiteAddressInputs";
 
 export const DealInputs = () => {
   const translate = useTranslate();
@@ -62,6 +63,8 @@ export const DealInputs = () => {
         ) : null}
 
         <TextInput source="name" validate={required()} helperText={false} />
+
+        <DealSiteAddressInputs />
 
         <SelectInput
           source="category"

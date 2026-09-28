@@ -155,11 +155,11 @@ async function createContact({
 
 const getMenuMethod = ({ page }: { page: Page; isMobile: boolean }) => ({
   goToDashboard: async () => {
-    await page.getByRole("link", { name: "Übersicht" }).click();
+    await page.goto("/#/");
     await page.waitForLoadState("networkidle");
   },
   goToContacts: async () => {
-    await page.getByRole("link", { name: "Kontakte" }).click();
+    await page.goto("/#/kontakte");
     // Neither the URL nor networkidle proves the target page is rendered: the
     // previous page (e.g. the dashboard, which links contacts too) can still be
     // on screen. Wait for the contacts list surface itself — its rows

@@ -57,7 +57,7 @@ test.describe("user adding a task", () => {
     }
     await page.getByLabel("Beschreibung *").fill("Mit Jane nachfassen");
     await page.getByLabel("Fällig am").fill("2026-12-11T21:00");
-    await page.getByLabel("Art").click();
+    await page.getByRole("combobox", { name: "Art", exact: true }).click();
     await page.getByRole("option", { name: "Rückruf" }).click();
 
     await page.getByRole("button", { name: "Speichern" }).click();

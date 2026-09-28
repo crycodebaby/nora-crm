@@ -516,7 +516,7 @@ describe("W7-M1 mobile Vorgang detail route", () => {
     // Not a blank dead end: the mobile navigation still offers the Startseite.
     const navigation = page.getByRole("navigation", { name: "CRM navigation" });
     await expect.element(navigation).toBeVisible();
-    await navigation.getByRole("link", { name: "Dashboard" }).click();
+    await navigation.getByRole("link", { name: "Start" }).click();
     await expect.poll(currentPath).toBe("/");
     await expect.element(dealCard()).toBeVisible();
   });

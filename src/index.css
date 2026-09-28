@@ -84,10 +84,11 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --nora-brand: #ff3b1f;
-  --nora-brand-hover: #e63218;
-  --nora-brand-soft: color-mix(in oklab, #ff3b1f 12%, white);
-  --nora-brand-ring: color-mix(in oklab, #ff3b1f 28%, transparent);
+  --nora-brand: #c65322;
+  --nora-brand-hover: #a8441b;
+  --nora-brand-soft: #fbefe9;
+  --nora-brand-ring: color-mix(in oklab, #c65322 28%, transparent);
+  --nora-app-ground: #f4f4f2;
   --avatar-0: oklch(0.85 0.08 240);
   --avatar-1: oklch(0.88 0.1 340);
   --avatar-2: oklch(0.85 0.07 180);
@@ -278,10 +279,11 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
-  --nora-brand: #ff3b1f;
-  --nora-brand-hover: #ff5238;
-  --nora-brand-soft: color-mix(in oklab, #ff3b1f 18%, transparent);
-  --nora-brand-ring: color-mix(in oklab, #ff3b1f 35%, transparent);
+  --nora-brand: #c65322;
+  --nora-brand-hover: #a8441b;
+  --nora-brand-soft: color-mix(in oklab, #c65322 18%, transparent);
+  --nora-brand-ring: color-mix(in oklab, #c65322 35%, transparent);
+  --nora-app-ground: #1f1f1c;
   /* Redefined for dark, never color-mixed against white (same trap that
      already forced a second --nora-brand-soft definition above). */
   --nora-success: oklch(0.76 0.15 150);

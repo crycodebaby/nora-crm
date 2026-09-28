@@ -190,7 +190,7 @@ export const loginAsAdmin = async (
 
     try {
       await expect(page.getByTestId("authenticated-app-shell")).toBeVisible();
-      await expect(page.getByRole("link", { name: "Kontakte" })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Kunden" })).toBeVisible();
     } catch (error) {
       const diagnostics = await collectLoginDiagnostics(
         page,

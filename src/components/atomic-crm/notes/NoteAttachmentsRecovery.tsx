@@ -1,6 +1,7 @@
 import { Paperclip, TriangleAlert } from "lucide-react";
 import { useTranslate } from "ra-core";
 
+import { safeHref } from "@/lib/safeHref";
 import type { AttachmentNote } from "../types";
 
 /**
@@ -42,27 +43,33 @@ export const NoteAttachmentsRecovery = ({
         </span>
       </div>
       <ul className="flex flex-col gap-1">
-        {attachments.map((attachment, index) => (
-          <li
-            key={attachment.path ?? attachment.src ?? index}
-            className="flex items-center gap-2 text-sm"
-          >
-            <Paperclip className="size-4 shrink-0" />
-            {attachment.src ? (
-              <a
-                href={attachment.src}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:no-underline"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {attachment.title}
-              </a>
-            ) : (
-              <span>{attachment.title}</span>
-            )}
-          </li>
-        ))}
+        {attachments.map((attachment, index) => {
+          // Quarantined data is by definition the LEAST trustworthy attachment
+          // source in the app, so its href goes through the same URL policy as
+          // every other stored link: an unsafe scheme degrades to plain text.
+          const href = safeHref(attachment.src);
+          return (
+            <li
+              key={attachment.path ?? attachment.src ?? index}
+              className="flex items-center gap-2 text-sm"
+            >
+              <Paperclip className="size-4 shrink-0" />
+              {href == null ? (
+                <span>{attachment.title}</span>
+              ) : (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:no-underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {attachment.title}
+                </a>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

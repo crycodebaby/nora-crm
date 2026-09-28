@@ -23,7 +23,10 @@ export const Layout = ({ children }: { children: ReactNode }) => {
 
   return (
     <QuickCaptureProvider>
-      <div data-testid="authenticated-app-shell">
+      <div
+        data-testid="authenticated-app-shell"
+        className="min-h-svh bg-[var(--nora-app-ground)]"
+      >
         <Header />
         <main
           className={cn(

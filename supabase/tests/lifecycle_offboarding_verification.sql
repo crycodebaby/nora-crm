@@ -427,6 +427,15 @@ begin
     raise notice 'OK 10. last active admin protected, other admin offboardable';
 
     -- ---- 11. W1 reactivation still works, sessions do not come back
+    -- Baseline for the `user.enabled` assertion below: this step proves that
+    -- THIS reactivation emits one event, not that the type has occurred exactly
+    -- once overall. Since the signup admission guard (migration
+    -- 20260927120000) a non-bootstrap identity is created disabled and the
+    -- fixture's own activation above already emits a `user.enabled`, so an
+    -- absolute count would measure the setup instead of the reactivation.
+    select count(*) into v_audit_before from public.audit_events
+    where event_type = 'user.enabled' and entity_id = public.nora_entity_uuid('sales', v_e);
+
     v_res := public.set_sales_access_by_executor(v_admin_b, v_e, null, false, null);
     if (v_res ->> 'disabled')::boolean is not false then raise exception 'FAIL: reactivation failed'; end if;
     if (select count(*) from auth.sessions where user_id = v_emp) <> 0 then raise exception 'FAIL: reactivation resurrected sessions'; end if;
@@ -437,7 +446,7 @@ begin
     perform set_config('request.jwt.claim.session_id', '', true);
     perform set_config('request.jwt.claim.role', 'service_role', true);
     perform set_config('request.jwt.claim.sub', '', true);
-    if (select count(*) from public.audit_events where event_type = 'user.enabled' and entity_id = public.nora_entity_uuid('sales', v_e)) <> 1 then
+    if (select count(*) from public.audit_events where event_type = 'user.enabled' and entity_id = public.nora_entity_uuid('sales', v_e)) <> v_audit_before + 1 then
         raise exception 'FAIL: user.enabled missing';
     end if;
     raise notice 'OK 11. W1 reactivation compatible, old sessions stay revoked';

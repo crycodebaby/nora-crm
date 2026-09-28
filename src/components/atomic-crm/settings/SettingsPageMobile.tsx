@@ -44,7 +44,10 @@ import {
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
 import { ChangelogPage } from "../misc/ChangelogPage";
+import { DemoRoleSwitcher } from "../misc/DemoRoleSwitcher";
+import { isNoraDemoMode } from "../misc/noraDemoMode";
 import ImageEditorField from "../misc/ImageEditorField";
+import { noraCreatePath } from "../routing/noraRoutes";
 import type { CrmDataProvider } from "../providers/types";
 import {
   setCurrentSaleCache,
@@ -114,6 +117,7 @@ export const SettingsPageMobile = () => {
           <div className="space-y-6">
             <ProfileSection />
             <PreferencesSection />
+            <NavigationSection />
             <InboundEmailSection />
             <McpServerSection />
             <AboutSection />
@@ -142,6 +146,30 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1 mb-1.5">
     {children}
   </p>
+);
+
+const NavigationSection = () => (
+  <div>
+    <SectionLabel>Navigation</SectionLabel>
+    <ItemGroup className="overflow-hidden rounded-lg border">
+      <Item asChild size="sm" className="cursor-pointer">
+        <Link to={noraCreatePath({ resource: "contacts", type: "list" })}>
+          <ItemContent>
+            <ItemTitle className="font-normal">Kontakte</ItemTitle>
+          </ItemContent>
+          <ItemActions>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </ItemActions>
+        </Link>
+      </Item>
+    </ItemGroup>
+    {isNoraDemoMode ? (
+      <div className="mt-5">
+        <SectionLabel>Demo-Rolle</SectionLabel>
+        <DemoRoleSwitcher className="rounded-lg border bg-card p-3" />
+      </div>
+    ) : null}
+  </div>
 );
 
 const ProfileSection = () => {

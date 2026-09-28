@@ -16,7 +16,13 @@ help:
 install: package.json ## install dependencies
 	npm install;
 
-start-supabase: ## start supabase locally
+signing-keys: ## generate the local Supabase Auth signing key if missing (never committed)
+	@node ./scripts/ensure-signing-keys.mjs
+
+scan-secrets: ## fail if a secret is git-tracked
+	@node ./scripts/scan-secrets.mjs
+
+start-supabase: signing-keys ## start supabase locally
 	npx supabase start
 
 start-supabase-functions: ## start the supabase Functions watcher
@@ -50,7 +56,7 @@ stop-supabase: ## stop local supabase
 
 stop: stop-supabase ## stop the stack locally
 
-start-supabase-e2e: ## start a separate supabase instance for e2e (fresh DB every run)
+start-supabase-e2e: signing-keys ## start a separate supabase instance for e2e (fresh DB every run)
 	@npx supabase stop --workdir .supabase-e2e --no-backup 2>/dev/null || true
 	rm -rf .supabase-e2e/supabase
 	mkdir -p .supabase-e2e/supabase

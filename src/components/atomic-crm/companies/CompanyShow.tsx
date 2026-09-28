@@ -28,6 +28,7 @@ import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { Avatar } from "../contacts/Avatar";
 import { TagsList } from "../contacts/TagsList";
 import { findDealLabel, formatDealAmount } from "../deals/dealUtils";
+import { DealSiteAddress } from "../deals/DealSiteAddress";
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
 import { MobileBackButton } from "../misc/MobileBackButton";
@@ -350,6 +351,7 @@ const CreateRelatedContactButton = () => {
 
 const DealsIterator = () => {
   const translate = useTranslate();
+  const { record: company } = useShowContext<Company>();
   const [locale = "en"] = useLocaleState();
   const { data: deals, error, isPending } = useListContext<Deal>();
   const { dealStages, dealCategories, currency } = useConfigurationContext();
@@ -364,7 +366,16 @@ const DealsIterator = () => {
               className="flex items-center justify-between hover:bg-muted py-2 px-4 transition-colors"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-medium">{deal.name}</div>
+                <div className="break-words font-semibold">{deal.name}</div>
+                {company ? (
+                  <div className="mt-1 break-words text-xs font-medium text-foreground/80">
+                    {company.name}
+                  </div>
+                ) : null}
+                <DealSiteAddress
+                  deal={deal}
+                  className="mt-1 text-[13px] text-muted-foreground"
+                />
                 <div className="text-sm text-muted-foreground">
                   {findDealLabel(dealStages, deal.stage)},{" "}
                   {formatDealAmount(deal.amount, currency, {

@@ -1,5 +1,6 @@
 import { useGetList } from "ra-core";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoraQueryError } from "../misc/NoraQueryError";
 
 import type { Contact, ContactNote } from "../types";
 import { DashboardActivityLog } from "./DashboardActivityLog";
@@ -7,26 +8,22 @@ import { DashboardStepper } from "./DashboardStepper";
 import { Hotboard } from "./Hotboard";
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
-import { useConfigurationContext } from "../root/ConfigurationContext";
+import { Link } from "react-router";
+import noraMonogram from "@/assets/nora-monogram.png";
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => {
-  const { darkModeLogo, lightModeLogo, title } = useConfigurationContext();
   return (
     <>
       <MobileHeader>
-        <div className="flex items-center gap-2 text-secondary-foreground no-underline py-3">
+        <Link to="/" className="flex items-center gap-2 text-foreground">
           <img
-            className="[.light_&]:hidden h-6"
-            src={darkModeLogo}
-            alt={title}
+            className="size-9 object-contain"
+            src={noraMonogram}
+            alt=""
+            aria-hidden="true"
           />
-          <img
-            className="[.dark_&]:hidden h-6"
-            src={lightModeLogo}
-            alt={title}
-          />
-          <h1 className="text-xl font-semibold">{title}</h1>
-        </div>
+          <span className="text-base font-semibold">Nora</span>
+        </Link>
       </MobileHeader>
       <MobileContent>{children}</MobileContent>
     </>
@@ -48,22 +45,38 @@ export const MobileDashboard = () => {
     data: dataContact,
     total: totalContact,
     isPending: isPendingContact,
+    error: contactError,
+    refetch: refetchContacts,
   } = useGetList<Contact>("contacts", {
     pagination: { page: 1, perPage: 1 },
   });
-  const { total: totalContactNotes, isPending: isPendingContactNotes } =
-    useGetList<ContactNote>("contact_notes", {
-      pagination: { page: 1, perPage: 1 },
-    });
+  const {
+    total: totalContactNotes,
+    isPending: isPendingContactNotes,
+    error: notesError,
+    refetch: refetchNotes,
+  } = useGetList<ContactNote>("contact_notes", {
+    pagination: { page: 1, perPage: 1 },
+  });
   const isPending = isPendingContact || isPendingContactNotes;
+
+  const error = contactError || notesError;
+  const onboardingStep =
+    !error && !isPending
+      ? !totalContact
+        ? 1
+        : !totalContactNotes
+          ? 2
+          : null
+      : null;
 
   // Der bisherige Ein-Sekunden-Vorlauf zeigte genau während des üblichen
   // Ladevorgangs eine leere Seite. Der Ladezustand erscheint jetzt sofort.
-  if (isPending) {
+  if (isPending && !error) {
     return <Loading />;
   }
 
-  if (!totalContact) {
+  if (onboardingStep === 1) {
     return (
       <Wrapper>
         <DashboardStepper step={1} />
@@ -71,7 +84,7 @@ export const MobileDashboard = () => {
     );
   }
 
-  if (!totalContactNotes) {
+  if (onboardingStep === 2) {
     return (
       <Wrapper>
         <DashboardStepper step={2} contactId={dataContact?.[0]?.id} />
@@ -82,6 +95,17 @@ export const MobileDashboard = () => {
   return (
     <Wrapper>
       <div className="flex flex-col gap-8 mt-1">
+        {error ? (
+          <NoraQueryError
+            error={error}
+            onRetry={() =>
+              Promise.all([
+                ...(contactError ? [refetchContacts()] : []),
+                ...(notesError ? [refetchNotes()] : []),
+              ])
+            }
+          />
+        ) : null}
         <Hotboard />
         <DashboardActivityLog />
       </div>

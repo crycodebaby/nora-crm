@@ -18,6 +18,8 @@
     "prettier": "prettier --config ./.prettierrc.json --check \"**/*.{js,json,ts,tsx,css,md,html}\"",
     "registry:build": "npx shadcn build",
     "registry:gen": "node ./scripts/generate-registry.mjs",
+    "signing-keys:ensure": "node ./scripts/ensure-signing-keys.mjs",
+    "scan:secrets": "node ./scripts/scan-secrets.mjs",
     "ghpages:deploy": "node ./scripts/ghpages-deploy.mjs",
     "supabase:remote:init": "node ./scripts/supabase-remote-init.mjs",
     "storybook": "storybook dev -p 6006",

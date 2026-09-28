@@ -14,7 +14,10 @@ export const MobileLayout = ({ children }: { children: ReactNode }) => {
   useConfigurationLoader();
   return (
     <QuickCaptureProvider>
-      <div data-testid="authenticated-app-shell">
+      <div
+        data-testid="authenticated-app-shell"
+        className="min-h-svh bg-[var(--nora-app-ground)]"
+      >
         <ErrorBoundary FallbackComponent={Error}>
           <Suspense fallback={<Skeleton className="h-12 w-12 rounded-full" />}>
             {children}
