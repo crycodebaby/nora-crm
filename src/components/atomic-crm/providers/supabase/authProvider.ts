@@ -3,7 +3,12 @@ import { supabaseAuthProvider } from "ra-supabase-core";
 
 import { canAccess, resolveNoraRole } from "../commons/canAccess";
 import { getSupabaseClient } from "./supabase";
-import { resetAttachmentUrlCache } from "../../attachments/attachmentAccess";
+import {
+  getSignedAttachmentUrl,
+  resetAttachmentUrlCache,
+  supabaseAttachmentSigner,
+} from "../../attachments/attachmentAccess";
+import { classifyStorageReference } from "../commons/storageReference";
 
 /** Local-storage key for the signed-in sales profile used by getIdentity(). */
 export const CURRENT_SALE_CACHE_KEY = "RaStore.auth.current_sale";
@@ -15,7 +20,16 @@ export type CurrentSaleCache = {
   id: number | string;
   first_name: string;
   last_name: string;
-  avatar?: { src?: string } | null;
+  /**
+   * W8-E: the identity cache carries the storage KEY as well as `src`.
+   *
+   * An employee photo is personal data, so it belongs in the private bucket,
+   * and a private object is addressed by its key — `src` is not persisted for
+   * it any more. Caching the key is safe: it is an opaque identifier, not a
+   * capability, and is worthless without an active session. A signed URL, by
+   * contrast, IS a capability and is never persisted anywhere.
+   */
+  avatar?: { src?: string; path?: string } | null;
   administrator?: boolean;
   role?: string;
   disabled?: boolean;
@@ -67,6 +81,37 @@ export function syncCurrentSaleCacheIfSelf(
   setCurrentSaleCache(sale);
 }
 
+/**
+ * W8-E — the header avatar is a plain string, not a React tree, so it cannot
+ * use `useAttachmentUrl`. It resolves through the same classifier instead, so
+ * there is still exactly one rule for what a stored file value may become.
+ *
+ * Today every employee avatar in Production is an inline `data:` image, which
+ * needs no round trip. The private branch exists so that an avatar that DOES
+ * carry a storage key renders instead of silently disappearing — without it,
+ * W8-E would leave the avatar upload path able to store a photo that Nora can
+ * never display again.
+ *
+ * Failure is not an error here: an avatar that cannot be resolved simply
+ * falls back to the initials the UI already shows.
+ */
+const resolveIdentityAvatar = async (
+  avatar: CurrentSaleCache["avatar"],
+): Promise<string | undefined> => {
+  const reference = classifyStorageReference(avatar, "private");
+  if (reference.kind === "private") {
+    try {
+      return await getSignedAttachmentUrl(
+        reference.storageKey,
+        supabaseAttachmentSigner,
+      );
+    } catch {
+      return undefined;
+    }
+  }
+  return reference.kind === "none" ? undefined : reference.url;
+};
+
 const getBaseAuthProvider = () =>
   supabaseAuthProvider(getSupabaseClient(), {
     getIdentity: async () => {
@@ -79,7 +124,7 @@ const getBaseAuthProvider = () =>
       return {
         id: sale.id,
         fullName: `${sale.first_name} ${sale.last_name}`,
-        avatar: sale.avatar?.src,
+        avatar: await resolveIdentityAvatar(sale.avatar),
         role: resolveNoraRole(sale),
       };
     },

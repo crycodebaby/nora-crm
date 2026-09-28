@@ -167,6 +167,36 @@ describe("classifyStorageReference — the blob: exemption stays narrow", () => 
   });
 });
 
+/**
+ * W8-E — employee/contact photos are PERSONAL DATA, not branding.
+ *
+ * They must never resolve through the public branding bucket. Today every
+ * avatar in Production is either an inline `data:` image or a foreign URL, so
+ * none of them cost a round trip; the private branch exists so that an avatar
+ * which does carry a storage key renders through a derived capability instead
+ * of silently disappearing.
+ */
+describe("classifyStorageReference — avatars are private, never branding", () => {
+  it("derives a key-bearing avatar from the private bucket", () => {
+    expect(classifyStorageReference({ path: "a1.png" }, "private")).toEqual({
+      kind: "private",
+      storageKey: "a1.png",
+    });
+  });
+
+  it("passes an inline avatar through without a round trip", () => {
+    expect(
+      classifyStorageReference({ src: "data:image/png;base64,AAA" }, "private"),
+    ).toEqual({ kind: "inline", url: "data:image/png;base64,AAA" });
+  });
+
+  it("passes a foreign avatar URL through without a round trip", () => {
+    expect(
+      classifyStorageReference({ src: "https://favicon.show/x.de" }, "private"),
+    ).toEqual({ kind: "public", url: "https://favicon.show/x.de" });
+  });
+});
+
 describe("classifyStorageReference — deliberately public values still work", () => {
   it("passes a foreign avatar URL through unchanged", () => {
     expect(

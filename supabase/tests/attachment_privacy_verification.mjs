@@ -31,6 +31,29 @@
  *   npx supabase db reset --local
  *   node supabase/tests/attachment_privacy_verification.mjs
  *
+ * ENVIRONMENT PREREQUISITE — a stack whose DB VOLUME matches the pinned CLI.
+ *
+ * `storage.objects` is migrated by the storage-api container, not by Nora. A
+ * database volume left over from an OLDER Supabase CLI can end up with a
+ * storage schema that the current storage-api boots against but does not
+ * match: every upload then fails with `42P10 infer_arbiter_indexes`, because
+ * the container issues `ON CONFLICT (name, bucket_id)` while the migrated
+ * schema carries only PARTIAL unique indexes on `(bucket_id, name)`, which
+ * PostgreSQL cannot infer as an arbiter.
+ *
+ * This is NOT a Nora defect and needs no schema change. `npx supabase db
+ * reset` does NOT fix it — the volume is the problem, not the data. Recreate
+ * the volume:
+ *
+ *   npx supabase stop --no-backup   # drops the volumes
+ *   npm run signing-keys:ensure
+ *   npx supabase start
+ *
+ * Verified 2026-09-28: on a volume created by the pinned CLI (2.118.0,
+ * storage-api v1.72.1) uploads work with NO index workaround and this suite
+ * passes 24/24. Never add a unique index to `storage.objects` to work around
+ * a stale volume — that encodes a local artefact as product schema.
+ *
  * Exit 0 = all assertions passed · 1 = assertion failure · 2 = prerequisites.
  */
 
@@ -156,9 +179,14 @@ const PNG_BYTES = Uint8Array.from(
     console.error(
       `[w8e] could not seed the attachments fixture: ${a.error.message}`,
     );
-    console.error(
-      "[w8e] see docs/nora/21 §4: the local storage-api can refuse uploads (42P10).",
-    );
+    if (/42P10|infer_arbiter/i.test(a.error.message)) {
+      console.error(
+        "[w8e] stale DB volume — see this file's ENVIRONMENT PREREQUISITE header:",
+      );
+      console.error(
+        "[w8e]   npx supabase stop --no-backup && npm run signing-keys:ensure && npx supabase start",
+      );
+    }
     process.exit(2);
   }
   const b = await service.storage

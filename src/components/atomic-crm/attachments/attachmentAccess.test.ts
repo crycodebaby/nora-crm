@@ -1,4 +1,5 @@
 import {
+  ATTACHMENT_URL_RENEWAL_MS,
   getSignedAttachmentUrl,
   resetAttachmentUrlCache,
 } from "./attachmentAccess";
@@ -122,6 +123,37 @@ describe("getSignedAttachmentUrl", () => {
         "https://signed.test/k1.png?t=2",
       );
       expect(calls).toBe(2);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it("renews exactly when the cache stops serving, never later", async () => {
+    // The proactive-renewal timer and the cache horizon must be the SAME
+    // instant. If renewal fired later, a rendered anchor would briefly carry a
+    // URL the cache already refuses to hand out — the stale-link bug this
+    // mechanism exists to prevent. Asserted as an identity, not a magic number.
+    let signedAt = 0;
+    const signer = async (key: string) => {
+      signedAt = Date.now();
+      return `https://signed.test/${key}`;
+    };
+    const realNow = Date.now;
+    try {
+      let now = realNow();
+      Date.now = () => now;
+      await getSignedAttachmentUrl("k1.png", signer);
+      const issuedAt = signedAt;
+
+      // One millisecond before the renewal instant: still served from cache.
+      now = issuedAt + ATTACHMENT_URL_RENEWAL_MS - 1;
+      await getSignedAttachmentUrl("k1.png", signer);
+      expect(signedAt).toBe(issuedAt);
+
+      // At the renewal instant: a new capability.
+      now = issuedAt + ATTACHMENT_URL_RENEWAL_MS;
+      await getSignedAttachmentUrl("k1.png", signer);
+      expect(signedAt).toBe(now);
     } finally {
       Date.now = realNow;
     }
