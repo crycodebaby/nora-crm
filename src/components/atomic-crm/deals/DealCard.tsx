@@ -1,4 +1,5 @@
 import { Draggable } from "@hello-pangea/dnd";
+import { MapPin } from "lucide-react";
 import { useRedirect, RecordContextProvider } from "ra-core";
 import { noraCreatePath } from "../routing/noraRoutes";
 import { NORA_MONEY_LOCALE } from "./dealUtils";
@@ -13,7 +14,6 @@ import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraUrgencyBadge } from "../misc/NoraUrgencyBadge";
 import { getFollowUpStatus, isDealTerminalStage } from "./dealUtils";
-import { DealSiteAddress } from "./DealSiteAddress";
 
 export const DealCard = ({ deal, index }: { deal: Deal; index: number }) => {
   if (!deal) return null;
@@ -27,6 +27,11 @@ export const DealCard = ({ deal, index }: { deal: Deal; index: number }) => {
   );
 };
 
+/**
+ * A Kanban card answers: what is it, for whom, where, and what needs
+ * attention — nothing more. Floor and tenant details, the full description
+ * and every secondary fact stay on the Vorgang itself.
+ */
 export const DealCardContent = ({
   provided,
   snapshot,
@@ -42,6 +47,9 @@ export const DealCardContent = ({
     deal && !isDealTerminalStage(deal.stage)
       ? getFollowUpStatus(deal.expected_closing_date)
       : null;
+  const street = deal.site_street?.trim();
+  const city = deal.site_city?.trim();
+  const site = [street, city].filter(Boolean).join(" · ");
   const handleClick = () => {
     redirect(
       noraCreatePath({ resource: "deals", type: "show", id: deal.id }),
@@ -65,7 +73,7 @@ export const DealCardContent = ({
       <RecordContextProvider value={deal}>
         <Card
           className={cn(
-            "nora-card nora-deal-card py-4 transition-all duration-200",
+            "nora-card nora-deal-card py-3 transition-all duration-200",
             followUpStatus === "overdue" && "nora-deal-card-overdue",
             followUpStatus === "today" && "nora-deal-card-today",
             snapshot?.isDragging
@@ -73,29 +81,42 @@ export const DealCardContent = ({
               : "hover:shadow-md",
           )}
         >
-          <CardContent className="px-4 flex flex-col gap-2.5">
-            <BusinessNumber
-              value={deal.case_number}
-              kind="case"
-              size="sm"
-              variant="badge"
-            />
-            <p className="nora-deal-card-title leading-snug line-clamp-2">
-              {deal.name}
-            </p>
-            <p className="nora-deal-card-customer break-words">
+          <CardContent className="px-3.5 flex flex-col gap-1.5">
+            <div className="nora-deal-card-top flex-wrap">
+              <BusinessNumber
+                value={deal.case_number}
+                kind="case"
+                size="sm"
+                variant="badge"
+                className="nora-business-id-sm text-[12.5px]"
+              />
+              {followUpStatus ? (
+                <NoraUrgencyBadge
+                  dateString={deal.expected_closing_date}
+                  variant="compact"
+                  className="nora-urgency-badge-sm"
+                />
+              ) : null}
+            </div>
+            <p className="nora-deal-card-title line-clamp-2">{deal.name}</p>
+            <p className="nora-deal-card-customer truncate">
               <ReferenceField
                 source="company_id"
                 reference="companies"
                 link={false}
               />
             </p>
-            <DealSiteAddress
-              deal={deal}
-              className="text-[13px] text-muted-foreground"
-            />
+            {site ? (
+              <p className="nora-deal-card-site" title={site}>
+                <MapPin aria-hidden />
+                <span>
+                  <span className="sr-only">Einsatzort: </span>
+                  {site}
+                </span>
+              </p>
+            ) : null}
             {(deal.category || deal.amount) && (
-              <p className="nora-deal-card-meta">
+              <p className="nora-deal-card-meta truncate">
                 {deal.category ? (
                   <SelectField
                     source="category"
@@ -119,12 +140,6 @@ export const DealCardContent = ({
                 ) : null}
               </p>
             )}
-            {followUpStatus ? (
-              <NoraUrgencyBadge
-                dateString={deal.expected_closing_date}
-                variant="compact"
-              />
-            ) : null}
           </CardContent>
         </Card>
       </RecordContextProvider>

@@ -308,6 +308,32 @@ export const englishCrmMessages = {
       },
       sections: {
         overview: "Overview",
+        context: "Parties and site",
+      },
+      groups: {
+        case: "Deal",
+        client: "Client",
+        client_hint:
+          "The customer this work is for, the people involved and who is responsible at Nora.",
+        site: "Site",
+        site_hint:
+          "On create, the customer address is proposed until you change something here.",
+        planning: "Planning and follow-up",
+        description: "Description",
+        description_hint:
+          "Longer texts, emails or notes may be pasted here in full.",
+      },
+      roles: {
+        client: "Client",
+      },
+      site: {
+        title: "Site",
+        empty: "No site address stored.",
+        floor: "Floor",
+        tenant: "Bell label",
+      },
+      contacts: {
+        empty: "No contacts on this deal.",
       },
       follow_up: {
         overdue: "Customer contact overdue",
@@ -458,6 +484,7 @@ export const englishCrmMessages = {
     tasks: {
       name: "Task |||| Tasks",
       forcedCaseName: "Task",
+      done_toggle: "Mark task as done",
       fields: {
         text: "Description",
         due_date: "Due date",
@@ -687,9 +714,16 @@ export const englishCrmMessages = {
     changelog: {
       title: "Changelog",
     },
+    longtext: {
+      show_more: "Show full text",
+      show_less: "Show less",
+    },
     audit: {
       page_title: "Audit log",
       history_title: "Change history",
+      entries_loaded: "%{smart_count} entry |||| %{smart_count} entries",
+      entries_loaded_more: "%{smart_count} entries loaded, more available",
+      collapsed_hint: "Open to view",
       events_heading: "Events",
       load_more: "Show more",
       show_changes: "Show %{count} change |||| Show %{count} changes",

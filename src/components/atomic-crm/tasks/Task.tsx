@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
+import { useGetSalesName } from "../sales/useGetSalesName";
 import type { Contact, Task as TData } from "../types";
+import { getFollowUpStatus } from "../deals/dealUtils";
 import { TaskEdit } from "./TaskEdit";
 import { TaskEditSheet } from "./TaskEditSheet";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -28,9 +30,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 export const Task = ({
   task,
   showContact,
+  showHolder,
 }: {
   task: TData;
   showContact?: boolean;
+  /** Names the responsible employee in the meta line (existing `sales_id`). */
+  showHolder?: boolean;
 }) => {
   const isMobile = useIsMobile();
   const { taskTypes } = useConfigurationContext();
@@ -38,6 +43,9 @@ export const Task = ({
   const translate = useTranslate();
   const queryClient = useQueryClient();
   const getContactRepresentation = useGetRecordRepresentation("contacts");
+  const holderName = useGetSalesName(task.sales_id, {
+    enabled: Boolean(showHolder) && task.sales_id != null,
+  });
 
   const [openEdit, setOpenEdit] = useState(false);
 
@@ -87,86 +95,106 @@ export const Task = ({
   }, [queryClient, isUpdatePending, isSuccess, variables]);
 
   const labelId = `checkbox-list-label-${task.id}`;
+  const matchedTaskType = taskTypes.find(
+    (taskType) => taskType.value === task.type,
+  );
+  const typeLabel =
+    task.type && task.type !== "none"
+      ? (matchedTaskType?.label ?? task.type)
+      : null;
+  const dueStatus = task.done_date ? null : getFollowUpStatus(task.due_date);
 
   return (
     <>
-      <div className="flex items-start justify-between">
-        <div
-          className="flex items-start gap-2 flex-1"
-          onClick={isMobile ? handleCheck() : undefined}
-        >
+      <div
+        className="nora-task-row"
+        data-done={task.done_date ? "true" : "false"}
+      >
+        <div className="nora-task-check">
           <Checkbox
             id={labelId}
             checked={!!task.done_date}
             onCheckedChange={handleCheck()}
             disabled={isUpdatePending}
-            className="mt-1"
+            aria-label={translate("resources.tasks.done_toggle", {
+              _: "Aufgabe erledigt",
+            })}
           />
-          <div className={`flex-grow ${task.done_date ? "line-through" : ""}`}>
-            <div className="text-sm">
-              {task.type && task.type !== "none" && (
-                <>
-                  <span className="font-semibold text-sm">
-                    {(() => {
-                      const matchedTaskType = taskTypes.find(
-                        (taskType) => taskType.value === task.type,
-                      );
-                      return matchedTaskType
-                        ? matchedTaskType.label
-                        : task.type;
-                    })()}
-                  </span>
-                  &nbsp;
-                </>
-              )}
-              {task.text}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {translate("resources.tasks.fields.due_short")}
-              &nbsp;
-              <DateField source="due_date" record={task} showDate showTime />
-              {showContact && (
-                <ReferenceField<TData, Contact>
-                  source="contact_id"
-                  reference="contacts_summary"
-                  record={task}
-                  link="show"
-                  className="inline text-sm text-muted-foreground"
-                  render={({ referenceRecord }) => {
-                    if (!referenceRecord) return null;
-                    // The task's own company_id is its historical customer
-                    // context, set once and never re-synced — it may no
-                    // longer match the contact's *current* company if the
-                    // contact was reassigned since. That is expected, not
-                    // an error; show it as a quiet note, not a warning.
-                    const isHistoricalMismatch =
-                      task.company_id != null &&
-                      referenceRecord.company_id !== task.company_id;
-                    return (
-                      <>
-                        {" "}
-                        {translate("resources.tasks.regarding_contact", {
-                          name: getContactRepresentation(referenceRecord),
-                        })}
-                        {isHistoricalMismatch && (
-                          <span className="italic">
-                            {" "}
-                            {referenceRecord.company_name
-                              ? translate(
-                                  "resources.tasks.historical_contact_company",
-                                  { company: referenceRecord.company_name },
-                                )
-                              : translate(
-                                  "resources.tasks.historical_contact_unassigned",
-                                )}
-                          </span>
-                        )}
-                      </>
-                    );
-                  }}
-                />
-              )}
-            </div>
+        </div>
+        <div
+          className="nora-task-body"
+          onClick={isMobile ? handleCheck() : undefined}
+        >
+          <label htmlFor={labelId} className="nora-task-text cursor-pointer">
+            {typeLabel ? (
+              <span className="nora-task-type">{typeLabel}</span>
+            ) : null}
+            {task.text}
+          </label>
+          <div className="nora-task-meta" data-due={dueStatus ?? undefined}>
+            <span className="nora-task-due">
+              {translate("resources.tasks.fields.due_short")}{" "}
+              <DateField
+                source="due_date"
+                record={task}
+                showDate
+                showTime
+                options={{
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }}
+              />
+            </span>
+            {showHolder && holderName ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>{holderName}</span>
+              </>
+            ) : null}
+            {showContact && (
+              <ReferenceField<TData, Contact>
+                source="contact_id"
+                reference="contacts_summary"
+                record={task}
+                link="show"
+                className="inline"
+                render={({ referenceRecord }) => {
+                  if (!referenceRecord) return null;
+                  // The task's own company_id is its historical customer
+                  // context, set once and never re-synced — it may no
+                  // longer match the contact's *current* company if the
+                  // contact was reassigned since. That is expected, not
+                  // an error; show it as a quiet note, not a warning.
+                  const isHistoricalMismatch =
+                    task.company_id != null &&
+                    referenceRecord.company_id !== task.company_id;
+                  return (
+                    <>
+                      {" "}
+                      {translate("resources.tasks.regarding_contact", {
+                        name: getContactRepresentation(referenceRecord),
+                      })}
+                      {isHistoricalMismatch && (
+                        <span className="italic">
+                          {" "}
+                          {referenceRecord.company_name
+                            ? translate(
+                                "resources.tasks.historical_contact_company",
+                                { company: referenceRecord.company_name },
+                              )
+                            : translate(
+                                "resources.tasks.historical_contact_unassigned",
+                              )}
+                        </span>
+                      )}
+                    </>
+                  );
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -175,7 +203,7 @@ export const Task = ({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 pr-0! size-8 cursor-pointer"
+              className="nora-task-menu cursor-pointer"
               aria-label={translate("resources.tasks.actions.title")}
             >
               <MoreVertical className="size-5 md:size-4" />

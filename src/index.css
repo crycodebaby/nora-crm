@@ -49,6 +49,20 @@
   --color-nora-success-soft: var(--nora-success-soft);
   --color-nora-warning: var(--nora-warning);
   --color-nora-warning-soft: var(--nora-warning-soft);
+  /* Nora visual system v1 (Alpha UI 1): accent roles + text roles */
+  --color-nora-accent: var(--nora-accent);
+  --color-nora-accent-strong: var(--nora-accent-strong);
+  --color-nora-accent-hover: var(--nora-accent-hover);
+  --color-nora-accent-text: var(--nora-accent-text);
+  --color-nora-accent-soft: var(--nora-accent-soft);
+  --color-nora-accent-border: var(--nora-accent-border);
+  --color-nora-text-secondary: var(--nora-text-secondary);
+  --color-nora-text-muted: var(--nora-text-muted);
+  --color-nora-hairline: var(--nora-hairline);
+  --color-nora-divider: var(--nora-divider);
+  --color-nora-surface: var(--nora-surface);
+  --color-nora-surface-elevated: var(--nora-surface-elevated);
+  --color-nora-surface-sunken: var(--nora-surface-sunken);
 }
 
 :root {
@@ -84,11 +98,39 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --nora-brand: #c65322;
-  --nora-brand-hover: #a8441b;
-  --nora-brand-soft: #fbefe9;
-  --nora-brand-ring: color-mix(in oklab, #c65322 28%, transparent);
+  /* Nora visual system v1 (Alpha UI 1) — accent roles.
+     One orange does not fit every role: white text needs a dark tone
+     (#c65322 measures exactly 4.50:1 and is the lightest AA fill), while
+     glyphs, borders, active states and tints read heavy in that tone.
+     `--nora-accent` (#e86f2f, 3.11:1 on white) is the lighter working
+     accent for non-text roles (WCAG 1.4.11 needs 3:1); text on light
+     surfaces uses `--nora-accent-text`. The legacy `--nora-brand*`
+     names stay as aliases so no existing surface changes semantics. */
+  --nora-accent-strong: #c65322;
+  --nora-accent: #e86f2f;
+  --nora-accent-hover: #a8441b;
+  --nora-accent-text: #c65322;
+  --nora-accent-soft: #fdf1ea;
+  --nora-accent-border: color-mix(in oklab, #e86f2f 34%, var(--border));
+  --nora-accent-ring: color-mix(in oklab, #e86f2f 34%, transparent);
+  --nora-brand: var(--nora-accent-strong);
+  --nora-brand-hover: var(--nora-accent-hover);
+  --nora-brand-soft: var(--nora-accent-soft);
+  --nora-brand-ring: var(--nora-accent-ring);
   --nora-app-ground: #f4f4f2;
+  /* Text roles (light). muted stays ≥ 4.5:1 on white and on the card. */
+  --nora-text-secondary: oklch(0.42 0 0);
+  --nora-text-muted: oklch(0.51 0 0);
+  /* Surfaces and lines */
+  --nora-surface: var(--card);
+  --nora-surface-elevated: var(--popover);
+  --nora-surface-sunken: var(--nora-app-ground);
+  --nora-hairline: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --nora-divider: color-mix(in oklab, var(--foreground) 13%, transparent);
+  /* Content measures: forms and prose stop growing with the viewport. */
+  --nora-measure-form: 46rem;
+  --nora-measure-prose: 68ch;
+  --nora-measure-detail: 68rem;
   --avatar-0: oklch(0.85 0.08 240);
   --avatar-1: oklch(0.88 0.1 340);
   --avatar-2: oklch(0.85 0.07 180);
@@ -279,11 +321,28 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
-  --nora-brand: #c65322;
-  --nora-brand-hover: #a8441b;
-  --nora-brand-soft: color-mix(in oklab, #c65322 18%, transparent);
-  --nora-brand-ring: color-mix(in oklab, #c65322 35%, transparent);
+  /* Dark accent roles: fills keep the AA tone for white text; the working
+     accent and accent text lighten so they carry on dark surfaces
+     (#f08a55 ≈ 6.7:1, #f5945f ≈ 7.3:1 on the app ground). */
+  --nora-accent-strong: #c65322;
+  --nora-accent: #f08a55;
+  --nora-accent-hover: #a8441b;
+  --nora-accent-text: #f5945f;
+  --nora-accent-soft: color-mix(in oklab, #f08a55 16%, transparent);
+  --nora-accent-border: color-mix(in oklab, #f08a55 38%, var(--border));
+  --nora-accent-ring: color-mix(in oklab, #f08a55 38%, transparent);
+  --nora-brand: var(--nora-accent-strong);
+  --nora-brand-hover: var(--nora-accent-hover);
+  --nora-brand-soft: var(--nora-accent-soft);
+  --nora-brand-ring: var(--nora-accent-ring);
   --nora-app-ground: #1f1f1c;
+  --nora-text-secondary: oklch(0.8 0 0);
+  --nora-text-muted: oklch(0.7 0 0);
+  --nora-surface: var(--card);
+  --nora-surface-elevated: var(--popover);
+  --nora-surface-sunken: var(--nora-app-ground);
+  --nora-hairline: color-mix(in oklab, white 9%, transparent);
+  --nora-divider: color-mix(in oklab, white 15%, transparent);
   /* Redefined for dark, never color-mixed against white (same trap that
      already forced a second --nora-brand-soft definition above). */
   --nora-success: oklch(0.76 0.15 150);
@@ -511,7 +570,10 @@ input[type="time"] {
   }
 
   .nora-primary-action {
-    @apply min-h-10 px-5 text-sm font-semibold shadow-sm;
+    @apply px-5 text-sm font-semibold shadow-sm;
+    /* 17 F: `min-h-10` via @apply beat every taller utility on the same
+       element (40 px measured). The touch minimum is now the floor. */
+    min-height: var(--nora-touch-min);
     background-color: var(--nora-brand);
     color: white;
   }
@@ -548,7 +610,8 @@ input[type="time"] {
   }
 
   .nora-deal-card-overdue {
-    border-color: color-mix(in oklab, var(--nora-brand) 30%, var(--border));
+    border-color: color-mix(in oklab, var(--nora-accent) 60%, var(--border));
+    box-shadow: inset 3px 0 0 var(--nora-accent);
   }
 
   .nora-kanban-viewport {
@@ -901,8 +964,8 @@ input[type="time"] {
   }
 
   .nora-business-id-case {
-    border-color: color-mix(in oklab, var(--nora-brand) 28%, var(--border));
-    background-color: color-mix(in oklab, var(--nora-brand) 7%, var(--card));
+    border-color: var(--nora-accent-border);
+    background-color: color-mix(in oklab, var(--nora-accent) 9%, var(--card));
     color: var(--foreground);
   }
 
@@ -913,23 +976,53 @@ input[type="time"] {
   }
 
   .nora-deal-card-title {
-    @apply text-[17px] font-semibold text-foreground;
+    @apply text-[15px] font-semibold leading-snug text-foreground;
+    overflow-wrap: anywhere;
   }
 
   .nora-deal-card-customer {
-    @apply text-[15px] text-muted-foreground;
+    @apply text-[14px] leading-snug;
+    color: var(--nora-text-secondary);
   }
 
   .nora-deal-card-meta {
-    @apply text-sm text-muted-foreground;
+    @apply text-[13px] leading-snug;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-deal-card-site {
+    @apply flex min-w-0 items-center gap-1.5 text-[13px] leading-snug;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-deal-card-site svg {
+    @apply size-3.5 shrink-0;
+    color: var(--nora-accent);
+  }
+
+  .nora-deal-card-site span {
+    /* plain declarations on purpose: browser tests compile index.css
+       without Tailwind, so `@apply` would not reach them */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .nora-deal-card-today {
-    border-color: color-mix(in oklab, var(--nora-brand) 35%, var(--border));
+    border-color: color-mix(in oklab, var(--nora-accent) 45%, var(--border));
+  }
+
+  .nora-deal-card-top {
+    @apply flex items-center justify-between gap-2;
   }
 
   .nora-urgency-badge {
     @apply inline-flex w-fit max-w-full items-center gap-2 rounded-lg border px-3 py-2 text-[15px] font-semibold leading-snug;
+  }
+
+  .nora-urgency-badge.nora-urgency-badge-sm {
+    @apply gap-1.5 rounded-md px-2 py-1 text-[12.5px] font-semibold;
   }
 
   .nora-urgency-icon-sm {
@@ -937,14 +1030,14 @@ input[type="time"] {
   }
 
   .nora-urgency-overdue {
-    border-color: color-mix(in oklab, var(--nora-brand) 55%, var(--border));
-    background-color: color-mix(in oklab, var(--nora-brand) 12%, var(--card));
-    color: var(--nora-brand);
+    border-color: color-mix(in oklab, var(--nora-accent) 55%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-accent) 12%, var(--card));
+    color: var(--nora-accent-text);
   }
 
   .nora-urgency-today {
-    border-color: color-mix(in oklab, var(--nora-brand) 40%, var(--border));
-    background-color: color-mix(in oklab, var(--nora-brand) 8%, var(--card));
+    border-color: color-mix(in oklab, var(--nora-accent) 40%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-accent) 8%, var(--card));
     color: var(--foreground);
   }
 
@@ -958,15 +1051,19 @@ input[type="time"] {
     @apply flex items-start gap-3 rounded-xl border px-4 py-4;
   }
 
+  .nora-urgency-alert {
+    @apply py-3;
+  }
+
   .nora-urgency-alert-overdue {
-    border-color: color-mix(in oklab, var(--nora-brand) 55%, var(--border));
-    background-color: color-mix(in oklab, var(--nora-brand) 10%, var(--card));
+    border-color: color-mix(in oklab, var(--nora-accent) 55%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-accent) 10%, var(--card));
     color: var(--foreground);
   }
 
   .nora-urgency-alert-today {
-    border-color: color-mix(in oklab, var(--nora-brand) 40%, var(--border));
-    background-color: color-mix(in oklab, var(--nora-brand) 7%, var(--card));
+    border-color: color-mix(in oklab, var(--nora-accent) 40%, var(--border));
+    background-color: color-mix(in oklab, var(--nora-accent) 7%, var(--card));
     color: var(--foreground);
   }
 
@@ -979,8 +1076,8 @@ input[type="time"] {
   }
 
   .nora-urgency-icon {
-    @apply size-6 shrink-0;
-    color: var(--nora-brand);
+    @apply size-5 shrink-0;
+    color: var(--nora-accent);
   }
 
   .nora-deal-dialog {
@@ -1039,23 +1136,28 @@ input[type="time"] {
   }
 
   .nora-deal-dialog-header {
-    @apply sticky top-0 z-10 flex flex-col gap-4 border-b bg-background/95 px-4 py-4 backdrop-blur-sm sm:flex-row sm:items-start sm:justify-between md:px-6 md:py-5;
+    @apply sticky top-0 z-10 flex flex-col gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur-sm sm:flex-row sm:items-start sm:justify-between md:px-6 md:py-4;
+    border-color: var(--nora-hairline);
   }
 
   .nora-deal-dialog-title {
-    @apply text-2xl font-semibold leading-tight tracking-tight md:text-[1.75rem];
+    @apply text-[1.375rem] font-semibold leading-[1.2] tracking-[-0.015em] md:text-[1.5rem];
+    text-wrap: balance;
   }
 
   .nora-deal-dialog-customer {
-    @apply text-base text-muted-foreground;
+    @apply text-[15px] leading-snug;
+    color: var(--nora-text-secondary);
   }
 
   .nora-section-card {
-    @apply rounded-xl border bg-card p-4 md:p-5 shadow-sm;
+    @apply rounded-xl border bg-card p-4 md:p-5;
+    border-color: var(--nora-divider);
+    box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 4%, transparent);
   }
 
   .nora-section-title {
-    @apply text-[17px] font-semibold tracking-tight text-foreground mb-4;
+    @apply text-[15px] font-semibold tracking-tight text-foreground mb-3;
   }
 
   .nora-section-body {
@@ -1072,6 +1174,415 @@ input[type="time"] {
 
   .nora-detail-body {
     @apply text-[15px] leading-relaxed text-foreground;
+  }
+
+  /* ------------------------------------------------------------------
+     Nora visual system v1 (Alpha UI 1)
+     Typography roles, content measures and the thin presentation
+     primitives used by the Vorgang experience. Roles, not components:
+     a component composes roles, it does not invent sizes.
+     ------------------------------------------------------------------ */
+
+  /* Typography roles */
+  .nora-t-title {
+    @apply text-[1.375rem] font-semibold leading-[1.2] tracking-[-0.015em] text-foreground md:text-[1.5rem];
+    text-wrap: balance;
+  }
+
+  .nora-t-section {
+    @apply text-[15px] font-semibold leading-snug tracking-tight text-foreground;
+  }
+
+  .nora-t-eyebrow {
+    @apply text-[12px] font-semibold uppercase leading-none tracking-[0.06em];
+    color: var(--nora-text-muted);
+  }
+
+  .nora-t-data {
+    @apply text-[15px] font-medium leading-snug text-foreground;
+  }
+
+  .nora-t-support {
+    @apply text-[14px] font-normal leading-snug;
+    color: var(--nora-text-secondary);
+  }
+
+  .nora-t-meta {
+    @apply text-[13px] font-normal leading-snug;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-t-helper {
+    @apply text-[12.5px] leading-snug;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-t-label {
+    @apply text-[13px] font-medium leading-none;
+    color: var(--nora-text-secondary);
+  }
+
+  /* Content measures */
+  .nora-measure-form {
+    max-width: var(--nora-measure-form);
+  }
+
+  .nora-measure-prose {
+    max-width: var(--nora-measure-prose);
+  }
+
+  .nora-measure-detail {
+    max-width: var(--nora-measure-detail);
+  }
+
+  /* Form groups: a titled, semantically grouped block of inputs with an
+     optional hint, and rows that share space only where it helps. */
+  .nora-form-group {
+    @apply flex min-w-0 flex-col gap-4;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .nora-form-group + .nora-form-group {
+    @apply border-t pt-6;
+    border-color: var(--nora-hairline);
+  }
+
+  /* A legend inside a flex fieldset keeps its own line; the hint follows
+     it tightly and the first field keeps the group gap. */
+  .nora-form-group-legend {
+    float: left;
+    width: 100%;
+    padding: 0;
+    margin-bottom: 0;
+  }
+
+  .nora-form-group-hint {
+    margin-top: -0.75rem;
+  }
+
+  .nora-form-row {
+    @apply grid grid-cols-1 gap-4;
+  }
+
+  @media (min-width: 640px) {
+    .nora-form-row[data-cols="2"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .nora-form-row[data-cols="3"] {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .nora-form-row[data-cols="wide-narrow"] {
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    }
+  }
+
+  /* Growing textarea: starts useful, grows with content, never eats the
+     viewport. JS raises the height on input (see useGrowingTextarea);
+     `field-sizing` covers browsers that support it before hydration. */
+  .nora-textarea-grow {
+    min-height: 7.5rem;
+    max-height: min(60vh, 32rem);
+    overflow-y: auto;
+    resize: vertical;
+    line-height: var(--nora-line-readable);
+    field-sizing: content;
+  }
+
+  /* Entity header: number → title → context line, actions kept quiet. */
+  .nora-entity-header {
+    @apply flex flex-col gap-3;
+  }
+
+  .nora-entity-header-top {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .nora-entity-header-context {
+    @apply flex flex-col gap-1;
+  }
+
+  /* Status pill: text + tone, never colour alone. */
+  .nora-status-pill {
+    @apply inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-medium leading-none;
+    border-color: var(--nora-divider);
+    background: color-mix(in oklab, var(--muted) 70%, var(--card));
+    color: var(--foreground);
+  }
+
+  .nora-status-pill[data-tone="accent"] {
+    border-color: var(--nora-accent-border);
+    background: var(--nora-accent-soft);
+    color: var(--nora-accent-text);
+  }
+
+  .nora-status-pill[data-tone="success"] {
+    border-color: color-mix(in oklab, var(--nora-success) 35%, var(--border));
+    background: var(--nora-success-soft);
+    color: var(--nora-success);
+  }
+
+  .nora-status-pill[data-tone="quiet"] {
+    border-color: transparent;
+    background: transparent;
+    color: var(--nora-text-muted);
+    padding-inline: 0;
+  }
+
+  /* Meta pair: label above value, value is the loud part. */
+  .nora-meta-pair {
+    @apply flex min-w-0 flex-col gap-1;
+  }
+
+  .nora-meta-pair[data-inline="true"] {
+    @apply flex-row items-baseline gap-2;
+  }
+
+  .nora-meta-pair-value {
+    @apply flex min-w-0 flex-wrap items-center gap-2 text-[15px] font-medium leading-snug text-foreground;
+    overflow-wrap: anywhere;
+  }
+
+  .nora-meta-grid {
+    @apply flex flex-wrap gap-x-10 gap-y-4;
+  }
+
+  .nora-meta-grid > .nora-meta-pair {
+    min-width: 9rem;
+    max-width: 100%;
+  }
+
+  /* Identity row: avatar/logo, name, context; the whole name is the link. */
+  .nora-identity-row {
+    @apply flex min-w-0 items-center gap-3;
+  }
+
+  .nora-identity-visual {
+    @apply flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border;
+    border-color: var(--nora-hairline);
+    background: color-mix(in oklab, var(--muted) 80%, var(--card));
+  }
+
+  .nora-identity-row[data-size="sm"] .nora-identity-visual {
+    @apply size-7;
+  }
+
+  .nora-identity-body {
+    @apply flex min-w-0 flex-col gap-0.5;
+  }
+
+  .nora-identity-name {
+    @apply min-w-0 truncate text-[15px] font-medium leading-snug text-foreground;
+  }
+
+  a.nora-identity-name:hover,
+  a.nora-identity-name:focus-visible {
+    color: var(--nora-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  a.nora-identity-name:focus-visible {
+    outline: 3px solid var(--nora-accent-ring);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  .nora-identity-context {
+    @apply min-w-0 truncate text-[13px] leading-snug;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-identity-list {
+    @apply flex flex-col gap-3;
+  }
+
+  /* Section card v2: header row with title, count and actions. */
+  .nora-section-head {
+    @apply mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2;
+  }
+
+  .nora-section-head-text {
+    @apply flex min-w-0 flex-col gap-0.5;
+  }
+
+  .nora-section-count {
+    @apply inline-flex min-w-6 items-center justify-center rounded-full px-1.5 text-[12px] font-semibold leading-5 tabular-nums;
+    background: color-mix(in oklab, var(--muted) 85%, var(--foreground));
+    color: var(--nora-text-secondary);
+  }
+
+  .nora-section-card[data-dense="true"] {
+    @apply p-4;
+  }
+
+  /* Expandable section: the entire head is the toggle. */
+  .nora-expandable-trigger {
+    @apply flex w-full min-w-0 items-center justify-between gap-3 rounded-lg text-left;
+    min-height: var(--nora-touch-min);
+    margin: -0.25rem;
+    padding: 0.25rem;
+  }
+
+  .nora-expandable-trigger:hover {
+    background: color-mix(in oklab, var(--muted) 60%, transparent);
+  }
+
+  .nora-expandable-trigger:focus-visible {
+    outline: 3px solid var(--nora-accent-ring);
+    outline-offset: 2px;
+  }
+
+  .nora-expandable-chevron {
+    @apply size-4 shrink-0 transition-transform;
+    color: var(--nora-text-muted);
+    transition-duration: var(--nora-motion-fast);
+  }
+
+  .nora-expandable-trigger[aria-expanded="true"] .nora-expandable-chevron {
+    transform: rotate(180deg);
+  }
+
+  .nora-expandable-body {
+    @apply pt-3;
+  }
+
+  /* Long text: readable measure, real newlines, quiet disclosure. */
+  .nora-longtext {
+    @apply relative text-[15px] text-foreground;
+    max-width: var(--nora-measure-prose);
+    line-height: var(--nora-line-readable);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+
+  .nora-longtext[data-collapsed="true"] {
+    max-height: var(--nora-longtext-collapsed, 15.5rem);
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, black 78%, transparent);
+    mask-image: linear-gradient(to bottom, black 78%, transparent);
+  }
+
+  .nora-longtext-toggle {
+    @apply mt-2 inline-flex items-center gap-1 rounded-md text-[13px] font-medium;
+    min-height: 2.25rem;
+    color: var(--nora-accent-text);
+  }
+
+  .nora-longtext-toggle:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .nora-longtext-toggle:focus-visible {
+    outline: 3px solid var(--nora-accent-ring);
+    outline-offset: 2px;
+  }
+
+  /* Task rows: checkbox, text, meta and the row's own overflow control. */
+  .nora-task-list {
+    @apply flex flex-col;
+  }
+
+  .nora-task-row {
+    @apply flex items-start gap-3 py-2.5;
+    border-bottom: 1px solid var(--nora-hairline);
+  }
+
+  .nora-task-row:last-child {
+    border-bottom: 0;
+  }
+
+  .nora-task-check {
+    @apply flex shrink-0 items-center justify-center;
+    min-width: var(--nora-touch-min);
+    min-height: 2.25rem;
+    margin-left: -0.5rem;
+  }
+
+  .nora-task-body {
+    @apply flex min-w-0 flex-1 flex-col gap-1 pt-1.5;
+  }
+
+  .nora-task-text {
+    @apply text-[15px] font-medium leading-snug text-foreground;
+    overflow-wrap: anywhere;
+  }
+
+  .nora-task-row[data-done="true"] .nora-task-text {
+    @apply font-normal line-through;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-task-type {
+    @apply mr-1.5 inline-flex items-center rounded-md px-1.5 py-0.5 align-[2px] text-[12px] font-semibold leading-none;
+    background: color-mix(in oklab, var(--muted) 85%, var(--foreground));
+    color: var(--nora-text-secondary);
+  }
+
+  .nora-task-meta {
+    @apply flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] leading-snug;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-task-meta[data-due="overdue"] .nora-task-due {
+    color: var(--nora-accent-text);
+    font-weight: 600;
+  }
+
+  .nora-task-meta[data-due="today"] .nora-task-due {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+
+  .nora-task-menu {
+    @apply shrink-0 rounded-lg;
+    width: var(--nora-touch-min);
+    height: var(--nora-touch-min);
+    margin-top: -0.125rem;
+    margin-right: -0.5rem;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-task-menu:hover {
+    color: var(--foreground);
+    background: color-mix(in oklab, var(--muted) 70%, transparent);
+  }
+
+  /* Vorgang dialog v2: a bounded detail column. */
+  .nora-deal-dialog-body {
+    @apply mx-auto flex w-full flex-col gap-5 px-4 py-5 md:px-6;
+    max-width: var(--nora-measure-detail);
+  }
+
+  .nora-deal-parties {
+    @apply grid grid-cols-1 gap-5 md:grid-cols-3;
+  }
+
+  .nora-deal-party {
+    @apply flex min-w-0 flex-col gap-2;
+  }
+
+  .nora-deal-party + .nora-deal-party {
+    @apply border-t pt-4 md:border-t-0 md:border-l md:pl-5 md:pt-0;
+    border-color: var(--nora-hairline);
+  }
+
+  .nora-site-address {
+    @apply flex min-w-0 items-start gap-2 text-[15px] leading-snug text-foreground;
+  }
+
+  .nora-site-address-icon {
+    @apply mt-0.5 size-4 shrink-0;
+    color: var(--nora-accent);
+  }
+
+  .nora-site-address-detail {
+    @apply block text-[13px] leading-snug;
+    color: var(--nora-text-muted);
   }
 
   .nora-landing {
@@ -3372,5 +3883,27 @@ input[type="time"] {
     animation-duration: 200ms !important;
     animation-delay: 100ms !important;
     transform: none !important;
+  }
+}
+
+/* Vorgang form dialog (Alpha UI 1): bounded form column, sticky toolbar. */
+@layer utilities {
+  .nora-deal-form-dialog {
+    gap: 0;
+  }
+
+  .nora-deal-form-head {
+    @apply flex flex-col gap-1 border-b px-5 pt-5 pb-4 md:px-7;
+    border-color: var(--nora-hairline);
+  }
+
+  .nora-deal-form-body {
+    @apply px-5 pt-5 pb-2 md:px-7;
+  }
+
+  .nora-deal-form-toolbar {
+    @apply border-t px-5 pb-4 md:px-7;
+    border-color: var(--nora-hairline);
+    background: var(--background);
   }
 }

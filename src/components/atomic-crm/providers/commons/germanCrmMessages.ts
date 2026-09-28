@@ -314,6 +314,32 @@ export const germanCrmMessages = {
       },
       sections: {
         overview: "Übersicht",
+        context: "Beteiligte und Einsatzort",
+      },
+      groups: {
+        case: "Vorgang",
+        client: "Auftraggeber",
+        client_hint:
+          "Der Kunde, für den gearbeitet wird, die beteiligten Ansprechpartner und wer bei Nora zuständig ist.",
+        site: "Einsatzort",
+        site_hint:
+          "Beim Anlegen wird die Kundenanschrift vorgeschlagen, bis Sie hier etwas ändern.",
+        planning: "Planung und Nachfassen",
+        description: "Beschreibung",
+        description_hint:
+          "Längere Texte, E-Mails oder Notizen dürfen hier vollständig eingefügt werden.",
+      },
+      roles: {
+        client: "Auftraggeber",
+      },
+      site: {
+        title: "Einsatzort",
+        empty: "Kein Einsatzort hinterlegt.",
+        floor: "Etage",
+        tenant: "Klingelschild",
+      },
+      contacts: {
+        empty: "Keine Ansprechpartner am Vorgang.",
       },
       follow_up: {
         overdue: "Kundenkontakt überfällig",
@@ -469,6 +495,7 @@ export const germanCrmMessages = {
     tasks: {
       name: "Aufgabe |||| Aufgaben",
       forcedCaseName: "Aufgabe",
+      done_toggle: "Aufgabe als erledigt markieren",
       fields: {
         text: "Beschreibung",
         due_date: "Fällig am",
@@ -701,9 +728,16 @@ export const germanCrmMessages = {
     changelog: {
       title: "Änderungsprotokoll",
     },
+    longtext: {
+      show_more: "Ganzen Text anzeigen",
+      show_less: "Weniger anzeigen",
+    },
     audit: {
       page_title: "Audit-Protokoll",
       history_title: "Änderungsverlauf",
+      entries_loaded: "%{smart_count} Eintrag |||| %{smart_count} Einträge",
+      entries_loaded_more: "%{smart_count} Einträge geladen, weitere vorhanden",
+      collapsed_hint: "Zum Anzeigen öffnen",
       events_heading: "Ereignisse",
       load_more: "Mehr anzeigen",
       show_changes:

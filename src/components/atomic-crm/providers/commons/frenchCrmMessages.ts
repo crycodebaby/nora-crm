@@ -317,6 +317,32 @@ export const frenchCrmMessages = {
       },
       sections: {
         overview: "Aperçu",
+        context: "Parties prenantes et lieu",
+      },
+      groups: {
+        case: "Affaire",
+        client: "Donneur d'ordre",
+        client_hint:
+          "Le client pour lequel on travaille, les contacts impliqués et le responsable chez Nora.",
+        site: "Lieu d'intervention",
+        site_hint:
+          "À la création, l'adresse du client est proposée tant que vous ne modifiez rien ici.",
+        planning: "Planification et relance",
+        description: "Description",
+        description_hint:
+          "Les textes longs, e-mails ou notes peuvent être collés ici en entier.",
+      },
+      roles: {
+        client: "Donneur d'ordre",
+      },
+      site: {
+        title: "Lieu d'intervention",
+        empty: "Aucune adresse d'intervention enregistrée.",
+        floor: "Étage",
+        tenant: "Interphone",
+      },
+      contacts: {
+        empty: "Aucun contact sur cette affaire.",
       },
       follow_up: {
         overdue: "Contact client en retard",
@@ -472,6 +498,7 @@ export const frenchCrmMessages = {
     tasks: {
       name: "Tâche |||| Tâches",
       forcedCaseName: "Tâche",
+      done_toggle: "Marquer la tâche comme terminée",
       fields: {
         text: "Description",
         due_date: "Date d'échéance",
@@ -701,9 +728,17 @@ export const frenchCrmMessages = {
     changelog: {
       title: "Notes de version",
     },
+    longtext: {
+      show_more: "Afficher tout le texte",
+      show_less: "Afficher moins",
+    },
     audit: {
       page_title: "Journal d'audit",
       history_title: "Historique des modifications",
+      entries_loaded: "%{smart_count} entrée |||| %{smart_count} entrées",
+      entries_loaded_more:
+        "%{smart_count} entrées chargées, d'autres disponibles",
+      collapsed_hint: "Ouvrir pour afficher",
       events_heading: "Événements",
       load_more: "Afficher plus",
       show_changes:

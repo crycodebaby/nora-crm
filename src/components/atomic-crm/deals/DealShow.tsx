@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Archive, ArchiveRestore } from "lucide-react";
 import {
@@ -14,17 +13,13 @@ import {
 } from "ra-core";
 import { NoraDeleteButton, NoraEditButton } from "../misc/NoraAccessActions";
 import { CanAccess } from "ra-core";
-import { ReferenceArrayField } from "@/components/admin/reference-array-field";
-import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 import { NoteCreate } from "../notes/NoteCreate";
 import { NotesIterator } from "../notes/NotesIterator";
 import type { Deal } from "../types";
-import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraSectionCard } from "../misc/NoraSectionCard";
-import { ContactList } from "./ContactList";
 import { DealFollowUpBadge } from "./DealFollowUpBadge";
 import { DealProductionChecklistSection } from "../checklists/DealProductionChecklistSection";
 import { DealTasksSection } from "./DealTasksSection";
@@ -33,7 +28,14 @@ import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import { useDealShowFacts } from "./useDealShowFacts";
 import { isNoraRecordId } from "../routing/noraRoutes";
-import { DealSiteAddress } from "./DealSiteAddress";
+import {
+  DealArchivedBanner,
+  DealDescriptionSection,
+  DealHeaderContextLine,
+  DealKeyFacts,
+  DealPartiesSection,
+  DealTitleBlock,
+} from "./DealShowSections";
 
 export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
   const redirect = useRedirect();
@@ -72,41 +74,18 @@ export const DealShow = ({ open, id }: { open: boolean; id?: string }) => {
 const DealShowContent = () => {
   const translate = useTranslate();
   const record = useRecordContext<Deal>();
-  const {
-    stageLabel,
-    categoryLabel,
-    amountLabel,
-    followUpDateLabel,
-    followUpStatus,
-    showFollowUp,
-    salesName,
-  } = useDealShowFacts(record);
+  const facts = useDealShowFacts(record);
   if (!record) return null;
+
+  const { followUpStatus } = facts;
+  const isAlert = followUpStatus === "today" || followUpStatus === "overdue";
 
   return (
     <div className="nora-detail-scroll flex flex-col min-h-0 flex-1">
-      {record.archived_at ? <ArchivedTitle /> : null}
-
       <header className="nora-deal-dialog-header shrink-0">
-        <div className="min-w-0 flex-1 space-y-2">
-          <BusinessNumber
-            value={record.case_number}
-            kind="case"
-            size="lg"
-            variant="badge"
-          />
-          <h2 className="nora-deal-dialog-title">{record.name}</h2>
-          <p className="nora-deal-dialog-customer">
-            <ReferenceField
-              source="company_id"
-              reference="companies"
-              link="show"
-            />
-          </p>
-          <DealSiteAddress
-            deal={record}
-            className="text-sm text-muted-foreground"
-          />
+        <div className="min-w-0 flex-1">
+          <DealTitleBlock deal={record} facts={facts} />
+          <DealHeaderContextLine deal={record} facts={facts} />
         </div>
         <div
           className={`flex flex-wrap gap-2 shrink-0 justify-end ${record.archived_at ? "" : "pr-10"}`}
@@ -129,85 +108,26 @@ const DealShowContent = () => {
         </div>
       </header>
 
-      {followUpStatus &&
-      (followUpStatus === "today" || followUpStatus === "overdue") ? (
-        <div className="px-4 md:px-6 pt-4 shrink-0">
+      <div className="nora-deal-dialog-body">
+        {record.archived_at ? <DealArchivedBanner /> : null}
+
+        {isAlert ? (
           <DealFollowUpBadge
             dateString={record.expected_closing_date}
             variant="alert"
             showDate
           />
-        </div>
-      ) : null}
-
-      <div className="px-4 md:px-6 py-6 space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <NoraSectionCard
-            title={translate("resources.deals.sections.overview")}
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <DealFact
-                label={translate("resources.deals.fields.stage")}
-                value={stageLabel}
-              />
-              {record.category ? (
-                <DealFact
-                  label={translate("resources.deals.fields.category")}
-                  value={categoryLabel}
-                />
-              ) : null}
-              <DealFact
-                label={translate(
-                  "resources.deals.fields.expected_closing_date",
-                )}
-                value={followUpDateLabel}
-                extra={
-                  showFollowUp && followUpStatus === "upcoming" ? (
-                    <DealFollowUpBadge
-                      dateString={record.expected_closing_date}
-                      variant="inline"
-                    />
-                  ) : null
-                }
-              />
-              <DealFact
-                label={translate("resources.deals.fields.amount")}
-                value={amountLabel}
-              />
-              <DealFact
-                label={translate("resources.deals.fields.sales_id")}
-                value={salesName}
-              />
-            </div>
-          </NoraSectionCard>
-
-          {!!record.contact_ids?.length && (
-            <NoraSectionCard
-              title={translate("resources.deals.fields.contact_ids")}
-            >
-              <ReferenceArrayField
-                source="contact_ids"
-                reference="contacts_summary"
-              >
-                <ContactList />
-              </ReferenceArrayField>
-            </NoraSectionCard>
-          )}
-        </div>
-
-        {record.description ? (
-          <NoraSectionCard
-            title={translate("resources.deals.fields.description")}
-          >
-            <p className="nora-detail-body whitespace-pre-line">
-              {record.description}
-            </p>
-          </NoraSectionCard>
         ) : null}
 
-        <NoraSectionCard title={translate("resources.deals.tasks.title")}>
-          <DealTasksSection />
+        <NoraSectionCard title={translate("resources.deals.sections.overview")}>
+          <DealKeyFacts deal={record} facts={facts} />
         </NoraSectionCard>
+
+        <DealPartiesSection deal={record} />
+
+        <DealDescriptionSection deal={record} />
+
+        <DealTasksSection />
 
         <DealProductionChecklistSection />
 
@@ -233,37 +153,6 @@ const DealShowContent = () => {
 
         <EntityAuditHistory entityType="deal" entityId={Number(record.id)} />
       </div>
-    </div>
-  );
-};
-
-const DealFact = ({
-  label,
-  value,
-  extra,
-  children,
-}: {
-  label: string;
-  value?: string | null;
-  extra?: React.ReactNode;
-  children?: ReactNode;
-}) => (
-  <div className="flex flex-col gap-1.5">
-    <span className="nora-detail-label">{label}</span>
-    <div className="nora-detail-value flex flex-wrap items-center gap-2">
-      {children ?? value}
-      {extra}
-    </div>
-  </div>
-);
-
-const ArchivedTitle = () => {
-  const translate = useTranslate();
-  return (
-    <div className="bg-orange-500 px-6 py-4 shrink-0">
-      <h3 className="text-lg font-bold text-white">
-        {translate("resources.deals.archived.title")}
-      </h3>
     </div>
   );
 };
