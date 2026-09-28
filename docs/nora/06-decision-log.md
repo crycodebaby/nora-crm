@@ -12,6 +12,7 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 
 | Bereich | Entscheidung |
 |---|---|
+| Design / UX | [Alpha UI 1: Akzentrollen, eine Aufgaben-Aktion, Verlauf zugeklappt](#2026-09-28--alpha-ui-1-akzentrollen-statt-einer-orange-eine-aufgaben-aktion-verlauf-zugeklappt-und-erst-auf-anfrage-geladen) |
 | Navigation / Informationsarchitektur | [RC3: drei primäre Ziele, kein Posteingang, `ora CRM` beabsichtigt](#2026-09-28--rc3-die-primäre-navigation-wird-auf-drei-ziele-verengt-der-posteingang-bewusst-nicht-gebaut-und-ora-crm-ist-der-richtige-titel) |
 | Vorgang / Einsatzort | [Eigenständige Einsatzadresse](#2026-09-25--eigenständige-einsatzadresse-am-vorgang) |
 | Mitarbeiter-Lifecycle | [W6-B Kontrollierter Hard Delete](#2026-09-07--user-lifecycle-w6-b-kontrollierter-hard-delete-benutzerkonto-endgültig-löschen) · [W6-A Session-Autorisierung fail-closed](#2026-09-06--user-lifecycle-w6-a-session-autorisierung-fail-closed-und-owner-gebunden) · [W5 Offboarding & Sitzungen](#2026-09-06--user-lifecycle-w5-kontrolliertes-offboarding-session-revokation-abhängigkeits-preview) · [W4 Anmeldeadresse](#2026-09-06--user-lifecycle-w4-kontrollierte-änderung-der-anmeldeadresse-login-identität) · [W3 Audit-Actor](#2026-09-05--user-lifecycle-w3-der-echte-administrator-steht-im-audit-der-mitarbeiter-hat-eine-stabile-audit-identität) · [W2 Referenzintegrität](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) · [W1 Executor](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) · [V1B Präsentation](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) · [V1A Zugangsstatus](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) · [Mitarbeiterzugang einladungsbasiert](#2026-07-23--mitarbeiterzugang-öffentliches-redesign-und-einladung) |
@@ -29,6 +30,25 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabelle „Nur archivierte Einträge" am Ende.
 
 ---
+
+## 2026-09-28 – Alpha UI 1: Akzentrollen statt einer Orange, eine Aufgaben-Aktion, Verlauf zugeklappt und erst auf Anfrage geladen
+
+**Status:** `RC` — Branch `feature/nora-ui-ux-vnext` auf `main` `2329158a`, nicht deployt, nicht gemergt; wartet auf visuelle Abnahme des Product Owners. Contract: [`02`](02-design-system.md) Abschnitt „Nora Visual System v1"; Produktsicht: [`20`](20-product-changelog.md); Evidenz: `docs/nora/assets/alpha-ui-1/`.
+
+**Kontext.** Der Product Owner hat die Produktionsoberfläche mit echten Abläufen getestet: zu wenig Hierarchie, gleichgewichtige Elemente, volle Viewportbreite für alles, leere Fläche ohne Bedeutung, vier Aufgaben-Schnellknöpfe für denselben Dialog, ein endlos langer Änderungsverlauf. Der bestehende Orangeton `#c65322` (seit dem Redesign; die Dokumentation nannte noch `#ff3b1f`) wirkt für viele Akzentrollen zu schwer.
+
+**Entscheidungen.**
+
+1. **Eine Orange pro Rolle, nicht eine Orange für alles.** Weiß auf `#c65322` misst exakt 4,50:1 und ist der hellste AA-taugliche Füllton — er bleibt `--nora-accent-strong` für Füllflächen mit weißem Text. Glyphen, Rahmen, aktive Zustände und Tönungen bekommen den helleren `--nora-accent` (`#e86f2f`, 3,11:1 für Nicht-Text nach WCAG 1.4.11); Akzenttext `--nora-accent-text`. Dunkelmodus hellt Akzent und Akzenttext auf. `--nora-brand*` bleiben Aliasse. Begründung: die Markenfarbe zu ändern löst nichts; die Rollen zu trennen löst das „schwere Orange" ohne Kontrastverlust.
+2. **Inhalte bekommen ein Maß.** Formulare 46 rem, Prosa 68ch, Akte 68 rem. Ein Feld ist so breit, wie sein Inhalt es braucht, nicht so breit, wie der Bildschirm ist.
+3. **Der Vorgang wird in fachlichen Gruppen erfasst und gelesen** — Vorgang · Auftraggeber · Einsatzort · Planung und Nachfassen · Beschreibung. Der Einsatzort-Vertrag vom 2026-09-25 ist unverändert; nur Anordnung und Breite änderten sich.
+4. **Ansprechpartner am Vorgang tragen keine erfundene Rolle.** Das Domänenmodell kennt keine deal-spezifische Rolle (Mieter, Objektkontakt); die Oberfläche zeigt den Kunden als „Auftraggeber" (das ist `deals.company_id`) und Ansprechpartner als Personen mit ihren eigenen Fakten. `NoraIdentityRow` hat einen Rollen-Slot für eine spätere persistierte Rolle — er wird nie heuristisch gefüllt. Eine solche Rolle wäre eine eigene Domänenentscheidung.
+5. **Genau eine Aufgaben-Aktion.** Die vier Schnellknöpfe öffneten denselben Dialog mit vorbelegter Art, die dort ohnehin wählbar ist. Sie entfallen ersatzlos; „Aufgabe hinzufügen" ist die Primäraktion des Abschnitts. Keine Änderung an Work-Semantik, Zuständigkeit oder `tasks`.
+6. **Der Änderungsverlauf ist zugeklappt und wird erst beim Öffnen geladen.** Die Audit-RPC ist der teuerste Lesevorgang auf einer Akte und liefert keine Gesamtzahl; der Kopf nennt deshalb nur die geladene Anzahl. Audit-Autorität und -Semantik sind unberührt. Über die gemeinsame Komponente gilt das Verhalten auch für Kunden- und Kontaktakte — bewusst, damit sich derselbe Abschnitt überall gleich verhält.
+7. **Die Kanban-Karte ist keine kleine Akte.** Sie trägt nur, was für eine Board-Entscheidung nötig ist; Etage, Klingelschild und Beschreibung bleiben in der Akte.
+8. **Keine Startseite, kein Arbeitskorb, keine Work-Commands, kein Schema.** Alpha UI 1 ist reine Präsentation: null Migrationen, null RLS-, Storage- oder Auth-Änderungen, `ora CRM` unverändert, Kontakte nicht in der Hauptnavigation.
+
+**Bewusst mitgeändert (projektweit, klein):** `.nora-primary-action` erfüllt jetzt die 44-px-Touch-Mindesthöhe (Empfehlung aus [`17`](17-known-issues-and-planned-waves.md) F).
 
 ## 2026-09-28 – RC3: Die primäre Navigation wird auf drei Ziele verengt, der Posteingang bewusst nicht gebaut, und `ora CRM` ist der richtige Titel
 

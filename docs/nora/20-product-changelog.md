@@ -27,6 +27,20 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 
 ---
 
+## 2026-09-28 — Vorgangsakte und Vorgangsformular neu geordnet (Vorabversion, noch nicht live)
+
+**Was ändert sich für Sie:** Der Vorgang ist auf einen Blick lesbar. Oben stehen Nummer, Status, Dienstleistung und Titel, darunter in einer Zeile Kunde, Einsatzort und wer zuständig ist. Auftraggeber, Ansprechpartner und Einsatzort haben einen festen Platz nebeneinander; lange Beschreibungen (zum Beispiel eingefügte E-Mails) werden in Lesebreite gezeigt und lassen sich mit einem Klick ganz ausklappen.
+
+**Beim Anlegen und Bearbeiten** sind die Felder in Gruppen geordnet — Vorgang, Auftraggeber, Einsatzort, Planung und Nachfassen, Beschreibung — und nicht mehr über die ganze Bildschirmbreite gestreckt. Das Beschreibungsfeld wächst mit dem Text mit. Die Vorschläge für die Einsatzadresse aus der Kundenanschrift verhalten sich wie bisher.
+
+**Aufgaben zum Vorgang** haben nur noch eine Schaltfläche „Aufgabe hinzufügen"; die Art der Aufgabe wählen Sie wie gewohnt im Dialog. Die Aufgabenzeilen sind kompakter, das Menü mit „Auf morgen verschieben", „Bearbeiten" und „Löschen" sitzt direkt an der Zeile.
+
+**Der Änderungsverlauf** ist standardmäßig zugeklappt und wird erst geladen, wenn Sie ihn öffnen — die Akte wird dadurch kürzer und schneller.
+
+**Die Vorgangskarten** in der Übersicht zeigen nur noch das Wesentliche: Nummer, Fälligkeit, Titel, Kunde und eine Zeile Einsatzort.
+
+**Technischer Hinweis:** reine Oberflächenänderung — keine neuen Daten, keine geänderten Regeln, keine Migration. Wartet auf die visuelle Freigabe des Product Owners.
+
 ## 2026-09-28 — Neue Oberfläche, eigene Einsatzadresse am Vorgang
 
 **Was ändert sich für Sie:** Nora hat eine **übersichtlichere Hauptnavigation**. Am Rechner führen Sie jetzt drei

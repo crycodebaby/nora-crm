@@ -697,5 +697,56 @@ Im Demo-Modus (`npm run dev:demo`, `VITE_IS_DEMO=true`) gibt es kein Auth-Backen
 
 **Status: `PRODUCTION VERIFIED — PO UX ACCEPTED` (2026-09-04).** Der Product Owner hat den kompletten Demo-Ablauf und alle Zustände visuell abgenommen; V1B ist seit `87c7c302` auf `main` und live (Release-Evidenz: `releases/2026-09.md`). *(Historischer Wortlaut der RC-Fassung: „Kein Push nach `main`, kein Deployment in dieser Welle.")*
 
+## Nora Visual System v1 — Vorgang-Erlebnis (Alpha UI 1, RC, noch nicht live)
+
+Stand: 2026-09-28, RC `feature/nora-ui-ux-vnext` auf `main` `2329158a`. Erste kohärente visuelle Grundlage, angewendet auf Vorgang anlegen/bearbeiten/anzeigen, Aufgaben am Vorgang, Änderungsverlauf und Kanban-Karte. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1"; Produktsicht: [`20`](20-product-changelog.md); Evidenz-Screenshots (vorher/nachher, hell/dunkel, 1440/820/390 px): `docs/nora/assets/alpha-ui-1/`.
+
+### Akzentrollen statt einer Orange
+
+Eine einzige Orange passt nicht auf jede Rolle: Weiß auf `#c65322` misst exakt 4,50:1 und ist damit der **hellste** AA-taugliche Füllton; für Glyphen, Rahmen, aktive Zustände und Tönungen wirkt dieser Ton schwer. Deshalb gibt es Rollen (alle in `src/index.css`, `:root` und `.dark`):
+
+| Token | Hell | Dunkel | Rolle |
+|---|---|---|---|
+| `--nora-accent-strong` | `#c65322` | `#c65322` | Füllflächen mit weißem Text (Primäraktion) — 4,50:1 |
+| `--nora-accent` | `#e86f2f` | `#f08a55` | Glyphen, Rahmen, aktive Zustände (Nicht-Text: 3,11:1 hell, ≈ 6,7:1 dunkel) |
+| `--nora-accent-text` | `#c65322` | `#f5945f` | akzentfarbener Text auf Flächen |
+| `--nora-accent-soft` / `-border` / `-ring` | Mischungen aus `--nora-accent` | dito | Tönung, Rahmen, Fokusring |
+| `--nora-text-secondary` / `--nora-text-muted` | `oklch(0.42)` / `oklch(0.51)` | `oklch(0.8)` / `oklch(0.7)` | Sekundärtext, Metadaten (≥ 4,5:1) |
+| `--nora-hairline` / `--nora-divider` | 8 % / 13 % Vordergrund | 9 % / 15 % Weiß | Trennlinien |
+| `--nora-measure-form` / `-prose` / `-detail` | 46rem / 68ch / 68rem | — | Inhaltsbreiten |
+
+`--nora-brand*` bleiben als **Aliasse** auf die Akzentrollen bestehen; keine bestehende Fläche ändert dadurch ihre Bedeutung. Die Markenfarbe selbst ist nicht geändert.
+
+### Typografierollen
+
+`.nora-t-title` (22/24 px, Entitätstitel) · `.nora-t-section` (15 px semibold) · `.nora-t-eyebrow` (12 px, Versalien, gedämpft) · `.nora-t-data` (15 px medium) · `.nora-t-support` (14 px sekundär) · `.nora-t-meta` (13 px gedämpft) · `.nora-t-helper` (12,5 px) · `.nora-t-label` (13 px medium). Komponenten setzen Rollen zusammen, sie erfinden keine Größen.
+
+### Präsentations-Primitive (`misc/`)
+
+| Primitive | Zweck |
+|---|---|
+| `NoraSectionCard` | Abschnitt mit Kopfzeile: Titel, verlässliche Anzahl, Aktionen, optionale Beschreibung; `aria-labelledby` |
+| `NoraExpandableSection` | Abschnitt, dessen ganzer Kopf **ein** Auf-/Zuklappen ist (`aria-expanded`/`aria-controls`); Inhalt wird erst beim ersten Öffnen montiert |
+| `NoraMetaPair` | Label über Wert, immer in derselben Relation |
+| `NoraIdentityRow` | Visual → Name (Link) → Kontextzeile; **Rollen-Slot vorbereitet, wird nie abgeleitet** |
+| `NoraFormGroup` / `NoraFormRow` | echte `fieldset`/`legend`-Gruppe mit Hinweis; Zeilen teilen Platz nur, wo es hilft (`2`, `3`, `wide-narrow`) |
+| `NoraLongText` | Lesemaß 68ch, echte Zeilenumbrüche, Ausklappen nur bei tatsächlichem Überlauf |
+| `NoraLongTextInput` | wachsende Textarea (Start 7,5 rem, Deckel `min(60vh, 32rem)`) |
+| `NoraStatusPill` | Zustand als Wort mit Ton, nie Farbe allein |
+
+### Vorgang: Formular, Akte, Aufgaben, Verlauf, Karte
+
+- **Formular** (`DealInputs`): fünf Gruppen — Vorgang · Auftraggeber · Einsatzort · Planung und Nachfassen · Beschreibung — in einer 46-rem-Spalte; kurze Felder teilen sich Zeilen. Der eingefrorene Einsatzort-Vertrag (Vorschlag nur bei Neuanlage, jeder Eingriff beendet Vorschläge, Etage/Klingelschild nie automatisch, Leeren = `NULL`) ist **unverändert**; Labels und zugängliche Namen ebenso.
+- **Akte** (`DealShow`, `DealShowMobile`, gemeinsame Bausteine in `DealShowSections`): Kopf mit Nummer, Status-Pill, Dienstleistung, Titel und **einer** Kontextzeile (Kunde · Einsatzort · Zuständig); dann Übersicht (Kontakttermin, Auftragswert, Zuständig), „Beteiligte und Einsatzort" (Auftraggeber als Identität mit Logo, Ansprechpartner **ohne** erfundene Rolle, gespeicherte Site-Felder), Beschreibung, Aufgaben, Checkliste, Notizen, Änderungsverlauf. Desktop-Dialog und mobile Seite komponieren dieselben Bausteine.
+- **Aufgaben**: genau eine Primäraktion „Aufgabe hinzufügen" im Abschnittskopf mit Anzahl offener Aufgaben; die vier Schnellknöpfe (Rückruf, Besichtigung, Rückmeldung zu Angebot, Termin vereinbaren) sind entfallen, weil sie denselben Dialog mit vorbelegter Art öffneten. Zeilen: Checkbox · Art als leises Präfix · Text · fällig/Zuständige(r) · Überlaufmenü **in der Zeile** (44 px).
+- **Änderungsverlauf**: standardmäßig zugeklappt und **erst beim Öffnen geladen**; danach zeigt der Kopf „N Einträge" bzw. „N Einträge geladen, weitere vorhanden" (die RPC liefert keine Gesamtzahl, es wird keine behauptet). Gilt über die gemeinsame Komponente auch für Kunden- und Kontaktakte. Audit-Semantik unberührt.
+- **Kanban-Karte**: Nummer und kleine Dringlichkeits-Pille oben, Titel (max. 2 Zeilen), Kunde, **eine** abgeschnittene Einsatzort-Zeile, leise Metadaten. Etage, Klingelschild und Beschreibung bleiben der Akte vorbehalten. Drag-and-drop unverändert (Tastatur-DnD durch Test belegt).
+
+### Regeln, die aus dieser Welle folgen
+
+- `.nora-primary-action` hat keine `min-h-10`-Utility mehr; die Mindesthöhe ist `var(--nora-touch-min)` (44 px) — schließt den Touch-Befund aus [`17`](17-known-issues-and-planned-waves.md) F projektweit.
+- **Browser-Tests kompilieren `index.css` ohne Tailwind:** `@apply`-Regeln sind dort unsichtbar. Layout- und A11y-kritische Maße (Touch-Ziele, Abschneiden, Deckel) stehen deshalb als **einfache Deklarationen**, nicht als `@apply`.
+- Fieldset-Gruppen tragen **kein** `aria-labelledby`: eine so benannte Gruppe kollidiert mit `getByLabel` eines gleichnamigen Feldes („Beschreibung"); die `legend` benennt die Gruppe nativ.
+
 ## Redesign zur Freigabe (2026-09-25, noch nicht live)
 Kompaktes Logo und großzügige Navigation für Desktop und Tablet; das bestehende Hotboard bleibt erhalten. Keine neue Arbeitskorb-/Posteingangsfläche. Vorgänge zeigen Titel → Kunde → Einsatzort. Kontakte und Demo-Rolle liegen in Einstellungen; Demo-Rollen schaffen keine Berechtigungen.
