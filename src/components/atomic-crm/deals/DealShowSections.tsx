@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Building2, MapPin, UserRound } from "lucide-react";
 import { useListContext, useTranslate } from "ra-core";
+import { Link } from "react-router";
 
 import { ReferenceArrayField } from "@/components/admin/reference-array-field";
 import { ReferenceField } from "@/components/admin/reference-field";
@@ -97,8 +98,23 @@ export const DealHeaderContextLine = ({
       <ReferenceField
         source="company_id"
         reference="companies"
-        link="show"
-        className="font-medium text-foreground"
+        link={false}
+        render={({ referenceRecord }) => {
+          const company = referenceRecord as Company | undefined;
+          if (!company) return null;
+          return (
+            <Link
+              to={noraCreatePath({
+                resource: "companies",
+                type: "show",
+                id: company.id,
+              })}
+              className="nora-inline-target font-medium text-foreground hover:underline"
+            >
+              {company.name}
+            </Link>
+          );
+        }}
       />
       {site ? (
         <span className="inline-flex min-w-0 items-center gap-2">

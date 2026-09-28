@@ -116,6 +116,7 @@ export const Task = ({
             checked={!!task.done_date}
             onCheckedChange={handleCheck()}
             disabled={isUpdatePending}
+            className="nora-task-checkbox"
             aria-label={translate("resources.tasks.done_toggle", {
               _: "Aufgabe erledigt",
             })}

@@ -88,7 +88,7 @@ const DealShowContent = () => {
           <DealHeaderContextLine deal={record} facts={facts} />
         </div>
         <div
-          className={`flex flex-wrap gap-2 shrink-0 justify-end ${record.archived_at ? "" : "pr-10"}`}
+          className={`nora-deal-dialog-actions flex flex-wrap gap-2 shrink-0 justify-end ${record.archived_at ? "" : "pr-10"}`}
         >
           {record.archived_at ? (
             <>

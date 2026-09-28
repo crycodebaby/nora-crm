@@ -48,11 +48,13 @@ const setup = async (deal: Deal = DEAL, tasks: Task[] = [TASK]) => {
         tasks,
       }}
     >
-      <ResourceContextProvider value="deals">
-        <RecordContextProvider value={deal}>
-          <DealTasksSection />
-        </RecordContextProvider>
-      </ResourceContextProvider>
+      <div style={{ padding: 32 }}>
+        <ResourceContextProvider value="deals">
+          <RecordContextProvider value={deal}>
+            <DealTasksSection />
+          </RecordContextProvider>
+        </ResourceContextProvider>
+      </div>
     </StoryWrapper>,
   );
 };
@@ -92,6 +94,17 @@ describe("DealTasksSection (Alpha UI 1)", () => {
     const rect = menu!.getBoundingClientRect();
     expect(rect.width).toBeGreaterThanOrEqual(44);
     expect(rect.height).toBeGreaterThanOrEqual(44);
+    // the completion control: 16 px box, 44 px hit area around it
+    const checkbox = row!.querySelector('[role="checkbox"]') as HTMLElement;
+    const box = checkbox.getBoundingClientRect();
+    expect(
+      document.elementFromPoint(box.right + 10, box.top + box.height / 2),
+    ).toBe(checkbox);
+    expect(
+      document.elementFromPoint(box.left + box.width / 2, box.bottom + 10),
+    ).toBe(checkbox);
+    const wrap = row!.querySelector(".nora-task-check") as HTMLElement;
+    expect(wrap.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     // type is shown as a quiet prefix, not as a second heading
     expect(row!.querySelector(".nora-task-type")?.textContent).toBe("Rückruf");
     // the open count is shown in the section head

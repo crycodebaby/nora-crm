@@ -34,6 +34,12 @@ describe("NoraLongText (Alpha UI 1)", () => {
     expect(getComputedStyle(body).maxWidth).not.toBe("none");
     expect(body.getBoundingClientRect().width).toBeLessThanOrEqual(640);
 
+    // the disclosure control meets the Nora touch minimum
+    const toggleEl = document.querySelector(
+      ".nora-longtext-toggle",
+    ) as HTMLElement;
+    expect(toggleEl.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+
     await userEvent.click(toggle());
     await expect
       .element(page.getByRole("button", { name: /Show less|Weniger/ }))

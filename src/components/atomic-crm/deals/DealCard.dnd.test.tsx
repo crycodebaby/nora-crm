@@ -89,6 +89,17 @@ describe("Deal Kanban card (Alpha UI 1)", () => {
     expect(getComputedStyle(site).overflow).toBe("hidden");
   });
 
+  it("keeps horizontal scrolling inside the board, never on the document", async () => {
+    const scroll = document.querySelector(".nora-kanban-scroll") as HTMLElement;
+    expect(scroll).not.toBeNull();
+    // containing block for absolutely positioned descendants (sr-only spans)
+    expect(getComputedStyle(scroll).position).toBe("relative");
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      window.innerWidth + 1,
+    );
+    expect(scroll.scrollWidth).toBeGreaterThanOrEqual(scroll.clientWidth);
+  });
+
   it("still moves a card to another status via keyboard drag and drop", async () => {
     expect(columnOf(7)).toBe("neue-anfrage");
 

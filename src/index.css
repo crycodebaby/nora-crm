@@ -109,7 +109,10 @@
   --nora-accent-strong: #c65322;
   --nora-accent: #e86f2f;
   --nora-accent-hover: #a8441b;
-  --nora-accent-text: #c65322;
+  /* Accent *text* is one step deeper than the fill: #c65322 measures only
+     4.06:1 on the soft tint and 4.09:1 on the app ground; #b94c1e clears
+     4.5:1 on white, card, soft tint and app ground (hardening pass). */
+  --nora-accent-text: #b94c1e;
   --nora-accent-soft: #fdf1ea;
   --nora-accent-border: color-mix(in oklab, #e86f2f 34%, var(--border));
   --nora-accent-ring: color-mix(in oklab, #e86f2f 34%, transparent);
@@ -655,6 +658,11 @@ input[type="time"] {
   }
 
   .nora-kanban-scroll {
+    /* Containing block for absolutely positioned descendants (e.g. the
+       `sr-only` spans inside cards). Without this they resolve against
+       `.nora-kanban-viewport`, escape this box's overflow clip and widen
+       the whole document to the board's width (measured: 3799 px at 1440). */
+    position: relative;
     width: 100%;
     overflow-x: auto;
     overflow-y: visible;
@@ -1467,8 +1475,10 @@ input[type="time"] {
   }
 
   .nora-longtext-toggle {
-    @apply mt-2 inline-flex items-center gap-1 rounded-md text-[13px] font-medium;
-    min-height: 2.25rem;
+    @apply mt-1 inline-flex items-center gap-1 rounded-md text-[13px] font-medium;
+    min-height: var(--nora-touch-min);
+    padding-inline: 0.25rem;
+    margin-inline: -0.25rem;
     color: var(--nora-accent-text);
   }
 
@@ -1499,12 +1509,47 @@ input[type="time"] {
   .nora-task-check {
     @apply flex shrink-0 items-center justify-center;
     min-width: var(--nora-touch-min);
-    min-height: 2.25rem;
+    min-height: var(--nora-touch-min);
     margin-left: -0.5rem;
+    margin-top: -0.25rem;
+  }
+
+  /* The visible box stays 16 px; the hit area is the full touch minimum. */
+  .nora-task-checkbox {
+    position: relative;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .nora-task-checkbox::after {
+    content: "";
+    position: absolute;
+    inset: -14px;
   }
 
   .nora-task-body {
     @apply flex min-w-0 flex-1 flex-col gap-1 pt-1.5;
+  }
+
+  /* Mobile header back control: 24 px chevron, touch-sized hit area.
+     Plain declarations so browser tests can measure it. */
+  .nora-mobile-back {
+    width: var(--nora-touch-min);
+    height: var(--nora-touch-min);
+    margin-left: -0.5rem;
+  }
+
+  /* Inline text link inside a meta line: same layout, 44 px hit area. */
+  .nora-inline-target {
+    position: relative;
+    display: inline-block;
+    padding-block: 0.875rem;
+    margin-block: -0.875rem;
+  }
+
+  .nora-deal-dialog-actions > a,
+  .nora-deal-dialog-actions > button {
+    min-height: var(--nora-touch-min);
   }
 
   .nora-task-text {

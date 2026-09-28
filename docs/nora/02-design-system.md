@@ -709,7 +709,7 @@ Eine einzige Orange passt nicht auf jede Rolle: Weiß auf `#c65322` misst exakt 
 |---|---|---|---|
 | `--nora-accent-strong` | `#c65322` | `#c65322` | Füllflächen mit weißem Text (Primäraktion) — 4,50:1 |
 | `--nora-accent` | `#e86f2f` | `#f08a55` | Glyphen, Rahmen, aktive Zustände (Nicht-Text: 3,11:1 hell, ≈ 6,7:1 dunkel) |
-| `--nora-accent-text` | `#c65322` | `#f5945f` | akzentfarbener Text auf Flächen |
+| `--nora-accent-text` | `#b94c1e` | `#f5945f` | akzentfarbener Text auf Flächen — eine Stufe tiefer als die Füllfläche, damit auch Tönung (4,60:1) und App-Grund (4,63:1) AA erfüllen (Hardening) |
 | `--nora-accent-soft` / `-border` / `-ring` | Mischungen aus `--nora-accent` | dito | Tönung, Rahmen, Fokusring |
 | `--nora-text-secondary` / `--nora-text-muted` | `oklch(0.42)` / `oklch(0.51)` | `oklch(0.8)` / `oklch(0.7)` | Sekundärtext, Metadaten (≥ 4,5:1) |
 | `--nora-hairline` / `--nora-divider` | 8 % / 13 % Vordergrund | 9 % / 15 % Weiß | Trennlinien |
@@ -747,6 +747,15 @@ Eine einzige Orange passt nicht auf jede Rolle: Weiß auf `#c65322` misst exakt 
 - `.nora-primary-action` hat keine `min-h-10`-Utility mehr; die Mindesthöhe ist `var(--nora-touch-min)` (44 px) — schließt den Touch-Befund aus [`17`](17-known-issues-and-planned-waves.md) F projektweit.
 - **Browser-Tests kompilieren `index.css` ohne Tailwind:** `@apply`-Regeln sind dort unsichtbar. Layout- und A11y-kritische Maße (Touch-Ziele, Abschneiden, Deckel) stehen deshalb als **einfache Deklarationen**, nicht als `@apply`.
 - Fieldset-Gruppen tragen **kein** `aria-labelledby`: eine so benannte Gruppe kollidiert mit `getByLabel` eines gleichnamigen Feldes („Beschreibung"); die `legend` benennt die Gruppe nativ.
+
+### Hardening-Pass (2026-09-28, RC-Ergänzung)
+
+Objektive Korrekturen vor der PO-Sichtprüfung, ohne die gewählte Richtung zu ändern:
+
+- **`/vorgaenge` scrollt nicht mehr als Dokument.** `.nora-kanban-scroll` ist jetzt `position: relative` und damit Containing Block seiner absolut positionierten Nachkommen (die `sr-only`-Spans in den Karten). Vorher lösten diese gegen `.nora-kanban-viewport` auf, entgingen dem Overflow-Clip des Scrollcontainers und weiteten das Dokument auf Boardbreite (gemessen 3799 px bei 1440). Nachher: Dokument = Viewport bei 1440/1280/820 px, Board scrollt weiterhin nur in seinem Viewport (`scrollWidth` 4060 bei `clientWidth` 1392/1232/772); Drag-and-drop und Tastatur-DnD unverändert (Test). Regel: **Ein horizontaler Scrollcontainer ist immer auch `position: relative`.**
+- **Trefferflächen (44 px, Nora-Minimum):** `.nora-longtext-toggle` 36 → 44; `.nora-task-check` 36 → 44 und die 16-px-Checkbox erhält über `::after` (inset −14 px) eine unsichtbare 44-px-Treffzone; `MobileBackButton` 21 × 21 → 44 × 44 (`.nora-mobile-back`, 24-px-Chevron bleibt); „Bearbeiten"-Link im Vorgangskopf 36 → 44 (`.nora-deal-dialog-actions`); Kundenlink in der Kontextzeile über `.nora-inline-target` (Padding/negative Margins, Layout unverändert); Offenlegung „Etage oder Klingelschild ergänzen" 36 → 44. Alle als einfache Deklarationen (testbar).
+- **Kontrast nachgemessen (Canvas-aufgelöst, hell/dunkel):** Weiß auf Füllfläche 4,50:1 (unverändert, PO-Entscheidung); Akzenttext hell jetzt `#b94c1e`: 5,10:1 auf Weiß/Karte, 4,60:1 auf Status-Pill-Tönung, 4,63:1 auf App-Grund, 4,53:1 auf der Überfällig-Tönung (vorher 4,50 / **4,06** / **4,09** / 4,50). Dunkel: 6,1–8,8:1. Arbeitsakzent `#e86f2f` bleibt Nicht-Text (3,11:1 auf Karte, 2,83:1 auf App-Grund — dort nicht als alleiniger Indikator verwenden).
+- **Geteilter Änderungsverlauf geprüft:** Vorgangsakte und Kontaktakte nutzen die zuklappbare Fläche (zugeklappt, kein RPC vor dem Öffnen, `aria-expanded`, geladener Zustand bleibt beim Zu-/Aufklappen); die Kundenakte bettet den Verlauf mit `embedded` in ihren Tab „Historie" ein und lädt ihn beim Öffnen des Tabs — die explizit nicht zuklappbare Variante, unverändert.
 
 ## Redesign zur Freigabe (2026-09-25, noch nicht live)
 Kompaktes Logo und großzügige Navigation für Desktop und Tablet; das bestehende Hotboard bleibt erhalten. Keine neue Arbeitskorb-/Posteingangsfläche. Vorgänge zeigen Titel → Kunde → Einsatzort. Kontakte und Demo-Rolle liegen in Einstellungen; Demo-Rollen schaffen keine Berechtigungen.

@@ -118,7 +118,7 @@ export const DealSiteAddressInputs = () => {
         <button
           type="button"
           onClick={() => setDetailsExpanded(true)}
-          className="min-h-9 w-fit rounded-md text-left text-[13px] font-medium text-[var(--nora-accent-text)] hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--nora-accent-ring)]"
+          className="min-h-11 w-fit rounded-md text-left text-[13px] font-medium text-[var(--nora-accent-text)] hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--nora-accent-ring)]"
         >
           Etage oder Klingelschild ergänzen
         </button>
