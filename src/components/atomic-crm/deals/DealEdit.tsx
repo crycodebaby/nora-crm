@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   EditBase,
   Form,
-  useEditContext,
   useNotify,
   useRecordContext,
   useRedirect,
@@ -11,12 +10,10 @@ import {
 import { useFormContext, useFormState } from "react-hook-form";
 import { Link } from "react-router";
 import { isNoraRecordId, noraCreatePath } from "../routing/noraRoutes";
-import { ReferenceField } from "@/components/admin/reference-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 import { FormToolbar } from "../layout/FormToolbar";
-import { CompanyAvatar } from "../companies/CompanyAvatar";
 import type { Deal } from "../types";
 import { BusinessNumber } from "../misc/BusinessNumber";
 import { NoraAccessGuard } from "../misc/NoraEditGuard";
@@ -96,7 +93,7 @@ const DealEditDialogBody = ({ onClose }: { onClose: () => void }) => {
       open
       isDirty={isDirty}
       onRequestClose={onClose}
-      className="lg:max-w-4xl p-4 overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
+      className="nora-deal-form-dialog sm:max-w-3xl p-0 overflow-y-auto max-h-9/10 top-1/20 translate-y-0"
     >
       <DialogTitle className="sr-only">
         {translate("resources.deals.action.edit", {
@@ -108,11 +105,13 @@ const DealEditDialogBody = ({ onClose }: { onClose: () => void }) => {
           _: "Vorgangsdaten bearbeiten und speichern.",
         })}
       </DialogDescription>
-      <Form>
+      <Form className="flex flex-col">
         <FormDirtyBridge onDirtyChange={setIsDirty} />
         <EditHeader />
-        <DealInputs />
-        <FormToolbar />
+        <div className="nora-deal-form-body">
+          <DealInputs />
+        </div>
+        <FormToolbar className="nora-deal-form-toolbar" />
       </Form>
     </NoraDialogContent>
   );
@@ -148,23 +147,31 @@ const FormDirtyBridge = ({
 
 function EditHeader() {
   const translate = useTranslate();
-  const { defaultTitle } = useEditContext<Deal>();
   const deal = useRecordContext<Deal>();
   if (!deal) {
     return null;
   }
 
   return (
-    <div className="pb-0 mb-8">
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-4 min-w-0">
-          <ReferenceField source="company_id" reference="companies" link="show">
-            <CompanyAvatar />
-          </ReferenceField>
-          <h2 className="text-2xl font-semibold truncate">{defaultTitle}</h2>
-          <BusinessNumber value={deal.case_number} />
+    <header className="nora-deal-form-head">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <BusinessNumber
+              value={deal.case_number}
+              kind="case"
+              size="sm"
+              variant="badge"
+            />
+            <span className="nora-t-eyebrow">
+              {translate("resources.deals.action.edit", {
+                _: "Vorgang bearbeiten",
+              })}
+            </span>
+          </div>
+          <h2 className="nora-t-title min-w-0 truncate">{deal.name}</h2>
         </div>
-        <div className="flex gap-2 pr-12 shrink-0">
+        <div className="flex gap-2 pr-10 shrink-0">
           <NoraDeleteButton resource="deals" />
           <Button asChild variant="outline" className="h-9">
             <Link
@@ -179,6 +186,6 @@ function EditHeader() {
           </Button>
         </div>
       </div>
-    </div>
+    </header>
   );
 }

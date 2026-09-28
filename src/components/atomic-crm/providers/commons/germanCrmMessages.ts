@@ -314,6 +314,37 @@ export const germanCrmMessages = {
       },
       sections: {
         overview: "Übersicht",
+        context: "Beteiligte und Einsatzort",
+      },
+      groups: {
+        case: "Vorgang",
+        client: "Auftraggeber",
+        client_hint:
+          "Der Kunde, für den gearbeitet wird, die beteiligten Ansprechpartner und wer bei Nora zuständig ist.",
+        site: "Einsatzort",
+        planning: "Planung und Nachfassen",
+        description: "Beschreibung",
+        description_hint:
+          "Längere Texte, E-Mails oder Notizen dürfen hier vollständig eingefügt werden.",
+      },
+      roles: {
+        client: "Auftraggeber",
+      },
+      attention: {
+        overdue_title: "Kundenkontakt überfällig",
+        overdue_since:
+          "seit %{smart_count} Tag (fällig am %{date}) |||| seit %{smart_count} Tagen (fällig am %{date})",
+        today_title: "Heute Kunden kontaktieren",
+        today_meta: "fällig am %{date}",
+      },
+      site: {
+        title: "Einsatzort",
+        empty: "Kein Einsatzort hinterlegt.",
+        floor: "Etage",
+        tenant: "Klingelschild",
+      },
+      contacts: {
+        empty: "Keine Ansprechpartner am Vorgang.",
       },
       follow_up: {
         overdue: "Kundenkontakt überfällig",
@@ -324,24 +355,6 @@ export const germanCrmMessages = {
         empty: "Keine offenen Aufgaben zu den Ansprechpartnern.",
         no_contact:
           "Bitte zuerst einen Ansprechpartner am Vorgang hinterlegen.",
-      },
-      checklist: {
-        title: "Produktionsfreigabe Fenster",
-        subtitle: "Kontrollpunkte vor Hersteller-/Produktionsfreigabe",
-        start: "Checkliste starten",
-        required: "Pflichtpunkt",
-        optional: "Optional",
-        done: "Erledigt",
-        open: "Offen",
-        note: "Notiz",
-        save_note: "Notiz speichern",
-        cancel: "Abbrechen",
-        required_complete: "Pflichtpunkte erledigt",
-        demo_disabled: "Checklisten sind im Demo-Modus eingeschränkt",
-        progress: "%{done} von %{total} erledigt",
-        start_error: "Checkliste konnte nicht gestartet werden",
-        not_started: "Checkliste noch nicht gestartet",
-        update_error: "Checklistenpunkt konnte nicht gespeichert werden",
       },
       unarchived: {
         action: "Zurück zur Übersicht",
@@ -418,8 +431,8 @@ export const germanCrmMessages = {
       added: "Notiz hinzugefügt",
       inputs: {
         add_note: "Notiz hinzufügen",
-        options_hint: "(Dateien anhängen oder Details ändern)",
         show_options: "Optionen anzeigen",
+        hide_options: "Optionen ausblenden",
       },
       actions: {
         attach_document: "Dokument anhängen",
@@ -469,11 +482,13 @@ export const germanCrmMessages = {
     tasks: {
       name: "Aufgabe |||| Aufgaben",
       forcedCaseName: "Aufgabe",
+      done_toggle: "Aufgabe als erledigt markieren",
       fields: {
         text: "Beschreibung",
         due_date: "Fällig am",
         type: "Art",
         contact_id: "Kontakt",
+        sales_id: "Zuständig",
         due_short: "fällig",
       },
       action: {
@@ -701,9 +716,18 @@ export const germanCrmMessages = {
     changelog: {
       title: "Änderungsprotokoll",
     },
+    longtext: {
+      show_more: "Ganzen Text anzeigen",
+      show_more_lines:
+        "Ganzen Text anzeigen (%{smart_count} Zeile) |||| Ganzen Text anzeigen (%{smart_count} Zeilen)",
+      show_less: "Weniger anzeigen",
+    },
     audit: {
       page_title: "Audit-Protokoll",
       history_title: "Änderungsverlauf",
+      entries_loaded: "%{smart_count} Eintrag |||| %{smart_count} Einträge",
+      entries_loaded_more: "%{smart_count} Einträge geladen, weitere vorhanden",
+      collapsed_hint: "Zum Anzeigen öffnen",
       events_heading: "Ereignisse",
       load_more: "Mehr anzeigen",
       show_changes:
@@ -869,10 +893,8 @@ export const germanCrmMessages = {
         waiting_manufacturer: "Wartet auf Hersteller",
         open_tasks: "Offene Aufgaben",
         offer_follow_up: "Rückmeldung zu Angeboten",
-        open_production_releases: "Produktionsfreigaben offen",
         required_complete: "Pflichtpunkte erledigt",
         still_missing: "Fehlt noch",
-        no_open_production_releases: "Keine offenen Produktionsfreigaben",
         required_progress: "%{done} von %{total} Pflichtpunkten erledigt",
         empty_section: "Keine Einträge",
         empty_new_inquiries: "Keine neuen Anfragen",

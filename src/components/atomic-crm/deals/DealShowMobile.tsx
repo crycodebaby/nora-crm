@@ -1,21 +1,21 @@
-import type { ReactNode } from "react";
 import { ShowBase, useShowContext, useTranslate } from "ra-core";
 import { Link } from "react-router";
 
-import { ReferenceArrayField } from "@/components/admin/reference-array-field";
-import { ReferenceField } from "@/components/admin/reference-field";
-
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
-import { BusinessNumber } from "../misc/BusinessNumber";
 import { MobileBackButton } from "../misc/MobileBackButton";
 import { NoraSectionCard } from "../misc/NoraSectionCard";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import type { Deal } from "../types";
-import { ContactList } from "./ContactList";
-import { DealFollowUpBadge } from "./DealFollowUpBadge";
+import { DealAttentionStrip } from "./DealAttentionStrip";
 import { useDealShowFacts } from "./useDealShowFacts";
-import { DealSiteAddress } from "./DealSiteAddress";
+import {
+  DealArchivedBanner,
+  DealDescriptionSection,
+  DealKeyFacts,
+  DealPartiesSection,
+  DealTitleBlock,
+} from "./DealShowSections";
 
 /**
  * Mobile Vorgang detail page (W7-M1).
@@ -25,7 +25,7 @@ import { DealSiteAddress } from "./DealSiteAddress";
  * Vorgangsliste) all target surfaces that deliberately do not exist on the
  * mobile app. Reusing that shell would only move the dead end, so mobile gets
  * its own read-only page and shares the *content* derivation instead — see
- * `useDealShowFacts`.
+ * `useDealShowFacts` and the shared blocks in `DealShowSections`.
  *
  * Scope is the fachliche core a Vorgang has to answer away from the desk:
  * Worum geht es, wie ist der Status, wer ist zuständig, was steht als
@@ -52,19 +52,12 @@ export const DealShowMobile = () => (
 const DealShowMobileContent = () => {
   const translate = useTranslate();
   const { record } = useShowContext<Deal>();
-  const {
-    stageLabel,
-    categoryLabel,
-    amountLabel,
-    followUpDateLabel,
-    followUpStatus,
-    showFollowUp,
-    salesName,
-  } = useDealShowFacts(record);
+  const facts = useDealShowFacts(record);
 
   if (!record) return null;
 
-  const isAlert = followUpStatus === "today" || followUpStatus === "overdue";
+  const isAlert =
+    facts.followUpStatus === "today" || facts.followUpStatus === "overdue";
 
   return (
     <>
@@ -85,128 +78,33 @@ const DealShowMobileContent = () => {
       </MobileHeader>
 
       <MobileContent>
-        {record.archived_at ? (
-          <p
-            className="mb-4 rounded-md bg-orange-500 px-4 py-3 text-sm font-semibold text-white"
-            role="status"
-          >
-            {translate("resources.deals.archived.title")}
-          </p>
-        ) : null}
+        <div className="flex flex-col gap-4">
+          {record.archived_at ? <DealArchivedBanner /> : null}
 
-        <div className="mb-6 flex flex-col gap-2">
-          <BusinessNumber
-            value={record.case_number}
-            kind="case"
-            size="lg"
-            variant="badge"
-          />
-          <h2 className="text-2xl font-bold">{record.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            <ReferenceField
-              source="company_id"
-              reference="companies"
-              link="show"
-            />
-          </p>
-          <DealSiteAddress
-            deal={record}
-            className="text-sm text-muted-foreground"
-          />
-        </div>
+          <DealTitleBlock deal={record} facts={facts} className="mt-1" />
 
-        {isAlert ? (
-          <div className="mb-6">
-            <DealFollowUpBadge
+          {isAlert ? (
+            <DealAttentionStrip
               dateString={record.expected_closing_date}
-              variant="alert"
-              showDate
+              responsible={facts.salesName !== "—" ? facts.salesName : null}
             />
-          </div>
-        ) : null}
+          ) : null}
 
-        <div className="flex flex-col gap-6">
           <NoraSectionCard
             title={translate("resources.deals.sections.overview")}
           >
-            <div className="flex flex-col gap-4">
-              <DealMobileFact
-                label={translate("resources.deals.fields.stage")}
-                value={stageLabel}
-              />
-              {categoryLabel ? (
-                <DealMobileFact
-                  label={translate("resources.deals.fields.category")}
-                  value={categoryLabel}
-                />
-              ) : null}
-              <DealMobileFact
-                label={translate(
-                  "resources.deals.fields.expected_closing_date",
-                )}
-                value={followUpDateLabel}
-                extra={
-                  showFollowUp && followUpStatus === "upcoming" ? (
-                    <DealFollowUpBadge
-                      dateString={record.expected_closing_date}
-                      variant="inline"
-                    />
-                  ) : null
-                }
-              />
-              <DealMobileFact
-                label={translate("resources.deals.fields.amount")}
-                value={amountLabel}
-              />
-              <DealMobileFact
-                label={translate("resources.deals.fields.sales_id")}
-                value={salesName}
-              />
-            </div>
+            <DealKeyFacts
+              deal={record}
+              facts={facts}
+              className="grid grid-cols-2 gap-x-4 gap-y-4"
+            />
           </NoraSectionCard>
 
-          {record.contact_ids?.length ? (
-            <NoraSectionCard
-              title={translate("resources.deals.fields.contact_ids")}
-            >
-              <ReferenceArrayField
-                source="contact_ids"
-                reference="contacts_summary"
-              >
-                <ContactList />
-              </ReferenceArrayField>
-            </NoraSectionCard>
-          ) : null}
+          <DealPartiesSection deal={record} />
 
-          {record.description ? (
-            <NoraSectionCard
-              title={translate("resources.deals.fields.description")}
-            >
-              <p className="nora-detail-body whitespace-pre-line">
-                {record.description}
-              </p>
-            </NoraSectionCard>
-          ) : null}
+          <DealDescriptionSection deal={record} collapsedHeight={220} />
         </div>
       </MobileContent>
     </>
   );
 };
-
-const DealMobileFact = ({
-  label,
-  value,
-  extra,
-}: {
-  label: string;
-  value?: string | null;
-  extra?: ReactNode;
-}) => (
-  <div className="flex flex-col gap-1.5">
-    <span className="nora-detail-label">{label}</span>
-    <div className="nora-detail-value flex flex-wrap items-center gap-2">
-      {value}
-      {extra}
-    </div>
-  </div>
-);

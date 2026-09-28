@@ -219,7 +219,7 @@ Vollständige Entscheidung inkl. Alternativen: `06-decision-log.md` „2026-08-2
 | Textbausteine (Plus/Minus) | `saved_text_snippets` | spezifiziert |
 | Audit / Nachvollziehbarkeit | `audit_events` (append-only) | ✅ v0.3l (CRM + Checklisten) |
 | Servicebereich | `service_area_code` (`FENS`, `HAUS`, `IMMO`) | spezifiziert |
-| Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2 ✅ |
+| Produktionsfreigabe Fenster | Vorlage `FENS_PRODUCTION_RELEASE` | Seed in Migration v0.3d2 ✅ — **Produktfläche zurückgezogen** (RC Alpha UI 1, 2026-09-28): keine Oberfläche, kein Start-Pfad; Vorlage bleibt als historischer Datensatz |
 
 ## 2026-09-25 – Eigenständige Einsatzadresse am Vorgang (vorbereitet, nicht live)
 

@@ -40,7 +40,8 @@ export const AddTask = ({
   defaultTaskText,
 }: {
   selectContact?: boolean;
-  display?: "chip" | "icon";
+  /** `primary`: the one Nora-accent action of a section head. */
+  display?: "chip" | "icon" | "primary";
   contactId?: Identifier;
   /** Creates a task scoped to this customer. Shows an optional contact
    * picker limited to the customer's own contacts instead of taking the
@@ -108,6 +109,15 @@ export const AddTask = ({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+      ) : display === "primary" ? (
+        <Button
+          type="button"
+          className="nora-primary-action nora-touch-target cursor-pointer gap-1.5 rounded-lg px-3.5"
+          onClick={handleOpen}
+        >
+          <Plus className="size-4" aria-hidden />
+          {defaultTaskText ?? translate("resources.tasks.action.add")}
+        </Button>
       ) : (
         <div className="my-2">
           <Button
