@@ -12,7 +12,7 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 
 | Bereich | Entscheidung |
 |---|---|
-| Design / UX | [Alpha UI 1 Pass A: Checkliste raus, Aufgaben-Raster, Alarm-Zeile](#2026-09-28--alpha-ui-1-pass-a-produktionsfreigabe-checkliste-verlässt-die-vorgangsakte-aufgaben-werden-ein-raster-der-alarm-eine-zeile) · [Alpha UI 1: Akzentrollen, eine Aufgaben-Aktion, Verlauf zugeklappt](#2026-09-28--alpha-ui-1-akzentrollen-statt-einer-orange-eine-aufgaben-aktion-verlauf-zugeklappt-und-erst-auf-anfrage-geladen) |
+| Design / UX | [Alpha UI 1 Product Closure: Produktionsfreigabe zurückgezogen](#2026-09-28--alpha-ui-1-product-closure-produktionsfreigabe-fenster-ist-kein-nora-produkt-mehr) · [Alpha UI 1 Pass A: Checkliste raus, Aufgaben-Raster, Alarm-Zeile](#2026-09-28--alpha-ui-1-pass-a-produktionsfreigabe-checkliste-verlässt-die-vorgangsakte-aufgaben-werden-ein-raster-der-alarm-eine-zeile) · [Alpha UI 1: Akzentrollen, eine Aufgaben-Aktion, Verlauf zugeklappt](#2026-09-28--alpha-ui-1-akzentrollen-statt-einer-orange-eine-aufgaben-aktion-verlauf-zugeklappt-und-erst-auf-anfrage-geladen) |
 | Navigation / Informationsarchitektur | [RC3: drei primäre Ziele, kein Posteingang, `ora CRM` beabsichtigt](#2026-09-28--rc3-die-primäre-navigation-wird-auf-drei-ziele-verengt-der-posteingang-bewusst-nicht-gebaut-und-ora-crm-ist-der-richtige-titel) |
 | Vorgang / Einsatzort | [Eigenständige Einsatzadresse](#2026-09-25--eigenständige-einsatzadresse-am-vorgang) |
 | Mitarbeiter-Lifecycle | [W6-B Kontrollierter Hard Delete](#2026-09-07--user-lifecycle-w6-b-kontrollierter-hard-delete-benutzerkonto-endgültig-löschen) · [W6-A Session-Autorisierung fail-closed](#2026-09-06--user-lifecycle-w6-a-session-autorisierung-fail-closed-und-owner-gebunden) · [W5 Offboarding & Sitzungen](#2026-09-06--user-lifecycle-w5-kontrolliertes-offboarding-session-revokation-abhängigkeits-preview) · [W4 Anmeldeadresse](#2026-09-06--user-lifecycle-w4-kontrollierte-änderung-der-anmeldeadresse-login-identität) · [W3 Audit-Actor](#2026-09-05--user-lifecycle-w3-der-echte-administrator-steht-im-audit-der-mitarbeiter-hat-eine-stabile-audit-identität) · [W2 Referenzintegrität](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) · [W1 Executor](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) · [V1B Präsentation](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) · [V1A Zugangsstatus](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) · [Mitarbeiterzugang einladungsbasiert](#2026-07-23--mitarbeiterzugang-öffentliches-redesign-und-einladung) |
@@ -30,6 +30,18 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabelle „Nur archivierte Einträge" am Ende.
 
 ---
+
+## 2026-09-28 – Alpha UI 1 Product Closure: „Produktionsfreigabe Fenster" ist kein Nora-Produkt mehr
+
+**Status:** `RC` — Abschlusscommit auf `feature/nora-ui-ux-vnext` (Draft PR #4), vom Product Owner visuell abgenommen, nicht deployt. Contract: [`02`](02-design-system.md) „Product Closure"; Datenmodell-Status: [`10`](10-checklists-snippets-audit.md); Produktsicht: [`20`](20-product-changelog.md).
+
+**Kontext.** Der Product Owner hat entschieden, dass das Konzept „Produktionsfreigabe Fenster" (Welle 7a/v0.3d) nicht mehr Teil des Produkts ist. Pass A hatte den Block in der Vorgangsakte entfernt; die Hotboard-Kachel „Produktionsfreigaben offen" war der letzte aktive Einstiegspunkt.
+
+**Entscheidungen.**
+
+1. **Alle aktiven Produktflächen des Workflows sind entfernt:** Vorgangsakte-Abschnitt, Hotboard-Kachel, die Präsentationshelfer und die Oberflächentexte. Ein Benutzer kann den Workflow nirgends mehr sehen oder starten.
+2. **Die generische Checklisten-Infrastruktur bleibt.** Tabellen, RLS, RPC `start_checklist_run_from_template`, DataProvider-Methode, Typen, Operation-Kontext und Audit-Ereignisse `checklist.*` sind nicht aufrufer-spezifisch und werden nicht gelöscht; sie haben nur keinen aktiven Aufrufer mehr. Der Änderungsverlauf zeigt historische `checklist.*`-Ereignisse weiterhin lesbar.
+3. **Keine Datenbereinigung.** Der mit Migration v0.3d2 gesäte Vorlagen-Datensatz `FENS_PRODUCTION_RELEASE` und eventuelle `checklist_runs` bleiben als historischer Production-Zustand bestehen; Migrationen werden nicht umgeschrieben. Ein späteres Entfernen wäre eine eigene, freigegebene Datenoperation.
 
 ## 2026-09-28 – Alpha UI 1 Pass A: Produktionsfreigabe-Checkliste verlässt die Vorgangsakte, Aufgaben werden ein Raster, der Alarm eine Zeile
 

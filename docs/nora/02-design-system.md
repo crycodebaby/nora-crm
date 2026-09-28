@@ -284,7 +284,7 @@ Breite Arbeitsflächen müssen ohne Erklärung erkennen lassen, dass links oder 
 
 ## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
 
-> **Entfernt aus der Vorgangsakte (RC Alpha UI 1 Pass A, 2026-09-28, noch nicht live).** Der Abschnitt wird in `DealShow` nicht mehr gerendert; die Tabelle unten beschreibt den historischen Stand. Hotboard-Kachel und Datenmodell bleiben.
+> **Produktfläche zurückgezogen (RC Alpha UI 1 Product Closure, 2026-09-28, noch nicht live).** Diese Fläche existiert im aktiven Produkt nicht mehr; der Text darunter beschreibt den historischen Stand. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Product Closure“.
 
 Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
 
@@ -299,6 +299,8 @@ Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
 | Demo | Hinweistext statt RPC — kein Absturz |
 
 ## Hotboard Produktionsfreigaben offen (Welle v0.3d5)
+
+> **Produktfläche zurückgezogen (RC Alpha UI 1 Product Closure, 2026-09-28, noch nicht live).** Diese Fläche existiert im aktiven Produkt nicht mehr; der Text darunter beschreibt den historischen Stand. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Product Closure“.
 
 `HotboardOpenProductionReleases` — gleiches Kartenlayout wie andere Hotboard-Sektionen.
 
@@ -750,11 +752,15 @@ Eine einzige Orange passt nicht auf jede Rolle: Weiß auf `#c65322` misst exakt 
 - **Browser-Tests kompilieren `index.css` ohne Tailwind:** `@apply`-Regeln sind dort unsichtbar. Layout- und A11y-kritische Maße (Touch-Ziele, Abschneiden, Deckel) stehen deshalb als **einfache Deklarationen**, nicht als `@apply`.
 - Fieldset-Gruppen tragen **kein** `aria-labelledby`: eine so benannte Gruppe kollidiert mit `getByLabel` eines gleichnamigen Feldes („Beschreibung"); die `legend` benennt die Gruppe nativ.
 
+### Product Closure (2026-09-28, RC-Abschluss)
+
+Die Produktfläche **„Produktionsfreigabe Fenster" ist vollständig zurückgezogen.** Nach der Vorgangsakte (Pass A) sind auch die Hotboard-Kachel „Produktionsfreigaben offen" (`HotboardOpenProductionReleases`, `productionReleaseHotboardUtils`) und die Präsentationshelfer `checklistUtils` entfernt; ebenso die zugehörigen Oberflächentexte. Ein Nora-Benutzer begegnet im aktiven Produkt keinem Produktionsfreigabe-Workflow mehr und kann keinen starten. **Bewusst erhalten:** Tabellen `checklist_templates` / `checklist_runs` / `checklist_run_items`, RPC `start_checklist_run_from_template` samt DataProvider-Methode und Typen (`types/checklists.ts`), Audit-Ereignisse `checklist.*` samt Verlaufsformatierung, der Operation-Kontext `checklists` sowie der per Migration v0.3d2 gesäte Vorlagen-Datensatz `FENS_PRODUCTION_RELEASE` in Production — historischer DB-Zustand, keine destruktive Bereinigung. Die akzeptierte Pass-A-Oberfläche ist unverändert.
+
 ### Product Feedback Pass A (2026-09-28, RC-Ergänzung)
 
 Umsetzung der ersten PO-Rückmeldung zum RC, ohne die Richtung zu ändern. Evidenz: `docs/nora/assets/alpha-ui-1/passA-*.png`.
 
-- **Produktionsfreigabe-Checkliste aus der Vorgangsakte entfernt.** Der Abschnitt „Produktionsfreigabe Fenster" (Welle v0.3d4) ist aus `DealShow` gestrichen und die Komponente `DealProductionChecklistSection` gelöscht. Datenmodell (`10`), RPC, Hotboard-Kachel „Produktionsfreigaben offen" und `checklistUtils` sind unverändert. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Pass A".
+- **Produktionsfreigabe-Checkliste aus der Vorgangsakte entfernt.** Der Abschnitt „Produktionsfreigabe Fenster" (Welle v0.3d4) ist aus `DealShow` gestrichen und die Komponente `DealProductionChecklistSection` gelöscht. Datenmodell (`10`) und RPC sind unverändert; die Hotboard-Kachel folgte im Product-Closure-Pass (unten). Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Pass A".
 - **Kein Hinweistext mehr unter „Einsatzort".** Der Satz „Beim Anlegen wird die Kundenanschrift vorgeschlagen …" entfällt; der Vorschlags-/Leeren-Vertrag selbst ist unverändert (Test `DealSiteAddressInputs.test.tsx`).
 - **Aufgaben als dichtes Raster.** `Task` hat eine Variante `row`: ab 48 rem eine tabellenartige Zeile (Checkbox · Art · Beschreibung · Fällig am · Zuständig · Menü) mit leiser Kopfzeile, darunter zweizeilig gestapelt. Offene Aufgaben nach Fälligkeit zuerst, kürzlich erledigte danach; überfällig/heute tragen die Fälligkeit in Akzenttext bzw. fett. Zeilenhöhe ≈ 40 px, Menü bleibt in der Zeile (44 px). Stack-Variante (Kontakte, Kunden, Hotboard) unverändert.
 - **Notiz-Composer als eine begrenzte Fläche.** Textfeld ohne eigenen Rahmen in einer Composer-Fläche (`.nora-note-composer`, Fokusring auf der Fläche), darunter eine Fußzeile mit „Optionen anzeigen/ausblenden" (`aria-expanded`/`aria-controls`, Büroklammer-Glyphe) links und „Diese Notiz hinzufügen" rechts; Datum/Status/Anhänge liegen in einem abgesetzten Optionsbereich (`hidden`, nicht skaliert). Der frühere Klammer-Hinweis „(Dateien anhängen oder Details ändern)" entfällt. Notizeinträge: eine Kopfzeile (Kunde · Autor · Zeit) mit stets sichtbaren, leisen Aktionen (Bearbeiten/Löschen 44 px, nicht mehr hover-only), Text in Lesebreite, Hairlines statt Separator-Komponente. Anhang-Sicherheit/Read-Model (S5) unberührt — nur Markup und Klassen.

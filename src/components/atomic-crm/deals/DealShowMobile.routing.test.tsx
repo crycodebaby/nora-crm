@@ -14,7 +14,6 @@ import {
   createTestAuthProvider,
 } from "@/test/StoryWrapper";
 import type { Contact, ContactNote, Deal } from "../types";
-import { FENS_PRODUCTION_RELEASE_TEMPLATE_CODE } from "../types/checklists";
 import { defaultCurrency } from "../root/defaultConfiguration";
 import { formatDealAmount } from "./dealUtils";
 
@@ -85,50 +84,6 @@ const DEAL: Deal = {
   expected_closing_date: FOLLOW_UP_DATE,
   sales_id: 0,
   index: 0,
-};
-
-/**
- * An open Produktionsfreigabe for the same Vorgang, so the Hotboard renders
- * its second Vorgang entry point (EP2) next to the Vorgangskarte (EP1).
- * FakeRest has no checklist collections by default — they are added here.
- */
-const CHECKLIST_FIXTURES = {
-  checklist_templates: [
-    {
-      id: "tpl-1",
-      code: FENS_PRODUCTION_RELEASE_TEMPLATE_CODE,
-      name: "Produktionsfreigabe Fenster",
-      service_area_code: "FENS",
-      is_active: true,
-      version: 1,
-      created_at: "2026-09-01T08:00:00.000Z",
-      updated_at: "2026-09-01T08:00:00.000Z",
-    },
-  ],
-  checklist_runs: [
-    {
-      id: "run-1",
-      template_id: "tpl-1",
-      deal_id: 7,
-      service_area_code: "FENS",
-      status: "open",
-      started_at: "2026-09-02T08:00:00.000Z",
-      created_at: "2026-09-02T08:00:00.000Z",
-      updated_at: "2026-09-02T08:00:00.000Z",
-    },
-  ],
-  checklist_run_items: [
-    {
-      id: "item-1",
-      checklist_run_id: "run-1",
-      label_snapshot: "Aufmaß freigegeben",
-      is_required: true,
-      is_checked: false,
-      sort_index: 1,
-      created_at: "2026-09-02T08:00:00.000Z",
-      updated_at: "2026-09-02T08:00:00.000Z",
-    },
-  ],
 };
 
 /** Title of the Vorgang created live by the Quick Capture test (T5). */
@@ -229,7 +184,6 @@ const renderCrm = async (
         contacts: [CONTACT],
         contact_notes: [CONTACT_NOTE],
         deals: [DEAL, ...extraDeals],
-        ...CHECKLIST_FIXTURES,
       }) as Parameters<typeof createCrmDb>[0],
     ),
     silent: true,
@@ -313,21 +267,6 @@ describe("W7-M1 mobile Vorgang detail route", () => {
 
     await expect.element(dealCard()).toBeVisible();
     await dealCard().click();
-
-    await expect.poll(currentPath).toBe(DEAL_SHOW_PATH);
-    await expectDealShowVisible();
-  });
-
-  /** T2 — the second Hotboard entry point: offene Produktionsfreigabe. */
-  it("opens the Vorgang from a Hotboard Produktionsfreigabe", async () => {
-    await renderCrm(["/"]);
-
-    // The missing required checklist item only exists inside the
-    // Produktionsfreigabe row, so clicking it identifies that row
-    // unambiguously — every Hotboard button shares the same aria-label.
-    const releaseRow = page.getByText(/Aufmaß freigegeben/).first();
-    await expect.element(releaseRow).toBeVisible();
-    await releaseRow.click();
 
     await expect.poll(currentPath).toBe(DEAL_SHOW_PATH);
     await expectDealShowVisible();

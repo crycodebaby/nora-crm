@@ -11,7 +11,6 @@ import { useMemo } from "react";
 import type { Company, Deal } from "../types";
 import { HotboardDealSection } from "./HotboardDealSection";
 import { HotboardFocusBoard } from "./HotboardFocusBoard";
-import { HotboardOpenProductionReleases } from "./HotboardOpenProductionReleases";
 import { HotboardOpenTasks } from "./HotboardOpenTasks";
 import { QuickCaptureTrigger } from "../quickCapture/QuickCaptureTrigger";
 import { GoogleCalendarDemoNotice } from "../calendar/GoogleCalendarDemoNotice";
@@ -165,7 +164,6 @@ export const Hotboard = () => {
           deals={offerFollowUpDeals}
           companyById={companyById}
         />
-        <HotboardOpenProductionReleases />
         <HotboardOpenTasks className="md:col-span-2 xl:col-span-1" />
       </div>
       <p className="nora-muted text-xs max-w-3xl">

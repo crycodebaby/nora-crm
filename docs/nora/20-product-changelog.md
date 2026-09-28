@@ -27,6 +27,12 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 
 ---
 
+## 2026-09-28 — „Produktionsfreigabe Fenster" ist aus Nora entfernt (Vorabversion, noch nicht live)
+
+**Was ändert sich für Sie:** Der frühere Bereich „Produktionsfreigabe Fenster" gibt es nicht mehr — weder in der Vorgangsakte noch als Kachel „Produktionsfreigaben offen" auf der Startseite. Nichts davon muss mehr ausgefüllt oder gestartet werden. Frühere Einträge im Änderungsverlauf bleiben lesbar.
+
+**Technischer Hinweis:** reine Produktentscheidung; keine Migration, keine Datenlöschung.
+
 ## 2026-09-28 — Vorgangsakte: Aufgaben als Tabelle, kompakter Kontakthinweis, ruhigere Notizen (Vorabversion, noch nicht live)
 
 **Was ändert sich für Sie:** Der Block „Produktionsfreigabe Fenster" ist aus der Vorgangsakte verschwunden. **Aufgaben** stehen jetzt als übersichtliche Tabelle mit Art, Beschreibung, Fälligkeit und Zuständigkeit; das Menü je Aufgabe sitzt direkt in der Zeile. Statt des großen orangefarbenen Balkens sehen Sie eine **kompakte Zeile**: „Kundenkontakt überfällig seit 3 Tagen (fällig am …)" oder „Heute Kunden kontaktieren". **Notizen** schreiben Sie in einer aufgeräumten Fläche — Datum, Status und Anhänge klappen Sie bei Bedarf über „Optionen anzeigen" auf; Bearbeiten und Löschen einer Notiz sind immer sichtbar. **Lange Beschreibungen** werden in Absätzen und mit Silbentrennung gezeigt, der Knopf „Ganzen Text anzeigen" nennt die Zeilenzahl. Die **Bildlaufleiste** in Dialogen ist breiter und leichter zu greifen. Der Hinweistext unter „Einsatzort" im Formular entfällt; die Adressvorschläge funktionieren wie bisher.
