@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { useConfigurationContext } from "../root/ConfigurationContext";
+import { useGetSalesName } from "../sales/useGetSalesName";
 import type { Contact, Task as TData } from "../types";
+import { getFollowUpStatus } from "../deals/dealUtils";
 import { TaskEdit } from "./TaskEdit";
 import { TaskEditSheet } from "./TaskEditSheet";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -28,9 +30,15 @@ import { useIsMobile } from "@/hooks/use-mobile";
 export const Task = ({
   task,
   showContact,
+  showHolder,
+  variant = "stack",
 }: {
   task: TData;
   showContact?: boolean;
+  /** Names the responsible employee in the meta line (existing `sales_id`). */
+  showHolder?: boolean;
+  /** `row`: dense grid row (type · text · due · responsible · actions). */
+  variant?: "stack" | "row";
 }) => {
   const isMobile = useIsMobile();
   const { taskTypes } = useConfigurationContext();
@@ -38,6 +46,9 @@ export const Task = ({
   const translate = useTranslate();
   const queryClient = useQueryClient();
   const getContactRepresentation = useGetRecordRepresentation("contacts");
+  const holderName = useGetSalesName(task.sales_id, {
+    enabled: Boolean(showHolder) && task.sales_id != null,
+  });
 
   const [openEdit, setOpenEdit] = useState(false);
 
@@ -87,51 +98,87 @@ export const Task = ({
   }, [queryClient, isUpdatePending, isSuccess, variables]);
 
   const labelId = `checkbox-list-label-${task.id}`;
+  const matchedTaskType = taskTypes.find(
+    (taskType) => taskType.value === task.type,
+  );
+  const typeLabel =
+    task.type && task.type !== "none"
+      ? (matchedTaskType?.label ?? task.type)
+      : null;
+  const dueStatus = task.done_date ? null : getFollowUpStatus(task.due_date);
 
   return (
     <>
-      <div className="flex items-start justify-between">
-        <div
-          className="flex items-start gap-2 flex-1"
-          onClick={isMobile ? handleCheck() : undefined}
-        >
+      <div
+        className="nora-task-row"
+        data-done={task.done_date ? "true" : "false"}
+        data-variant={variant}
+        data-due={dueStatus ?? undefined}
+        role={variant === "row" ? "row" : undefined}
+      >
+        <div className="nora-task-check">
           <Checkbox
             id={labelId}
             checked={!!task.done_date}
             onCheckedChange={handleCheck()}
             disabled={isUpdatePending}
-            className="mt-1"
+            className="nora-task-checkbox"
+            aria-label={translate("resources.tasks.done_toggle", {
+              _: "Aufgabe erledigt",
+            })}
           />
-          <div className={`flex-grow ${task.done_date ? "line-through" : ""}`}>
-            <div className="text-sm">
-              {task.type && task.type !== "none" && (
+        </div>
+        <div
+          className="nora-task-body"
+          onClick={isMobile ? handleCheck() : undefined}
+        >
+          {typeLabel ? (
+            <span className="nora-task-type-cell">
+              <span className="nora-task-type">{typeLabel}</span>
+            </span>
+          ) : (
+            <span className="nora-task-type-cell" aria-hidden />
+          )}
+          <label htmlFor={labelId} className="nora-task-text cursor-pointer">
+            {task.text}
+          </label>
+          <div className="nora-task-meta" data-due={dueStatus ?? undefined}>
+            <span className="nora-task-due">
+              <span className="nora-task-due-label">
+                {translate("resources.tasks.fields.due_short")}{" "}
+              </span>
+              <DateField
+                source="due_date"
+                record={task}
+                showDate
+                showTime
+                options={{
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }}
+              />
+            </span>
+            <span className="nora-task-holder">
+              {showHolder && holderName ? (
                 <>
-                  <span className="font-semibold text-sm">
-                    {(() => {
-                      const matchedTaskType = taskTypes.find(
-                        (taskType) => taskType.value === task.type,
-                      );
-                      return matchedTaskType
-                        ? matchedTaskType.label
-                        : task.type;
-                    })()}
+                  <span className="nora-task-sep" aria-hidden>
+                    ·
                   </span>
-                  &nbsp;
+                  <span>{holderName}</span>
                 </>
-              )}
-              {task.text}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {translate("resources.tasks.fields.due_short")}
-              &nbsp;
-              <DateField source="due_date" record={task} showDate showTime />
-              {showContact && (
+              ) : null}
+            </span>
+            {showContact && (
+              <span className="nora-task-contact">
                 <ReferenceField<TData, Contact>
                   source="contact_id"
                   reference="contacts_summary"
                   record={task}
                   link="show"
-                  className="inline text-sm text-muted-foreground"
+                  className="inline"
                   render={({ referenceRecord }) => {
                     if (!referenceRecord) return null;
                     // The task's own company_id is its historical customer
@@ -165,8 +212,8 @@ export const Task = ({
                     );
                   }}
                 />
-              )}
-            </div>
+              </span>
+            )}
           </div>
         </div>
 
@@ -175,7 +222,7 @@ export const Task = ({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 pr-0! size-8 cursor-pointer"
+              className="nora-task-menu cursor-pointer"
               aria-label={translate("resources.tasks.actions.title")}
             >
               <MoreVertical className="size-5 md:size-4" />

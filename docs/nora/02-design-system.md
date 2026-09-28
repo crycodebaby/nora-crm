@@ -284,6 +284,8 @@ Breite Arbeitsflächen müssen ohne Erklärung erkennen lassen, dass links oder 
 
 ## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
 
+> **Produktfläche zurückgezogen (RC Alpha UI 1 Product Closure, 2026-09-28, noch nicht live).** Diese Fläche existiert im aktiven Produkt nicht mehr; der Text darunter beschreibt den historischen Stand. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Product Closure“.
+
 Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
 
 | Element | Regel |
@@ -297,6 +299,8 @@ Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
 | Demo | Hinweistext statt RPC — kein Absturz |
 
 ## Hotboard Produktionsfreigaben offen (Welle v0.3d5)
+
+> **Produktfläche zurückgezogen (RC Alpha UI 1 Product Closure, 2026-09-28, noch nicht live).** Diese Fläche existiert im aktiven Produkt nicht mehr; der Text darunter beschreibt den historischen Stand. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Product Closure“.
 
 `HotboardOpenProductionReleases` — gleiches Kartenlayout wie andere Hotboard-Sektionen.
 
@@ -696,6 +700,82 @@ Deutsch, ohne Magic Link / OTP / Auth / Token / Callback / Recovery / Session / 
 Im Demo-Modus (`npm run dev:demo`, `VITE_IS_DEMO=true`) gibt es kein Auth-Backend. Damit der komplette Ablauf visuell geprüft werden kann, simuliert `set-password-page.tsx` dort die drei Backend-Aufrufe (Session, Passwort, Profil) mit 0,7 s Latenz und der Demo-Persona „Otto Office". Szenarien über `?demo=weak | blocked | unverified | profile-error`, ohne Token erscheint der ungültige Zustand. Die Verzweigung hängt an `isNoraDemoMode` (Build-Zeit-Konstante) und ist im Production-Bundle nicht enthalten (nachgewiesen: `dist/` enthält weder `nora.demo` noch die Simulationsstrings); `getSupabaseClient()` wird im Demo-Modus nie aufgerufen, die URL-Token werden nur auf Vorhandensein geprüft und nie als Zugangsdaten verwendet (Test `set-password-page.demo.test.tsx`). Jeder Schritt läuft weiterhin durch den V1A-Reducer.
 
 **Status: `PRODUCTION VERIFIED — PO UX ACCEPTED` (2026-09-04).** Der Product Owner hat den kompletten Demo-Ablauf und alle Zustände visuell abgenommen; V1B ist seit `87c7c302` auf `main` und live (Release-Evidenz: `releases/2026-09.md`). *(Historischer Wortlaut der RC-Fassung: „Kein Push nach `main`, kein Deployment in dieser Welle.")*
+
+## Nora Visual System v1 — Vorgang-Erlebnis (Alpha UI 1, RC, noch nicht live)
+
+Stand: 2026-09-28, RC `feature/nora-ui-ux-vnext` auf `main` `2329158a`. Erste kohärente visuelle Grundlage, angewendet auf Vorgang anlegen/bearbeiten/anzeigen, Aufgaben am Vorgang, Änderungsverlauf und Kanban-Karte. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1"; Produktsicht: [`20`](20-product-changelog.md); Evidenz-Screenshots (vorher/nachher, hell/dunkel, 1440/820/390 px): `docs/nora/assets/alpha-ui-1/`.
+
+### Akzentrollen statt einer Orange
+
+Eine einzige Orange passt nicht auf jede Rolle: Weiß auf `#c65322` misst exakt 4,50:1 und ist damit der **hellste** AA-taugliche Füllton; für Glyphen, Rahmen, aktive Zustände und Tönungen wirkt dieser Ton schwer. Deshalb gibt es Rollen (alle in `src/index.css`, `:root` und `.dark`):
+
+| Token | Hell | Dunkel | Rolle |
+|---|---|---|---|
+| `--nora-accent-strong` | `#c65322` | `#c65322` | Füllflächen mit weißem Text (Primäraktion) — 4,50:1 |
+| `--nora-accent` | `#e86f2f` | `#f08a55` | Glyphen, Rahmen, aktive Zustände (Nicht-Text: 3,11:1 hell, ≈ 6,7:1 dunkel) |
+| `--nora-accent-text` | `#b94c1e` | `#f5945f` | akzentfarbener Text auf Flächen — eine Stufe tiefer als die Füllfläche, damit auch Tönung (4,60:1) und App-Grund (4,63:1) AA erfüllen (Hardening) |
+| `--nora-accent-soft` / `-border` / `-ring` | Mischungen aus `--nora-accent` | dito | Tönung, Rahmen, Fokusring |
+| `--nora-text-secondary` / `--nora-text-muted` | `oklch(0.42)` / `oklch(0.51)` | `oklch(0.8)` / `oklch(0.7)` | Sekundärtext, Metadaten (≥ 4,5:1) |
+| `--nora-hairline` / `--nora-divider` | 8 % / 13 % Vordergrund | 9 % / 15 % Weiß | Trennlinien |
+| `--nora-measure-form` / `-prose` / `-detail` | 46rem / 68ch / 68rem | — | Inhaltsbreiten |
+
+`--nora-brand*` bleiben als **Aliasse** auf die Akzentrollen bestehen; keine bestehende Fläche ändert dadurch ihre Bedeutung. Die Markenfarbe selbst ist nicht geändert.
+
+### Typografierollen
+
+`.nora-t-title` (22/24 px, Entitätstitel) · `.nora-t-section` (15 px semibold) · `.nora-t-eyebrow` (12 px, Versalien, gedämpft) · `.nora-t-data` (15 px medium) · `.nora-t-support` (14 px sekundär) · `.nora-t-meta` (13 px gedämpft) · `.nora-t-helper` (12,5 px) · `.nora-t-label` (13 px medium). Komponenten setzen Rollen zusammen, sie erfinden keine Größen.
+
+### Präsentations-Primitive (`misc/`)
+
+| Primitive | Zweck |
+|---|---|
+| `NoraSectionCard` | Abschnitt mit Kopfzeile: Titel, verlässliche Anzahl, Aktionen, optionale Beschreibung; `aria-labelledby` |
+| `NoraExpandableSection` | Abschnitt, dessen ganzer Kopf **ein** Auf-/Zuklappen ist (`aria-expanded`/`aria-controls`); Inhalt wird erst beim ersten Öffnen montiert |
+| `NoraMetaPair` | Label über Wert, immer in derselben Relation |
+| `NoraIdentityRow` | Visual → Name (Link) → Kontextzeile; **Rollen-Slot vorbereitet, wird nie abgeleitet** |
+| `NoraFormGroup` / `NoraFormRow` | echte `fieldset`/`legend`-Gruppe mit Hinweis; Zeilen teilen Platz nur, wo es hilft (`2`, `3`, `wide-narrow`) |
+| `NoraLongText` | Lesemaß 68ch, echte Zeilenumbrüche, Ausklappen nur bei tatsächlichem Überlauf |
+| `NoraLongTextInput` | wachsende Textarea (Start 7,5 rem, Deckel `min(60vh, 32rem)`) |
+| `NoraStatusPill` | Zustand als Wort mit Ton, nie Farbe allein |
+
+### Vorgang: Formular, Akte, Aufgaben, Verlauf, Karte
+
+- **Formular** (`DealInputs`): fünf Gruppen — Vorgang · Auftraggeber · Einsatzort · Planung und Nachfassen · Beschreibung — in einer 46-rem-Spalte; kurze Felder teilen sich Zeilen. Der eingefrorene Einsatzort-Vertrag (Vorschlag nur bei Neuanlage, jeder Eingriff beendet Vorschläge, Etage/Klingelschild nie automatisch, Leeren = `NULL`) ist **unverändert**; Labels und zugängliche Namen ebenso.
+- **Akte** (`DealShow`, `DealShowMobile`, gemeinsame Bausteine in `DealShowSections`): Kopf mit Nummer, Status-Pill, Dienstleistung, Titel und **einer** Kontextzeile (Kunde · Einsatzort · Zuständig); dann Übersicht (Kontakttermin, Auftragswert, Zuständig), „Beteiligte und Einsatzort" (Auftraggeber als Identität mit Logo, Ansprechpartner **ohne** erfundene Rolle, gespeicherte Site-Felder), Beschreibung, Aufgaben, Checkliste, Notizen, Änderungsverlauf. Desktop-Dialog und mobile Seite komponieren dieselben Bausteine.
+- **Aufgaben**: genau eine Primäraktion „Aufgabe hinzufügen" im Abschnittskopf mit Anzahl offener Aufgaben; die vier Schnellknöpfe (Rückruf, Besichtigung, Rückmeldung zu Angebot, Termin vereinbaren) sind entfallen, weil sie denselben Dialog mit vorbelegter Art öffneten. Zeilen: Checkbox · Art als leises Präfix · Text · fällig/Zuständige(r) · Überlaufmenü **in der Zeile** (44 px).
+- **Änderungsverlauf**: standardmäßig zugeklappt und **erst beim Öffnen geladen**; danach zeigt der Kopf „N Einträge" bzw. „N Einträge geladen, weitere vorhanden" (die RPC liefert keine Gesamtzahl, es wird keine behauptet). Gilt über die gemeinsame Komponente auch für Kunden- und Kontaktakte. Audit-Semantik unberührt.
+- **Kanban-Karte**: Nummer und kleine Dringlichkeits-Pille oben, Titel (max. 2 Zeilen), Kunde, **eine** abgeschnittene Einsatzort-Zeile, leise Metadaten. Etage, Klingelschild und Beschreibung bleiben der Akte vorbehalten. Drag-and-drop unverändert (Tastatur-DnD durch Test belegt).
+
+### Regeln, die aus dieser Welle folgen
+
+- `.nora-primary-action` hat keine `min-h-10`-Utility mehr; die Mindesthöhe ist `var(--nora-touch-min)` (44 px) — schließt den Touch-Befund aus [`17`](17-known-issues-and-planned-waves.md) F projektweit.
+- **Browser-Tests kompilieren `index.css` ohne Tailwind:** `@apply`-Regeln sind dort unsichtbar. Layout- und A11y-kritische Maße (Touch-Ziele, Abschneiden, Deckel) stehen deshalb als **einfache Deklarationen**, nicht als `@apply`.
+- Fieldset-Gruppen tragen **kein** `aria-labelledby`: eine so benannte Gruppe kollidiert mit `getByLabel` eines gleichnamigen Feldes („Beschreibung"); die `legend` benennt die Gruppe nativ.
+
+### Product Closure (2026-09-28, RC-Abschluss)
+
+Die Produktfläche **„Produktionsfreigabe Fenster" ist vollständig zurückgezogen.** Nach der Vorgangsakte (Pass A) sind auch die Hotboard-Kachel „Produktionsfreigaben offen" (`HotboardOpenProductionReleases`, `productionReleaseHotboardUtils`) und die Präsentationshelfer `checklistUtils` entfernt; ebenso die zugehörigen Oberflächentexte. Ein Nora-Benutzer begegnet im aktiven Produkt keinem Produktionsfreigabe-Workflow mehr und kann keinen starten. **Bewusst erhalten:** Tabellen `checklist_templates` / `checklist_runs` / `checklist_run_items`, RPC `start_checklist_run_from_template` samt DataProvider-Methode und Typen (`types/checklists.ts`), Audit-Ereignisse `checklist.*` samt Verlaufsformatierung, der Operation-Kontext `checklists` sowie der per Migration v0.3d2 gesäte Vorlagen-Datensatz `FENS_PRODUCTION_RELEASE` in Production — historischer DB-Zustand, keine destruktive Bereinigung. Die akzeptierte Pass-A-Oberfläche ist unverändert.
+
+### Product Feedback Pass A (2026-09-28, RC-Ergänzung)
+
+Umsetzung der ersten PO-Rückmeldung zum RC, ohne die Richtung zu ändern. Evidenz: `docs/nora/assets/alpha-ui-1/passA-*.png`.
+
+- **Produktionsfreigabe-Checkliste aus der Vorgangsakte entfernt.** Der Abschnitt „Produktionsfreigabe Fenster" (Welle v0.3d4) ist aus `DealShow` gestrichen und die Komponente `DealProductionChecklistSection` gelöscht. Datenmodell (`10`) und RPC sind unverändert; die Hotboard-Kachel folgte im Product-Closure-Pass (unten). Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Pass A".
+- **Kein Hinweistext mehr unter „Einsatzort".** Der Satz „Beim Anlegen wird die Kundenanschrift vorgeschlagen …" entfällt; der Vorschlags-/Leeren-Vertrag selbst ist unverändert (Test `DealSiteAddressInputs.test.tsx`).
+- **Aufgaben als dichtes Raster.** `Task` hat eine Variante `row`: ab 48 rem eine tabellenartige Zeile (Checkbox · Art · Beschreibung · Fällig am · Zuständig · Menü) mit leiser Kopfzeile, darunter zweizeilig gestapelt. Offene Aufgaben nach Fälligkeit zuerst, kürzlich erledigte danach; überfällig/heute tragen die Fälligkeit in Akzenttext bzw. fett. Zeilenhöhe ≈ 40 px, Menü bleibt in der Zeile (44 px). Stack-Variante (Kontakte, Kunden, Hotboard) unverändert.
+- **Notiz-Composer als eine begrenzte Fläche.** Textfeld ohne eigenen Rahmen in einer Composer-Fläche (`.nora-note-composer`, Fokusring auf der Fläche), darunter eine Fußzeile mit „Optionen anzeigen/ausblenden" (`aria-expanded`/`aria-controls`, Büroklammer-Glyphe) links und „Diese Notiz hinzufügen" rechts; Datum/Status/Anhänge liegen in einem abgesetzten Optionsbereich (`hidden`, nicht skaliert). Der frühere Klammer-Hinweis „(Dateien anhängen oder Details ändern)" entfällt. Notizeinträge: eine Kopfzeile (Kunde · Autor · Zeit) mit stets sichtbaren, leisen Aktionen (Bearbeiten/Löschen 44 px, nicht mehr hover-only), Text in Lesebreite, Hairlines statt Separator-Komponente. Anhang-Sicherheit/Read-Model (S5) unberührt — nur Markup und Klassen.
+- **Langtext mit Absatzrhythmus.** `NoraLongText` teilt gespeicherten Text an Leerzeilen in `<p>`-Blöcke (Zeichen bleiben wörtlich, einfache Umbrüche über `pre-line`), `lang="de"` + `hyphens: auto`, 15,5 px, 68ch. Der Ausklapp-Knopf nennt die Zeilenzahl („Ganzen Text anzeigen (23 Zeilen)"). Kein Markdown, kein Umschreiben.
+- **Aufmerksamkeitszeile statt Banner.** `DealAttentionStrip` ersetzt den vollflächigen Alarm: eine Zeile mit Glyphe, „Kundenkontakt überfällig" + „seit N Tagen (fällig am …)" bzw. „Heute Kunden kontaktieren" + „fällig am …", optional „Zuständig: …"; links ein 4-px-Akzentrand, Höhe < 80 px, Hell/Dunkel. Quelle bleibt `expected_closing_date` und `getFollowUpStatus`; erscheint nur bei heute/überfällig.
+- **Nora-Scrollbars.** Für `.nora-detail-scroll`, Formular-Dialoge und generell `[data-slot="dialog-content"]` / `[data-slot="sheet-content"]`: 16 px breit (10 px bei grobem Zeiger), Thumb 32 % Vordergrund (Hover 50 %, Aktiv akzentgetönt), sichtbare Spur, `scrollbar-gutter: stable`, `scrollbar-color` für Firefox. Native Scrollbars, kein Fake.
+
+### Hardening-Pass (2026-09-28, RC-Ergänzung)
+
+Objektive Korrekturen vor der PO-Sichtprüfung, ohne die gewählte Richtung zu ändern:
+
+- **`/vorgaenge` scrollt nicht mehr als Dokument.** `.nora-kanban-scroll` ist jetzt `position: relative` und damit Containing Block seiner absolut positionierten Nachkommen (die `sr-only`-Spans in den Karten). Vorher lösten diese gegen `.nora-kanban-viewport` auf, entgingen dem Overflow-Clip des Scrollcontainers und weiteten das Dokument auf Boardbreite (gemessen 3799 px bei 1440). Nachher: Dokument = Viewport bei 1440/1280/820 px, Board scrollt weiterhin nur in seinem Viewport (`scrollWidth` 4060 bei `clientWidth` 1392/1232/772); Drag-and-drop und Tastatur-DnD unverändert (Test). Regel: **Ein horizontaler Scrollcontainer ist immer auch `position: relative`.**
+- **Trefferflächen (44 px, Nora-Minimum):** `.nora-longtext-toggle` 36 → 44; `.nora-task-check` 36 → 44 und die 16-px-Checkbox erhält über `::after` (inset −14 px) eine unsichtbare 44-px-Treffzone; `MobileBackButton` 21 × 21 → 44 × 44 (`.nora-mobile-back`, 24-px-Chevron bleibt); „Bearbeiten"-Link im Vorgangskopf 36 → 44 (`.nora-deal-dialog-actions`); Kundenlink in der Kontextzeile über `.nora-inline-target` (Padding/negative Margins, Layout unverändert); Offenlegung „Etage oder Klingelschild ergänzen" 36 → 44. Alle als einfache Deklarationen (testbar).
+- **Kontrast nachgemessen (Canvas-aufgelöst, hell/dunkel):** Weiß auf Füllfläche 4,50:1 (unverändert, PO-Entscheidung); Akzenttext hell jetzt `#b94c1e`: 5,10:1 auf Weiß/Karte, 4,60:1 auf Status-Pill-Tönung, 4,63:1 auf App-Grund, 4,53:1 auf der Überfällig-Tönung (vorher 4,50 / **4,06** / **4,09** / 4,50). Dunkel: 6,1–8,8:1. Arbeitsakzent `#e86f2f` bleibt Nicht-Text (3,11:1 auf Karte, 2,83:1 auf App-Grund — dort nicht als alleiniger Indikator verwenden).
+- **Geteilter Änderungsverlauf geprüft:** Vorgangsakte und Kontaktakte nutzen die zuklappbare Fläche (zugeklappt, kein RPC vor dem Öffnen, `aria-expanded`, geladener Zustand bleibt beim Zu-/Aufklappen); die Kundenakte bettet den Verlauf mit `embedded` in ihren Tab „Historie" ein und lädt ihn beim Öffnen des Tabs — die explizit nicht zuklappbare Variante, unverändert.
 
 ## Redesign zur Freigabe (2026-09-25, noch nicht live)
 Kompaktes Logo und großzügige Navigation für Desktop und Tablet; das bestehende Hotboard bleibt erhalten. Keine neue Arbeitskorb-/Posteingangsfläche. Vorgänge zeigen Titel → Kunde → Einsatzort. Kontakte und Demo-Rolle liegen in Einstellungen; Demo-Rollen schaffen keine Berechtigungen.

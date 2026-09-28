@@ -20,7 +20,7 @@ export const MobileBackButton = (props: { resource?: string; to?: string }) => {
       type="button"
       variant="ghost"
       size="icon"
-      className="rounded-full size-5 pr-2"
+      className="nora-mobile-back rounded-full shrink-0"
       onClick={(e) => {
         e.preventDefault();
         navigate(finalTo);

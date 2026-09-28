@@ -317,6 +317,37 @@ export const frenchCrmMessages = {
       },
       sections: {
         overview: "Aperçu",
+        context: "Parties prenantes et lieu",
+      },
+      groups: {
+        case: "Affaire",
+        client: "Donneur d'ordre",
+        client_hint:
+          "Le client pour lequel on travaille, les contacts impliqués et le responsable chez Nora.",
+        site: "Lieu d'intervention",
+        planning: "Planification et relance",
+        description: "Description",
+        description_hint:
+          "Les textes longs, e-mails ou notes peuvent être collés ici en entier.",
+      },
+      roles: {
+        client: "Donneur d'ordre",
+      },
+      attention: {
+        overdue_title: "Contact client en retard",
+        overdue_since:
+          "depuis %{smart_count} jour (prévu le %{date}) |||| depuis %{smart_count} jours (prévu le %{date})",
+        today_title: "Contacter le client aujourd'hui",
+        today_meta: "prévu le %{date}",
+      },
+      site: {
+        title: "Lieu d'intervention",
+        empty: "Aucune adresse d'intervention enregistrée.",
+        floor: "Étage",
+        tenant: "Interphone",
+      },
+      contacts: {
+        empty: "Aucun contact sur cette affaire.",
       },
       follow_up: {
         overdue: "Contact client en retard",
@@ -326,24 +357,6 @@ export const frenchCrmMessages = {
         title: "Tâches de l'affaire",
         empty: "Aucune tâche ouverte pour les contacts liés.",
         no_contact: "Ajoutez d'abord un contact à l'affaire.",
-      },
-      checklist: {
-        title: "Validation production fenêtres",
-        subtitle: "Points de contrôle avant validation fabricant/production",
-        start: "Démarrer la checklist",
-        required: "Obligatoire",
-        optional: "Optionnel",
-        done: "Terminé",
-        open: "Ouvert",
-        note: "Note",
-        save_note: "Enregistrer la note",
-        cancel: "Annuler",
-        required_complete: "Points obligatoires terminés",
-        demo_disabled: "Les checklists sont limitées en mode démo",
-        progress: "%{done} sur %{total} terminés",
-        start_error: "Impossible de démarrer la checklist",
-        not_started: "Checklist pas encore démarrée",
-        update_error: "Impossible d'enregistrer le point de checklist",
       },
       unarchived: {
         action: "Renvoyer au tableau",
@@ -420,8 +433,8 @@ export const frenchCrmMessages = {
       added: "Note ajoutée",
       inputs: {
         add_note: "Ajouter une note",
-        options_hint: "(joindre des fichiers ou modifier les détails)",
         show_options: "Afficher les options",
+        hide_options: "Masquer les options",
       },
       actions: {
         attach_document: "Joindre un document",
@@ -472,11 +485,13 @@ export const frenchCrmMessages = {
     tasks: {
       name: "Tâche |||| Tâches",
       forcedCaseName: "Tâche",
+      done_toggle: "Marquer la tâche comme terminée",
       fields: {
         text: "Description",
         due_date: "Date d'échéance",
         type: "Type",
         contact_id: "Contact",
+        sales_id: "Responsable",
         due_short: "échéance",
       },
       action: {
@@ -701,9 +716,19 @@ export const frenchCrmMessages = {
     changelog: {
       title: "Notes de version",
     },
+    longtext: {
+      show_more: "Afficher tout le texte",
+      show_more_lines:
+        "Afficher tout le texte (%{smart_count} ligne) |||| Afficher tout le texte (%{smart_count} lignes)",
+      show_less: "Afficher moins",
+    },
     audit: {
       page_title: "Journal d'audit",
       history_title: "Historique des modifications",
+      entries_loaded: "%{smart_count} entrée |||| %{smart_count} entrées",
+      entries_loaded_more:
+        "%{smart_count} entrées chargées, d'autres disponibles",
+      collapsed_hint: "Ouvrir pour afficher",
       events_heading: "Événements",
       load_more: "Afficher plus",
       show_changes:
@@ -871,10 +896,8 @@ export const frenchCrmMessages = {
         waiting_manufacturer: "En attente du fabricant",
         open_tasks: "Tâches ouvertes",
         offer_follow_up: "Retour sur les offres",
-        open_production_releases: "Validations production ouvertes",
         required_complete: "Points obligatoires terminés",
         still_missing: "Manque encore",
-        no_open_production_releases: "Aucune validation production ouverte",
         required_progress: "%{done} sur %{total} points obligatoires terminés",
         empty_section: "Aucune entrée",
         empty_new_inquiries: "Aucune nouvelle demande",

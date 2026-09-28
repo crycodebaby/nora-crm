@@ -308,6 +308,37 @@ export const englishCrmMessages = {
       },
       sections: {
         overview: "Overview",
+        context: "Parties and site",
+      },
+      groups: {
+        case: "Deal",
+        client: "Client",
+        client_hint:
+          "The customer this work is for, the people involved and who is responsible at Nora.",
+        site: "Site",
+        planning: "Planning and follow-up",
+        description: "Description",
+        description_hint:
+          "Longer texts, emails or notes may be pasted here in full.",
+      },
+      roles: {
+        client: "Client",
+      },
+      attention: {
+        overdue_title: "Customer contact overdue",
+        overdue_since:
+          "%{smart_count} day overdue (due %{date}) |||| %{smart_count} days overdue (due %{date})",
+        today_title: "Contact customer today",
+        today_meta: "due %{date}",
+      },
+      site: {
+        title: "Site",
+        empty: "No site address stored.",
+        floor: "Floor",
+        tenant: "Bell label",
+      },
+      contacts: {
+        empty: "No contacts on this deal.",
       },
       follow_up: {
         overdue: "Customer contact overdue",
@@ -317,24 +348,6 @@ export const englishCrmMessages = {
         title: "Tasks for this deal",
         empty: "No open tasks for linked contacts.",
         no_contact: "Add a contact to this deal before creating tasks.",
-      },
-      checklist: {
-        title: "Window production release",
-        subtitle: "Checkpoints before manufacturer/production release",
-        start: "Start checklist",
-        required: "Required",
-        optional: "Optional",
-        done: "Done",
-        open: "Open",
-        note: "Note",
-        save_note: "Save note",
-        cancel: "Cancel",
-        required_complete: "Required items completed",
-        demo_disabled: "Checklists are limited in demo mode",
-        progress: "%{done} of %{total} completed",
-        start_error: "Could not start checklist",
-        not_started: "Checklist not started yet",
-        update_error: "Could not save checklist item",
       },
       unarchived: {
         action: "Send back to the board",
@@ -410,8 +423,8 @@ export const englishCrmMessages = {
       added: "Note added",
       inputs: {
         add_note: "Add a note",
-        options_hint: "(attach files, or change details)",
         show_options: "Show options",
+        hide_options: "Hide options",
       },
       actions: {
         attach_document: "Attach document",
@@ -458,11 +471,13 @@ export const englishCrmMessages = {
     tasks: {
       name: "Task |||| Tasks",
       forcedCaseName: "Task",
+      done_toggle: "Mark task as done",
       fields: {
         text: "Description",
         due_date: "Due date",
         type: "Type",
         contact_id: "Contact",
+        sales_id: "Responsible",
         due_short: "due",
       },
       action: {
@@ -687,9 +702,18 @@ export const englishCrmMessages = {
     changelog: {
       title: "Changelog",
     },
+    longtext: {
+      show_more: "Show full text",
+      show_more_lines:
+        "Show full text (%{smart_count} line) |||| Show full text (%{smart_count} lines)",
+      show_less: "Show less",
+    },
     audit: {
       page_title: "Audit log",
       history_title: "Change history",
+      entries_loaded: "%{smart_count} entry |||| %{smart_count} entries",
+      entries_loaded_more: "%{smart_count} entries loaded, more available",
+      collapsed_hint: "Open to view",
       events_heading: "Events",
       load_more: "Show more",
       show_changes: "Show %{count} change |||| Show %{count} changes",
@@ -854,10 +878,8 @@ export const englishCrmMessages = {
         waiting_manufacturer: "Waiting for manufacturer",
         open_tasks: "Open tasks",
         offer_follow_up: "Offers awaiting response",
-        open_production_releases: "Open production releases",
         required_complete: "Required items completed",
         still_missing: "Still missing",
-        no_open_production_releases: "No open production releases",
         required_progress: "%{done} of %{total} required items completed",
         empty_section: "No entries",
         empty_new_inquiries: "No new inquiries",

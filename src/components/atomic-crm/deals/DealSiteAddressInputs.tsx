@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 
 import { TextInput } from "@/components/admin/text-input";
 import type { Company, Deal } from "../types";
+import { NoraFormRow } from "../misc/NoraFormGroup";
 
 const addressFields = [
   "site_street",
@@ -13,6 +14,15 @@ const addressFields = [
   "site_tenant_name",
 ] as const;
 
+/**
+ * Einsatzort inputs — the frozen site-address contract (06, 2026-09-25).
+ *
+ * On create, the customer's street and city are *proposed* while no site
+ * field was touched; any manual edit or a deliberate clear ends proposals
+ * for this form. On edit nothing is proposed. Floor and tenant are never
+ * proposed. Only the layout changed in Alpha UI 1; labels, accessible
+ * names and the clear affordance are unchanged.
+ */
 export const DealSiteAddressInputs = () => {
   const record = useRecordContext<Deal>();
   const { control, setValue, getValues } = useFormContext<Deal>();
@@ -58,12 +68,12 @@ export const DealSiteAddressInputs = () => {
 
   return (
     <div
-      className="space-y-3"
+      className="flex flex-col gap-3"
       onChangeCapture={() => {
         manuallyEdited.current = true;
       }}
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <NoraFormRow cols="wide-narrow">
         <TextInput
           source="site_street"
           label="Straße und Hausnummer"
@@ -83,14 +93,14 @@ export const DealSiteAddressInputs = () => {
             onClick={clear}
             aria-label="Einsatzadresse vollständig löschen"
             title="Einsatzadresse löschen"
-            className="mb-px inline-flex size-10 shrink-0 items-center justify-center rounded-lg text-red-600 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 dark:text-red-400"
+            className="mb-px inline-flex size-11 shrink-0 items-center justify-center rounded-lg text-[var(--nora-text-muted)] hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--nora-accent-ring)]"
           >
             <X className="size-4" aria-hidden />
           </button>
         </div>
-      </div>
+      </NoraFormRow>
       {showDetails ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <NoraFormRow cols="2">
           <TextInput
             source="site_floor"
             label="Etage"
@@ -103,12 +113,12 @@ export const DealSiteAddressInputs = () => {
             helperText={false}
             placeholder="Optional"
           />
-        </div>
+        </NoraFormRow>
       ) : (
         <button
           type="button"
           onClick={() => setDetailsExpanded(true)}
-          className="min-h-8 text-left text-xs font-medium text-[var(--nora-brand-hover)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nora-brand-ring)]"
+          className="min-h-11 w-fit rounded-md text-left text-[13px] font-medium text-[var(--nora-accent-text)] hover:underline focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[var(--nora-accent-ring)]"
         >
           Etage oder Klingelschild ergänzen
         </button>

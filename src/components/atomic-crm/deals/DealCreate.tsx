@@ -5,6 +5,7 @@ import {
   useGetIdentity,
   useListContext,
   useRedirect,
+  useTranslate,
   type GetListResult,
 } from "ra-core";
 import { Create } from "@/components/admin/create";
@@ -18,6 +19,7 @@ import { DealInputs } from "./DealInputs";
 
 export const DealCreate = ({ open }: { open: boolean }) => {
   const redirect = useRedirect();
+  const translate = useTranslate();
   const dataProvider = useDataProvider();
   const { data: allDeals } = useListContext<Deal>();
 
@@ -75,18 +77,34 @@ export const DealCreate = ({ open }: { open: boolean }) => {
 
   return (
     <Dialog open={open} onOpenChange={() => handleClose()}>
-      <DialogContent className="lg:max-w-4xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0">
+      <DialogContent className="nora-deal-form-dialog sm:max-w-3xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0 p-0">
         <DialogTitle className="sr-only">Neuen Vorgang anlegen</DialogTitle>
-        <Create resource="deals" mutationOptions={{ onSuccess }}>
+        <Create
+          resource="deals"
+          mutationOptions={{ onSuccess }}
+          title={false}
+          disableBreadcrumb
+        >
           <Form
             defaultValues={{
               sales_id: identity?.id,
               contact_ids: [],
               index: 0,
             }}
+            className="flex flex-col"
           >
-            <DealInputs />
-            <FormToolbar>
+            <header className="nora-deal-form-head">
+              <p className="nora-t-eyebrow">
+                {translate("resources.deals.forcedCaseName")}
+              </p>
+              <h2 className="nora-t-title">
+                {translate("resources.deals.action.create")}
+              </h2>
+            </header>
+            <div className="nora-deal-form-body">
+              <DealInputs />
+            </div>
+            <FormToolbar className="nora-deal-form-toolbar">
               <SaveButton />
             </FormToolbar>
           </Form>

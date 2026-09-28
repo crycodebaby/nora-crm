@@ -14,7 +14,7 @@ Dieses Dokument bewertet das Chef-Rohkonzept für Fenstertausch/Fensterauftrag u
 Das Rohkonzept beschreibt einen **operativen End-to-End-Ablauf für Fenstertausch / Fensterauftrag** bei der Ergart Gruppe:
 
 - Aufmaß → Angebot → Kundenfreigabe → Herstellerbestellung → Produktion → Montage → Abschluss
-- mit internen Qualitätskontrollen vor Produktionsfreigabe
+- mit internen Qualitätskontrollen vor Produktionsfreigabe *(die Checklisten-**Oberfläche** dazu ist mit dem RC Alpha UI 1 vom 2026-09-28 zurückgezogen — [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Product Closure“; Datenmodell bleibt)*
 - mit Wunsch nach Kundenkommunikation und Transparenz („wie Paketverfolgung“)
 
 Das ist **fachlich wertvoll** als Referenzprozess für einen Kerngeschäftszweig (`fensterservice` in `dealCategories`), aber **nicht** als universelles Schema für alle Vorgänge.
