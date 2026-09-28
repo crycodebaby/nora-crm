@@ -1,12 +1,20 @@
 # 16 – Aktueller Zustand (Einstiegspunkt für neue Agenten)
 
-Stand: 2026-09-26 · Load-Klasse: **ALWAYS** · Status: **CURRENT SNAPSHOT**
+Stand: 2026-09-28 · Load-Klasse: **ALWAYS** · Status: **CURRENT SNAPSHOT**
 
 Dieses Dokument besitzt den **heutigen Zustand** von Nora — nicht die Contracts der Subsysteme, nicht deren Runbooks, nicht die offenen Punkte und nicht die Release-Historie. Welches Dokument wofür zuständig ist und wann es geladen wird, entscheidet ausschließlich der Router [`README.md`](README.md); dieses Dokument führt bewusst keine zweite Routingtabelle und keine Owner-Liste. Die aktuellen Release- und Laufzeitfakten stehen hier; die historische Beweisführung (RC-SHAs, Migrations-Hashes, Testzahlen, Live-Beweise, Zwischenfälle) liegt im Archiv [`releases/`](releases/README.md). **Repository-Kopf und Laufzeit-Kopf sind zwei verschiedene Fakten** — siehe Abschnitt „Vier Fakten".
 
 ## Was ist Nora?
 
 Nora CRM ist eine angepasste Kunden- und Vorgangsverwaltung für einen deutschen Hausmeister- und Fensterservice-Betrieb (Ergart Gruppe) auf Basis von Atomic CRM. Details: [`00-project-context.md`](00-project-context.md). Nora läuft **produktiv** unter `nora.ergart.de` und arbeitet mit **echten Produktions-/Kundendaten** (seit 2026-08-25).
+
+## Anwendungstitel `ora CRM` — beabsichtigt
+
+**Der in Production gespeicherte Anwendungstitel lautet `ora CRM`, und das ist so gewollt.** Das Logo liefert bereits das führende `N`; zusammen liest die visuelle Identität `N` + `ora CRM` = **Nora CRM**. Es ist eine bewusste UI-/Produktkonvention.
+
+**Es ist kein Tippfehler, kein LOW-Befund, kein Aufräumpunkt und kein Release-Nachzügler.** Wer den Titel auf „Nora CRM" „korrigiert", zerstört die kombinierte Wortmarke und erzeugt `NNora CRM` im Erscheinungsbild.
+
+Wo der Wert liegt, ist wichtig für künftige Prüfungen: `ora CRM` steht als **Datenwert** in `public.configuration` (Zeile `id = 1`, Schlüssel `title`), read-only bestätigt 2026-09-28. Der **Quellcode-Default** in `src/components/atomic-crm/root/defaultConfiguration.ts` ist unverändert `"Nora CRM"` — die gespeicherte Konfiguration überschreibt ihn zur Laufzeit. Eine Suche im Quellcode nach `ora CRM` findet deshalb nichts; das widerlegt den Live-Titel nicht.
 
 ## Kernressourcen
 
@@ -25,6 +33,10 @@ Nur das Namensmapping sichtbar ↔ technisch. Fachliche Bedeutung: [`01-domain-m
 ## Security
 
 Security wird **serverseitig** durchgesetzt; die UI ist keine Security Boundary. Der vollständige aktuelle Contract für Rollen, Berechtigungen, RLS, Grants, `SECURITY DEFINER`, Trust Boundaries sowie Session- und Executor-Integrität steht in [`22-security-and-access.md`](22-security-and-access.md), die offenen Risiken in [`17`](17-known-issues-and-planned-waves.md) Abschnitt A. Hier wird davon nichts dupliziert.
+
+**Mit RC3 ausgeliefert** (Überblick, Details im Contract `22`): sichere Behandlung von Anhang-URLs; ein **fail-closed Zulassungswächter für die Registrierung** (Migration `20260927120000_nora_signup_admission_guard`); unveränderte Lifecycle-Autorität; gehärteter Webhook-Pfad mit sicherem Vergleich; Security-Header. **Die CSP bleibt `Content-Security-Policy-Report-Only`** — das ist der gewollte aktuelle Zustand und **kein** Befund. Der zuvor im Repository mitgeführte Signing Key ist **entfernt**; er wird jetzt pro Maschine generiert (`supabase/signing_keys.json` ist absichtlich nicht versioniert, Bootstrap: [`21`](21-agent-runbooks.md) Sektion 1). CI enthält seit RC3 einen **Secret-Scan**-Job.
+
+**RC3 hat keine Edge Function deployt.** Der bestehende Advisor-Rückstand (drei `SECURITY DEFINER`-Views, `EXECUTE`-Defaults auf `public`-Functions) ist **vorbestehend** und wurde von RC3 weder verursacht noch gelöst — Tracking: [`17`](17-known-issues-and-planned-waves.md) A.8 und A.10, Views als bewusst privilegiert in [`06`](06-decision-log.md).
 
 ## Anhänge / Storage
 
@@ -70,6 +82,7 @@ Stand seit **W-A** (`PRODUCTION VERIFIED` 2026-09-22). Der eingefrorene Domain-C
 - **Sie ist kein neuer Datenbestand.** Keine Work-Tabelle, keine Work-View, keine Work-Persistenz, kein Work-Command-Layer und **keine Work-Oberfläche** — der Arbeitskorb bleibt ungebaut. `public.tasks` ist strukturell unverändert (8 Spalten, 4 Trigger, 4 Policies, 6 Indexe, RLS aktiv, **kein neuer Index**), und `set_sales_id_default()` wurde nicht angefasst.
 - **Der Akteur kommt ausschließlich aus der Sitzung.** `nora_private.current_sales_id()` ist der kanonische Weg von der Session zum Mitarbeiter: kein Actor-Parameter, deaktivierte Mitarbeiter ausgeschlossen, lebende Sitzung verlangt. Ist er nicht auflösbar, antwortet die Query `42501` / `NORA_PERMISSION_DENIED` statt einer leeren Liste.
 - **Das Hotboard ist davon unberührt.** Es liest Aufgaben weiterhin über rohes CRUD und filtert clientseitig; W-A hat daran nichts geändert und keine bestehende Fläche umgestellt.
+- **RC3 hat keine neue Work-Autorität eingeführt und keinen Posteingang gebaut.** Das im Redesign zunächst mitgedachte Inbox-/Posteingang-Konzept wurde nach Review **absichtlich aus dem Release entfernt**. Kanonisch gilt: das bestehende Hotboard-/Work-Verhalten bleibt autoritativ, es gibt **kein** Inbox-/Posteingang-Persistenzmodell, und das Universal Work Model bleibt eingefroren ([`25`](25-universal-work-model.md)). **Das ist kein unfertiges RC3-Feature** — es war ein bewusster Ausschluss. Ein künftiges Inbox-/Kommunikationskonzept braucht eine eigene Produktdiskovery und einen eigenen `06`-Eintrag; wer es aus dem RC3-Verlauf als „angefangen" liest, liest falsch.
 - **Vier Vertragsfälle sind in Production nicht beobachtbar** — freie (`is_unassigned`) Arbeit, der `NULLS LAST`-Schwanz bei fehlender Fälligkeit, die Tie-Break-Ordnung bei gleicher Fälligkeit und die unvollständige Zeile. Der Bestand enthält sie schlicht nicht; sie sind durch die lokale Contract-Suite belegt, nicht durch Produktionsdaten ([`25`](25-universal-work-model.md) Abschnitt 22.2). **„Alle Work-Semantik in Production bewiesen" wäre falsch.**
 - **Nächster Planungskandidat ist G-1 (Lifecycle Persistence)** — unbegonnen, ohne eigene Architekturreview.
 
@@ -78,20 +91,61 @@ Stand seit **W-A** (`PRODUCTION VERIFIED` 2026-09-22). Der eingefrorene Domain-C
 | Komponente | Stand | Nachweis |
 |---|---|---|
 | Repository-/Dokumentationskopf | aktueller `main` — hier bewusst nicht als SHA festgeschrieben, weil reine Docs-Commits ihn verschieben, ohne die Laufzeit zu ändern | `git log` |
-| Letzter Laufzeit-Release | Relational Attachment Read Gate W8-C S5, Laufzeit `3f9dd9edc2e7e5c73cb1dcf0184a7b17955e26d5` (`PRODUCTION VERIFIED` 2026-09-21) — **keine Migration** (Ledger unverändert 66), kein Edge-Deploy, keine Schema-, RLS-, Grant- oder Storage-Policy-Änderung. Reine Laufzeitwelle: Notiz-Anhänge werden nur noch als verifiziertes Read Model gelesen, anhangändernde Schreibvorgänge an nicht verbürgten Notizen werden abgewiesen, degradierte Anhänge erscheinen schreibgeschützt (Abschnitt „Anhänge / Storage"). Der Build enthält die Vorgänger W8-C S3B (`fd5f3ad7`, Projektion der Notiz-Anhänge samt zwei deutschen Fehlermeldungen für abgewiesene Anhangverweise), W8-B (`be77e7da`, Typ- und Größengrenzen beim Anhängen), W7-R1B (`fd635b08`), W7-M1 (`8aa62cc`) und den Laufzeitcommit `c7501f9` (SEC-B2 Browser-Persistenz); dessen Verifikation und Abschluss sind eine eigene Welle und mit S5 nicht mitbehauptet. **Die im ausgelieferten Build eingebettete SHA folgt dem jeweils deployten `main`-Commit, nicht dem letzten Laufzeit-Release** — auch Commits ohne Laufzeitwirkung verschieben sie: reine Docs-Commits ebenso wie W8-C S4, das keine Zeile in `src/**` geändert hat (nur `supabase/maintenance/` und `supabase/tests/`). Der letzte Release **mit** Laufzeitwirkung bleibt S5, bis wieder Laufzeitcode ausgeliefert wird. Eine von `3f9dd9ed` abweichende eingebettete SHA ist deshalb für sich **kein** Beleg für eine Laufzeitänderung und kein Befund; ein Live-Smoke vergleicht gegen die tatsächliche Deployment-/Build-Evidenz, nie gegen eine in der Dokumentation festgeschriebene SHA ([`21`](21-agent-runbooks.md) Sektion 14) | Archiv `releases/2026-09.md` |
-| Letzter Release mit **neuer sichtbarer** Funktionalität (W8-B, W8-C S3B und W8-C S5 bringen sichtbare Einschränkungen, Fehlermeldungen bzw. eine schreibgeschützte Ersatzdarstellung, keine neue Fläche) | W7-M1 (Laufzeit `8aa62cc`, im aktuellen Build enthalten): Vorgänge lassen sich unter 768 CSS px über `/vorgaenge/:id/show` als eigene mobile Detailseite öffnen. Die mobile Vorgang-**Route** ist nur eine Anzeige — mobil sind für Vorgänge keine Listen-/Kanban-, Anlege- oder Bearbeiten-Routen registriert (andere mobile Einstiege wie die Schnellerfassung sind davon unberührt); Desktop unverändert. Routing-Contract: [`04`](04-routing-i18n.md) | Archiv `releases/2026-09.md` |
+| Letzter Laufzeit-Release | **Nora Redesign + Security Closure (RC3)**, Laufzeit `22b012752354a14a02a62c0e45c2b2732a1a6b41` (`PRODUCTION VERIFIED` 2026-09-28) — der **Merge-Commit** von PR #2 auf `main`. Sein Quellbaum ist **byteidentisch** mit dem zertifizierten RC3 `df13fda8c739b9aa4795e11f5d64046eeecfee35`: beide tragen den Tree `6699ed5cc53b04c5096cb68036f0d5d8e15c8704`, `git diff 22b01275 df13fda8` ist leer. **Production läuft den Merge-Commit, nicht den RC3-Commit** — die beiden SHAs sind verschiedene Fakten und werden nirgends gleichgesetzt; korrekt formuliert ist „Laufzeit `22b01275…`, Quellbaum identisch mit dem zertifizierten RC3 `df13fda8…`". Vercel-Deployment `dpl_3T9qjGjY9FvyiNvo1f8LW1go3xqc` (`READY`, Target `production`, Alias `nora.ergart.de`), Laufzeit `GREEN`. RC3 ist eine **Laufzeit- und DB-Welle**: drei Migrationen (Ledger 68 → 71), **kein** Edge-Deploy. Release-Reihenfolge und Zustandsübergänge: Abschnitt „Release-Reihenfolge RC3". Vorgänger-Laufzeit: W8-C S5 (`3f9dd9ed`). **Die im ausgelieferten Build eingebettete Commit-SHA bleibt der Identitätsnachweis** und folgt dem jeweils deployten `main`-Commit — auch Commits ohne Laufzeitwirkung verschieben sie, reine Docs-Commits eingeschlossen. Eine von `22b01275` abweichende eingebettete SHA ist deshalb für sich **kein** Beleg für eine Laufzeitänderung und kein Befund; ein Live-Smoke vergleicht gegen die tatsächliche Deployment-/Build-Evidenz, nie gegen eine in der Dokumentation festgeschriebene SHA ([`21`](21-agent-runbooks.md) Sektion 14) | Archiv `releases/2026-09.md` |
+| Letzter Release mit **neuer sichtbarer** Funktionalität | **RC3** (Laufzeit `22b01275…`): neue primäre Navigation auf Desktop und Mobil, überarbeitete Startseite, eigenständige Einsatzadresse am Vorgang, mobile Kundenliste und Nora-Mobile-Header. Details: Abschnitte „Navigation / Informationsarchitektur", „Startseite" und „Vorgang / Einsatzort"; Produktsicht: [`20`](20-product-changelog.md) Eintrag 2026-09-28. Vorgänger war W7-M1 (`8aa62cc`, im Build enthalten): Vorgänge lassen sich unter 768 CSS px über `/vorgaenge/:id/show` als eigene mobile Detailseite öffnen. Die mobile Vorgang-**Route** bleibt eine reine Anzeige — mobil sind für Vorgänge weiterhin keine Listen-/Kanban-, Anlege- oder Bearbeiten-Routen registriert (andere mobile Einstiege wie die Schnellerfassung sind davon unberührt). Routing-Contract: [`04`](04-routing-i18n.md) | Archiv `releases/2026-09.md` |
 | Frontend / Deploy | Vercel-Projekt `nora-crm`, Domain `nora.ergart.de`; **jeder Push auf `main` löst ein automatisches Production-Deployment aus**. Prüfregel für die Build-/Release-Identität: [`21`](21-agent-runbooks.md) Sektion 14 | Archiv `releases/2026-09.md` |
-| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **68 Einträge, Kopf `20260922140000_nora_attachment_ordinal`**, deckungsgleich mit `supabase/migrations/` (68 Dateien) | W8-C S6-A: Production Apply 2026-09-25, danach unabhängig verifiziert; `ordinal` und `uq__attachments__owner_ordinal` live, kanonischer Anhangprüfer `GREEN` |
-| Letzte **reine DB-Änderung** ohne Laufzeitwirkung | **W8-C S6-A Attachment Ordinal**, Repository-Commit `eba95108ec4e7000f1c93a440f4a3dc946324c19`, Migration `20260922140000_nora_attachment_ordinal` (Production Apply 2026-09-25, danach unabhängig `PRODUCTION VERIFIED`). `public.attachments.ordinal` und die Eindeutigkeitsregel pro Notiz sind live; 31 Bestandszeilen wurden nach Legacy-Reihenfolge befüllt. **Keine Zeile in `src/**`**, kein Wechsel des Laufzeit-Lesepfads, keine physische Storage-Löschung. Vorgänger: W-A Universal Work Model Read Model, Commit `3d7b8cc083152cc791b6adf13321b0ea8e81e15a`, Migration `20260922120000_nora_work_read_model` (`PRODUCTION VERIFIED` 2026-09-22) | Archiv `releases/2026-09.md` |
+| Datenbank | `nora-crm-prod` (`kixxroxtfzbcbzctohex`), Postgres 17.6; Migrations-Ledger **71 Einträge, Kopf `20260927120000_nora_signup_admission_guard`**, deckungsgleich mit `supabase/migrations/`. Die drei RC3-Migrationen: `20260925180000_deal_site_address`, `20260925213701_deal_site_address_audit`, `20260927120000_nora_signup_admission_guard` | RC3: Production-DB-Apply 2026-09-28 über den CLI-Weg `db push` (Ledger korrekt ohne Korrektur), danach unabhängig read-only verifiziert — 71/71, keine Drift |
+| Letzte **reine DB-Änderung** ohne Laufzeitwirkung (vor RC3) | **W8-C S6-A Attachment Ordinal**, Repository-Commit `eba95108ec4e7000f1c93a440f4a3dc946324c19`, Migration `20260922140000_nora_attachment_ordinal` (Production Apply 2026-09-25, danach unabhängig `PRODUCTION VERIFIED`). `public.attachments.ordinal` und die Eindeutigkeitsregel pro Notiz sind live; 31 Bestandszeilen wurden nach Legacy-Reihenfolge befüllt. **Keine Zeile in `src/**`**, kein Wechsel des Laufzeit-Lesepfads, keine physische Storage-Löschung. Vorgänger: W-A Universal Work Model Read Model, Commit `3d7b8cc083152cc791b6adf13321b0ea8e81e15a`, Migration `20260922120000_nora_work_read_model` (`PRODUCTION VERIFIED` 2026-09-22) | Archiv `releases/2026-09.md` |
 | Letzte reine **Production-Datenänderung** ohne Schema- und ohne Laufzeitwirkung | W8-C S4 Attachment Consistency Backfill, Commit `6dece31a6e92aaa459b4eef511325bf1136c9fc6` (`PRODUCTION VERIFIED` 2026-09-20). **Keine Migration** (Ledger unverändert 66), keine Zeile in `src/**`, keine Grant-, Policy- oder Edge-Änderung: der Commit liefert ausschließlich Operator-Werkzeug unter `supabase/maintenance/` und Verifikationssuiten unter `supabase/tests/`. Durchgeführt wurde damit eine einmalige, ausschließlich einfügende Datenoperation — die Bestandsnotizen wurden in `public.attachments` nachprojiziert; der kanonische Konsistenzprüfer war danach `GREEN` (Abschnitt „Anhänge / Storage"). Die Zeilen- und Ausführungszahlen liegen im Archiv | Archiv `releases/2026-09.md` |
-| Edge Function `users` | **Version 10** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-18 |
+| Edge Function `users` | **Version 10** (`verify_jwt = false`, verifiziert JWTs selbst) | `list_edge_functions` read-only 2026-09-28 (RC3-Abschluss; unverändert gegenüber 2026-09-18) |
 | Edge Function `brevo-email-events` | **Version 3** (`verify_jwt = false`, Bearer-Token) | dito |
 | Herkunft der Edge-Versionsnummern | Die Plattform zählt heute `users` **10** und `brevo-email-events` **3**. Die ausgelieferten Bundles sind byteidentisch mit den Artefakten, die die Release-Historie als `users` v9 (W6-B, 2026-09-07) und `brevo-email-events` v2 (V1C-B, 2026-09-04) führt — es gab **keinen** neuen Edge-Deploy. Die Angaben v9/v2 im Archiv und in datierten Einträgen bleiben historische Release-Evidenz, keine aktuellen Versionsangaben | dito (Bundle-Hash `ezbr_sha256` und letzte Aktualisierung) |
-| Alle übrigen Edge Functions im Repo (`calendar-*`, `merge_contacts`, `update_password`, `postmark`, `mcp`) | **nicht in Production deployt** — live sind ausschließlich `users` und `brevo-email-events` | dito |
+| Alle übrigen Edge Functions im Repo (`calendar-*`, `merge_contacts`, `update_password`, `postmark`, `mcp`) | **nicht in Production deployt** — live sind ausschließlich `users` und `brevo-email-events`. **RC3 hat daran nichts geändert:** `mcp` und `postmark` liegen als Repository-Code vor und sind **nicht** deployt. Vorhandener Quellcode ist kein Deployment, und ihre Anwesenheit im ausgelieferten Baum ist **kein** Befund | dito |
 | Edge Function `delete_note_attachments` | **existiert nicht mehr** — sie war nie in Production deployt und ihre Quelle ist mit W8-B aus dem Repository entfernt; der sie aufrufende DB-Pfad (Trigger → `cleanup_note_attachments()` → `pg_net`) ist in Production gelöscht | Abschnitt „Anhänge / Storage" |
-| Build / CI (Repository, **nicht** Laufzeit) | **Gesamt-CI GREEN**: GitHub Actions „Check" Run #104 (ID `34791859868`) auf `7384431d917eed79000d50437a53abd514bc27c5` — alle sechs Jobs erfolgreich (Prettier, Typecheck, Test, ESLint, Build, `e2e-test`); Playwright 7 passed / 1 bewusst übersprungen / 0 failed / 0 flaky. `7384431d` ändert ausschließlich E2E-Test-Infrastruktur (E2E-B1) — **kein** Laufzeit-Release, keine Production-Verifikation, ein durch den Push ausgelöstes Vercel-Deployment wurde nicht geprüft; die Zeile „Letzter Laufzeit-Release" bleibt davon unberührt. E2E-Isolationsregeln: [`21`](21-agent-runbooks.md) Sektion 16 | Archiv `releases/2026-09.md` „E2E-Testisolation E2E-B1" |
+| Build / CI (Repository, **nicht** Laufzeit) | **Gesamt-CI GREEN, 7/7 Jobs**: Prettier, Typecheck, Test, ESLint, Build, `e2e-test` und `secret-scan` — `secret-scan` ist mit RC3 als siebter Job hinzugekommen (vorher sechs). Drei Läufe tragen den Release: `36404176185` auf dem zertifizierten RC3 `df13fda8`, `36411888675` beim Ready-Übergang von PR #2, `36412396189` auf dem Merge-Commit `22b01275` — alle drei 7/7. **Frühere Draft-Läufe mit übersprungenen Jobs sind keine Release-Evidenz** und taugen nur als historischer Kontext. E2E-Isolationsregeln: [`21`](21-agent-runbooks.md) Sektion 16 | GitHub Actions „Check", read-only 2026-09-28 |
 
 Die Release-/Deploy-Grundreihenfolge für schemaabhängige Wellen steht in [`07-agent-change-checklist.md`](07-agent-change-checklist.md). **Bei PWA-Clients ist ein Reload allein kein belastbarer Nachweis dafür, welcher Build aktiv ist** — technischer Contract: [`24`](24-pwa-and-update-lifecycle.md); Live-Smoke: [`21`](21-agent-runbooks.md) Sektion 14.
+
+## Release-Reihenfolge RC3
+
+**RC3 wurde DB-first ausgeliefert — bewusst, nicht zufällig.** Die drei Zustände, die Production dabei durchlaufen hat:
+
+- **Zustand A** — alte Laufzeit, alte Datenbank (Ausgangslage, `main` = `e18905c5bfdc298d94bc7486b1bb0b318e61df97`)
+- **Zustand B** — alte Laufzeit, **migrierte** Datenbank (nach dem DB-Apply; die alte Laufzeit kennt die neuen Spalten nicht und benutzt sie nicht)
+- **Zustand C** — zertifizierte RC3-Laufzeit, migrierte Datenbank (nach dem Merge und dem automatischen Vercel-Deployment) — der heutige Zustand
+
+**Zustand D — RC3-Laufzeit auf alter Datenbank — war ausdrücklich nicht unterstützt und wurde vermieden.** Die neue Laufzeit schreibt und liest `site_*`; ohne die Migration wäre sie auf einen Fehler gelaufen. Deshalb gilt die Reihenfolge aus [`07`](07-agent-change-checklist.md): Migration vor Push, nie umgekehrt. Zustand B ist die bewusst tolerierte Zwischenlage, weil additive nullable Spalten von einer Laufzeit, die sie nicht kennt, gefahrlos ignoriert werden.
+
+## Navigation / Informationsarchitektur
+
+Stand seit **RC3** (2026-09-28). Routing-Contract: [`04`](04-routing-i18n.md); Begründung: [`06`](06-decision-log.md) Eintrag 2026-09-28.
+
+- **Die primäre Desktop-Navigation trägt genau drei Ziele:** Startseite, Kunden, Vorgänge.
+- **Die primäre Mobil-Navigation trägt sechs Schaltflächen:** Suche, Start, Kunden, Erstellen, Aufgaben, Einstellungen.
+- **Ansprechpartner (`contacts`) sind weiterhin eine vollwertige Domänenressource** — mit Listen, Detailseiten, Anlegen und Bearbeiten. Sie sind nur **kein primäres Navigationsziel** mehr. Erreichbar bleiben sie kontextuell: über den Kunden, über den Vorgang, über die globale Suche und über die Verwaltungs-/Einstellungspfade.
+- **Das Fehlen von „Kontakte" in der Hauptnavigation ist eine bewusste Vereinfachung, kein Defekt** und keine Regression. Wer sie wieder einhängt, ändert einen Produktentscheid und braucht dafür einen eigenen `06`-Eintrag.
+- **Vorgänge haben mobil kein primäres Navigationsziel** — das ist unverändert gegenüber W7-M1 und folgt daraus, dass mobil nur die Vorgang-Detailseite existiert.
+
+## Startseite
+
+Stand seit **RC3**. Die Startseite wurde neu gestaltet, **ohne** die bestehende Arbeitsautorität abzulösen:
+
+- **Das Hotboard bleibt erhalten und bleibt die operative Startübersicht.** RC3 hat es nicht ersetzt und nicht umgebaut.
+- **Ladefehler sind bereichsweise begrenzt:** scheitert eine Startseiten-Abfrage, zeigt Nora den Fehler im betroffenen Bereich mit erneutem Ladeversuch; die übrigen Bereiche bleiben sichtbar und nutzbar.
+- Desktop- und Mobil-Start sind überarbeitet; Aktivitätsverlauf und Dashboard-Bereiche erscheinen in der ausgelieferten Form.
+
+## Vorgang / Einsatzort
+
+Stand seit **RC3** (Migrationen `20260925180000_deal_site_address` und `20260925213701_deal_site_address_audit`). Durable Entscheidung mit Begründung: [`06`](06-decision-log.md) Eintrag 2026-09-25.
+
+- **Der Vorgang besitzt einen eigenen gespeicherten Einsatzort** in vier nullable Textfeldern: `site_street`, `site_city`, `site_floor`, `site_tenant_name`. Kein neues Adressobjekt, keine neue Relation.
+- **Die Kundenanschrift ist nur ein Vorschlag bei der Neuanlage, nie eine laufende Ableitung.** Straße und Ort dürfen beim ersten Kunden und bei Kundenwechsel vorgeschlagen werden — solange kein Site-Feld manuell verändert wurde.
+- **Jeder manuelle Eingriff beendet alle weiteren Vorschläge für dieses Formular**, auch bewusstes Leeren. Eigene Eingaben werden nie überschrieben.
+- **Etage und Klingelschild werden niemals automatisch gesetzt oder geleert.**
+- **Geleert heißt SQL-`NULL`.** `''` ist kein zweiter Leerzustand.
+- **Spätere Änderungen an der Kundenanschrift verändern gespeicherte Vorgänge nicht.** Beim Bearbeiten findet keine Übernahme statt; Renderer lesen ausschließlich Deal-Felder.
+- **Bestandsvorgänge ohne Einsatzadresse bleiben gültig.** Es gab **keinen** Backfill und es gibt keine Synchronisierung; ein `NULL`-Einsatzort ist ein legitimer Zustand und **kein** Datenmangel.
+- Änderungen laufen durch den bestehenden Deal-Audit-Pfad.
 
 ## Vier Fakten
 
@@ -105,6 +159,8 @@ Die Release-/Deploy-Grundreihenfolge für schemaabhängige Wellen steht in [`07-
 Der laufende Gegenbeleg ist der **Kalender**: der Code liegt vollständig auf `main`, die Integration ist aber **derzeit nicht produktiv nutzbar**. Aktueller Owner und Details: [`11`](11-google-calendar-rbac.md) und [`14`](14-google-calendar-readonly-implementation.md).
 
 ## Aktive Programmlage
+
+**RC3 (Nora Redesign + Security Closure) ist am 2026-09-28 abgeschlossen und in Production verifiziert.** Damit ist keine neue Welle begonnen; die nächste Arbeit ist ein eigener Programmstrom und beginnt nicht aus diesem Abschluss heraus.
 
 Aktiv ist **Wave 7**; ihre offenen Folgepunkte (Vorgänge, mobile Vorgang-Fläche) stehen in [`17`](17-known-issues-and-planned-waves.md) Abschnitt G. Der vollständige offene Zustand — Bugs, Restrisiken, geplante Wellen — steht ausschließlich in [`17`](17-known-issues-and-planned-waves.md); dieses Dokument führt weder eine zweite Known-Issues-Liste noch eine Chronik abgeschlossener Wellen. Abgeschlossene Wellen und ihre Evidenz liegen im Archiv [`releases/`](releases/README.md).
 
