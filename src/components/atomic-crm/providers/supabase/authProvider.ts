@@ -3,6 +3,7 @@ import { supabaseAuthProvider } from "ra-supabase-core";
 
 import { canAccess, resolveNoraRole } from "../commons/canAccess";
 import { getSupabaseClient } from "./supabase";
+import { resetAttachmentUrlCache } from "../../attachments/attachmentAccess";
 
 /** Local-storage key for the signed-in sales profile used by getIdentity(). */
 export const CURRENT_SALE_CACHE_KEY = "RaStore.auth.current_sale";
@@ -137,6 +138,12 @@ function clearAuthBootstrapCaches() {
   const storage = getLocalStorage();
   storage?.removeItem(IS_INITIALIZED_CACHE_KEY);
   clearCurrentSaleCache();
+  // W8-E: derived attachment capabilities are per-session. They live only in
+  // memory and are never persisted, but a signed URL minted by the employee
+  // who just logged out must not be handed to whoever logs in next in the
+  // same tab. This does not retract URLs already issued — that is a bearer
+  // capability and expires on its own — it stops Nora reusing them.
+  resetAttachmentUrlCache();
 }
 
 export const getAuthProvider = (): AuthProvider => {

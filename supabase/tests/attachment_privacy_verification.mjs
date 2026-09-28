@@ -1,0 +1,451 @@
+#!/usr/bin/env node
+/**
+ * Nora W8-E — attachment privacy: Storage API verification.
+ *
+ * Drives the whole W8-E compatibility matrix against a REAL Storage API with
+ * REAL GoTrue sessions, by flipping the local bucket between public and
+ * private and asserting each state:
+ *
+ *   STATE PUBLIC   (Stage A/B)  the pre-flip state the new runtime must also
+ *                               support: derived signed URLs already work,
+ *                               and the legacy public URL still resolves.
+ *   STATE PRIVATE  (Stage C)    the target: a known object key returns NO
+ *                               bytes to anyone without a session, by any
+ *                               route, while active employees still open it
+ *                               through a signed URL.
+ *   ROLLBACK                    public again, immediately and completely.
+ *
+ * Plus the branding bucket in every state: public read without a session,
+ * write restricted to an active writer, and never a home for note content.
+ *
+ * THE ASSERTION THAT CHANGED. `attachment_storage_policy_verification.mjs`
+ * records anonymous readability of a known key as RESIDUAL T1 — expected, not
+ * a failure, because the bucket was public by design. Here, in the private
+ * state, the identical observation is a BLOCKING failure. That inversion is
+ * the whole point of W8-E and is deliberately expressed as two separate
+ * verifiers rather than one with a loosened assertion.
+ *
+ * Local only — refuses any non-localhost URL. MUTATES the local bucket's
+ * `public` flag and restores it at the end; never run against Production.
+ *
+ *   npx supabase db reset --local
+ *   node supabase/tests/attachment_privacy_verification.mjs
+ *
+ * Exit 0 = all assertions passed · 1 = assertion failure · 2 = prerequisites.
+ */
+
+import { createClient } from "@supabase/supabase-js";
+import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+
+const ATTACHMENTS = "attachments";
+const BRANDING = "branding";
+const DB_CONTAINER =
+  process.env.NORA_DB_CONTAINER || "supabase_db_atomic-crm-demo";
+
+const readLocalKeys = () => {
+  const raw = execFileSync("npx", ["supabase", "status", "-o", "json"], {
+    encoding: "utf8",
+    shell: process.platform === "win32",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const status = JSON.parse(raw.slice(raw.indexOf("{")));
+  return {
+    url: process.env.SUPABASE_URL || status.API_URL || "http://127.0.0.1:54321",
+    // The new-format keys are what Nora itself ships (VITE_SB_PUBLISHABLE_KEY).
+    anon: status.PUBLISHABLE_KEY || status.ANON_KEY,
+    service: status.SECRET_KEY || status.SERVICE_ROLE_KEY,
+  };
+};
+
+let config;
+try {
+  config = readLocalKeys();
+} catch (error) {
+  console.error("[w8e] local Supabase stack unavailable:", error.message);
+  process.exit(2);
+}
+if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(config.url)) {
+  console.error(`[w8e] refusing non-local Supabase URL ${config.url}`);
+  process.exit(2);
+}
+
+const clientOptions = {
+  auth: { persistSession: false, autoRefreshToken: false },
+};
+const service = createClient(config.url, config.service, clientOptions);
+const anon = createClient(config.url, config.anon, clientOptions);
+
+const psql = (sql) =>
+  execFileSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      DB_CONTAINER,
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-At",
+    ],
+    { input: sql, encoding: "utf8" },
+  ).trim();
+
+const run = randomUUID().slice(0, 8);
+const password = `W8e-${randomUUID()}`;
+const results = [];
+
+const check = (label, actual, expected) => {
+  const ok = actual === expected;
+  results.push({ label, ok });
+  console.log(
+    `${ok ? "OK  " : "FAIL"} ${label} :: got ${actual}, expected ${expected}`,
+  );
+  if (!ok) process.exitCode = 1;
+};
+
+const createEmployee = async (label, role) => {
+  const email = `w8e-${label}-${run}@nora.test`;
+  const { data, error } = await service.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { first_name: "W8E", last_name: label },
+  });
+  if (error) throw new Error(`createUser ${label}: ${error.message}`);
+  psql(`select nora_private.apply_sales_role_change(
+          (select id from public.sales where user_id = '${data.user.id}'), '${role}', false);`);
+  const client = createClient(config.url, config.anon, clientOptions);
+  const { error: signInError } = await client.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (signInError) throw new Error(`signIn ${label}: ${signInError.message}`);
+  return { label, userId: data.user.id, client };
+};
+
+const setPublic = (bucket, value) => {
+  psql(`update storage.buckets set public = ${value} where id = '${bucket}';`);
+  return psql(`select public from storage.buckets where id = '${bucket}';`);
+};
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+const noteKey = `w8e-note-${run}.txt`;
+const noteBody = `note-secret-${run}`;
+const brandKey = `w8e-brand-${run}.png`;
+// A one-pixel PNG, so the branding bucket's MIME allowlist is exercised for
+// real rather than bypassed with text/plain.
+const PNG_BYTES = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  ),
+  (c) => c.charCodeAt(0),
+);
+
+{
+  const a = await service.storage
+    .from(ATTACHMENTS)
+    .upload(noteKey, new Blob([noteBody], { type: "text/plain" }));
+  if (a.error) {
+    console.error(
+      `[w8e] could not seed the attachments fixture: ${a.error.message}`,
+    );
+    console.error(
+      "[w8e] see docs/nora/21 §4: the local storage-api can refuse uploads (42P10).",
+    );
+    process.exit(2);
+  }
+  const b = await service.storage
+    .from(BRANDING)
+    .upload(brandKey, new Blob([PNG_BYTES], { type: "image/png" }));
+  if (b.error) {
+    console.error(
+      `[w8e] could not seed the branding fixture: ${b.error.message}`,
+    );
+    process.exit(2);
+  }
+}
+
+// admin FIRST: guard_last_active_admin() refuses to demote the bootstrap admin
+const admin = await createEmployee("admin", "admin");
+const viewer = await createEmployee("viewer", "viewer");
+const office = await createEmployee("office", "office");
+const disabled = await createEmployee("disabled", "office");
+
+const publicUrl = (bucket, key) =>
+  `${config.url}/storage/v1/object/public/${bucket}/${key}`;
+const authedUrl = (bucket, key) =>
+  `${config.url}/storage/v1/object/authenticated/${bucket}/${key}`;
+
+/** True when the URL really returns the fixture bytes. */
+const yieldsBytes = async (url, expected, headers = {}) => {
+  const response = await fetch(url, { headers });
+  if (!response.ok) return false;
+  return (await response.text()) === expected;
+};
+
+const canSign = async (client, bucket, key) => {
+  const { data, error } = await client.storage
+    .from(bucket)
+    .createSignedUrl(key, 60);
+  return !error && Boolean(data?.signedUrl);
+};
+
+const signedYieldsBytes = async (client, bucket, key, expected) => {
+  const { data, error } = await client.storage
+    .from(bucket)
+    .createSignedUrl(key, 60);
+  if (error || !data?.signedUrl) return false;
+  const url = new URL(data.signedUrl);
+  return yieldsBytes(`${config.url}${url.pathname}${url.search}`, expected);
+};
+
+// ---------------------------------------------------------------------------
+// STATE PUBLIC — Stage A / Stage B
+// ---------------------------------------------------------------------------
+console.log(
+  `\n=== STATE PUBLIC (attachments.public=${setPublic(ATTACHMENTS, true)}) — Stage A/B ===`,
+);
+
+check(
+  "A/B active office can derive a signed URL that yields bytes",
+  await signedYieldsBytes(office.client, ATTACHMENTS, noteKey, noteBody),
+  true,
+);
+check(
+  "A/B active viewer can derive a signed URL that yields bytes",
+  await signedYieldsBytes(viewer.client, ATTACHMENTS, noteKey, noteBody),
+  true,
+);
+// RESIDUAL T1 while public. Recorded, not celebrated: this is the exposure
+// W8-E exists to close, and it is asserted as a FAILURE in the private state.
+check(
+  "A/B legacy public URL still yields bytes anonymously [RESIDUAL T1]",
+  await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody),
+  true,
+);
+
+// ---------------------------------------------------------------------------
+// STATE PRIVATE — Stage C, the target
+// ---------------------------------------------------------------------------
+console.log(
+  `\n=== STATE PRIVATE (attachments.public=${setPublic(ATTACHMENTS, false)}) — Stage C ===`,
+);
+
+// --- the closure itself: no anonymous route returns the bytes
+check(
+  "C anonymous former public URL yields NO bytes [T1 CLOSED]",
+  await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody),
+  false,
+);
+check(
+  "C /object/authenticated with the publishable key yields NO bytes",
+  await yieldsBytes(authedUrl(ATTACHMENTS, noteKey), noteBody, {
+    apikey: config.anon,
+    Authorization: `Bearer ${config.anon}`,
+  }),
+  false,
+);
+check(
+  "C /object/authenticated with no credentials yields NO bytes",
+  await yieldsBytes(authedUrl(ATTACHMENTS, noteKey), noteBody),
+  false,
+);
+check(
+  "C anonymous client cannot derive a signed URL",
+  await canSign(anon, ATTACHMENTS, noteKey),
+  false,
+);
+
+// --- the app must still work for everyone who is entitled to the content
+check(
+  "C active viewer still opens the attachment through a signed URL",
+  await signedYieldsBytes(viewer.client, ATTACHMENTS, noteKey, noteBody),
+  true,
+);
+check(
+  "C active office still opens the attachment through a signed URL",
+  await signedYieldsBytes(office.client, ATTACHMENTS, noteKey, noteBody),
+  true,
+);
+check(
+  "C active admin still opens the attachment through a signed URL",
+  await signedYieldsBytes(admin.client, ATTACHMENTS, noteKey, noteBody),
+  true,
+);
+check(
+  "C active office can still upload",
+  await (async () => {
+    const key = `w8e-upload-${randomUUID()}.txt`;
+    const { error } = await office.client.storage
+      .from(ATTACHMENTS)
+      .upload(key, new Blob(["x"], { type: "text/plain" }));
+    return !error;
+  })(),
+  true,
+);
+
+// --- a deactivated identity holding a still-valid JWT
+psql(`select nora_private.apply_sales_role_change(
+        (select id from public.sales where user_id = '${disabled.userId}'), 'office', true);`);
+check(
+  "C deactivated identity with a live JWT cannot derive a fresh signed URL",
+  await canSign(disabled.client, ATTACHMENTS, noteKey),
+  false,
+);
+check(
+  "C deactivated identity with a live JWT cannot read the public route either",
+  await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody),
+  false,
+);
+
+// --- capability lifetime, stated honestly
+{
+  const { data } = await office.client.storage
+    .from(ATTACHMENTS)
+    .createSignedUrl(noteKey, 1);
+  const url = new URL(data.signedUrl);
+  const target = `${config.url}${url.pathname}${url.search}`;
+  check(
+    "C a freshly issued signed URL yields bytes",
+    await yieldsBytes(target, noteBody),
+    true,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  check(
+    "C the same signed URL yields NO bytes once expired",
+    await yieldsBytes(target, noteBody),
+    false,
+  );
+}
+
+// --- branding is unaffected by the flip, which is the point of splitting it
+console.log("\n--- branding bucket, attachments still PRIVATE ---");
+const brandBytes = async (url) => {
+  const response = await fetch(url);
+  if (!response.ok) return false;
+  return (
+    new Uint8Array(await response.arrayBuffer()).length === PNG_BYTES.length
+  );
+};
+check(
+  "C branding is readable with NO session at all (pre-auth logo)",
+  await brandBytes(publicUrl(BRANDING, brandKey)),
+  true,
+);
+check(
+  "C anonymous client cannot WRITE to branding",
+  await (async () => {
+    const { error } = await anon.storage
+      .from(BRANDING)
+      .upload(
+        `w8e-anon-${randomUUID()}.png`,
+        new Blob([PNG_BYTES], { type: "image/png" }),
+      );
+    return !error;
+  })(),
+  false,
+);
+check(
+  "C viewer cannot WRITE to branding",
+  await (async () => {
+    const { error } = await viewer.client.storage
+      .from(BRANDING)
+      .upload(
+        `w8e-viewer-${randomUUID()}.png`,
+        new Blob([PNG_BYTES], { type: "image/png" }),
+      );
+    return !error;
+  })(),
+  false,
+);
+check(
+  "C active office CAN write to branding (admin logo upload keeps working)",
+  await (async () => {
+    const { error } = await office.client.storage
+      .from(BRANDING)
+      .upload(
+        `w8e-office-${randomUUID()}.png`,
+        new Blob([PNG_BYTES], { type: "image/png" }),
+      );
+    return !error;
+  })(),
+  true,
+);
+check(
+  "C deactivated identity cannot write to branding",
+  await (async () => {
+    const { error } = await disabled.client.storage
+      .from(BRANDING)
+      .upload(
+        `w8e-gone-${randomUUID()}.png`,
+        new Blob([PNG_BYTES], { type: "image/png" }),
+      );
+    return !error;
+  })(),
+  false,
+);
+// The branding bucket is for brand marks, not documents. Its MIME allowlist is
+// what stops it becoming a public drop box for business content.
+check(
+  "C a PDF cannot be uploaded to branding (it is not a brand mark)",
+  await (async () => {
+    const { error } = await office.client.storage
+      .from(BRANDING)
+      .upload(
+        `w8e-doc-${randomUUID()}.pdf`,
+        new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+      );
+    return !error;
+  })(),
+  false,
+);
+check(
+  "C an SVG cannot be uploaded to branding (active document on a public origin)",
+  await (async () => {
+    const { error } = await office.client.storage
+      .from(BRANDING)
+      .upload(
+        `w8e-x-${randomUUID()}.svg`,
+        new Blob(["<svg/>"], { type: "image/svg+xml" }),
+      );
+    return !error;
+  })(),
+  false,
+);
+
+// ---------------------------------------------------------------------------
+// ROLLBACK — public again
+// ---------------------------------------------------------------------------
+console.log(
+  `\n=== ROLLBACK (attachments.public=${setPublic(ATTACHMENTS, true)}) ===`,
+);
+check(
+  "rollback restores the pre-W8-E public read path for the old runtime",
+  await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody),
+  true,
+);
+check(
+  "rollback leaves branding untouched and still public",
+  await brandBytes(publicUrl(BRANDING, brandKey)),
+  true,
+);
+
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+const failed = results.filter((r) => !r.ok);
+console.log(
+  `\n=== ${results.length - failed.length}/${results.length} PASS ===`,
+);
+if (failed.length) {
+  console.log("failed:");
+  for (const f of failed) console.log(`  - ${f.label}`);
+}
+process.exit(failed.length ? 1 : 0);

@@ -4,6 +4,37 @@ export const ATTACHMENTS_BUCKET =
   import.meta.env.VITE_ATTACHMENTS_BUCKET || "attachments";
 
 /**
+ * W8-E — the deliberately PUBLIC branding bucket.
+ *
+ * It exists because two of Nora's file classes are not business documents at
+ * all: the configuration light/dark logos, which must render on the login page
+ * with no session whatsoever, and the customer logos, which are public brand
+ * marks of the firms Nora works with. Solving pre-auth branding with signed
+ * URLs is impossible (there is nobody to sign as) and solving it with a
+ * service broker would be a new privileged path, so the two classes are
+ * separated by bucket instead.
+ *
+ * The name must NOT contain the substring `attachments`: the S2A2.1 liveness
+ * resolver classifies any storage-looking URL mentioning `attachments` as
+ * `unknown` (fail-closed), which would make every branding URL permanently
+ * ambiguous to the deletion contract. `branding` classifies cleanly as `none`.
+ *
+ * Nothing that is a note or document attachment may ever be uploaded here.
+ */
+export const BRANDING_BUCKET =
+  import.meta.env.VITE_BRANDING_BUCKET || "branding";
+
+/**
+ * Lifetime of a derived attachment access URL, in seconds.
+ *
+ * ONE place, on purpose: a TTL scattered across components cannot be reasoned
+ * about, and this value is a security parameter, not styling. See
+ * `attachments/attachmentAccess.ts` for how it is refreshed and
+ * docs/nora/22 §6.14 for the measurements behind the number.
+ */
+export const ATTACHMENT_SIGNED_URL_TTL_SECONDS = 900;
+
+/**
  * Upload policy of the attachments bucket (W8-B).
  *
  * Mirrors `storage.buckets.file_size_limit` / `allowed_mime_types` from

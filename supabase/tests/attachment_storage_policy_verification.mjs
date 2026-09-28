@@ -47,6 +47,25 @@ import { randomUUID } from "node:crypto";
 
 const BUCKET = "attachments";
 const MAX_BYTES = 50 * 1024 * 1024;
+
+/**
+ * W8-E — which side of the privacy flip this run expects.
+ *
+ * Before W8-E this file could hard-code "the bucket is public" and record
+ * anonymous readability of a known key as RESIDUAL T1: expected, documented,
+ * not a failure. After the Stage C flip that same observation means the
+ * closure has regressed, so the expectation has to follow the stage instead
+ * of being loosened away.
+ *
+ *   NORA_ATTACHMENTS_EXPECTED_PUBLIC=true   (default) pre-flip / Stage A+B
+ *   NORA_ATTACHMENTS_EXPECTED_PUBLIC=false            post-flip / Stage C
+ *
+ * The full private-state matrix lives in `attachment_privacy_verification.mjs`;
+ * this file keeps owning the W8-B policy matrix, which the flip does not
+ * change.
+ */
+const EXPECT_PUBLIC =
+  (process.env.NORA_ATTACHMENTS_EXPECTED_PUBLIC ?? "true") !== "false";
 const DB_CONTAINER =
   process.env.NORA_DB_CONTAINER || "supabase_db_atomic-crm-demo";
 
@@ -72,8 +91,11 @@ const readLocalKeys = () => {
   const status = JSON.parse(raw.slice(raw.indexOf("{")));
   return {
     url: process.env.SUPABASE_URL || status.API_URL || "http://127.0.0.1:54321",
-    anon: status.ANON_KEY,
-    service: status.SERVICE_ROLE_KEY,
+    // Prefer the new-format keys: they are what Nora itself ships
+    // (VITE_SB_PUBLISHABLE_KEY), and current local storage-api builds reject
+    // the legacy ES256 JWT keys outright.
+    anon: status.PUBLISHABLE_KEY || status.ANON_KEY,
+    service: status.SECRET_KEY || status.SERVICE_ROLE_KEY,
   };
 };
 
@@ -257,13 +279,20 @@ const roleMatrix = async (label, client) => {
   await seed(fixture, `fixture for ${label}`);
 
   check(`${label} LIST`, await probe.list(client), expected.select);
-  // RESIDUAL T1: for a PUBLIC bucket storage-api's GET /object/<bucket>/<key>
-  // resolves the object asSuperUser (routes/object/getObject.js) — RLS is not
-  // consulted, exactly like /object/public/. Allowed for every caller until W8-E.
+  // T1. For a PUBLIC bucket storage-api's GET /object/<bucket>/<key> resolves
+  // the object asSuperUser (routes/object/getObject.js) — RLS is not
+  // consulted, exactly like /object/public/. That was the accepted residual
+  // risk of W8-B.
+  //
+  // W8-E CLOSES IT, and the expectation inverts accordingly: once the bucket
+  // is private the very same call must fail for a caller without SELECT, and
+  // a success here is a BLOCKING failure, not a documented residual.
   check(
-    `${label} download() on public bucket [RESIDUAL T1, not RLS]`,
+    EXPECT_PUBLIC
+      ? `${label} download() on public bucket [RESIDUAL T1, not RLS]`
+      : `${label} download() on private bucket [T1 CLOSED — success here is a regression]`,
     await probe.download(client, fixture),
-    true,
+    EXPECT_PUBLIC ? true : expected.select,
   );
   check(
     `${label} SELECT signed URL`,
@@ -309,8 +338,10 @@ const main = async () => {
   );
   console.log(`bucket: ${bucketRow}`);
   assert(
-    "bucket attachments is still public (W8-B keeps public read)",
-    bucketRow.startsWith("t|"),
+    EXPECT_PUBLIC
+      ? "bucket attachments is public (pre-W8-E-flip stage)"
+      : "bucket attachments is PRIVATE (W8-E Stage C applied)",
+    bucketRow.startsWith(EXPECT_PUBLIC ? "t|" : "f|"),
   );
   assert(
     "bucket file_size_limit = 52428800",
@@ -370,7 +401,17 @@ const main = async () => {
     await serviceExists(ownKey),
   );
 
-  // --- 3. residual T1: public URL read without login ------------------------
+  // --- 3. T1: known-object read without login -------------------------------
+  //
+  // While the bucket is public this is the ACCEPTED residual of W8-B, and it
+  // is asserted positively so that a silent change of storage-api behaviour
+  // would be noticed. Once W8-E Stage C has flipped the bucket, every one of
+  // these reads must fail instead — same probes, inverted verdict.
+  const t1 = (label) =>
+    EXPECT_PUBLIC
+      ? `RESIDUAL T1 (expected): ${label}`
+      : `T1 CLOSED (W8-E): ${label} must NOT be readable`;
+
   const publicKey = `${prefix}/public-residual.txt`;
   await seed(publicKey, "public residual");
   const { data: publicUrl } = service.storage
@@ -378,28 +419,35 @@ const main = async () => {
     .getPublicUrl(publicKey);
   const publicResponse = await fetch(publicUrl.publicUrl);
   assert(
-    "RESIDUAL T1 (expected): public object URL readable without any credentials",
-    publicResponse.status === 200 &&
-      (await publicResponse.text()) === "public residual",
+    t1("public object URL readable without any credentials"),
+    (publicResponse.status === 200 &&
+      (await publicResponse.text()) === "public residual") === EXPECT_PUBLIC,
   );
   check(
-    "RESIDUAL T1 (expected): anon download() of the same object",
+    t1("anon download() of the same object"),
     await probe.download(anon, publicKey),
-    true,
+    EXPECT_PUBLIC,
   );
-  // The "authenticated" route does not require a login for a public bucket
-  // either (the public anon key suffices): RLS protects LIST/signing/mutations,
-  // not known-object reads.
+  // For a PUBLIC bucket the "authenticated" route does not require a login
+  // either (the public anon key suffices): RLS protects LIST/signing/
+  // mutations, not known-object reads. For a PRIVATE bucket it does.
   const authenticatedRouteResponse = await fetch(
     `${config.url}/storage/v1/object/authenticated/${BUCKET}/${publicKey}`,
     { headers: { apikey: config.anon } },
   );
   assert(
-    "RESIDUAL T1 (expected): /object/authenticated/ readable with only the public anon key (no login)",
-    authenticatedRouteResponse.status === 200 &&
-      (await authenticatedRouteResponse.text()) === "public residual",
+    t1(
+      "/object/authenticated/ readable with only the public anon key (no login)",
+    ),
+    (authenticatedRouteResponse.status === 200 &&
+      (await authenticatedRouteResponse.text()) === "public residual") ===
+      EXPECT_PUBLIC,
   );
-  check("anon LIST of the same prefix (RLS-bound)", await probe.list(anon), false);
+  check(
+    "anon LIST of the same prefix (RLS-bound)",
+    await probe.list(anon),
+    false,
+  );
   check(
     "anon signed URL for the same object (RLS-bound)",
     await probe.signedUrl(anon, publicKey),

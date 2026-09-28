@@ -2,6 +2,8 @@ import { RecordContextProvider } from "ra-core";
 import { render } from "vitest-browser-react";
 
 import { AttachmentField } from "./AttachmentField";
+import { AttachmentSignerProvider } from "../attachments/useAttachmentUrl";
+import { resetAttachmentUrlCache } from "../attachments/attachmentAccess";
 import { StoryWrapper } from "@/test/StoryWrapper";
 
 /**
@@ -71,15 +73,32 @@ describe("AttachmentField never emits an unsafe href", () => {
   );
 
   it.each(UNSAFE)(
-    "does not wrap an image with %s in a clickable anchor",
+    "renders an image with %s as its title, with no anchor and no img",
     async (_label, src) => {
       const screen = await render(<Host record={image(src)} />);
 
-      // the preview is still shown, it just must not be clickable
-      await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+      // W8-E tightened this. Before, a rejected value was still handed to
+      // `<img src>` — harmless (an `<img>` never executes a scheme) but
+      // pointless, and it produced a broken-image box. Now the value is
+      // rejected by the ONE URL authority before it reaches the DOM at all,
+      // and the attachment degrades to its file name so nothing silently
+      // disappears from the UI.
+      await expect.element(screen.getByText("bild.png")).toBeVisible();
       expect(anchors(screen)).toEqual([]);
+      expect(screen.container.querySelector("img")).toBeNull();
     },
   );
+
+  it("still previews inline image content that was never uploaded", async () => {
+    // The cropper produces a `data:image/...` value before the upload runs.
+    // It is renderable but, being a document scheme, never navigable.
+    const screen = await render(
+      <Host record={image("data:image/png;base64,iVBORw0KGgo=")} />,
+    );
+
+    await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+  });
 });
 
 describe("AttachmentField keeps safe attachment links working", () => {
@@ -174,6 +193,78 @@ describe("AttachmentField keeps the in-session file preview clickable", () => {
     const screen = await render(
       <Host
         record={{ rawFile, src: "javascript:alert(1)", title: "angebot.pdf" }}
+      />,
+    );
+
+    await expect.element(screen.getByText("angebot.pdf")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+  });
+});
+
+/**
+ * W8-E — an attachment already stored in the private bucket.
+ *
+ * In the real edit form this is the common case: the note was saved earlier,
+ * so the element carries a `path`. The field must then show the object
+ * through a DERIVED capability, and must ignore whatever `src` happens to be
+ * sitting next to that key.
+ */
+describe("AttachmentField derives access for a stored attachment", () => {
+  const SignedHost = ({
+    record,
+    signer,
+  }: {
+    record: Record<string, unknown>;
+    signer: (key: string) => Promise<string>;
+  }) => (
+    <StoryWrapper>
+      <AttachmentSignerProvider signer={signer}>
+        <RecordContextProvider value={record}>
+          <AttachmentField source="src" title="title" target="_blank" />
+        </RecordContextProvider>
+      </AttachmentSignerProvider>
+      <span>committed</span>
+    </StoryWrapper>
+  );
+
+  beforeEach(() => resetAttachmentUrlCache());
+
+  it("links a stored document through its signed URL, not its stored src", async () => {
+    const screen = await render(
+      <SignedHost
+        record={{ ...doc("https://cdn.test/legacy.pdf"), path: "k2.pdf" }}
+        signer={async (key) => `https://signed.test/${key}?token=abc`}
+      />,
+    );
+
+    await expect
+      .element(screen.getByRole("link", { name: "angebot.pdf" }))
+      .toBeVisible();
+    expect(anchors(screen)).toEqual(["https://signed.test/k2.pdf?token=abc"]);
+  });
+
+  it("ignores a hostile stored src when a storage key is present", async () => {
+    const screen = await render(
+      <SignedHost
+        record={{ ...image("javascript:alert(1)"), path: "k1.png" }}
+        signer={async (key) => `https://signed.test/${key}?token=abc`}
+      />,
+    );
+
+    await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+    expect(screen.container.querySelector("img")?.getAttribute("src")).toBe(
+      "https://signed.test/k1.png?token=abc",
+    );
+    expect(anchors(screen)).toEqual(["https://signed.test/k1.png?token=abc"]);
+  });
+
+  it("shows the file name and no link when access cannot be derived", async () => {
+    const screen = await render(
+      <SignedHost
+        record={{ ...doc("https://cdn.test/legacy.pdf"), path: "k2.pdf" }}
+        signer={async () => {
+          throw new Error("no session");
+        }}
       />,
     );
 

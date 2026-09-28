@@ -205,6 +205,8 @@ Stand seit W8-B (`PRODUCTION VERIFIED` 2026-09-16, Migration `20260915120000_nor
 
 > **Der Bucket ist `public = true` und die W8-B-Policies machen ihn nicht privat.** Wer einen Objektschlüssel kennt, lädt die Datei ohne Konto herunter. Das ist ein bewusst getragenes Restrisiko ([`17`](17-known-issues-and-planned-waves.md) Abschnitt H) und wird in einer eigenen Welle (Umstellung auf einen privaten Bucket) entschieden — nicht nebenbei.
 
+> **W8-E schließt genau dieses Restrisiko — Stand `RC`, nicht Production.** Der Vertrag des privaten Buckets, die abgeleitete Zugriffs-URL und der eigene Branding-Bucket stehen in Abschnitt 6.14. **Bis die Stage-C-Umstellung tatsächlich in Production ausgeführt ist, gilt dieser Abschnitt 6.5 unverändert:** der Bucket ist öffentlich, und die Matrix unten beschreibt den Ist-Zustand. Die W8-B-Policies selbst ändert W8-E **nicht** — sie sind es, die nach der Umstellung die einzige Lesefähigkeit tragen.
+
 **Zugriffsmatrix (Ist-Zustand Production):**
 
 | Aufrufer | Auflisten / signierte URL | Hochladen | Überschreiben (`UPDATE`) | Löschen | Bekannten öffentlichen Schlüssel abrufen |
@@ -544,6 +546,58 @@ Stand seit W-A (`PRODUCTION VERIFIED` 2026-09-22, Migration `20260922120000_nora
 **Vorbestehende Abhängigkeit, von W-A nicht verändert.** Die Work-Identität entsteht über `public.nora_entity_uuid(text, bigint)`. Diese Function hält in Production weiterhin ihre breitere Privilegienlage inklusive `PUBLIC`- und `anon`-`EXECUTE`. Das ist ein **vorbestehender** Punkt der offenen Security-Welle ([`17`](17-known-issues-and-planned-waves.md) A.8/A.10) — W-A hat ihn weder eingeführt noch vergrößert und **schließt ihn nicht**. Die Function ist `IMMUTABLE` und deterministisch; eine daraus berechnete `work_id` ist bekanntlich **kein Autorisierungstoken**.
 
 Operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4 und 5.
+
+### 6.14 Privater Anhang-Bucket und abgeleiteter Zugriff (W8-E)
+
+Stand: **`RC`, nicht Production** (Migration `20260928120000_nora_branding_bucket`). **Neunte Fläche, neunter Contract:** wie Anhänge erreicht werden, wenn der Bucket `attachments` nicht mehr öffentlich ist — und warum Branding davon ausgenommen ist. Solange die Stage-C-Umstellung nicht ausgeführt ist, beschreibt dieser Abschnitt den **Zielzustand**, nicht den Ist-Zustand; Abschnitt 6.5 bleibt bis dahin die Ist-Beschreibung.
+
+> **W8-E ändert den Zugriffsweg, nicht die Autorität.** Keine neue Rolle, kein neuer Grant, keine neue Policy auf `storage.objects` für `attachments`, kein `service_role`-Pfad, kein Broker, keine Änderung an `public.attachments`, an der Warteschlange, am Liveness-Resolver, an der Projektion oder am S5-Lese-Gate. **S6-B1, S6-B2 und S2B bleiben geschlossen.**
+
+**Zwei Bucket-Klassen, bewusst getrennt.** Ein Bucket kann nicht gleichzeitig vertraulich und vor dem Login lesbar sein. Die vier Dateiklassen, die sich `attachments` heute teilen, zerfallen deshalb in zwei Gruppen:
+
+| Klasse | Bucket | Adressierung | Begründung |
+|---|---|---|---|
+| Notiz-/Dokumentanhänge | `attachments` (privat) | `path` → abgeleitete Signed URL | Geschäftsinhalt, vertraulich |
+| Mitarbeiter-/Kontakt-Avatare | `attachments` (privat) | `path` → abgeleitete Signed URL | **Personenbezogene Daten sind kein Branding.** Heute liegt kein einziger Avatar im Bucket (`sales.avatar` = `data:`, `contacts.avatar` = Fremd-URLs); der Upload-Pfad existiert aber und schreibt deshalb in den privaten Bucket |
+| Konfigurations-Logos (hell/dunkel) | `branding` (öffentlich) | öffentliche URL | Werden auf der **Login-Seite** gerendert — dort gibt es keine Sitzung, mit der signiert werden könnte |
+| Kundenlogos | `branding` (öffentlich) | öffentliche URL | Öffentliche Markenzeichen der Kundenfirmen, keine Geschäftsdokumente |
+
+**Die Klasse wird deklariert, nie geraten.** `classifyStorageReference(value, "private" | "branding")` — der Aufrufer sagt, um welches Feld es geht. „Ist diese Datei vertraulich?" ist eine Produktentscheidung über das **Feld**, keine Eigenschaft, die man einer URL ansehen kann. Default ist `private`: ein falsch verdrahteter Aufrufer behandelt vertraulichen Inhalt dann fail-closed als vertraulich, nicht still als öffentlich.
+
+**Der Bucket `branding`:** `public = true` **by design**, `file_size_limit` 5 MiB, MIME-Allowlist aus genau vier Rastertypen (PNG, JPEG, WebP, GIF). **Kein SVG** — ein SVG ist ein aktives Dokument und würde von einem öffentlichen Bucket-Origin ausgeliefert. Kein PDF, kein Office-Format: ein Branding-Bucket ist kein öffentlicher Ablageort für Geschäftsinhalte. Policies analog zu `attachments`: `branding_select_active_user` (`SELECT`, aktiv) und `branding_insert_writer` (`INSERT`, `can_write()`), **keine** `UPDATE`- und **keine** `DELETE`-Policy. Öffentliches Lesen kommt von der Bucket-Zeile, nicht von der Policy — schreiben darf weiterhin nur ein aktiver Büro-/Admin-Account.
+
+**Der Name ist Vertragsbestandteil.** Er darf die Zeichenfolge `attachments` **nicht** enthalten: `nora_private.attachment_url_liveness` (6.8) stuft jede storage-ähnliche URL, die `attachments` enthält, fail-closed als `unknown` ein. Eine umgezogene Branding-URL wäre dann dauerhaft mehrdeutig für den Löschvertrag. `branding` klassifiziert sauber als `none`.
+
+**Persistiert vs. abgeleitet — die Kernregel:**
+
+| | Wert | Lebensdauer |
+|---|---|---|
+| **Identität** | `path` / `storage_key` | dauerhaft, unveränderlich (6.6) |
+| **Zugriff** | Signed URL | **nur Laufzeit**, nie persistiert |
+
+- Eine Signed URL wird **nie** in `contact_notes.attachments` / `deal_notes.attachments`, nie in `public.attachments`, nie in `companies.logo` und nie in der Konfiguration gespeichert. Sie lebt ausschließlich in einem **In-Memory-Cache** des Browsers.
+- Ein Upload in den privaten Bucket persistiert **kein** `src` mehr. Das ist von der S3B-Grammatik (6.11) ausdrücklich gedeckt: `src` darf fehlen, `null` sein oder die kanonische öffentliche URL genau dieses `path` sein. **Es ist daher keine Vertragsänderung an der Datenbank.**
+- **Der Schlüssel schlägt `src`.** Trägt ein Element einen `path`, wird ausschließlich daraus abgeleitet; ein daneben liegendes Alt-`src` ist ab W8-E inerte Legacy-Daten und **niemals** Autorisierungsquelle. Das ist gleichzeitig eine Härtung: ein bösartiges gespeichertes `src` ist bei vorhandenem Schlüssel schlicht unerreichbar.
+- Ein Wert **ohne** Schlüssel durchläuft unverändert `safeHref`. `data:` wird nur als `data:image/` und nur als Vorschauquelle akzeptiert, nie als `href`.
+- Die lokale `blob:`-Ausnahme für eine echte `File`-Instanz aus derselben Sitzung bleibt **eng** und beidseitig geprüft (RC3).
+
+**Degradierte Anhänge erzeugen keine Zugriffsfähigkeit (Decision B).** Für `drift` und `unverified` (6.12) wird **keine** Signed URL abgeleitet — die Wiederherstellungsdarstellung importiert die Zugriffsfunktion nicht einmal. Sie ist seit W8-E **metadaten-only**: Dateiname und Warnhinweis, **kein** `<img>`, **kein** Link. Das frühere „Datei öffnen" über das Alt-`src` entfällt bewusst: nach der Umstellung wäre diese URL tot, und sie wäre ein Umweg um genau das Gate, das den Datensatz als nicht verbürgt erklärt hat. **Anzeigen bleibt keine Verifikation.**
+
+**TTL und Erneuerung.** Ein zentraler Parameter, `ATTACHMENT_SIGNED_URL_TTL_SECONDS = 900` (15 Minuten), an **einer** Stelle — kein TTL-Literal in Komponenten. Gewählt nach Messung gegen die drei Fälle, die ihn bestimmen: Bildanzeige (signiert beim Mount, sofort verwendet), Dokument-Öffnen (`href` entsteht beim Rendern, nicht beim Klick) und lange offene Tabs. Ergänzend:
+
+- **Dedupe:** N Komponenten für dasselbe Objekt erzeugen **eine** Signieranfrage.
+- **Proaktive Erneuerung:** solange eine Komponente montiert ist, wird die Fähigkeit kurz vor Ablauf erneuert. Ohne das trüge ein länger offener Vorgang einen toten Link, und ein `<a>` feuert kein `onError`.
+- **Reaktive Erneuerung:** ein `<img>`, dessen URL nicht mehr auflöst, fordert **einmal** neu an — begrenzt, damit ein endgültig fehlendes Objekt keine Schleife gegen die Storage-API erzeugt.
+- **Fehler werden nie gecacht**, damit ein transienter Netzfehler keinen dauerhaft kaputten Anhang hinterlässt.
+- **Beim Logout** wird der Cache geleert, damit eine im selben Tab nachfolgende Anmeldung keine fremde Fähigkeit weiterverwendet.
+
+> **Ehrliche Grenze — keine Sofort-Rücknahme.** Eine bereits ausgestellte Signed URL bleibt bis zu ihrem Ablauf gültig, und bereits heruntergeladene Bytes sind ohnehin außerhalb jeder Kontrolle. W8-E garantiert: **ein deaktivierter Mitarbeiter erhält über Nora keine _neue_ Fähigkeit** (bewiesen gegen die echte Storage-API), und ein bekannter Objektschlüssel liefert ohne Sitzung **keine** Bytes mehr. Es garantiert **nicht**, dass eine vor der Deaktivierung ausgestellte URL sofort stirbt, und es löscht keine bereits verteilten Kopien.
+
+**PWA/Cache — gemessen, nicht angenommen.** Der generierte Service Worker registriert genau **eine** Route, eine `NavigationRoute` auf `index.html`; es gibt **kein** `runtimeCaching`, keinen `NetworkFirst`/`CacheFirst`/`StaleWhileRevalidate`-Handler und keinen eigenen Cache-API-Zugriff im Anwendungscode. Der Precache-Manifest enthält **null** Supabase-/Storage-URLs. Signierte Antworten landen damit in keinem Service-Worker-Cache. Die gebündelten Standard-Logos (`logos/*.png`) sind precached und funktionieren offline; ein in der Konfiguration **gespeichertes** Logo ist eine Cross-Origin-Laufzeitanfrage und wird nicht precached. Browser- und CDN-Caches außerhalb des Service Workers sind davon unberührt — dazu wird nichts versprochen.
+
+**Release-Reihenfolge — die bewusste Ausnahme.** W8-E weicht von der normalen „DB zuerst"-Reihenfolge ab, weil **altes Runtime + privater Bucket nicht unterstützt** ist: das alte Frontend erreicht Anhänge über öffentliche Objekt-URLs. Deshalb ist die Umstellung der Bucket-Sichtbarkeit **keine Migration**, sondern ein Operator-Schritt (`supabase/maintenance/attachment_privacy/`). Läge sie in einer Migration, erzeugte ein routinemäßiges `db push` vor dem Deployment genau diesen nicht unterstützten Zustand. Die Bucket-Zeile ist Konfiguration, kein Schema — Präzedenz: der S4-Backfill war ebenfalls Operator-Werkzeug. Stages: **A** Branding-Bucket + Umzug der vier Branding-Objekte (auf altem Runtime unterstützt) → **B** W8-E-Runtime bei noch öffentlichem Bucket → **C** Umstellung auf privat. Rollback nach C: **zuerst** den Bucket wieder öffentlich machen, **dann** das Runtime zurückrollen; die umgezogenen Branding-Objekte bleiben, wo sie sind.
+
+Regressionsprobe: `supabase/tests/attachment_privacy_verification.mjs` (Matrix öffentlich → privat → Rollback) und `attachment_storage_policy_verification.mjs`, dessen T1-Erwartung seit W8-E **stufenabhängig** ist (`NORA_ATTACHMENTS_EXPECTED_PUBLIC`): was vor der Umstellung dokumentiertes Restrisiko war, ist danach ein **blockierender** Fehler. Operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4.
 
 ---
 

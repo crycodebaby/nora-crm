@@ -88,6 +88,7 @@ import {
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 import {
   ATTACHMENTS_BUCKET,
+  BRANDING_BUCKET,
   assertStoredAttachment,
   createAttachmentObjectKey,
 } from "../commons/attachments";
@@ -121,7 +122,9 @@ const processCompanyLogo = async (params: any) => {
   const logo = params.data.logo;
 
   if (logo?.rawFile instanceof File) {
-    await uploadToBucket(logo);
+    // A customer logo is a public brand mark, not a business document — it
+    // goes to the deliberately public branding bucket (W8-E Decision A).
+    await uploadToBucket(logo, "branding");
   }
 
   return {
@@ -868,7 +871,9 @@ export type CrmDataProvider = ReturnType<
 const processConfigLogo = async (logo: any): Promise<string> => {
   if (typeof logo === "string") return logo;
   if (logo?.rawFile instanceof File) {
-    await uploadToBucket(logo);
+    // The Nora light/dark logos must render on the login page with no session
+    // at all, so they are public by design (W8-E Decision A).
+    await uploadToBucket(logo, "branding");
     return logo.src;
   }
   return logo?.src ?? "";
@@ -943,7 +948,9 @@ const lifeCycleCallbacks: ResourceCallbacks[] = [
     resource: "sales",
     beforeSave: async (data: Sale, _, __) => {
       if (data.avatar) {
-        await uploadToBucket(data.avatar);
+        // An employee photo is personal data, NOT branding: it stays in the
+        // private bucket and is rendered through the derived-access path.
+        await uploadToBucket(data.avatar, "private");
       }
       return data;
     },
@@ -1057,22 +1064,49 @@ const applyFullTextSearch = (columns: string[]) => (params: GetListParams) => {
   };
 };
 
-const uploadToBucket = async (fi: RAFile) => {
-  if (!fi.src.startsWith("blob:") && !fi.src.startsWith("data:")) {
-    // Sign URL check if path exists in the bucket
-    if (fi.path) {
-      const { error } = await getSupabaseClient()
-        .storage.from(ATTACHMENTS_BUCKET)
-        .createSignedUrl(fi.path, 60);
+/**
+ * W8-E — which bucket a file class belongs to, and therefore how it is
+ * addressed afterwards.
+ *
+ * `private`  the `attachments` bucket. The upload persists the storage KEY and
+ *            deliberately persists NO URL: after W8-E a note attachment is
+ *            reached through a derived signed URL (`useAttachmentUrl`), and a
+ *            persisted URL would be neither the identity nor the authority.
+ *            Leaving `src` unset is explicitly permitted by the S3B reference
+ *            grammar (`src` absent | null | the canonical public URL of this
+ *            exact key), so this changes no database contract.
+ * `branding` the `branding` bucket. These assets are public BY DESIGN and must
+ *            render without a session, so the public URL is persisted exactly
+ *            as before.
+ */
+type UploadTarget = "private" | "branding";
 
-      if (!error) {
-        return fi;
-      }
+const TARGET_BUCKET: Record<UploadTarget, string> = {
+  private: ATTACHMENTS_BUCKET,
+  branding: BRANDING_BUCKET,
+};
+
+const uploadToBucket = async (fi: RAFile, target: UploadTarget = "private") => {
+  const bucket = TARGET_BUCKET[target];
+  const src = typeof fi.src === "string" ? fi.src : null;
+
+  // An element that already carries a storage key is an existing object. It is
+  // re-verified through a short-lived signed URL rather than re-uploaded — a
+  // check that works identically on a public and on a private bucket, because
+  // signing has always been governed by the W8-B `SELECT` policy, not by
+  // bucket publicness.
+  if (fi.path && !src?.startsWith("blob:") && !src?.startsWith("data:")) {
+    const { error } = await getSupabaseClient()
+      .storage.from(bucket)
+      .createSignedUrl(fi.path, 60);
+
+    if (!error) {
+      return fi;
     }
   }
 
-  const dataContent = fi.src
-    ? await fetch(fi.src)
+  const dataContent = src
+    ? await fetch(src)
         .then((res) => {
           if (res.status !== 200) {
             return null;
@@ -1095,7 +1129,7 @@ const uploadToBucket = async (fi: RAFile) => {
   const file = fi.rawFile;
   const filePath = createAttachmentObjectKey(file.name);
   const { error: uploadError } = await getSupabaseClient()
-    .storage.from(ATTACHMENTS_BUCKET)
+    .storage.from(bucket)
     .upload(filePath, dataContent);
 
   if (uploadError) {
@@ -1103,12 +1137,18 @@ const uploadToBucket = async (fi: RAFile) => {
     throw new Error("Failed to upload attachment");
   }
 
-  const { data } = getSupabaseClient()
-    .storage.from(ATTACHMENTS_BUCKET)
-    .getPublicUrl(filePath);
-
   fi.path = filePath;
-  fi.src = data.publicUrl;
+
+  if (target === "branding") {
+    const { data } = getSupabaseClient()
+      .storage.from(bucket)
+      .getPublicUrl(filePath);
+    fi.src = data.publicUrl;
+  } else {
+    // No persisted URL for private content. `undefined` (not `""`) so the key
+    // is simply absent from the JSON the note write sends.
+    fi.src = undefined as unknown as string;
+  }
 
   // save MIME type
   const mimeType = file.type;
