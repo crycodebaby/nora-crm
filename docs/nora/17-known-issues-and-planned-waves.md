@@ -1,8 +1,21 @@
 # 17 – Bekannte offene Punkte und geplante Waves
 
-Stand: 2026-09-26. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
+Stand: 2026-09-28. Übersicht: `16-current-state.md`. Dieses Dokument enthält **nur genuin offene Punkte**: bestätigte Bugs, Restrisiken, geparkte Entscheidungen und geplante Wellen. Erledigte Punkte werden nicht gelöscht, sondern mit ihrem Originalwortlaut ins Release-Archiv verschoben (`releases/2026-08.md` und `releases/2026-09.md`, jeweils Anhang „aus `17-known-issues-…` verschoben"). Bitte Status-Tags nicht ohne erneute Code-/Live-Prüfung ändern.
 
 Status-Legende: `OPEN` (bestätigt, nicht behoben) · `NEEDS RE-VERIFICATION` (gemeldet, im aktuellen Code nicht reproduzierbar) · `PARKED` (bewusst nicht entschieden) · `PLANNED DOMAIN WAVE` · `PLANNED FOLLOW-UP` · `ACCEPTED LIMITATION` (dokumentiert, bewusst nicht behoben).
+
+## Absichtliche Zustände — hier bewusst *kein* Eintrag
+
+Die folgenden Zustände sind gewollt oder erwartet und gehören **nicht** in dieses Dokument. Sie werden regelmäßig
+fehlgelesen; wer einen davon als Bug aufnimmt, erzeugt Arbeit gegen einen Produktentscheid. Zuständig ist jeweils der
+Ist-Zustand in [`16`](16-current-state.md), begründet in [`06`](06-decision-log.md):
+
+- **`ora CRM` als Anwendungstitel** — das Logo liefert das `N`. Kein Tippfehler ([`16`](16-current-state.md) Abschnitt „Anwendungstitel `ora CRM`").
+- **Ansprechpartner ohne Eintrag in der Hauptnavigation** — bewusste Vereinfachung, die Ressource bleibt vollständig erreichbar.
+- **Kein Posteingang / keine Inbox** — absichtlich aus RC3 entfernt, nicht unfertig.
+- **`mcp` und `postmark` nicht deployt** — Repository-Code ist kein Deployment.
+- **Bestandsvorgänge mit `NULL`-Einsatzadresse** — es gab absichtlich keinen Backfill.
+- **CSP als `Report-Only`** — gewollter aktueller Zustand.
 
 ---
 
@@ -174,6 +187,7 @@ Der technische PWA-/Update-Contract (Lifecycle, Precache, Offline, Installabilit
 - **Dark-Mode der öffentlichen Zugangs-Shell** — Tokens vorbereitet (`--nora-access-*`), kein `.dark`-Block. `PLANNED FOLLOW-UP`.
 - **Echter Screenreader-Lauf und echte Reduced-Motion-Browsereinstellung** für Onboarding (V1B) und PWA-Fläche — nur per injizierter Stylesheet-Regel bzw. Code-Review gedeckt. `NEEDS RE-VERIFICATION`.
 - **Pflicht-Stern an Labels** auf der Mitarbeiterfläche ist react-admin-Standard — Folgeentscheidung, falls unerwünscht (projektweit). `PARKED`.
+- **Pluralisierung im Audit-Verlauf greift nicht — beide Trennvarianten erscheinen im Text** — `OPEN (LOW)`, verifiziert am Repository-Stand 2026-09-28, **vorbestehend und nicht release-verursacht**. Polyglot wählt die Plural-Variante hinter `||||` nur bei der Interpolationsvariable `smart_count`; übergeben wird an zwei Stellen aber `count`. Ausgabe deshalb wörtlich `4 Änderung anzeigen |||| 4 Änderungen anzeigen`. Betroffen sind **zwei** Aufrufstellen, nicht eine: `src/components/atomic-crm/audit/EntityAuditHistory.tsx:192` (`crm.audit.show_changes`) und `src/components/atomic-crm/audit/AuditPage.tsx:493` (`crm.audit.change_count`). **Abgrenzung:** beide Zeilen stehen wortgleich schon im Vor-Release-Stand `e18905c5`, und der Diff `e18905c5..df13fda8` berührt `src/components/atomic-crm/audit/` **gar nicht** — RC3 hat den Defekt weder verursacht noch verschlimmert. **Abhilfe** (eigener kleiner Slice, nicht beauftragt): an beiden Stellen `smart_count` übergeben; die Übersetzungsstrings selbst sind korrekt und bleiben unangetastet.
 
 ## G. Kunden, Kontakte, Vorgänge, Aufgaben
 
@@ -379,3 +393,32 @@ macht ihn nicht zu einer Nora-Route; englische Tiefpfade wie `/contacts/…` sin
 Verwandt, aber eigener Punkt: die fehlende Catch-All-Behandlung unbekannter Pfade (Abschnitt **G.5**).
 **Abhilfe** (eigener kleiner Slice, nicht beauftragt): `base` bewerten oder den Direkteinstieg bewusst auf den
 Anwendungsstamm umlenken — zusammen mit der Routing-Härtung aus G.5.
+
+### I.9 `main` ist ungeschützt und verlangt keine Status-Checks
+
+**Status: `OPEN (LOW)` — Repository-Governance-Schuld**, read-only verifiziert 2026-09-28 (`branches/main/protection`
+antwortet `404 Branch not protected`); **nicht** von RC3 verursacht.
+
+`main` trägt keine Branch Protection: kein erforderlicher Review, keine erforderlichen Status-Checks, kein Schutz vor
+Force-Push. Dass RC3 vollständig über PR #2 mit 7/7 grüner CI integriert wurde, war **Disziplin, nicht Durchsetzung** —
+technisch hätte ein direkter Push dieselbe Laufzeit erzeugt, und jeder Push auf `main` löst automatisch ein
+Production-Deployment aus ([`16`](16-current-state.md) Abschnitt „Was ist live?"). Das ist der eigentliche Grund, warum
+der Punkt hier steht.
+
+**Abhilfe** (eigene Governance-Aufgabe nach dem Release, nicht beauftragt und bewusst **nicht** im Rahmen des
+RC3-Abschlusses ausgeführt): erforderliche Status-Checks auf den bestehenden „Check"-Workflow setzen und über
+Force-Push-Schutz entscheiden. **Branch Protection wird nicht nebenbei im Rahmen einer Docs- oder Release-Schließung
+verändert** — sie ändert, wer künftig ausliefern darf.
+
+### I.10 Frischer RC-Checkout braucht den Signing-Key-Bootstrap
+
+**Status: `PLANNED FOLLOW-UP` (LOW, Wartung)**, verifiziert 2026-09-28.
+
+`supabase/signing_keys.json` ist **absichtlich nicht versioniert** (`.gitignore`) und wird pro Maschine erzeugt. Ein
+frischer Klon oder ein neuer Worktree hat die Datei deshalb nicht, und Supabase-CLI-Kommandos scheitern, bevor die
+eigentliche Aufgabe beginnt. Vorhandene Abhilfe: `npm run signing-keys:ensure` vor dem ersten CLI-Kommando
+(Runbook: [`21`](21-agent-runbooks.md) Sektion 1).
+
+**Der Schlüssel gehört nicht ins Git** — das ist keine offene Frage, sondern die Entscheidung. Offen ist nur die
+**Ergonomie**: den Bootstrap in die Setup-Dokumentation bzw. in ein `postinstall`- oder Preflight-Schritt ziehen, damit
+niemand ihn erst nach einem Fehlschlag findet. Eigene kleine Wartungsänderung, nicht beauftragt.

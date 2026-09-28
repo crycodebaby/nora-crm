@@ -1,6 +1,6 @@
 # Nora Documentation
 
-Stand: 2026-09-22. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
+Stand: 2026-09-28. Dies ist der **einzige kanonische Router** der Nora-Dokumentation: welches Dokument wofür zuständig ist, wann es geladen wird und in welcher Reihenfolge ein neuer Agent liest. Er ist **keine** Architekturbeschreibung, kein Zustandsbericht, kein Decision Log und keine Release-Historie — dafür gibt es die verlinkten Dokumente.
 
 Kein anderes Dokument führt einen konkurrierenden Dokumentenkatalog. `AGENTS.md` nennt nur den Always-Kontext und verweist hierher; `16-current-state.md` beschreibt den Zustand und verweist hierher.
 

@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-21
+Stand: 2026-09-28
 
 ## Wozu dieses Dokument
 
@@ -27,9 +27,40 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 
 ---
 
-## In Vorbereitung — neue Oberfläche und Einsatzadressen
+## 2026-09-28 — Neue Oberfläche, eigene Einsatzadresse am Vorgang
 
-Größere Navigationsflächen und eine mobile Kundenliste. Vorgänge zeigen Kunde und eigenen Einsatzort; Straße, Ort, Etage und Klingelschild lassen sich unabhängig von der Kundenanschrift speichern. Eigene Eingaben bleiben bei Kundenwechsel erhalten; Adressänderungen werden im bestehenden Verlauf erfasst. Das bestehende Hotboard bleibt erhalten. Wenn eine Startseiten-Abfrage scheitert, zeigt Nora den Fehler im betroffenen Bereich mit erneutem Ladeversuch; andere Bereiche bleiben sichtbar. Noch nicht veröffentlicht.
+**Was ändert sich für Sie:** Nora hat eine **übersichtlichere Hauptnavigation**. Am Rechner führen Sie jetzt drei
+Ziele: Startseite, Kunden und Vorgänge. Auf dem Smartphone finden Sie unten Suche, Start, Kunden, Erstellen,
+Aufgaben und Einstellungen.
+
+**Ansprechpartner sind weiterhin vollständig vorhanden** — Sie erreichen sie über den Kunden, über den Vorgang und
+über die Suche. Sie haben nur keinen eigenen Eintrag mehr in der Hauptnavigation. Das ist eine bewusste
+Vereinfachung, kein Verlust: es sind dieselben Daten an denselben Stellen, nur ohne den zusätzlichen Menüpunkt.
+
+**Jeder Vorgang hat jetzt seinen eigenen Einsatzort.** Straße, Ort, **Etage** und **Klingelschild** speichern Sie am
+Vorgang, unabhängig von der Anschrift des Kunden — praktisch, wenn der Auftraggeber woanders sitzt als die Wohnung
+oder das Objekt, um das es geht. Beim Anlegen schlägt Nora Straße und Ort des Kunden vor; sobald Sie selbst etwas
+eintragen oder bewusst löschen, macht Nora keine weiteren Vorschläge mehr und **überschreibt Ihre Eingaben nie**.
+Etage und Klingelschild füllt Nora niemals von selbst. Ändert sich später die Anschrift des Kunden, bleiben bereits
+gespeicherte Vorgänge unverändert — der Einsatzort eines laufenden Vorgangs verschiebt sich also nicht hinter Ihrem
+Rücken. Adressänderungen erscheinen im bestehenden Änderungsverlauf.
+
+**Bestehende Vorgänge ohne Einsatzort bleiben genau so gültig wie bisher.** Die Felder sind neu und bleiben leer, bis
+jemand sie ausfüllt; es wurde nichts automatisch nachgetragen. Ein leerer Einsatzort ist kein Fehler.
+
+**Die Startseite ist überarbeitet, das Hotboard bleibt.** Ihre gewohnte operative Übersicht ist unverändert die
+Startseite. Neu ist: scheitert das Laden eines einzelnen Bereichs, zeigt Nora den Fehler nur dort — mit einem
+erneuten Ladeversuch — und die übrigen Bereiche bleiben sichtbar und benutzbar. Auf dem Smartphone gibt es außerdem
+eine Kundenliste und eine überarbeitete Kopfzeile.
+
+**Technischer Hinweis:** Die Änderung enthält außerdem eine Reihe nicht sichtbarer Sicherheitsverbesserungen,
+darunter einen Wächter für die Registrierung. Ein **Posteingang ist bewusst nicht Teil dieser Änderung** und war
+nicht versehentlich ausgelassen — eine solche Fläche braucht eine eigene Vorbereitung. Details:
+`releases/2026-09.md` „Nora Redesign + Security Closure RC3".
+
+**Hinweis zur Aktualisierung:** Nora ist eine App, die sich im Hintergrund aktualisiert. Wenn Nora einen Hinweis
+„Jetzt aktualisieren" zeigt, klicken Sie ihn bitte an — erst danach läuft die neue Fassung. Ein einfaches Neuladen
+der Seite genügt dafür nicht immer.
 
 ## 2026-09-21 — Anhänge: Nora prüft jetzt, ob die Dateiangaben einer Notiz stimmen
 
