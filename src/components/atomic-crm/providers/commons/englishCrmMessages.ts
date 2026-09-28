@@ -316,8 +316,6 @@ export const englishCrmMessages = {
         client_hint:
           "The customer this work is for, the people involved and who is responsible at Nora.",
         site: "Site",
-        site_hint:
-          "On create, the customer address is proposed until you change something here.",
         planning: "Planning and follow-up",
         description: "Description",
         description_hint:
@@ -325,6 +323,13 @@ export const englishCrmMessages = {
       },
       roles: {
         client: "Client",
+      },
+      attention: {
+        overdue_title: "Customer contact overdue",
+        overdue_since:
+          "%{smart_count} day overdue (due %{date}) |||| %{smart_count} days overdue (due %{date})",
+        today_title: "Contact customer today",
+        today_meta: "due %{date}",
       },
       site: {
         title: "Site",
@@ -436,8 +441,8 @@ export const englishCrmMessages = {
       added: "Note added",
       inputs: {
         add_note: "Add a note",
-        options_hint: "(attach files, or change details)",
         show_options: "Show options",
+        hide_options: "Hide options",
       },
       actions: {
         attach_document: "Attach document",
@@ -490,6 +495,7 @@ export const englishCrmMessages = {
         due_date: "Due date",
         type: "Type",
         contact_id: "Contact",
+        sales_id: "Responsible",
         due_short: "due",
       },
       action: {
@@ -716,6 +722,8 @@ export const englishCrmMessages = {
     },
     longtext: {
       show_more: "Show full text",
+      show_more_lines:
+        "Show full text (%{smart_count} line) |||| Show full text (%{smart_count} lines)",
       show_less: "Show less",
     },
     audit: {

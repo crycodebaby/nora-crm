@@ -15,9 +15,9 @@ import type { Deal, Task as TaskRecord } from "../types";
  * Tasks that belong to this Vorgang, i.e. tasks of its linked contacts
  * (tasks carry no `deal_id` — see 01-domain-model).
  *
- * One primary action: "Aufgabe hinzufügen". The former per-type quick
- * buttons opened the very same dialog with the type preselected, which the
- * dialog's own type field already offers — four buttons for one action.
+ * One primary action: "Aufgabe hinzufügen". Rows are a dense grid — type,
+ * text, due, responsible, actions — so the office can scan the section
+ * without reading it; open tasks first, recently completed ones last.
  */
 export const DealTasksSection = () => {
   const translate = useTranslate();
@@ -35,19 +35,24 @@ export const DealTasksSection = () => {
     { enabled: contactIds.length > 0 },
   );
 
-  const openTasks =
+  const visibleTasks =
     tasks?.filter(
       (task) =>
         !isDone({ ...task, done_date: task.done_date ?? null }) ||
         isRecentlyDone({ ...task, done_date: task.done_date ?? null }),
     ) ?? [];
-
-  const openCount = openTasks.filter((task) => !task.done_date).length;
+  // Open tasks by due date first, recently completed ones after them.
+  const orderedTasks = [
+    ...visibleTasks.filter((task) => !task.done_date),
+    ...visibleTasks.filter((task) => task.done_date),
+  ];
+  const openCount = visibleTasks.filter((task) => !task.done_date).length;
 
   return (
     <NoraSectionCard
       title={translate("resources.deals.tasks.title")}
       count={contactIds.length && !isPending ? openCount : null}
+      dense
       actions={
         primaryContactId != null ? (
           <AddTask display="primary" contactId={primaryContactId} />
@@ -58,29 +63,44 @@ export const DealTasksSection = () => {
         <p className="nora-t-meta">
           {translate("resources.deals.tasks.no_contact")}
         </p>
-      ) : isPending ? null : !openTasks.length ? (
+      ) : isPending ? null : !orderedTasks.length ? (
         <p className="nora-t-meta">
           {translate("resources.deals.tasks.empty")}
         </p>
       ) : (
-        <DealTaskList tasks={openTasks} contactIds={contactIds} />
+        <DealTaskGrid tasks={orderedTasks} contactIds={contactIds} />
       )}
     </NoraSectionCard>
   );
 };
 
-const DealTaskList = ({
+const DealTaskGrid = ({
   tasks,
   contactIds,
 }: {
   tasks: TaskRecord[];
   contactIds: Identifier[];
-}) => (
-  <ul className="nora-task-list" aria-label={undefined}>
-    {tasks.map((task) => (
-      <li key={task.id} className="list-none">
-        <Task task={task} showContact={contactIds.length > 1} showHolder />
-      </li>
-    ))}
-  </ul>
-);
+}) => {
+  const translate = useTranslate();
+  return (
+    <div className="nora-task-grid" role="table">
+      <div className="nora-task-grid-head" role="row" aria-hidden>
+        <span />
+        <span>{translate("resources.tasks.fields.type")}</span>
+        <span>{translate("resources.tasks.fields.text")}</span>
+        <span>{translate("resources.tasks.fields.due_date")}</span>
+        <span>{translate("resources.tasks.fields.sales_id")}</span>
+        <span />
+      </div>
+      {tasks.map((task) => (
+        <Task
+          key={task.id}
+          task={task}
+          showContact={contactIds.length > 1}
+          showHolder
+          variant="row"
+        />
+      ))}
+    </div>
+  );
+};

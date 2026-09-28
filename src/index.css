@@ -3952,3 +3952,437 @@ input[type="time"] {
     background: var(--background);
   }
 }
+
+/* ------------------------------------------------------------------
+   Alpha UI 1 — Product Feedback Pass A
+   Dense task grid, compact attention strip, long-text paragraphs,
+   note composer, Nora scrollbars. Layout-critical values are plain
+   declarations (browser tests compile without Tailwind).
+   ------------------------------------------------------------------ */
+@layer utilities {
+  /* Task grid (row variant): check · type · text · due · responsible · menu */
+  .nora-task-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nora-task-grid-head {
+    display: none;
+  }
+
+  .nora-task-row[data-variant="row"] {
+    display: grid;
+    grid-template-columns: var(--nora-touch-min) minmax(0, 1fr) var(
+        --nora-touch-min
+      );
+    align-items: start;
+    column-gap: 0.5rem;
+    padding-block: 0.375rem;
+    border-bottom: 1px solid var(--nora-hairline);
+  }
+
+  .nora-task-row[data-variant="row"]:last-child {
+    border-bottom: 0;
+  }
+
+  .nora-task-row[data-variant="row"]:hover {
+    background: color-mix(in oklab, var(--muted) 45%, transparent);
+    box-shadow: 0 0 0 0.5rem color-mix(in oklab, var(--muted) 45%, transparent);
+    border-radius: 0.375rem;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-check {
+    margin: 0;
+    min-height: var(--nora-touch-min);
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.125rem 0.75rem;
+    padding-top: 0.25rem;
+    min-width: 0;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-type-cell {
+    display: flex;
+    align-items: center;
+    min-height: 1.5rem;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-type {
+    margin-right: 0;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-text {
+    font-size: 14.5px;
+    line-height: 1.35;
+    padding-block: 0.125rem;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.125rem 0.5rem;
+    font-size: 12.5px;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-menu {
+    margin: 0;
+  }
+
+  .nora-task-row[data-variant="row"] .nora-task-due {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .nora-task-row[data-variant="row"][data-due="overdue"] .nora-task-due,
+  .nora-task-row[data-variant="row"][data-due="today"] .nora-task-due {
+    font-weight: 600;
+  }
+
+  .nora-task-row[data-variant="row"][data-due="overdue"] .nora-task-due {
+    color: var(--nora-accent-text);
+  }
+
+  .nora-task-row[data-variant="row"][data-done="true"] .nora-task-due,
+  .nora-task-row[data-variant="row"][data-done="true"] .nora-task-type {
+    opacity: 0.7;
+  }
+
+  /* From 48 rem the row becomes a real table-like grid with a head line. */
+  @media (min-width: 48rem) {
+    .nora-task-grid-head {
+      display: grid;
+      grid-template-columns:
+        var(--nora-touch-min) 7.5rem minmax(0, 1fr) 9.5rem 8.5rem
+        var(--nora-touch-min);
+      column-gap: 0.5rem;
+      padding-bottom: 0.375rem;
+      border-bottom: 1px solid var(--nora-divider);
+      font-size: 11.5px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--nora-text-muted);
+    }
+
+    .nora-task-row[data-variant="row"] {
+      grid-template-columns: var(--nora-touch-min) minmax(0, 1fr) var(
+          --nora-touch-min
+        );
+      align-items: center;
+      padding-block: 0.25rem;
+    }
+
+    .nora-task-row[data-variant="row"] .nora-task-body {
+      grid-template-columns: 7.5rem minmax(0, 1fr) 9.5rem 8.5rem;
+      column-gap: 0.5rem;
+      align-items: center;
+      padding-top: 0;
+      min-height: 2.5rem;
+    }
+
+    .nora-task-row[data-variant="row"] .nora-task-meta {
+      display: contents;
+    }
+
+    .nora-task-row[data-variant="row"] .nora-task-due-label,
+    .nora-task-row[data-variant="row"] .nora-task-sep {
+      display: none;
+    }
+
+    .nora-task-row[data-variant="row"] .nora-task-due,
+    .nora-task-row[data-variant="row"] .nora-task-holder {
+      font-size: 13px;
+      line-height: 1.3;
+      color: var(--nora-text-muted);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nora-task-row[data-variant="row"] .nora-task-contact {
+      grid-column: 2 / -1;
+      font-size: 12.5px;
+      color: var(--nora-text-muted);
+    }
+  }
+
+  /* Attention strip: one compact row instead of a full-width banner. */
+  .nora-attention {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--nora-accent-border);
+    border-left-width: 4px;
+    border-left-color: var(--nora-accent);
+    background: var(--nora-accent-soft);
+    color: var(--foreground);
+  }
+
+  .nora-attention[data-tone="today"] {
+    border-left-color: var(--nora-accent);
+    background: color-mix(in oklab, var(--nora-accent) 6%, var(--card));
+  }
+
+  .nora-attention-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+    color: var(--nora-accent);
+  }
+
+  .nora-attention-body {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.125rem 0.625rem;
+  }
+
+  .nora-attention-title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .nora-attention[data-tone="overdue"] .nora-attention-title {
+    color: var(--nora-accent-text);
+  }
+
+  .nora-attention-meta {
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--nora-text-secondary);
+  }
+
+  /* Long text: paragraph rhythm and German hyphenation. */
+  .nora-longtext {
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    font-size: 15.5px;
+  }
+
+  .nora-longtext-block {
+    margin: 0;
+    white-space: pre-line;
+  }
+
+  .nora-longtext-block + .nora-longtext-block {
+    margin-top: 0.875em;
+  }
+
+  .nora-longtext[data-collapsed="true"] {
+    -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent);
+    mask-image: linear-gradient(to bottom, black 70%, transparent);
+  }
+
+  /* Note composer: one bounded surface, body first, options and actions
+     as a footer row, attachments only on request. */
+  .nora-note-composer {
+    border: 1px solid var(--nora-divider);
+    border-radius: 0.75rem;
+    background: var(--card);
+    transition: border-color var(--nora-motion-fast) var(--nora-motion-ease);
+  }
+
+  .nora-note-composer:focus-within {
+    border-color: var(--nora-accent-border);
+    box-shadow: 0 0 0 3px var(--nora-accent-ring);
+  }
+
+  .nora-note-composer textarea {
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+    padding: 0.75rem 0.875rem;
+    font-size: 15px;
+    line-height: var(--nora-line-readable);
+    min-height: 3.25rem;
+    resize: vertical;
+  }
+
+  .nora-note-composer textarea:focus-visible {
+    outline: none;
+    box-shadow: none;
+    border-color: transparent;
+  }
+
+  .nora-note-composer-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem 0.5rem 0.75rem;
+    border-top: 1px solid var(--nora-hairline);
+  }
+
+  .nora-note-composer-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .nora-note-composer-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.25rem;
+    padding: 0 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--nora-text-secondary);
+  }
+
+  .nora-note-composer-tool:hover {
+    background: color-mix(in oklab, var(--muted) 70%, transparent);
+    color: var(--foreground);
+  }
+
+  .nora-note-composer-tool[aria-expanded="true"] {
+    background: var(--nora-accent-soft);
+    color: var(--nora-accent-text);
+  }
+
+  .nora-note-composer-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    border-top: 1px solid var(--nora-hairline);
+    background: color-mix(in oklab, var(--muted) 35%, transparent);
+  }
+
+  .nora-note-composer-options [data-slot="form-label"] {
+    font-size: 12.5px;
+  }
+
+  .nora-note-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nora-note {
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--nora-hairline);
+  }
+
+  .nora-note:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .nora-note-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.25rem;
+  }
+
+  .nora-note-meta {
+    min-width: 0;
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.35;
+    color: var(--nora-text-muted);
+  }
+
+  .nora-note-actions {
+    display: inline-flex;
+    gap: 0.125rem;
+    opacity: 0.55;
+  }
+
+  .nora-note:hover .nora-note-actions,
+  .nora-note:focus-within .nora-note-actions {
+    opacity: 1;
+  }
+
+  .nora-note-body {
+    margin-top: 0.25rem;
+    font-size: 15px;
+    line-height: var(--nora-line-readable);
+    max-width: var(--nora-measure-prose);
+  }
+
+  /* Nora scrollbars for scrollable dialog/detail surfaces: wider, higher
+     contrast, hover feedback; native behaviour untouched. */
+  .nora-detail-scroll,
+  .nora-deal-form-dialog,
+  .nora-dialog-scroll,
+  [data-slot="dialog-content"],
+  [data-slot="sheet-content"] {
+    scrollbar-width: auto;
+    scrollbar-gutter: stable;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 32%, transparent)
+      color-mix(in oklab, var(--muted) 80%, transparent);
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar,
+  .nora-deal-form-dialog::-webkit-scrollbar,
+  .nora-dialog-scroll::-webkit-scrollbar,
+  [data-slot="dialog-content"]::-webkit-scrollbar,
+  [data-slot="sheet-content"]::-webkit-scrollbar {
+    width: 16px;
+    height: 16px;
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-track,
+  .nora-deal-form-dialog::-webkit-scrollbar-track,
+  .nora-dialog-scroll::-webkit-scrollbar-track,
+  [data-slot="dialog-content"]::-webkit-scrollbar-track,
+  [data-slot="sheet-content"]::-webkit-scrollbar-track {
+    background: color-mix(in oklab, var(--muted) 80%, transparent);
+    border-radius: 9999px;
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-thumb,
+  .nora-deal-form-dialog::-webkit-scrollbar-thumb,
+  .nora-dialog-scroll::-webkit-scrollbar-thumb,
+  [data-slot="dialog-content"]::-webkit-scrollbar-thumb,
+  [data-slot="sheet-content"]::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 32%, transparent);
+    border-radius: 9999px;
+    border: 4px solid transparent;
+    background-clip: padding-box;
+    min-height: 3rem;
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-thumb:hover,
+  .nora-deal-form-dialog::-webkit-scrollbar-thumb:hover,
+  .nora-dialog-scroll::-webkit-scrollbar-thumb:hover,
+  [data-slot="dialog-content"]::-webkit-scrollbar-thumb:hover,
+  [data-slot="sheet-content"]::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 50%, transparent);
+  }
+
+  .nora-detail-scroll::-webkit-scrollbar-thumb:active,
+  .nora-deal-form-dialog::-webkit-scrollbar-thumb:active,
+  .nora-dialog-scroll::-webkit-scrollbar-thumb:active,
+  [data-slot="dialog-content"]::-webkit-scrollbar-thumb:active,
+  [data-slot="sheet-content"]::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(
+      in oklab,
+      var(--nora-accent) 60%,
+      var(--foreground)
+    );
+  }
+
+  @media (pointer: coarse) {
+    .nora-detail-scroll::-webkit-scrollbar,
+    .nora-deal-form-dialog::-webkit-scrollbar,
+    .nora-dialog-scroll::-webkit-scrollbar,
+    [data-slot="dialog-content"]::-webkit-scrollbar,
+    [data-slot="sheet-content"]::-webkit-scrollbar {
+      width: 10px;
+    }
+  }
+}

@@ -20,8 +20,7 @@ import { NoteCreate } from "../notes/NoteCreate";
 import { NotesIterator } from "../notes/NotesIterator";
 import type { Deal } from "../types";
 import { NoraSectionCard } from "../misc/NoraSectionCard";
-import { DealFollowUpBadge } from "./DealFollowUpBadge";
-import { DealProductionChecklistSection } from "../checklists/DealProductionChecklistSection";
+import { DealAttentionStrip } from "./DealAttentionStrip";
 import { DealTasksSection } from "./DealTasksSection";
 import { EntityAuditHistory } from "../audit/EntityAuditHistory";
 import { useDialogFocusReturn } from "../misc/useNoraDirtyDialog";
@@ -112,10 +111,9 @@ const DealShowContent = () => {
         {record.archived_at ? <DealArchivedBanner /> : null}
 
         {isAlert ? (
-          <DealFollowUpBadge
+          <DealAttentionStrip
             dateString={record.expected_closing_date}
-            variant="alert"
-            showDate
+            responsible={facts.salesName !== "—" ? facts.salesName : null}
           />
         ) : null}
 
@@ -128,8 +126,6 @@ const DealShowContent = () => {
         <DealDescriptionSection deal={record} />
 
         <DealTasksSection />
-
-        <DealProductionChecklistSection />
 
         <NoraSectionCard
           title={translate("resources.notes.name", { smart_count: 2 })}

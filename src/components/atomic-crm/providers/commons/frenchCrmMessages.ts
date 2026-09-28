@@ -325,8 +325,6 @@ export const frenchCrmMessages = {
         client_hint:
           "Le client pour lequel on travaille, les contacts impliqués et le responsable chez Nora.",
         site: "Lieu d'intervention",
-        site_hint:
-          "À la création, l'adresse du client est proposée tant que vous ne modifiez rien ici.",
         planning: "Planification et relance",
         description: "Description",
         description_hint:
@@ -334,6 +332,13 @@ export const frenchCrmMessages = {
       },
       roles: {
         client: "Donneur d'ordre",
+      },
+      attention: {
+        overdue_title: "Contact client en retard",
+        overdue_since:
+          "depuis %{smart_count} jour (prévu le %{date}) |||| depuis %{smart_count} jours (prévu le %{date})",
+        today_title: "Contacter le client aujourd'hui",
+        today_meta: "prévu le %{date}",
       },
       site: {
         title: "Lieu d'intervention",
@@ -446,8 +451,8 @@ export const frenchCrmMessages = {
       added: "Note ajoutée",
       inputs: {
         add_note: "Ajouter une note",
-        options_hint: "(joindre des fichiers ou modifier les détails)",
         show_options: "Afficher les options",
+        hide_options: "Masquer les options",
       },
       actions: {
         attach_document: "Joindre un document",
@@ -504,6 +509,7 @@ export const frenchCrmMessages = {
         due_date: "Date d'échéance",
         type: "Type",
         contact_id: "Contact",
+        sales_id: "Responsable",
         due_short: "échéance",
       },
       action: {
@@ -730,6 +736,8 @@ export const frenchCrmMessages = {
     },
     longtext: {
       show_more: "Afficher tout le texte",
+      show_more_lines:
+        "Afficher tout le texte (%{smart_count} ligne) |||| Afficher tout le texte (%{smart_count} lignes)",
       show_less: "Afficher moins",
     },
     audit: {

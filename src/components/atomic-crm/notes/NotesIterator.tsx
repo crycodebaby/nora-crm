@@ -1,6 +1,5 @@
 import { useListContext } from "ra-core";
 import { Fragment } from "react";
-import { Separator } from "@/components/ui/separator";
 
 import { Note } from "./Note";
 import { NoteCreate } from "./NoteCreate";
@@ -18,10 +17,10 @@ export const NotesIterator = ({
   if (isPending || error) return null;
 
   return (
-    <div className="mt-4">
+    <div>
       <NoteCreate reference={reference} showStatus={showStatus} />
       {data.length > 0 && (
-        <div className="mt-4 space-y-4">
+        <div className="nora-note-list mt-4">
           {data.map((note, index) => (
             <Fragment key={note.id}>
               <Note
@@ -29,7 +28,6 @@ export const NotesIterator = ({
                 isLast={index === data.length - 1}
                 showStatus={showStatus}
               />
-              {index < data.length - 1 && <Separator />}
             </Fragment>
           ))}
         </div>

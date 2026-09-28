@@ -12,7 +12,7 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 
 | Bereich | Entscheidung |
 |---|---|
-| Design / UX | [Alpha UI 1: Akzentrollen, eine Aufgaben-Aktion, Verlauf zugeklappt](#2026-09-28--alpha-ui-1-akzentrollen-statt-einer-orange-eine-aufgaben-aktion-verlauf-zugeklappt-und-erst-auf-anfrage-geladen) |
+| Design / UX | [Alpha UI 1 Pass A: Checkliste raus, Aufgaben-Raster, Alarm-Zeile](#2026-09-28--alpha-ui-1-pass-a-produktionsfreigabe-checkliste-verlässt-die-vorgangsakte-aufgaben-werden-ein-raster-der-alarm-eine-zeile) · [Alpha UI 1: Akzentrollen, eine Aufgaben-Aktion, Verlauf zugeklappt](#2026-09-28--alpha-ui-1-akzentrollen-statt-einer-orange-eine-aufgaben-aktion-verlauf-zugeklappt-und-erst-auf-anfrage-geladen) |
 | Navigation / Informationsarchitektur | [RC3: drei primäre Ziele, kein Posteingang, `ora CRM` beabsichtigt](#2026-09-28--rc3-die-primäre-navigation-wird-auf-drei-ziele-verengt-der-posteingang-bewusst-nicht-gebaut-und-ora-crm-ist-der-richtige-titel) |
 | Vorgang / Einsatzort | [Eigenständige Einsatzadresse](#2026-09-25--eigenständige-einsatzadresse-am-vorgang) |
 | Mitarbeiter-Lifecycle | [W6-B Kontrollierter Hard Delete](#2026-09-07--user-lifecycle-w6-b-kontrollierter-hard-delete-benutzerkonto-endgültig-löschen) · [W6-A Session-Autorisierung fail-closed](#2026-09-06--user-lifecycle-w6-a-session-autorisierung-fail-closed-und-owner-gebunden) · [W5 Offboarding & Sitzungen](#2026-09-06--user-lifecycle-w5-kontrolliertes-offboarding-session-revokation-abhängigkeits-preview) · [W4 Anmeldeadresse](#2026-09-06--user-lifecycle-w4-kontrollierte-änderung-der-anmeldeadresse-login-identität) · [W3 Audit-Actor](#2026-09-05--user-lifecycle-w3-der-echte-administrator-steht-im-audit-der-mitarbeiter-hat-eine-stabile-audit-identität) · [W2 Referenzintegrität](#2026-09-05--user-lifecycle-w2-referenzintegrität-und-historische-identität) · [W1 Executor](#2026-09-05--user-lifecycle-w1-ein-privilegierter-executor-selbst-letzter-admin-schutz-zugangskonsistenz) · [V1B Präsentation](#2026-09-04--employee-onboarding--access-v1b-präsentation-über-dem-eingefrorenen-v1a-contract) · [V1A Zugangsstatus](#2026-09-04--employee-onboarding--access-v1a-zugangsstatus-wird-abgeleitet-nicht-gespeichert) · [Mitarbeiterzugang einladungsbasiert](#2026-07-23--mitarbeiterzugang-öffentliches-redesign-und-einladung) |
@@ -30,6 +30,20 @@ Aktueller Zustand: `16-current-state.md`. Lifecycle-Architektur: `19-user-lifecy
 Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabelle „Nur archivierte Einträge" am Ende.
 
 ---
+
+## 2026-09-28 – Alpha UI 1 Pass A: Produktionsfreigabe-Checkliste verlässt die Vorgangsakte, Aufgaben werden ein Raster, der Alarm eine Zeile
+
+**Status:** `RC` — Folgecommit auf `feature/nora-ui-ux-vnext` (Draft PR #4), nicht deployt. Contract: [`02`](02-design-system.md) „Product Feedback Pass A"; Produktsicht: [`20`](20-product-changelog.md).
+
+**Kontext.** Erste Rückmeldung des Product Owners zum Alpha-UI-1-RC: der Checklistenblock „Produktionsfreigabe Fenster" ist eine alte fixe Idee und wird nicht mehr gewollt; der Aufgabenbereich ist zu luftig; Notizen, Langtext, der Überfällig-Banner und die Dialog-Scrollbars sind nicht gut genug.
+
+**Entscheidungen.**
+
+1. **Die Produktionsfreigabe-Checkliste ist kein Bestandteil der Vorgangsakte mehr.** Der Abschnitt wird nicht versteckt, sondern entfernt (`DealProductionChecklistSection` gelöscht). Datenmodell (`checklist_templates`, `checklist_runs`, `checklist_run_items`), RPC, RLS, Audit-Ereignisse `checklist.*` und die Hotboard-Kachel „Produktionsfreigaben offen" bleiben unverändert — es ist eine Präsentationsentscheidung, keine Datenlöschung. Wer die Checkliste als Fläche zurückholen will, braucht eine neue Produktentscheidung.
+2. **Aufgaben am Vorgang sind ein Raster, keine Kartenliste.** Eine Zeile je Aufgabe mit Art, Beschreibung, Fälligkeit, Zuständigkeit und Aktionen in derselben Reihenfolge; die einzige Primäraktion bleibt „Aufgabe hinzufügen". Keine Änderung an `tasks`, Work-Semantik oder Zuständigkeitsregeln.
+3. **Dringlichkeit ist eine Zeile, kein Banner.** „Kundenkontakt überfällig seit N Tagen (fällig am …)" bzw. „Heute Kunden kontaktieren (fällig am …)" — dieselbe Quelle (`expected_closing_date`), dieselbe Statuslogik, weniger Fläche.
+4. **Langtext bleibt wörtlich, bekommt aber Rhythmus.** Absätze an Leerzeilen, Silbentrennung, Zeilenzahl am Ausklapp-Knopf; kein Markdown-Editor.
+5. **Dialoge tragen Nora-Scrollbars,** nativ gestylt (16 px, kontrastreicher Thumb), keine Fake-Implementierung.
 
 ## 2026-09-28 – Alpha UI 1: Akzentrollen statt einer Orange, eine Aufgaben-Aktion, Verlauf zugeklappt und erst auf Anfrage geladen
 

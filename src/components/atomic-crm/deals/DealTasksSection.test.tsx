@@ -107,6 +107,11 @@ describe("DealTasksSection (Alpha UI 1)", () => {
     expect(wrap.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
     // type is shown as a quiet prefix, not as a second heading
     expect(row!.querySelector(".nora-task-type")?.textContent).toBe("Rückruf");
+    // dense grid row: type cell, text, due and responsible as own cells
+    expect(row!.getAttribute("data-variant")).toBe("row");
+    expect(getComputedStyle(row!).display).toBe("grid");
+    expect(row!.querySelector(".nora-task-type-cell")).not.toBeNull();
+    expect(row!.querySelector(".nora-task-due")?.textContent).toMatch(/2099/);
     // the open count is shown in the section head
     expect(document.querySelector(".nora-section-count")?.textContent).toBe(
       "1",

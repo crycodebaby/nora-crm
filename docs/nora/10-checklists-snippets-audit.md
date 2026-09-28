@@ -6,7 +6,7 @@
 **Welle v0.3d4** — Checklisten-UI im Vorgangsdetail umgesetzt  
 **Welle v0.3d5** — Hotboard-Kachel „Produktionsfreigaben offen“ umgesetzt  
 **Welle v0.3l** — CRM-Audit-Verlauf (Kern-CRM-Trigger + UI) umgesetzt  
-**Status:** Tabellen, RLS, Audit, Run-Start, Vorgangs-UI, **Hotboard-Kachel** und **CRM-Änderungshistorie** implementiert
+**Status:** Tabellen, RLS, Audit, Run-Start, **Hotboard-Kachel** und **CRM-Änderungshistorie** implementiert. **Die Vorgangs-UI (v0.3d4) ist mit dem RC Alpha UI 1 Pass A (2026-09-28, noch nicht live) aus der Vorgangsakte entfernt** — Produktentscheid, [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Pass A“; Datenmodell und RPC bleiben bestehen.
 
 Dieses Dokument definiert das fachliche und technische Fundament für modulare Checklisten, wiederverwendbare Textbausteine und zentrale Audit-Logs. Es ergänzt `01-domain-model.md`, `03-data-model-guardrails.md`, `09-window-order-workflow.md` und den Decision Log.
 

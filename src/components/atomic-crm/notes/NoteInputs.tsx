@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { required, useGetOne, useTranslate } from "ra-core";
 import { TextInput } from "@/components/admin/text-input";
 import { FileInput } from "@/components/admin/file-input";
 import { SelectInput } from "@/components/admin/select-input";
 import { DateTimeInput } from "@/components/admin/date-time-input";
 import { Button } from "@/components/ui/button";
+import { ChevronDown, Paperclip, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFormContext, useWatch } from "react-hook-form";
 import type { DropzoneOptions } from "react-dropzone";
@@ -30,6 +31,7 @@ export const NoteInputs = ({
   selectReference,
   reference,
   attachmentsEditable,
+  footerActions,
 }: {
   defaultStatus?: string;
   showStatus?: boolean;
@@ -42,10 +44,13 @@ export const NoteInputs = ({
    * on an existing note.
    */
   attachmentsEditable: boolean;
+  /** Primary action rendered in the composer footer (e.g. the save button). */
+  footerActions?: ReactNode;
 }) => {
   const { noteStatuses } = useConfigurationContext();
   const translate = useTranslate();
   const [displayMore, setDisplayMore] = useState(false);
+  const optionsId = useId();
   const [isFocused, setIsFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { control, formState, setValue } = useFormContext<
@@ -123,7 +128,11 @@ export const NoteInputs = ({
   // would use the resource from the context, which is either "contact_notes" or "deal_notes",
   // but we want it to be "notes" regardless of the context
   return (
-    <div ref={containerRef} className="space-y-2">
+    <div
+      ref={containerRef}
+      className="nora-note-composer"
+      data-slot="note-composer"
+    >
       <TextInput
         source="text"
         label={false}
@@ -131,9 +140,10 @@ export const NoteInputs = ({
         helperText={false}
         placeholder={translate("resources.notes.inputs.add_note")}
         rows={2}
+        className="m-0"
         inputClassName={cn(
           "transition-[min-height] duration-300 ease-in-out",
-          isExpanded && "min-h-[20rem]",
+          isExpanded && "min-h-[12rem]",
         )}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
@@ -161,30 +171,45 @@ export const NoteInputs = ({
         </ReferenceInput>
       )}
 
-      {!displayMore && (
-        <div className="flex justify-end items-center gap-2">
+      <div className="nora-note-composer-footer">
+        <div className="nora-note-composer-tools">
           <Button
-            variant="link"
+            type="button"
+            variant="ghost"
             size="sm"
-            onClick={() => {
-              setDisplayMore(!displayMore);
-            }}
-            className="text-sm text-muted-foreground underline hover:no-underline p-0 h-auto cursor-pointer"
+            aria-expanded={displayMore}
+            aria-controls={optionsId}
+            onClick={() => setDisplayMore((value) => !value)}
+            className="nora-note-composer-tool cursor-pointer"
           >
-            {translate("resources.notes.inputs.show_options")}
+            {attachmentsEditable ? (
+              <Paperclip className="size-4" aria-hidden />
+            ) : (
+              <SlidersHorizontal className="size-4" aria-hidden />
+            )}
+            {translate(
+              displayMore
+                ? "resources.notes.inputs.hide_options"
+                : "resources.notes.inputs.show_options",
+            )}
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                displayMore && "rotate-180",
+              )}
+              aria-hidden
+            />
           </Button>
-          <span className="text-sm text-muted-foreground">
-            {translate("resources.notes.inputs.options_hint")}
-          </span>
         </div>
-      )}
+        {footerActions ? (
+          <div className="flex items-center gap-2">{footerActions}</div>
+        ) : null}
+      </div>
 
       <div
-        className={cn(
-          "space-y-3 mt-3 overflow-hidden origin-top",
-          "transition-transform ease-in-out duration-300",
-          !displayMore ? "scale-y-0 max-h-0 h-0" : "scale-y-100",
-        )}
+        id={optionsId}
+        className={cn("nora-note-composer-options", !displayMore && "hidden")}
+        hidden={!displayMore}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {showStatus && (

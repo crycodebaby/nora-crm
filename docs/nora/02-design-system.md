@@ -284,6 +284,8 @@ Breite Arbeitsflächen müssen ohne Erklärung erkennen lassen, dass links oder 
 
 ## Checkliste Produktionsfreigabe Fenster (Welle v0.3d4)
 
+> **Entfernt aus der Vorgangsakte (RC Alpha UI 1 Pass A, 2026-09-28, noch nicht live).** Der Abschnitt wird in `DealShow` nicht mehr gerendert; die Tabelle unten beschreibt den historischen Stand. Hotboard-Kachel und Datenmodell bleiben.
+
 Im Vorgangsdetail (`DealShow`) — zwischen Aufgaben und Notizen.
 
 | Element | Regel |
@@ -747,6 +749,18 @@ Eine einzige Orange passt nicht auf jede Rolle: Weiß auf `#c65322` misst exakt 
 - `.nora-primary-action` hat keine `min-h-10`-Utility mehr; die Mindesthöhe ist `var(--nora-touch-min)` (44 px) — schließt den Touch-Befund aus [`17`](17-known-issues-and-planned-waves.md) F projektweit.
 - **Browser-Tests kompilieren `index.css` ohne Tailwind:** `@apply`-Regeln sind dort unsichtbar. Layout- und A11y-kritische Maße (Touch-Ziele, Abschneiden, Deckel) stehen deshalb als **einfache Deklarationen**, nicht als `@apply`.
 - Fieldset-Gruppen tragen **kein** `aria-labelledby`: eine so benannte Gruppe kollidiert mit `getByLabel` eines gleichnamigen Feldes („Beschreibung"); die `legend` benennt die Gruppe nativ.
+
+### Product Feedback Pass A (2026-09-28, RC-Ergänzung)
+
+Umsetzung der ersten PO-Rückmeldung zum RC, ohne die Richtung zu ändern. Evidenz: `docs/nora/assets/alpha-ui-1/passA-*.png`.
+
+- **Produktionsfreigabe-Checkliste aus der Vorgangsakte entfernt.** Der Abschnitt „Produktionsfreigabe Fenster" (Welle v0.3d4) ist aus `DealShow` gestrichen und die Komponente `DealProductionChecklistSection` gelöscht. Datenmodell (`10`), RPC, Hotboard-Kachel „Produktionsfreigaben offen" und `checklistUtils` sind unverändert. Entscheidung: [`06`](06-decision-log.md) „2026-09-28 – Alpha UI 1 Pass A".
+- **Kein Hinweistext mehr unter „Einsatzort".** Der Satz „Beim Anlegen wird die Kundenanschrift vorgeschlagen …" entfällt; der Vorschlags-/Leeren-Vertrag selbst ist unverändert (Test `DealSiteAddressInputs.test.tsx`).
+- **Aufgaben als dichtes Raster.** `Task` hat eine Variante `row`: ab 48 rem eine tabellenartige Zeile (Checkbox · Art · Beschreibung · Fällig am · Zuständig · Menü) mit leiser Kopfzeile, darunter zweizeilig gestapelt. Offene Aufgaben nach Fälligkeit zuerst, kürzlich erledigte danach; überfällig/heute tragen die Fälligkeit in Akzenttext bzw. fett. Zeilenhöhe ≈ 40 px, Menü bleibt in der Zeile (44 px). Stack-Variante (Kontakte, Kunden, Hotboard) unverändert.
+- **Notiz-Composer als eine begrenzte Fläche.** Textfeld ohne eigenen Rahmen in einer Composer-Fläche (`.nora-note-composer`, Fokusring auf der Fläche), darunter eine Fußzeile mit „Optionen anzeigen/ausblenden" (`aria-expanded`/`aria-controls`, Büroklammer-Glyphe) links und „Diese Notiz hinzufügen" rechts; Datum/Status/Anhänge liegen in einem abgesetzten Optionsbereich (`hidden`, nicht skaliert). Der frühere Klammer-Hinweis „(Dateien anhängen oder Details ändern)" entfällt. Notizeinträge: eine Kopfzeile (Kunde · Autor · Zeit) mit stets sichtbaren, leisen Aktionen (Bearbeiten/Löschen 44 px, nicht mehr hover-only), Text in Lesebreite, Hairlines statt Separator-Komponente. Anhang-Sicherheit/Read-Model (S5) unberührt — nur Markup und Klassen.
+- **Langtext mit Absatzrhythmus.** `NoraLongText` teilt gespeicherten Text an Leerzeilen in `<p>`-Blöcke (Zeichen bleiben wörtlich, einfache Umbrüche über `pre-line`), `lang="de"` + `hyphens: auto`, 15,5 px, 68ch. Der Ausklapp-Knopf nennt die Zeilenzahl („Ganzen Text anzeigen (23 Zeilen)"). Kein Markdown, kein Umschreiben.
+- **Aufmerksamkeitszeile statt Banner.** `DealAttentionStrip` ersetzt den vollflächigen Alarm: eine Zeile mit Glyphe, „Kundenkontakt überfällig" + „seit N Tagen (fällig am …)" bzw. „Heute Kunden kontaktieren" + „fällig am …", optional „Zuständig: …"; links ein 4-px-Akzentrand, Höhe < 80 px, Hell/Dunkel. Quelle bleibt `expected_closing_date` und `getFollowUpStatus`; erscheint nur bei heute/überfällig.
+- **Nora-Scrollbars.** Für `.nora-detail-scroll`, Formular-Dialoge und generell `[data-slot="dialog-content"]` / `[data-slot="sheet-content"]`: 16 px breit (10 px bei grobem Zeiger), Thumb 32 % Vordergrund (Hover 50 %, Aktiv akzentgetönt), sichtbare Spur, `scrollbar-gutter: stable`, `scrollbar-color` für Firefox. Native Scrollbars, kein Fake.
 
 ### Hardening-Pass (2026-09-28, RC-Ergänzung)
 

@@ -75,10 +75,7 @@ export const DealInputs = () => {
         </NoraFormRow>
       </NoraFormGroup>
 
-      <NoraFormGroup
-        title={translate("resources.deals.groups.site")}
-        hint={translate("resources.deals.groups.site_hint")}
-      >
+      <NoraFormGroup title={translate("resources.deals.groups.site")}>
         <DealSiteAddressInputs />
       </NoraFormGroup>
 

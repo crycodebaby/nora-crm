@@ -41,7 +41,6 @@ export const Note = ({
   note: DealNote | ContactNote;
   isLast: boolean;
 }) => {
-  const [isHover, setHover] = useState(false);
   const [isEditing, setEditing] = useState(false);
   const [isExpanded, setExpanded] = useState(false);
   const [isTruncated, setTruncated] = useState(false);
@@ -95,7 +94,6 @@ export const Note = ({
 
   const handleCancelEdit = () => {
     setEditing(false);
-    setHover(false);
   };
 
   const handleNoteUpdate: SubmitHandler<FieldValues> = (values) => {
@@ -105,20 +103,15 @@ export const Note = ({
       {
         onSuccess: () => {
           setEditing(false);
-          setHover(false);
         },
       },
     );
   };
 
   const content = (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      className="mb-4"
-    >
-      <div className="flex items-center space-x-4 w-full">
-        <span className="inline-flex h-full items-center text-sm text-muted-foreground min-w-0">
+    <div className="nora-note">
+      <div className="nora-note-head">
+        <span className="nora-note-meta inline-flex min-w-0 flex-wrap items-center gap-x-1">
           <ReferenceField
             source="company_id"
             reference="companies"
@@ -135,7 +128,10 @@ export const Note = ({
             <Status className="ml-2" status={note.status} />
           )}
         </span>
-        <span className={`${isHover ? "visible" : "invisible"}`}>
+        <span className="nora-note-date text-[13px] text-[var(--nora-text-muted)] shrink-0">
+          <RelativeDate date={note.date} />
+        </span>
+        <span className="nora-note-actions">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -171,10 +167,6 @@ export const Note = ({
             </Tooltip>
           </TooltipProvider>
         </span>
-        <div className="flex-1"></div>
-        <span className="text-sm text-muted-foreground">
-          <RelativeDate date={note.date} />
-        </span>
       </div>
       {isEditing ? (
         <Form onSubmit={handleNoteUpdate} record={note} className="mt-1">
@@ -206,12 +198,12 @@ export const Note = ({
           </div>
         </Form>
       ) : (
-        <div className="pt-2 nora-readable max-w-prose">
+        <div className="nora-note-body">
           {note.text && (
             <div
               ref={contentRef}
               className={cn(
-                "nora-readable overflow-hidden transition-[max-height] duration-300 ease-in-out",
+                "overflow-hidden transition-[max-height] duration-300 ease-in-out",
                 isExpanded ? "max-h-[5000px]" : "max-h-46",
               )}
             >
@@ -224,7 +216,8 @@ export const Note = ({
                 e.stopPropagation();
                 setExpanded(!isExpanded);
               }}
-              className="text-primary text-sm mt-1 underline hover:no-underline cursor-pointer"
+              className="nora-longtext-toggle cursor-pointer"
+              aria-expanded={isExpanded}
             >
               {isExpanded
                 ? translate("crm.common.show_less")

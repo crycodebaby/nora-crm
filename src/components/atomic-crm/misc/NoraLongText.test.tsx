@@ -48,6 +48,26 @@ describe("NoraLongText (Alpha UI 1)", () => {
     expect(body.getBoundingClientRect().height).toBeGreaterThan(400);
   });
 
+  it("renders blank-line paragraphs verbatim and hyphenates German", async () => {
+    const text = "Erster Absatz\nzweite Zeile\n\n\nZweiter Absatz.";
+    await render(
+      <StoryWrapper>
+        <NoraLongText text={text} />
+      </StoryWrapper>,
+    );
+    await expect.element(page.getByText(/Zweiter Absatz/)).toBeVisible();
+    const blocks = Array.from(
+      document.querySelectorAll(".nora-longtext-block"),
+    );
+    expect(blocks.map((b) => b.textContent)).toEqual([
+      "Erster Absatz\nzweite Zeile",
+      "Zweiter Absatz.",
+    ]);
+    const body = document.querySelector(".nora-longtext") as HTMLElement;
+    expect(body.getAttribute("lang")).toBe("de");
+    expect(getComputedStyle(body).hyphens).toBe("auto");
+  });
+
   it("shows short text in full without any control", async () => {
     await render(
       <StoryWrapper>

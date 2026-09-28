@@ -27,6 +27,12 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 
 ---
 
+## 2026-09-28 — Vorgangsakte: Aufgaben als Tabelle, kompakter Kontakthinweis, ruhigere Notizen (Vorabversion, noch nicht live)
+
+**Was ändert sich für Sie:** Der Block „Produktionsfreigabe Fenster" ist aus der Vorgangsakte verschwunden. **Aufgaben** stehen jetzt als übersichtliche Tabelle mit Art, Beschreibung, Fälligkeit und Zuständigkeit; das Menü je Aufgabe sitzt direkt in der Zeile. Statt des großen orangefarbenen Balkens sehen Sie eine **kompakte Zeile**: „Kundenkontakt überfällig seit 3 Tagen (fällig am …)" oder „Heute Kunden kontaktieren". **Notizen** schreiben Sie in einer aufgeräumten Fläche — Datum, Status und Anhänge klappen Sie bei Bedarf über „Optionen anzeigen" auf; Bearbeiten und Löschen einer Notiz sind immer sichtbar. **Lange Beschreibungen** werden in Absätzen und mit Silbentrennung gezeigt, der Knopf „Ganzen Text anzeigen" nennt die Zeilenzahl. Die **Bildlaufleiste** in Dialogen ist breiter und leichter zu greifen. Der Hinweistext unter „Einsatzort" im Formular entfällt; die Adressvorschläge funktionieren wie bisher.
+
+**Technischer Hinweis:** reine Oberflächenänderung, keine Migration; Checklisten-Daten und die Hotboard-Kachel „Produktionsfreigaben offen" bleiben erhalten.
+
 ## 2026-09-28 — Vorgangsakte und Vorgangsformular neu geordnet (Vorabversion, noch nicht live)
 
 **Was ändert sich für Sie:** Der Vorgang ist auf einen Blick lesbar. Oben stehen Nummer, Status, Dienstleistung und Titel, darunter in einer Zeile Kunde, Einsatzort und wer zuständig ist. Auftraggeber, Ansprechpartner und Einsatzort haben einen festen Platz nebeneinander; lange Beschreibungen (zum Beispiel eingefügte E-Mails) werden in Lesebreite gezeigt und lassen sich mit einem Klick ganz ausklappen.

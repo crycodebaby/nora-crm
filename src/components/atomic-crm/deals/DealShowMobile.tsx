@@ -7,7 +7,7 @@ import { MobileBackButton } from "../misc/MobileBackButton";
 import { NoraSectionCard } from "../misc/NoraSectionCard";
 import { NoraShowBoundary } from "../misc/NoraShowBoundary";
 import type { Deal } from "../types";
-import { DealFollowUpBadge } from "./DealFollowUpBadge";
+import { DealAttentionStrip } from "./DealAttentionStrip";
 import { useDealShowFacts } from "./useDealShowFacts";
 import {
   DealArchivedBanner,
@@ -84,10 +84,9 @@ const DealShowMobileContent = () => {
           <DealTitleBlock deal={record} facts={facts} className="mt-1" />
 
           {isAlert ? (
-            <DealFollowUpBadge
+            <DealAttentionStrip
               dateString={record.expected_closing_date}
-              variant="alert"
-              showDate
+              responsible={facts.salesName !== "—" ? facts.salesName : null}
             />
           ) : null}
 

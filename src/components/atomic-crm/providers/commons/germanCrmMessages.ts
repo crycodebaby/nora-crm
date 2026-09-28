@@ -322,8 +322,6 @@ export const germanCrmMessages = {
         client_hint:
           "Der Kunde, für den gearbeitet wird, die beteiligten Ansprechpartner und wer bei Nora zuständig ist.",
         site: "Einsatzort",
-        site_hint:
-          "Beim Anlegen wird die Kundenanschrift vorgeschlagen, bis Sie hier etwas ändern.",
         planning: "Planung und Nachfassen",
         description: "Beschreibung",
         description_hint:
@@ -331,6 +329,13 @@ export const germanCrmMessages = {
       },
       roles: {
         client: "Auftraggeber",
+      },
+      attention: {
+        overdue_title: "Kundenkontakt überfällig",
+        overdue_since:
+          "seit %{smart_count} Tag (fällig am %{date}) |||| seit %{smart_count} Tagen (fällig am %{date})",
+        today_title: "Heute Kunden kontaktieren",
+        today_meta: "fällig am %{date}",
       },
       site: {
         title: "Einsatzort",
@@ -444,8 +449,8 @@ export const germanCrmMessages = {
       added: "Notiz hinzugefügt",
       inputs: {
         add_note: "Notiz hinzufügen",
-        options_hint: "(Dateien anhängen oder Details ändern)",
         show_options: "Optionen anzeigen",
+        hide_options: "Optionen ausblenden",
       },
       actions: {
         attach_document: "Dokument anhängen",
@@ -501,6 +506,7 @@ export const germanCrmMessages = {
         due_date: "Fällig am",
         type: "Art",
         contact_id: "Kontakt",
+        sales_id: "Zuständig",
         due_short: "fällig",
       },
       action: {
@@ -730,6 +736,8 @@ export const germanCrmMessages = {
     },
     longtext: {
       show_more: "Ganzen Text anzeigen",
+      show_more_lines:
+        "Ganzen Text anzeigen (%{smart_count} Zeile) |||| Ganzen Text anzeigen (%{smart_count} Zeilen)",
       show_less: "Weniger anzeigen",
     },
     audit: {

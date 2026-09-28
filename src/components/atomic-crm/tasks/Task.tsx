@@ -31,11 +31,14 @@ export const Task = ({
   task,
   showContact,
   showHolder,
+  variant = "stack",
 }: {
   task: TData;
   showContact?: boolean;
   /** Names the responsible employee in the meta line (existing `sales_id`). */
   showHolder?: boolean;
+  /** `row`: dense grid row (type · text · due · responsible · actions). */
+  variant?: "stack" | "row";
 }) => {
   const isMobile = useIsMobile();
   const { taskTypes } = useConfigurationContext();
@@ -109,6 +112,9 @@ export const Task = ({
       <div
         className="nora-task-row"
         data-done={task.done_date ? "true" : "false"}
+        data-variant={variant}
+        data-due={dueStatus ?? undefined}
+        role={variant === "row" ? "row" : undefined}
       >
         <div className="nora-task-check">
           <Checkbox
@@ -126,15 +132,21 @@ export const Task = ({
           className="nora-task-body"
           onClick={isMobile ? handleCheck() : undefined}
         >
-          <label htmlFor={labelId} className="nora-task-text cursor-pointer">
-            {typeLabel ? (
+          {typeLabel ? (
+            <span className="nora-task-type-cell">
               <span className="nora-task-type">{typeLabel}</span>
-            ) : null}
+            </span>
+          ) : (
+            <span className="nora-task-type-cell" aria-hidden />
+          )}
+          <label htmlFor={labelId} className="nora-task-text cursor-pointer">
             {task.text}
           </label>
           <div className="nora-task-meta" data-due={dueStatus ?? undefined}>
             <span className="nora-task-due">
-              {translate("resources.tasks.fields.due_short")}{" "}
+              <span className="nora-task-due-label">
+                {translate("resources.tasks.fields.due_short")}{" "}
+              </span>
               <DateField
                 source="due_date"
                 record={task}
@@ -149,52 +161,58 @@ export const Task = ({
                 }}
               />
             </span>
-            {showHolder && holderName ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>{holderName}</span>
-              </>
-            ) : null}
+            <span className="nora-task-holder">
+              {showHolder && holderName ? (
+                <>
+                  <span className="nora-task-sep" aria-hidden>
+                    ·
+                  </span>
+                  <span>{holderName}</span>
+                </>
+              ) : null}
+            </span>
             {showContact && (
-              <ReferenceField<TData, Contact>
-                source="contact_id"
-                reference="contacts_summary"
-                record={task}
-                link="show"
-                className="inline"
-                render={({ referenceRecord }) => {
-                  if (!referenceRecord) return null;
-                  // The task's own company_id is its historical customer
-                  // context, set once and never re-synced — it may no
-                  // longer match the contact's *current* company if the
-                  // contact was reassigned since. That is expected, not
-                  // an error; show it as a quiet note, not a warning.
-                  const isHistoricalMismatch =
-                    task.company_id != null &&
-                    referenceRecord.company_id !== task.company_id;
-                  return (
-                    <>
-                      {" "}
-                      {translate("resources.tasks.regarding_contact", {
-                        name: getContactRepresentation(referenceRecord),
-                      })}
-                      {isHistoricalMismatch && (
-                        <span className="italic">
-                          {" "}
-                          {referenceRecord.company_name
-                            ? translate(
-                                "resources.tasks.historical_contact_company",
-                                { company: referenceRecord.company_name },
-                              )
-                            : translate(
-                                "resources.tasks.historical_contact_unassigned",
-                              )}
-                        </span>
-                      )}
-                    </>
-                  );
-                }}
-              />
+              <span className="nora-task-contact">
+                <ReferenceField<TData, Contact>
+                  source="contact_id"
+                  reference="contacts_summary"
+                  record={task}
+                  link="show"
+                  className="inline"
+                  render={({ referenceRecord }) => {
+                    if (!referenceRecord) return null;
+                    // The task's own company_id is its historical customer
+                    // context, set once and never re-synced — it may no
+                    // longer match the contact's *current* company if the
+                    // contact was reassigned since. That is expected, not
+                    // an error; show it as a quiet note, not a warning.
+                    const isHistoricalMismatch =
+                      task.company_id != null &&
+                      referenceRecord.company_id !== task.company_id;
+                    return (
+                      <>
+                        {" "}
+                        {translate("resources.tasks.regarding_contact", {
+                          name: getContactRepresentation(referenceRecord),
+                        })}
+                        {isHistoricalMismatch && (
+                          <span className="italic">
+                            {" "}
+                            {referenceRecord.company_name
+                              ? translate(
+                                  "resources.tasks.historical_contact_company",
+                                  { company: referenceRecord.company_name },
+                                )
+                              : translate(
+                                  "resources.tasks.historical_contact_unassigned",
+                                )}
+                          </span>
+                        )}
+                      </>
+                    );
+                  }}
+                />
+              </span>
             )}
           </div>
         </div>
