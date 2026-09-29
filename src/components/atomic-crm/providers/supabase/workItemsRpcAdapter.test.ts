@@ -708,6 +708,26 @@ describe("Work read adapter — failures are failures, never an empty list", () 
     expect(error.code).toBe(NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT);
   });
 
+  it("keeps a 403 an access refusal even when its text matches another pattern first", async () => {
+    const error = await expectWorkQueryError(
+      readWorkItemsViaRpc(
+        request(),
+        answering(
+          null,
+          {
+            code: "42501",
+            details: null,
+            hint: null,
+            message: "request cancelled: account disabled",
+          },
+          403,
+        ),
+      ),
+      "permission_denied",
+    );
+    expect(error.code).toBeNull();
+  });
+
   it("does not read a free-text 'disabled' as an access refusal", async () => {
     const error = await expectWorkQueryError(
       readWorkItemsViaRpc(

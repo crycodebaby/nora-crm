@@ -61,10 +61,10 @@ export type GetWorkItemsRpcArgs = {
   p_cursor_work_id: string | null;
 };
 
-/** The narrow slice of the Supabase RPC call this adapter needs. */
 /** `p_limit` is a Postgres `integer`; larger values are a transport error, not a page size. */
 const PG_INTEGER_MAX = 2_147_483_647;
 
+/** The narrow slice of the Supabase RPC call this adapter needs. */
 export type GetWorkItemsRpc = (
   fn: typeof GET_WORK_ITEMS_RPC,
   args: GetWorkItemsRpcArgs,
@@ -208,9 +208,14 @@ const fromTransportError = (
     : error;
   const normalized = normalizeCrmError(diagnostic);
   const code = extractNoraErrorCode(error);
+  // The HTTP status is checked directly as well: normalizeCrmError tests a
+  // few free-text patterns before it looks at 403, and a refusal must not
+  // be downgraded because its message happens to match one of them.
   const denied =
     code === NORA_ERROR_CODES.PERMISSION_DENIED ||
-    normalized.kind === "permission_denied";
+    normalized.kind === "permission_denied" ||
+    status === 401 ||
+    status === 403;
   return new WorkQueryError(
     denied ? "permission_denied" : "failed",
     denied

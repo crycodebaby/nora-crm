@@ -136,7 +136,6 @@ export type WorkItem = {
   workType: string | null;
   state: WorkState;
   holder: WorkHolder | null;
-  /** The server's timestamptz rendering, verbatim. `null` = no due date set (valid). */
   /**
    * The server's timestamptz rendering, verbatim. `null` = no due date set
    * (valid). It is NOT guaranteed to be parseable by a JS `Date`: Postgres
