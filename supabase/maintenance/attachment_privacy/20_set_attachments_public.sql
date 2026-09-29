@@ -1,7 +1,27 @@
--- W8-E ROLLBACK — return the `attachments` bucket to PUBLIC. THIS FILE MUTATES.
+-- W8-E ROLLBACK FALLBACK — return the `attachments` bucket to PUBLIC by SQL.
+-- THIS FILE MUTATES.
 --
 -- It writes exactly one column of exactly one row:
 --     storage.buckets.public = true   where id = 'attachments'
+--
+-- THE CANONICAL ROLLBACK IS NOT THIS FILE. It is
+--     node 10_set_attachments_privacy.mjs public --target=<host> --probe-url=<url> --apply
+-- — the same Storage-API control plane as Stage C, which also proves that
+-- the bucket controls are unchanged and that the public URL serves bytes
+-- again. This file is the documented FALLBACK for when that path is not
+-- available: the Storage API is down, the privileged key is not at hand, or
+-- `10_…mjs` itself reported EMERGENCY and told the operator to come here.
+--
+-- WHY SQL IS ACCEPTABLE IN THIS DIRECTION (and never for public -> private)
+--   The CDN problem of a direct SQL flip (Alpha Storage 3C F-2) is stale
+--   PUBLIC copies surviving a change to PRIVATE. Going private -> public only
+--   widens access: there is no cached content that must stop being served.
+--   storage-api itself does not purge on this transition either (it purges
+--   only when `public` goes true -> false), so the API path and this file are
+--   equivalent for the CDN here. The one CDN residue both share: an error
+--   response cached while the bucket was private. That is why the gate for
+--   reverting the runtime is an anonymous `probe` of a public URL returning
+--   bytes, not this file's verdict row.
 --
 -- WHEN TO RUN IT
 --   Only as the FIRST step of a post-flip rollback. If the W8-E runtime has to
@@ -42,11 +62,23 @@
 --   Hard errors carry a stable DETAIL: NORA_W8E_ATTACHMENTS_BUCKET_MISSING,
 --   NORA_W8E_ATTACHMENTS_STILL_PRIVATE.
 --
+-- DEFERRED CONSTRAINTS (Alpha Storage 3C F-34). In a single-transaction
+-- runner a DEFERRED constraint trigger would only fire at COMMIT — after the
+-- postconditions below had already passed. `set constraints all immediate`
+-- makes any such trigger fire inside the statement, where the postconditions
+-- see its effect. In psql autocommit mode each statement is its own
+-- transaction, the SET is a no-op with a warning, and the independent second
+-- block observes the committed state instead. Neither covers a revert by a
+-- DIFFERENT session after this file ends — which is why the verdict row is
+-- necessary but not sufficient, and the anonymous `probe` is the gate.
+--
 -- RUNNER. psql with -v ON_ERROR_STOP=1 (exit code 3 on failure), or the whole
 -- file verbatim as ONE Supabase MCP execute_sql call (one implicit
 -- transaction: any error aborts all of it). Never psql without ON_ERROR_STOP:
 -- it runs on past an error and exits 0. The verdict row is the result either
 -- way — `PUBLIC — …` is success, anything else is not.
+
+set constraints all immediate;
 
 do $$
 declare
@@ -114,7 +146,7 @@ select
     b.id      as bucket,
     b.public  as is_public,
     case when b.public is true
-         then 'PUBLIC — expected target state; the pre-W8-E runtime is supported again; revert the runtime next'
+         then 'PUBLIC — expected target state; confirm with an anonymous probe that a public URL serves bytes, then revert the runtime'
          else 'FAILURE — attachments is STILL PRIVATE, the rollback did not take effect; do NOT revert the runtime'
     end       as verdict
 from storage.buckets b

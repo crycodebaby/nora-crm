@@ -1,28 +1,34 @@
 -- Nora CRM: W8-E Branding Bucket (2026-09-28)
 --
 -- W8-E makes the `attachments` bucket private. Two of the four file classes
--- that share it today cannot survive that, because they are not confidential
--- content at all:
+-- that share it today do not belong behind it, because they are not
+-- confidential content at all:
 --
---   * the configuration light/dark logos, rendered on the LOGIN page -- there
---     is no session there, so there is nobody to sign a URL as;
+--   * the configuration light/dark logos;
 --   * customer logos, which are public brand marks of the firms Nora works
 --     with, not business documents.
 --
--- Solving pre-auth branding with signed URLs is impossible, and solving it
--- with a service broker would introduce a new privileged path for a purely
--- cosmetic asset. The two classes are therefore separated BY BUCKET: this
--- migration creates a small, deliberately public `branding` bucket next to
--- the (still public, for now) `attachments` bucket.
+-- They are intentionally public, non-sensitive presentation assets, and
+-- their stable public URLs are part of the product configuration model:
+-- `configuration.lightModeLogo` / `darkModeLogo` and `companies.logo.src`
+-- store the URL itself and every surface renders it directly. Keeping them
+-- public avoids signed-URL capability machinery -- or a privileged broker --
+-- for assets that need no protection. (This is NOT an authentication
+-- requirement: the employee login page renders bundled logos, not these.)
+-- The two classes are therefore separated BY BUCKET: this migration creates a
+-- small, deliberately public `branding` bucket next to the (still public, for
+-- now) `attachments` bucket.
 --
 -- Deliberately OUT of scope here, each for its own reason:
 --
 --   * `attachments.public` is NOT touched. Flipping it in a migration would
 --     mean a routine pre-runtime `db push` produces the one combination W8-E
---     declares unsupported -- old runtime plus private bucket. The flip is a
---     data change on a configuration row, is packaged as an operator step
---     (supabase/maintenance/attachment_privacy/) and happens only after the
---     W8-E runtime is deployed and verified (Stage C).
+--     declares unsupported -- old runtime plus private bucket -- and a SQL
+--     flip would also bypass the Storage API's CDN purge. The flip is an
+--     operator step through the Storage API
+--     (supabase/maintenance/attachment_privacy/10_set_attachments_privacy.mjs)
+--     and happens only after the W8-E runtime is deployed and verified
+--     (Stage C).
 --   * No object is copied, moved or deleted here. Relocating the four
 --     existing branding objects is a data operation with its own dry-run and
 --     verification, not schema.
@@ -78,8 +84,9 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 1. The branding bucket
 -- ---------------------------------------------------------------------------
--- public = true is the POINT of this bucket, not an oversight: the login page
--- must render the logo with no credentials at all. Everything else about it is
+-- public = true is the POINT of this bucket, not an oversight: its objects
+-- are addressed by stable public URLs stored in the configuration and on the
+-- companies, readable with no credentials. Everything else about it is
 -- deliberately narrow.
 --
 -- MIME allowlist: raster images only. image/svg+xml is excluded on purpose --

@@ -222,7 +222,7 @@ const copyObject = async (sourceKey, kind, ref) => {
   }
 
   // Prove the copy really is publicly readable AND identical, anonymously —
-  // no session, exactly as the login page will fetch it.
+  // no session: its stable public URL is what the reference will store.
   const response = await fetch(publicUrl(TARGET_BUCKET, targetKey));
   if (!response.ok) {
     record({

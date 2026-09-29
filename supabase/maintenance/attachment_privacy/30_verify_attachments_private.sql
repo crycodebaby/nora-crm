@@ -1,38 +1,23 @@
--- W8-E Stage C PREFLIGHT — STRICT READ-ONLY. Writes nothing, ever.
+-- W8-E POST-STAGE-C VERIFICATION — STRICT READ-ONLY. Writes nothing, ever.
 --
--- Answers one question: may the `attachments` bucket be made private right
--- now? The flip itself is NOT SQL: it is `10_set_attachments_privacy.mjs`
--- through the Storage API (the only path that purges the CDN). This file is
--- the database half of the gate, run IMMEDIATELY before that script; the
--- script re-checks what it can observe through the Storage API itself.
+-- Answers one question: is the database in the W8-E target state after
+-- `10_set_attachments_privacy.mjs private --apply` reported PRIVATE /
+-- VERIFIED? It is the read-only database half of the post-Stage-C proof;
+-- the functional half (signed URLs for active users, nothing for anonymous
+-- or deactivated callers, the exact primed URL) is in docs/nora/21 Section 17.
 --
--- It CANNOT observe the deployed frontend. Stage B (the W8-E runtime is live)
--- and B.5 (client convergence) are confirmed by the operator, not by this
--- file — the verdict row says so rather than implying it checked.
+-- This file replaces the former `10_set_attachments_private.sql`, which
+-- flipped the bucket by direct SQL and thereby bypassed the Storage API's CDN
+-- purge (Alpha Storage 3C F-2). There is no SQL privacy flip any more; this
+-- file can only read.
 --
--- STRICTLY READ-ONLY BY CONSTRUCTION: the whole file is ONE `select`
--- statement over catalogs and three tables. No DML, no DDL, no temp object,
--- no user-defined function call, no transaction control. Safe against
--- Production at any moment.
---
--- ONE STATEMENT, VERDICT LAST (Alpha Storage 3C F-6 / F-40). A runner that
--- shows only the last result of a call (Supabase MCP `execute_sql`) and
--- psql (`-v ON_ERROR_STOP=1 -f`) show the same rows. The final row is
--- `99 | == VERDICT == | GO` or `… | STOP`, and `observed` names the failed
--- gates. Anything else — no verdict row, an error — is STOP.
---
--- POLICY DEFINITIONS, NOT NAMES (Alpha Storage 3C F-3). A same-named policy
--- with widened roles or a weakened predicate is drift and STOPs. Expected
--- definitions are the canonical migrations (W8-B 20260915120000, W8-E
--- 20260928120000) in PostgreSQL's own normalized form (`pg_policies.qual` /
--- `with_check` are `pg_get_expr` output), so whitespace in the migration text
--- is irrelevant. The fingerprint block is kept identical to
--- `30_verify_attachments_private.sql`; the privacy verifier asserts that.
---
--- A FAILED GATE IS NEVER "FIXED" HERE. An unknown policy is not dropped to get
--- past the gate: permissive policies are OR-combined, and removing a foreign
--- one can break another surface. It goes to a Product Owner decision
--- (docs/nora/21 Section 17).
+-- STRICTLY READ-ONLY BY CONSTRUCTION: ONE `select` statement, no DML, no DDL,
+-- no temp object, no user-defined function call, no transaction control.
+-- Verdict row LAST: `99 | == VERDICT == | VERIFIED` or `… | STOP`, with the
+-- failed gates named. Every gate except #1 is identical to
+-- `00_preflight.sql` — including the canonical policy fingerprints, which the
+-- privacy verifier keeps in lockstep — so "nothing changed but the flip" is
+-- shown by the same checks before and after.
 
 with expected_policy (policyname, fingerprint) as (
     values
@@ -74,8 +59,8 @@ branding_ref as (
      where r.v ~ '^https?://[^/?#[:space:]]+/storage/v1/object/public/attachments/'
 ),
 gates (seq, gate, ok, observed) as (
-    select 1, 'attachments bucket exists and is still PUBLIC (flip not done yet)',
-           coalesce((select public from bucket where id = 'attachments'), false),
+    select 1, 'attachments bucket exists and is PRIVATE (Stage C target state)',
+           coalesce((select not public from bucket where id = 'attachments'), false),
            coalesce((select public::text from bucket where id = 'attachments'), 'missing')
     union all
     select 2, 'attachments controls = W8-B contract (50 MiB, 9 MIME types)',
@@ -138,9 +123,9 @@ select seq, gate, case when coalesce(ok, false) then 'PASS' else 'FAIL' end as s
   from gates
 union all
 select 99, '== VERDICT ==',
-       case when bool_and(coalesce(ok, false)) then 'GO' else 'STOP' end,
+       case when bool_and(coalesce(ok, false)) then 'VERIFIED' else 'STOP' end,
        case when bool_and(coalesce(ok, false))
-            then 'all gates PASS — the operator must still confirm Stage B and B.5; then run 10_set_attachments_privacy.mjs private'
+            then 'all gates PASS — database state is the W8-E target; complete the functional post-Stage-C checks'
             else 'failed gate(s): ' || string_agg(seq::text, ', ' order by seq) filter (where not coalesce(ok, false))
        end
   from gates

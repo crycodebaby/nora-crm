@@ -24,10 +24,11 @@ export type CurrentSaleCache = {
    * W8-E: the identity cache carries the storage KEY as well as `src`.
    *
    * An employee photo is personal data, so it belongs in the private bucket,
-   * and a private object is addressed by its key — `src` is not persisted for
-   * it any more. Caching the key is safe: it is an opaque identifier, not a
-   * capability, and is worthless without an active session. A signed URL, by
-   * contrast, IS a capability and is never persisted anywhere.
+   * and a private object is addressed by its key — access derives from the
+   * key; a persisted `src` is inert N-1 compatibility metadata, never used
+   * when a key is present. Caching the key is safe: it is an opaque
+   * identifier, not a capability, and is worthless without an active session.
+   * A signed URL, by contrast, IS a capability and is never persisted anywhere.
    */
   avatar?: { src?: string; path?: string } | null;
   administrator?: boolean;
@@ -179,6 +180,20 @@ const getSale = async () => {
   return dataSale;
 };
 
+/**
+ * Call IMMEDIATELY BEFORE any call that establishes a new authenticated
+ * session in this document — `login`, the invite code (`verifyOtp`) and the
+ * access link (`setSession`). Drops the cached identity and every attachment
+ * capability minted, or still being minted, for a session that may have
+ * existed in this tab before (W8-E U-3; Alpha Storage 3C F-5: the invite path
+ * establishes a session without going through `login`). Deliberately not
+ * wired to token refreshes: a refresh keeps the same user and session.
+ */
+export function resetSessionScopedCaches(): void {
+  clearCurrentSaleCache();
+  resetAttachmentUrlCache();
+}
+
 function clearAuthBootstrapCaches() {
   const storage = getLocalStorage();
   storage?.removeItem(IS_INITIALIZED_CACHE_KEY);
@@ -210,8 +225,7 @@ export const getAuthProvider = (): AuthProvider => {
       // Drop stale identity before a new session is established — including
       // any attachment capability minted, or still being minted, for a
       // session that may have existed in this tab before (W8-E U-3).
-      clearCurrentSaleCache();
-      resetAttachmentUrlCache();
+      resetSessionScopedCaches();
       return baseAuthProvider.login(params);
     },
     logout: async (params) => {

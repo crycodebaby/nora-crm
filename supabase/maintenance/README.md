@@ -20,7 +20,10 @@ Rules for anything placed here:
 - **"Read-only" is not one property, and this directory never blurs the two.**
   *No durable or business-data mutation* is what makes a file safe against
   Production. *Strict SQL read-only* is the narrower claim that it also runs
-  inside `BEGIN TRANSACTION READ ONLY`. A file that creates even a session-local
+  inside `BEGIN TRANSACTION READ ONLY` — or is one single plain `select` with
+  no DML, DDL, temp object, user-defined function call or transaction control
+  (which is how a file keeps its verdict as the LAST result in a runner that
+  shows only the last one). A file that creates even a session-local
   `pg_temp` object satisfies the first and **not** the second, and must say so
   where an operator reads it.
 - A file that mutates must return **its own** result in the **same invocation**.
@@ -94,13 +97,28 @@ table alone. The one rule behind the order: *old runtime + private
 `attachments` bucket* is unsupported, so the bucket flip is an operator step,
 not a migration.
 
+**The flip to private is never SQL.** storage-api purges the bucket's CDN
+cache only when it performs a public -> private change itself; a direct
+`update storage.buckets set public = false` bypasses that and can leave
+publicly fetched objects on the Smart CDN edge (Alpha Storage 3C F-2). The
+only tool that changes the visibility of `attachments` is
+`attachment_privacy/10_set_attachments_privacy.mjs`, through the Storage API.
+
 | File | Writes? | Classification |
 |---|---|---|
 | `branding_migration/relocate_branding_objects.mjs` | only with `--apply` — copies branding objects into `branding`, rewrites the logo references | business-data mutating (Stage A); dry run by default; signs in as an active admin, **no** `service_role` |
-| `attachment_privacy/00_preflight.sql` | no | **STRICT READ-ONLY** — GO / STOP gate for Stage C; runs inside `BEGIN TRANSACTION READ ONLY` |
-| `attachment_privacy/10_set_attachments_private.sql` | **YES** — `storage.buckets.public = false` for `attachments` | configuration mutating (Stage C); re-checks every preflight gate itself, incl. unknown policies, and verifies its own result |
-| `attachment_privacy/20_set_attachments_public.sql` | **YES** — `storage.buckets.public = true` for `attachments` | configuration mutating (rollback); verifies its own result — mutation and postcondition in one block, plus an independent postcondition |
+| `attachment_privacy/00_preflight.sql` | no | **STRICT READ-ONLY** — ONE `select`, GO / STOP gate for Stage C; verdict is the last row in every runner |
+| `attachment_privacy/10_set_attachments_privacy.mjs` | **YES**, only with `--apply` — `private` or `public` for `attachments`, through `PUT /storage/v1/bucket/attachments`, controls echoed verbatim | configuration mutating (Stage C and canonical rollback); **operator-only privileged key** from the environment; verifies its own result, compensates a failed flip, never leaves an ambiguous state; logic in `lib/privacy_control.mjs` (unit-tested in CI) |
+| `attachment_privacy/20_set_attachments_public.sql` | **YES** — `storage.buckets.public = true` for `attachments` | configuration mutating — rollback **fallback** only when the Storage API path is unavailable; verifies its own result (in-block + independent postcondition, `set constraints all immediate`) |
+| `attachment_privacy/30_verify_attachments_private.sql` | no | **STRICT READ-ONLY** — ONE `select`, VERIFIED / STOP after Stage C |
 
-Runner: the whole file verbatim as ONE Supabase MCP `execute_sql` call, or
-`psql -v ON_ERROR_STOP=1 -f <file>`. Never `psql` without `ON_ERROR_STOP` —
-it carries on past an error and exits 0.
+SQL runner: the whole file verbatim as ONE Supabase MCP `execute_sql` call,
+the Dashboard SQL editor, or `psql -v ON_ERROR_STOP=1 -f <file>`. Never `psql`
+without `ON_ERROR_STOP` — it carries on past an error and exits 0.
+
+**The privileged Storage admin key** (`NORA_STORAGE_ADMIN_KEY`, a secret key or
+the legacy `service_role` key) exists only in the operator's shell for the
+duration of the command. Never in a file, a `.env*`, a `VITE_*` variable, a
+bundle, an Edge Function, a database row, a log, a chat or a document — the
+tool refuses a publishable key and a key it also finds in a `VITE_*`
+variable, and never prints it.

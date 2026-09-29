@@ -871,8 +871,9 @@ export type CrmDataProvider = ReturnType<
 const processConfigLogo = async (logo: any): Promise<string> => {
   if (typeof logo === "string") return logo;
   if (logo?.rawFile instanceof File) {
-    // The Nora light/dark logos must render on the login page with no session
-    // at all, so they are public by design (W8-E Decision A).
+    // The Nora light/dark logos are public, non-sensitive brand assets stored
+    // by their stable public URL, so they are public by design (W8-E
+    // Decision A) — not because the login page needs them (it does not).
     await uploadToBucket(logo, "branding");
     return logo.src;
   }

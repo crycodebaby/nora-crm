@@ -53,6 +53,36 @@
  *        "deactivated identity" read check now really presents that
  *        identity's JWT, so it can fail independently of the anonymous one.
  *
+ * Alpha Storage 6 (CDN-safe release procedure) changes how Stage C runs:
+ *
+ *   F-2  the flip is no longer SQL. Stage C and the canonical rollback run
+ *        through the REAL operator tool `10_set_attachments_privacy.mjs`
+ *        against the REAL local Storage API (child process, publishable key
+ *        for anonymous probes, the local secret key as the operator-only
+ *        admin credential). Asserted: its outcome line, its exit code, the
+ *        bucket state in the database, the untouched bucket controls, the
+ *        key never appearing in its output, and its refusal of an
+ *        already-private bucket (the Storage API never purges from there).
+ *   §10  compensation, by triggers injected on `storage.buckets`: an API
+ *        refusal is STOP / NO MUTATION; a dropped MIME allowlist, a flip
+ *        that does not take, or a branding bucket knocked private are
+ *        PUBLIC / COMPENSATED with the original controls; a compensation
+ *        that is refused too is EMERGENCY.
+ *   F-3  a same-named but widened `attachments_select_active_user` makes the
+ *        preflight STOP (definition, not name), and the tool refuses before
+ *        mutating because anonymous LIST works; an authenticated-only
+ *        widening is caught by the preflight alone.
+ *   F-32 / F-33  RLS disabled on `storage.objects` (local superuser) and any
+ *        policy on `storage.buckets` make the preflight STOP.
+ *   F-6  `00_preflight.sql` and `30_verify_attachments_private.sql` end on
+ *        their verdict row in every runner shape, including last-result-only.
+ *   F-34 the SQL rollback fallback refuses to report PUBLIC when a deferred
+ *        constraint trigger reverts the flip at commit.
+ *   F-1  branding is checked by its exact public bytes, anonymously.
+ *   The SQL rollback fallback `20_set_attachments_public.sql` keeps its U-7
+ *   runner-shape matrix. Every injection, policy change and bucket control is
+ *   restored in the exit handler, however the run ends.
+ *
  * THE ASSERTION THAT CHANGED. `attachment_storage_policy_verification.mjs`
  * records anonymous readability of a known key as RESIDUAL T1 — expected, not
  * a failure, because the bucket was public by design. Here, in the private
@@ -95,8 +125,9 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { execFileSync, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const ATTACHMENTS = "attachments";
 const BRANDING = "branding";
@@ -158,6 +189,8 @@ const psql = (sql, stdio = undefined) =>
 const run = randomUUID().slice(0, 8);
 const password = `W8e-${randomUUID()}`;
 const results = [];
+/** Checks that could not run here — reported next to the pass count (F-18). */
+const skipped = [];
 
 const check = (label, actual, expected) => {
   const ok = actual === expected;
@@ -294,16 +327,6 @@ const psqlTry = (sql) => {
   }
 };
 
-/** The part of an operator script from the line holding `marker` to its end. */
-const scriptFrom = (script, marker) => {
-  const at = script.indexOf(marker);
-  if (at < 0) throw new Error(`operator script has no section "${marker}"`);
-  return script.slice(script.lastIndexOf("\n", at) + 1);
-};
-
-const verdictOf = (rows, bucket) =>
-  rows.find((row) => row[0] === bucket)?.[3] ?? "<missing>";
-
 /**
  * Alpha Storage 5 U-7 — the runner shapes an operator (or an agent) may use.
  * Each returns exit code, stdout and stderr; none throws, because what a
@@ -345,33 +368,103 @@ const psqlShape = (shape, sql) => {
 };
 
 // Names of the objects this run may inject. Unique per run, and removed in
-// `finally` whatever happens (U-9).
+// the exit handler whatever happens (U-9).
 const INJECTED_POLICY = `w8e_verify_${run}_foreign_read`;
-const INJECTED_TRIGGER = `w8e_verify_${run}_keep_private`;
-const INJECTED_FUNCTION = `public.w8e_verify_${run}_keep_private`;
+const INJECTED_BUCKET_POLICY = `w8e_verify_${run}_buckets_rw`;
 
+/**
+ * Fault injections on `storage.buckets`. BEFORE triggers rewrite or refuse
+ * the row the Storage API (or SQL) writes; the AFTER and the DEFERRED ones
+ * change state behind the writer's back. SECURITY DEFINER so they behave the
+ * same whichever role storage-api uses for the update.
+ */
+const TRIGGERS = {
+  keep_private: `if new.id = 'attachments' then new.public := false; end if; return new;`,
+  refuse_private: `if new.id = 'attachments' and new.public = false then
+                       raise exception 'w8e verify: refusing the flip'; end if; return new;`,
+  drop_mime: `if new.id = 'attachments' and new.public = false then
+                  new.allowed_mime_types := null; end if; return new;`,
+  keep_public: `if new.id = 'attachments' then new.public := true; end if; return new;`,
+  refuse_public: `if new.id = 'attachments' and new.public = true then
+                      raise exception 'w8e verify: refusing public'; end if; return new;`,
+  flip_branding: `if new.id = 'attachments' and new.public = false and pg_trigger_depth() = 1 then
+                      update storage.buckets set public = false where id = 'branding'; end if; return null;`,
+  deferred_revert: `if new.id = 'attachments' and new.public is true and pg_trigger_depth() = 1 then
+                        update storage.buckets set public = false where id = 'attachments'; end if; return null;`,
+};
+const TRIGGER_TIMING = {
+  flip_branding: "after update on storage.buckets",
+  deferred_revert:
+    "after update on storage.buckets deferrable initially deferred",
+};
+const injectTrigger = (kind) => {
+  const name = `w8e_verify_${run}_${kind}`;
+  const timing = TRIGGER_TIMING[kind] ?? "before update on storage.buckets";
+  psql(`create function public.${name}() returns trigger
+          language plpgsql security definer set search_path = '' as $f$
+        begin ${TRIGGERS[kind]} end; $f$;
+        create ${kind === "deferred_revert" ? "constraint " : ""}trigger ${name}
+            ${timing}
+            for each row execute function public.${name}();`);
+};
 /** Makes every UPDATE of the attachments bucket row keep it PRIVATE. */
-const injectKeepPrivate = () =>
-  psql(`create function ${INJECTED_FUNCTION}() returns trigger
-          language plpgsql as $f$
-        begin
-            if new.id = 'attachments' then
-                new.public := false;
-            end if;
-            return new;
-        end;
-        $f$;
-        create trigger ${INJECTED_TRIGGER}
-            before update on storage.buckets
-            for each row execute function ${INJECTED_FUNCTION}();`);
+const injectKeepPrivate = () => injectTrigger("keep_private");
+
+// The W8-B definition of the one policy the F-3 probes widen.
+const CANONICAL_SELECT_POLICY = `alter policy attachments_select_active_user on storage.objects
+    to authenticated using (bucket_id = 'attachments' and nora_private.is_active_user());`;
 
 const removeInjections = () =>
-  psql(`drop trigger if exists ${INJECTED_TRIGGER} on storage.buckets;
-        drop function if exists ${INJECTED_FUNCTION}();
-        drop policy if exists ${INJECTED_POLICY} on storage.objects;`);
+  psql(`${Object.keys(TRIGGERS)
+    .map(
+      (
+        kind,
+      ) => `drop trigger if exists w8e_verify_${run}_${kind} on storage.buckets;
+        drop function if exists public.w8e_verify_${run}_${kind}();`,
+    )
+    .join("\n")}
+        drop policy if exists ${INJECTED_POLICY} on storage.objects;
+        drop policy if exists ${INJECTED_BUCKET_POLICY} on storage.buckets;
+        ${CANONICAL_SELECT_POLICY}`);
+
+/** The local superuser — needed only for the RLS-disabled probe (F-32). */
+const superuserPsql = (sql) =>
+  execFileSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      "-e",
+      `PGPASSWORD=${process.env.NORA_DB_SUPERUSER_PASSWORD || "postgres"}`,
+      DB_CONTAINER,
+      "psql",
+      "-U",
+      "supabase_admin",
+      "-h",
+      "127.0.0.1",
+      "-d",
+      "postgres",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-At",
+    ],
+    { input: sql, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+  ).trim();
 
 const bucketPublic = (bucket) =>
   psql(`select public from storage.buckets where id = '${bucket}';`);
+
+/** The attachments controls at start — restored verbatim however the run ends. */
+const bucketControls = (bucket) =>
+  psql(`select file_size_limit || '|' || allowed_mime_types::text
+          from storage.buckets where id = '${bucket}';`);
+const ATTACHMENTS_CONTROLS = bucketControls(ATTACHMENTS);
+const restoreAttachmentsControls = () => {
+  const [limit, mime] = ATTACHMENTS_CONTROLS.split("|");
+  psql(`update storage.buckets set file_size_limit = ${Number(limit)},
+          allowed_mime_types = '${mime.replace(/'/g, "''")}'::text[]
+         where id = 'attachments';`);
+};
 
 const unknownPolicyCount = () =>
   psql(`select count(*) from pg_policies
@@ -401,8 +494,27 @@ process.on("exit", (code) => {
       );
     }
   };
-  step("remove injected policy/trigger/function", () => {
-    removeInjections();
+  step(
+    "remove injected policies/triggers/functions, restore the W8-B policy",
+    () => {
+      removeInjections();
+    },
+  );
+  step("row level security on storage.objects", () => {
+    if (
+      psql(
+        "select relrowsecurity from pg_class where oid = 'storage.objects'::regclass;",
+      ) === "t"
+    ) {
+      return null;
+    }
+    superuserPsql("alter table storage.objects enable row level security;");
+    return "RLS on storage.objects had been left DISABLED — re-enabled";
+  });
+  step("restore attachments controls", () => {
+    if (bucketControls(ATTACHMENTS) === ATTACHMENTS_CONTROLS) return null;
+    restoreAttachmentsControls();
+    return "attachments controls had drifted — restored";
   });
   for (const bucket of [ATTACHMENTS, BRANDING]) {
     step(`restore ${bucket}.public = true`, () => {
@@ -437,8 +549,13 @@ const grammarAccepts = (element) => {
   );
   if (error) {
     if (!error.includes("NORA_ATTACHMENT_REFERENCE_INVALID")) {
-      console.error(`[w8e] unexpected grammar error: ${error}`);
-      process.exitCode = 1;
+      // An unexpected SQL error is a FAILURE, never a counted rejection
+      // (Alpha Storage 3C F-17): it lands in the summary like any check.
+      results.push({
+        label: `grammar raised an unexpected error: ${error.split("\n")[0]}`,
+        ok: false,
+      });
+      console.error(`FAIL unexpected grammar error: ${error}`);
     }
     return false;
   }
@@ -448,8 +565,24 @@ const grammarAccepts = (element) => {
 // ---------------------------------------------------------------------------
 // STATE PUBLIC — Stage A / Stage B
 // ---------------------------------------------------------------------------
+// Start-state precondition: the stack must be exactly the pre-Stage-C target
+// (the preflight says GO). A stack left private or drifted by an interrupted
+// run is reported, not silently "repaired" into a pass.
+{
+  const start = psqlTry(operatorScript("00_preflight.sql"));
+  const verdict = (start.rows ?? []).at(-1);
+  if (verdict?.[1] !== "== VERDICT ==" || verdict?.[2] !== "GO") {
+    console.error(
+      "[w8e] start state is not the pre-Stage-C target (00_preflight.sql did not say GO):",
+    );
+    for (const row of start.rows ?? [])
+      console.error(`[w8e]   ${row.join("|")}`);
+    if (start.error) console.error(`[w8e]   ${start.error}`);
+    process.exit(2);
+  }
+}
 console.log(
-  `\n=== STATE PUBLIC (attachments.public=${setPublic(ATTACHMENTS, true)}) — Stage A/B ===`,
+  `\n=== STATE PUBLIC (attachments.public=${bucketPublic(ATTACHMENTS)}) — Stage A/B ===`,
 );
 
 check(
@@ -608,6 +741,9 @@ if (onAllowlistedOrigin) {
     "NORA_ATTACHMENT_REFERENCE_INVALID",
   );
 } else {
+  skipped.push(
+    "M-2 real note writes (stack is not on the grammar's allowlisted origin)",
+  );
   console.log(
     `SKIP M-2 real note writes: ${config.url} is not the grammar's allowlisted local origin ${GRAMMAR_LOCAL_ORIGIN}`,
   );
@@ -624,67 +760,115 @@ check(
   true,
 );
 
-// --- L-2: the Stage C verdict logic, observed while attachments is PUBLIC ---
-// Simulates "the flip did not take effect": the postcondition must be a hard
-// error and the report must call it a failure — for attachments only.
-{
-  const script = operatorScript("10_set_attachments_private.sql");
-  const post = psqlTry(scriptFrom(script, "-- POSTCONDITION"));
-  check(
-    "L-2 Stage C postcondition is a HARD error while attachments is still public",
-    /NORA_W8E_ATTACHMENTS_STILL_PUBLIC/.test(post.error ?? ""),
-    true,
-  );
-  const report = psqlTry(
-    scriptFrom(script, "-- The invocation returns its own result."),
-  );
-  check(
-    "L-2 Stage C report calls a still-public attachments bucket a FAILURE",
-    verdictOf(report.rows ?? [], "attachments").startsWith("FAILURE"),
-    true,
-  );
-  check(
-    "L-2 Stage C report calls public branding EXPECTED BY DESIGN",
-    verdictOf(report.rows ?? [], "branding").startsWith(
-      "PUBLIC — expected by design",
-    ),
-    true,
-  );
+// ---------------------------------------------------------------------------
+// Alpha Storage 6 — the Stage C control plane, run as the REAL tool
+// ---------------------------------------------------------------------------
+const STAGE_TOOL = fileURLToPath(
+  new URL(
+    "../maintenance/attachment_privacy/10_set_attachments_privacy.mjs",
+    import.meta.url,
+  ),
+);
+const targetHost = new URL(config.url).host;
+const PROBE_URL = publicUrl(ATTACHMENTS, noteKey);
+
+/**
+ * Runs the operator tool in a child process exactly as an operator would —
+ * same Node flags (so a local fetch shim reaches it and its probe processes),
+ * publishable key for the anonymous probes, the local secret key as the
+ * operator-only admin credential. Short CDN window: there is no CDN locally.
+ */
+const runStageTool = (command, { apply = true } = {}) => {
+  const args = [
+    ...process.execArgv,
+    STAGE_TOOL,
+    command,
+    `--target=${targetHost}`,
+    `--probe-url=${PROBE_URL}`,
+    "--cdn-window-seconds=5",
+    "--cdn-interval-seconds=1",
+  ];
+  if (apply) args.push("--apply");
+  const child = spawnSync(process.execPath, args, {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      SUPABASE_URL: config.url,
+      SUPABASE_ANON_KEY: config.anon,
+      NORA_STORAGE_ADMIN_KEY: config.service,
+    },
+  });
+  const out = child.stdout ?? "";
+  const last = out.trim().split("\n").at(-1) ?? "";
+  let result = { outcome: "<no result line>" };
+  if (last.startsWith("NORA_W8E_RESULT ")) {
+    try {
+      result = JSON.parse(last.slice("NORA_W8E_RESULT ".length));
+    } catch {
+      result = { outcome: "<unparseable result line>" };
+    }
+  }
+  return {
+    code: child.status,
+    result,
+    out,
+    leaked: `${out}${child.stderr ?? ""}`.includes(config.service),
+  };
+};
+
+/** Runs a read-only gate file and returns its final (verdict) row. */
+const verdictRow = (file) => {
+  const { rows, error } = psqlTry(operatorScript(file));
+  return { last: (rows ?? []).at(-1) ?? [], rows: rows ?? [], error };
+};
+const failedGates = (row) => row?.[3] ?? "";
+
+// --- F-6: the read-only gates end on their verdict in every runner shape ---
+console.log(
+  "\n--- F-6 read-only gates across runner shapes (attachments PUBLIC) ---",
+);
+for (const [file, expected] of [
+  ["00_preflight.sql", "GO"],
+  ["30_verify_attachments_private.sql", "STOP"],
+]) {
+  for (const shape of Object.keys(RUNNER_SHAPES)) {
+    if (shape === "psql stdin without ON_ERROR_STOP") continue; // same output as with
+    const ran = psqlShape(shape, operatorScript(file));
+    const lastLine = ran.out.trim().split("\n").at(-1) ?? "";
+    check(
+      `F-6 [${shape}] ${file}: the LAST visible row is its verdict (${expected})`,
+      lastLine.startsWith(`99|== VERDICT ==|${expected}|`),
+      true,
+    );
+  }
 }
 
-// --- U-6: Stage C itself refuses a foreign policy, before any mutation -----
-// A permissive policy is OR-ed with the W8-B ones: with it installed, a
-// "private" bucket stays readable through the API. The gate must live in the
-// mutating script, not only in the preflight an operator may skip.
-console.log(
-  "\n--- U-6 unknown storage.objects policy (attachments PUBLIC) ---",
-);
+// --- F-3 / U-6 / F-32 / F-33: the preflight judges definitions, not names ---
+console.log("\n--- preflight gates (attachments PUBLIC) ---");
 {
   check(
-    "U-6 precondition: no foreign policy on storage.objects",
-    unknownPolicyCount(),
-    "0",
+    "preflight precondition: GO on the pristine stack",
+    verdictRow("00_preflight.sql").last[2],
+    "GO",
   );
+
+  // U-6: a foreign permissive policy
   psql(`create policy ${INJECTED_POLICY} on storage.objects
           for select to anon using (bucket_id = 'attachments');`);
-  const preflight = psqlTry(operatorScript("00_preflight.sql"));
+  const foreign = verdictRow("00_preflight.sql");
+  check("U-6 preflight STOPs on a foreign policy", foreign.last[2], "STOP");
   check(
-    "U-6 preflight verdict is STOP while a foreign policy exists",
-    (preflight.rows ?? []).some(
-      (row) => row[0] === "== VERDICT ==" && row[1] === "STOP",
+    "U-6 preflight names the foreign policy",
+    foreign.rows.some(
+      (row) => row[0] === "8" && row.join("|").includes(INJECTED_POLICY),
     ),
     true,
   );
-  const refused = psqlTry(operatorScript("10_set_attachments_private.sql"));
+  const refusedForeign = runStageTool("private");
   check(
-    "U-6 Stage C REFUSES with NORA_W8E_UNKNOWN_STORAGE_POLICY",
-    /NORA_W8E_UNKNOWN_STORAGE_POLICY/.test(refused.error ?? ""),
-    true,
-  );
-  check(
-    "U-6 Stage C refusal names the foreign policy",
-    (refused.error ?? "").includes(INJECTED_POLICY),
-    true,
+    "U-6 Stage C tool refuses BEFORE mutating (anonymous LIST works)",
+    `${refusedForeign.code} ${refusedForeign.result.outcome}`,
+    "1 STOP / NO MUTATION",
   );
   check(
     "U-6 attachments.public is UNCHANGED after the refusal",
@@ -692,80 +876,322 @@ console.log(
     "t",
   );
   check(
-    "U-6 the foreign policy was neither dropped nor altered by Stage C",
+    "U-6 the foreign policy was neither dropped nor altered",
     psql(`select count(*) from pg_policies
            where schemaname = 'storage' and tablename = 'objects'
-             and policyname = '${INJECTED_POLICY}' and cmd = 'SELECT'
-             and roles = '{anon}';`),
+             and policyname = '${INJECTED_POLICY}' and cmd = 'SELECT' and roles = '{anon}';`),
     "1",
   );
   removeInjections();
+
+  // F-3 (a): same name, widened to anon, predicate weakened
+  psql(`alter policy attachments_select_active_user on storage.objects
+          to anon, authenticated using (bucket_id = 'attachments');`);
+  const widened = verdictRow("00_preflight.sql");
   check(
-    "U-6 cleanup: the injected policy is gone again",
-    unknownPolicyCount(),
-    "0",
+    "F-3 preflight STOPs on a same-named widened policy",
+    widened.last[2],
+    "STOP",
+  );
+  check(
+    "F-3 the failed gate is the DEFINITION gate (6), with the drifted definition shown",
+    failedGates(widened.last) === "failed gate(s): 6" &&
+      widened.rows.some(
+        (row) =>
+          row[0] === "6" && row.join("|").includes("{anon,authenticated}"),
+      ),
+    true,
+  );
+  const refusedWidened = runStageTool("private");
+  check(
+    "F-3 Stage C tool refuses BEFORE mutating (anonymous LIST works)",
+    `${refusedWidened.code} ${refusedWidened.result.outcome}`,
+    "1 STOP / NO MUTATION",
+  );
+  check("F-3 attachments.public is UNCHANGED", bucketPublic(ATTACHMENTS), "t");
+  psql(CANONICAL_SELECT_POLICY);
+
+  // F-3 (b): same name, same role, the active-user predicate dropped — only
+  // the definition gate can see this; anonymous probes cannot.
+  psql(`alter policy attachments_select_active_user on storage.objects
+          to authenticated using (bucket_id = 'attachments');`);
+  check(
+    "F-3 preflight STOPs when is_active_user() is dropped from the definition",
+    `${verdictRow("00_preflight.sql").last[2]} ${failedGates(verdictRow("00_preflight.sql").last)}`,
+    "STOP failed gate(s): 6",
+  );
+  psql(CANONICAL_SELECT_POLICY);
+  check(
+    "F-3 canonical definition restored: preflight GO again",
+    verdictRow("00_preflight.sql").last[2],
+    "GO",
+  );
+
+  // F-33: any policy on storage.buckets
+  psql(`create policy ${INJECTED_BUCKET_POLICY} on storage.buckets
+          for all to authenticated using (true) with check (true);`);
+  check(
+    "F-33 preflight STOPs on a policy on storage.buckets (gate 9)",
+    `${verdictRow("00_preflight.sql").last[2]} ${failedGates(verdictRow("00_preflight.sql").last)}`,
+    "STOP failed gate(s): 9",
+  );
+  removeInjections();
+
+  // F-32: RLS disabled on storage.objects (platform-owner roles only)
+  let superuser = true;
+  try {
+    superuserPsql("alter table storage.objects disable row level security;");
+  } catch (error) {
+    superuser = false;
+    skipped.push("F-32 RLS-disabled probe (local superuser unavailable)");
+    console.log(
+      `SKIP F-32 RLS-disabled probe: local superuser unavailable (${String(error.message).split("\n")[0]})`,
+    );
+  }
+  if (superuser) {
+    try {
+      check(
+        "F-32 preflight STOPs when RLS is disabled on storage.objects (gate 5)",
+        `${verdictRow("00_preflight.sql").last[2]} ${failedGates(verdictRow("00_preflight.sql").last)}`,
+        "STOP failed gate(s): 5",
+      );
+    } finally {
+      superuserPsql("alter table storage.objects enable row level security;");
+    }
+  }
+  // Stage A not complete: a branding reference still points into attachments.
+  // The tool enforces this itself (read-only through PostgREST), not only the
+  // preflight.
+  const configBefore = psql(
+    "select coalesce((select config::text from public.configuration where id = 1), '<none>');",
+  );
+  psql(`insert into public.configuration (id, config) values (1, '{}'::jsonb)
+          on conflict (id) do nothing;
+        update public.configuration
+           set config = config || jsonb_build_object('darkModeLogo', '${publicUrl(ATTACHMENTS, noteKey)}')
+         where id = 1;`);
+  try {
+    check(
+      "Stage A gate: preflight STOPs while a branding reference points into attachments (gate 10)",
+      `${verdictRow("00_preflight.sql").last[2]} ${failedGates(verdictRow("00_preflight.sql").last)}`,
+      "STOP failed gate(s): 10",
+    );
+    const stale = runStageTool("private");
+    check(
+      "Stage A gate: the tool itself refuses BEFORE mutating",
+      `${stale.code} ${stale.result.outcome} ${(stale.result.stops ?? []).some((s) => s.includes("configuration#1.darkModeLogo"))}`,
+      "1 STOP / NO MUTATION true",
+    );
+    check(
+      "Stage A gate: attachments.public is UNCHANGED",
+      bucketPublic(ATTACHMENTS),
+      "t",
+    );
+  } finally {
+    psql(
+      configBefore === "<none>"
+        ? "delete from public.configuration where id = 1;"
+        : `update public.configuration set config = $cfg$${configBefore}$cfg$::jsonb where id = 1;`,
+    );
+  }
+  check(
+    "preflight GO again after every probe was undone",
+    verdictRow("00_preflight.sql").last[2],
+    "GO",
   );
 }
 
-// --- U-7: the rollback refuses a missing bucket -----------------------------
-// Run on a session-local stand-in for storage.buckets with NO attachments row,
-// so the real bucket is never touched.
+// --- §10: every failure after the API mutation ends in a named state -------
+console.log("\n--- §10 Stage C failure compensation (attachments PUBLIC) ---");
+const withTrigger = (kind, action) => {
+  injectTrigger(kind);
+  try {
+    return action();
+  } finally {
+    removeInjections();
+  }
+};
 {
-  const onTempTable = operatorScript("20_set_attachments_public.sql").replace(
-    /storage\.buckets/g,
-    "pg_temp.w8e_buckets",
-  );
-  const setup =
-    "create temp table w8e_buckets (id text primary key, public boolean not null);\n";
-  const stop = psqlShape("psql stdin + ON_ERROR_STOP", setup + onTempTable);
+  const refused = withTrigger("refuse_private", () => runStageTool("private"));
   check(
-    "U-7 rollback: a missing attachments bucket is a HARD error (NORA_W8E_ATTACHMENTS_BUCKET_MISSING)",
-    stop.code !== 0 && /NORA_W8E_ATTACHMENTS_BUCKET_MISSING/.test(stop.err),
-    true,
-  );
-  const lax = psqlShape(
-    "psql stdin without ON_ERROR_STOP",
-    setup + onTempTable,
+    "§10 an API refusal is STOP / NO MUTATION (exit 1)",
+    `${refused.code} ${refused.result.outcome}`,
+    "1 STOP / NO MUTATION",
   );
   check(
-    "U-7 rollback: a missing bucket never reports PUBLIC, even to a runner that ignores errors",
-    /NORA_W8E_ATTACHMENTS_BUCKET_MISSING/.test(lax.err) &&
-      !lax.out.includes("PUBLIC —"),
+    "§10 … and the bucket is verifiably still public",
+    bucketPublic(ATTACHMENTS),
+    "t",
+  );
+
+  const dropped = withTrigger("drop_mime", () => runStageTool("private"));
+  check(
+    "§10 a dropped MIME allowlist is PUBLIC / COMPENSATED (exit 2)",
+    `${dropped.code} ${dropped.result.outcome}`,
+    "2 PUBLIC / COMPENSATED",
+  );
+  check(
+    "§10 … reporting the original failure",
+    (dropped.result.originalFailures ?? [])
+      .join(" ")
+      .includes("allowed_mime_types"),
     true,
   );
+  check(
+    "§10 … and the database holds public + the ORIGINAL controls",
+    `${bucketPublic(ATTACHMENTS)} ${bucketControls(ATTACHMENTS) === ATTACHMENTS_CONTROLS}`,
+    "t true",
+  );
+
+  const noEffect = withTrigger("keep_public", () => runStageTool("private"));
+  check(
+    "§10 a flip that does not take effect is PUBLIC / COMPENSATED, never PRIVATE",
+    `${noEffect.code} ${noEffect.result.outcome}`,
+    "2 PUBLIC / COMPENSATED",
+  );
+
+  const branding = withTrigger("flip_branding", () => runStageTool("private"));
+  check(
+    "§10 branding knocked private by the flip is PUBLIC / COMPENSATED",
+    `${branding.code} ${branding.result.outcome}`,
+    "2 PUBLIC / COMPENSATED",
+  );
+  check(
+    "§10 … the original failure names the branding bucket",
+    (branding.result.originalFailures ?? [])
+      .join(" ")
+      .includes('"branding" is not public'),
+    true,
+  );
+  check(
+    "§10 … attachments verifiably public again",
+    bucketPublic(ATTACHMENTS),
+    "t",
+  );
+  setPublic(BRANDING, true);
+
+  injectTrigger("drop_mime");
+  injectTrigger("refuse_public");
+  let emergency;
+  try {
+    emergency = runStageTool("private");
+  } finally {
+    removeInjections();
+  }
+  check(
+    "§10 a refused compensation is EMERGENCY / STATE REQUIRES MANUAL RECOVERY (exit 3)",
+    `${emergency.code} ${emergency.result.outcome}`,
+    "3 EMERGENCY / STATE REQUIRES MANUAL RECOVERY",
+  );
+  check(
+    "§10 … keeping BOTH the original failure and the compensation error",
+    (emergency.result.originalFailures ?? [])
+      .join(" ")
+      .includes("allowed_mime_types") &&
+      // storage-api surfaces the injected trigger's RAISE as its SQLSTATE
+      String(emergency.result.compensationError ?? "").includes("P0001"),
+    true,
+  );
+  check(
+    "§10 … and telling the operator not to revert the runtime",
+    emergency.out.includes("Do NOT revert the runtime"),
+    true,
+  );
+  // manual recovery of the emergency the probe created
+  setPublic(ATTACHMENTS, true);
+  restoreAttachmentsControls();
+  check(
+    "§10 recovered: preflight GO",
+    verdictRow("00_preflight.sql").last[2],
+    "GO",
+  );
+  for (const [label, runResult] of [
+    ["refusal", refused],
+    ["compensation", dropped],
+    ["emergency", emergency],
+  ]) {
+    check(
+      `§10 the admin key never appears in the tool output (${label})`,
+      runResult.leaked,
+      false,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
-// STATE PRIVATE — Stage C, the target
+// STATE PRIVATE — Stage C, the target, through the Storage API
 // ---------------------------------------------------------------------------
-// Stage C runs as the REAL operator script, gates and all.
-const stageC = psqlTry(operatorScript("10_set_attachments_private.sql"));
-if (stageC.error) {
-  console.error(`[w8e] Stage C operator script refused: ${stageC.error}`);
+const dryRun = runStageTool("private", { apply: false });
+check(
+  "F-2 dry run: DRY-RUN / NO MUTATION, bucket still public",
+  `${dryRun.code} ${dryRun.result.outcome} ${bucketPublic(ATTACHMENTS)}`,
+  "0 DRY-RUN / NO MUTATION t",
+);
+const stageC = runStageTool("private");
+if (stageC.result.outcome !== "PRIVATE / VERIFIED") {
+  console.error(`[w8e] Stage C tool did not verify PRIVATE:\n${stageC.out}`);
   process.exit(2);
 }
 console.log(
-  `\n=== STATE PRIVATE (attachments.public=${psql(
-    "select public from storage.buckets where id = 'attachments';",
-  )}) — Stage C ===`,
+  `\n=== STATE PRIVATE (attachments.public=${bucketPublic(ATTACHMENTS)}) — Stage C ===`,
 );
 check(
-  "L-2 Stage C reports attachments PRIVATE as the expected target state",
-  verdictOf(stageC.rows, "attachments").startsWith(
-    "PRIVATE — expected target state",
-  ),
+  "F-2 Stage C tool exits 0 with PRIVATE / VERIFIED",
+  `${stageC.code} ${stageC.result.outcome}`,
+  "0 PRIVATE / VERIFIED",
+);
+check(
+  "F-2 the database says PRIVATE (not just the report)",
+  bucketPublic(ATTACHMENTS),
+  "f",
+);
+check(
+  "F-2 file_size_limit and allowed_mime_types are byte-identical to before",
+  bucketControls(ATTACHMENTS),
+  ATTACHMENTS_CONTROLS,
+);
+check("F-2 branding untouched and public", bucketPublic(BRANDING), "t");
+check(
+  "F-2 the primed exact URL was re-probed and serves no bytes",
+  stageC.result.attempts?.at(-1)?.status >= 400,
   true,
 );
 check(
-  "L-2 Stage C reports branding PUBLIC as expected by design",
-  verdictOf(stageC.rows, "branding").startsWith("PUBLIC — expected by design"),
-  true,
-);
-check(
-  "L-2 Stage C output never says STILL PUBLIC for a correct end state",
-  stageC.rows.some((row) => row.join("|").includes("STILL PUBLIC")),
+  "F-2 the admin key never appears in the tool output",
+  stageC.leaked,
   false,
 );
+check(
+  "F-2 read-only post-check 30_verify_attachments_private.sql says VERIFIED",
+  verdictRow("30_verify_attachments_private.sql").last[2],
+  "VERIFIED",
+);
+check(
+  "F-2 the preflight now says STOP (flip already done)",
+  verdictRow("00_preflight.sql").last[2],
+  "STOP",
+);
+{
+  const again = runStageTool("private");
+  check(
+    "F-2 an ALREADY private bucket is refused (the API would not purge): STOP / NO MUTATION",
+    `${again.code} ${again.result.outcome}`,
+    "1 STOP / NO MUTATION",
+  );
+}
+for (const shape of Object.keys(RUNNER_SHAPES)) {
+  if (shape === "psql stdin without ON_ERROR_STOP") continue;
+  const lastLine =
+    psqlShape(shape, operatorScript("30_verify_attachments_private.sql"))
+      .out.trim()
+      .split("\n")
+      .at(-1) ?? "";
+  check(
+    `F-6 [${shape}] 30_verify_attachments_private.sql ends on VERIFIED while private`,
+    lastLine.startsWith("99|== VERDICT ==|VERIFIED|"),
+    true,
+  );
+}
 
 // --- the closure itself: no anonymous route returns the bytes
 check(
@@ -790,6 +1216,12 @@ check(
   "C anonymous client cannot derive a signed URL",
   await canSign(anon, ATTACHMENTS, noteKey),
   false,
+);
+check(
+  "C anonymous client lists nothing",
+  ((await anon.storage.from(ATTACHMENTS).list("", { limit: 5 })).data ?? [])
+    .length,
+  0,
 );
 check(
   "M-2 [Stage C] the persisted canonical src yields NO bytes anonymously",
@@ -883,18 +1315,38 @@ check(
     false,
   );
 }
+// F-35: the expiry is the SIGNER's choice. Nora asks for 900 s; an actor the
+// policy allows to sign may ask the Storage API for far more. Recorded so the
+// documentation can never again claim a platform-wide 900 s bound.
+{
+  const { data, error } = await office.client.storage
+    .from(ATTACHMENTS)
+    .createSignedUrl(noteKey, 60 * 60 * 24 * 365);
+  const token = data?.signedUrl
+    ? new URL(data.signedUrl).searchParams.get("token")
+    : null;
+  const claims = token
+    ? JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"))
+    : {};
+  check(
+    "F-35 an authorized signer can choose a one-year expiry directly (residual, documented)",
+    !error && claims.exp - claims.iat === 60 * 60 * 24 * 365,
+    true,
+  );
+}
 
 // --- branding is unaffected by the flip, which is the point of splitting it
 console.log("\n--- branding bucket, attachments still PRIVATE ---");
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const PNG_SHA256 = sha256(PNG_BYTES);
+/** F-1: the exact public branding bytes, anonymously — no session, no key. */
 const brandBytes = async (url) => {
   const response = await fetch(url);
   if (!response.ok) return false;
-  return (
-    new Uint8Array(await response.arrayBuffer()).length === PNG_BYTES.length
-  );
+  return sha256(new Uint8Array(await response.arrayBuffer())) === PNG_SHA256;
 };
 check(
-  "C branding is readable with NO session at all (pre-auth logo)",
+  "C branding: the exact public URL returns the exact bytes with NO session and NO key",
   await brandBytes(publicUrl(BRANDING, brandKey)),
   true,
 );
@@ -979,43 +1431,8 @@ check(
   false,
 );
 
-// --- U-1: Stage C's branding postcondition, on its own ----------------------
-// Gate 1 already refuses a non-public branding bucket BEFORE the flip, so the
-// full script can never reach this branch on a sane stack. Asserting the
-// section directly is what makes deleting it fail this suite.
-{
-  const script = operatorScript("10_set_attachments_private.sql");
-  setPublic(BRANDING, false);
-  try {
-    const post = psqlTry(scriptFrom(script, "-- POSTCONDITION"));
-    check(
-      "U-1 Stage C postcondition is a HARD error when branding is not public",
-      /NORA_W8E_BRANDING_NOT_PUBLIC/.test(post.error ?? ""),
-      true,
-    );
-    const report = psqlTry(
-      scriptFrom(script, "-- The invocation returns its own result."),
-    );
-    check(
-      "U-1 Stage C report calls a non-public branding bucket a FAILURE",
-      verdictOf(report.rows ?? [], "branding").startsWith("FAILURE"),
-      true,
-    );
-  } finally {
-    setPublic(BRANDING, true);
-  }
-  check(
-    "U-1 branding is public again after the postcondition probe",
-    bucketPublic(BRANDING),
-    "t",
-  );
-}
-
-// --- U-7: a rollback that does not take effect is a failure in EVERY runner --
-// An injected trigger keeps the bucket private whatever the UPDATE says. The
-// rollback must then never look like success: not in the exit code where the
-// runner honours errors, and never as a `PUBLIC —` row where it does not.
-console.log("\n--- U-7 rollback postcondition across runner shapes ---");
+// --- U-7: the SQL rollback FALLBACK never reports a rollback that did not happen
+console.log("\n--- U-7 SQL rollback fallback across runner shapes ---");
 {
   const script = operatorScript("20_set_attachments_public.sql");
   injectKeepPrivate();
@@ -1048,8 +1465,12 @@ console.log("\n--- U-7 rollback postcondition across runner shapes ---");
     // it. Even there both postconditions fire and the last row says FAILURE.
     const lax = shapes["psql stdin without ON_ERROR_STOP"];
     check(
-      "U-7 [psql stdin without ON_ERROR_STOP] both postconditions fire",
-      (lax.err.match(/NORA_W8E_ATTACHMENTS_STILL_PRIVATE/g) ?? []).length,
+      "U-7 [psql stdin without ON_ERROR_STOP] both postconditions fire as ERRORs",
+      (
+        lax.err.match(
+          /ERROR:[^\n]*\n(?:[^\n]*\n)*?DETAIL:\s+NORA_W8E_ATTACHMENTS_STILL_PRIVATE/g,
+        ) ?? []
+      ).length,
       2,
     );
     check(
@@ -1077,31 +1498,109 @@ console.log("\n--- U-7 rollback postcondition across runner shapes ---");
   }
 }
 
+// --- F-34: a deferred constraint trigger cannot fake a PUBLIC verdict ------
+console.log("\n--- F-34 SQL rollback fallback vs a deferred revert ---");
+{
+  const script = operatorScript("20_set_attachments_public.sql");
+  injectTrigger("deferred_revert");
+  try {
+    for (const shape of Object.keys(RUNNER_SHAPES)) {
+      if (shape === "psql stdin without ON_ERROR_STOP") continue;
+      const result = psqlShape(shape, script);
+      check(
+        `F-34 [${shape}] a revert at COMMIT is reported STILL_PRIVATE, never PUBLIC —`,
+        /NORA_W8E_ATTACHMENTS_STILL_PRIVATE/.test(result.err) &&
+          !result.out.includes("PUBLIC —") &&
+          result.code !== 0,
+        true,
+      );
+      check(
+        `F-34 [${shape}] … and the bucket is still private`,
+        bucketPublic(ATTACHMENTS),
+        "f",
+      );
+    }
+  } finally {
+    removeInjections();
+  }
+}
+
 // ---------------------------------------------------------------------------
-// ROLLBACK — public again
+// ROLLBACK A — the SQL fallback (Storage API unavailable)
 // ---------------------------------------------------------------------------
 const rollback = psqlTry(operatorScript("20_set_attachments_public.sql"));
 if (rollback.error) {
-  console.error(`[w8e] rollback operator script failed: ${rollback.error}`);
+  console.error(`[w8e] rollback fallback failed: ${rollback.error}`);
   process.exit(2);
 }
 console.log(
-  `\n=== ROLLBACK (attachments.public=${psql(
-    "select public from storage.buckets where id = 'attachments';",
-  )}) ===`,
+  `\n=== ROLLBACK A: SQL fallback (attachments.public=${bucketPublic(ATTACHMENTS)}) ===`,
 );
 check(
-  "rollback operator script reports PUBLIC",
+  "rollback fallback reports PUBLIC",
   (rollback.rows.find((row) => row[0] === "attachments")?.[2] ?? "").startsWith(
     "PUBLIC —",
   ),
   true,
 );
 check(
-  "rollback end state really is public (not just reported)",
+  "rollback fallback end state really is public (not just reported)",
   bucketPublic(ATTACHMENTS),
   "t",
 );
+check(
+  "rollback fallback leaves the controls untouched",
+  bucketControls(ATTACHMENTS),
+  ATTACHMENTS_CONTROLS,
+);
+
+// ---------------------------------------------------------------------------
+// ROLLBACK B — the canonical path: the Storage API tool
+// ---------------------------------------------------------------------------
+{
+  const reflip = runStageTool("private");
+  check(
+    "F-2 a second Stage C after a rollback is again PRIVATE / VERIFIED (the API path purges again)",
+    `${reflip.code} ${reflip.result.outcome}`,
+    "0 PRIVATE / VERIFIED",
+  );
+  const back = runStageTool("public");
+  console.log(
+    `\n=== ROLLBACK B: Storage API (attachments.public=${bucketPublic(ATTACHMENTS)}) ===`,
+  );
+  check(
+    "rollback via the tool is PUBLIC / VERIFIED (exit 0)",
+    `${back.code} ${back.result.outcome}`,
+    "0 PUBLIC / VERIFIED",
+  );
+  check(
+    "rollback via the tool: the database says public",
+    bucketPublic(ATTACHMENTS),
+    "t",
+  );
+  check(
+    "rollback via the tool: the probe URL served bytes before it said so",
+    back.result.probe?.status,
+    200,
+  );
+  check(
+    "rollback via the tool leaves the controls untouched",
+    bucketControls(ATTACHMENTS),
+    ATTACHMENTS_CONTROLS,
+  );
+  const idempotent = runStageTool("public");
+  check(
+    "rollback via the tool on an already public bucket changes nothing and says so",
+    `${idempotent.code} ${idempotent.result.outcome} ${idempotent.result.mutation}`,
+    "0 PUBLIC / VERIFIED none — already public",
+  );
+  check(
+    "rollback: the admin key never appears in the tool output",
+    back.leaked || reflip.leaked,
+    false,
+  );
+}
+
 check(
   "M-2 [rollback] the persisted canonical src yields bytes again (old runtime route)",
   await yieldsBytes(canonicalSrc, repBody),
@@ -1146,9 +1645,14 @@ check(
   true,
 );
 check(
-  "rollback leaves branding untouched and still public",
+  "rollback leaves branding untouched and still public (exact bytes)",
   await brandBytes(publicUrl(BRANDING, brandKey)),
   true,
+);
+check(
+  "the preflight is GO again after the rollback (the stack is back at the pre-C target)",
+  verdictRow("00_preflight.sql").last[2],
+  "GO",
 );
 
 // ---------------------------------------------------------------------------
@@ -1156,8 +1660,9 @@ check(
 // ---------------------------------------------------------------------------
 const failed = results.filter((r) => !r.ok);
 console.log(
-  `\n=== ${results.length - failed.length}/${results.length} PASS ===`,
+  `\n=== ${results.length - failed.length}/${results.length} PASS${skipped.length ? `, ${skipped.length} SKIPPED — not a full run` : ""} ===`,
 );
+for (const skip of skipped) console.log(`  skipped: ${skip}`);
 if (failed.length) {
   console.log("failed:");
   for (const f of failed) console.log(`  - ${f.label}`);
