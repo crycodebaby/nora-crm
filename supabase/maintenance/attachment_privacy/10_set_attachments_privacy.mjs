@@ -53,8 +53,11 @@
  *      `/object/authenticated` (publishable key) / `/object/<bucket>/<key>`
  *      yield nothing. Any failure -> COMPENSATION (below);
  *   6. CDN proof: the EXACT primed URL — same path, no query string — from a
- *      FRESH process per attempt, polled until it stops returning bytes or the
- *      propagation window ends.
+ *      FRESH process per attempt, polled until it answers HTTP 400 or 404 or
+ *      the propagation window ends. ONLY 400/404 is proof (Alpha Storage 3D
+ *      LOW-1): a 2xx is a still-served copy, and a transport error, 3xx, 401,
+ *      403, 429, 5xx or any other answer is INCONCLUSIVE — both end in
+ *      `CDN PROOF PENDING` (exit 4), never in `PRIVATE / VERIFIED`.
  *
  * COMPENSATION (Alpha Storage 3C F-7 / brief §10)
  *   The API mutation is not in a transaction with anything else. If it took
@@ -112,6 +115,7 @@ import {
   EXIT,
   OUTCOME,
   classifyAdminKey,
+  classifyExactUrlProbe,
   parseProbeUrl,
   runSetPrivate,
   runSetPublic,
@@ -169,6 +173,9 @@ if (command === "probe") {
   } catch (error) {
     probed.error = String(error?.message ?? error);
   }
+  // For a Stage C follow-up of the exact URL only `denied` (HTTP 400/404) is
+  // proof; `inconclusive` is never privacy (docs/nora/21 Section 17).
+  probed.classification = classifyExactUrlProbe(probed);
   console.log(JSON.stringify(probed));
   process.exit(0);
 }

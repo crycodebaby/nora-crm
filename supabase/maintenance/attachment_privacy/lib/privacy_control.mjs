@@ -139,6 +139,38 @@ export const describeBucket = (bucket) =>
 
 const is2xx = (result) => result?.status >= 200 && result?.status < 300;
 
+/**
+ * The ONLY answers of the exact public URL that count as Storage denying the
+ * anonymous read after Stage C. Hosted Production answers 400 (Alpha Storage
+ * 3D, Phase 0); 404 is Storage's other "not found" shape. Do not widen this
+ * set without independent evidence of another denial shape.
+ */
+export const CONFIRMED_DENIAL_STATUSES = new Set([400, 404]);
+
+export const PROBE_CLASS = {
+  accessible: "accessible",
+  denied: "denied",
+  inconclusive: "inconclusive",
+};
+
+/**
+ * What ONE anonymous request of the exact primed URL proves (Alpha Storage
+ * 3D LOW-1). Only a confirmed denial completes the CDN proof:
+ *
+ *   accessible    any 2xx — the URL still answers with the object
+ *   denied        HTTP 400 or 404 — the URL no longer serves the object
+ *   inconclusive  everything else: transport error, timeout, no status,
+ *                 3xx, 401, 403, 408, 409, 425, 429, 5xx, … — it proves
+ *                 only that THIS request failed, never that the read is denied
+ */
+export const classifyExactUrlProbe = (probed) => {
+  if (probed == null || probed.error != null) return PROBE_CLASS.inconclusive;
+  if (!Number.isInteger(probed.status)) return PROBE_CLASS.inconclusive;
+  if (is2xx(probed)) return PROBE_CLASS.accessible;
+  if (CONFIRMED_DENIAL_STATUSES.has(probed.status)) return PROBE_CLASS.denied;
+  return PROBE_CLASS.inconclusive;
+};
+
 const showProbe = (say, label, result) =>
   say(
     `[w8e-c]   ${label}: ${result.error ? `ERROR ${result.error}` : `HTTP ${result.status}, ${result.bytes} bytes, sha256 ${String(result.sha256).slice(0, 16)}…`}${result.headers && Object.keys(result.headers).length ? ` ${JSON.stringify(result.headers)}` : ""}`,
@@ -463,41 +495,66 @@ export async function runSetPrivate(io) {
   }
 
   // --- CDN proof: the EXACT primed URL, a fresh process per attempt -------
+  // Only a confirmed denial (HTTP 400/404) completes it. A still-served copy
+  // AND an inconclusive answer (transport error, 3xx, 429, 5xx, …) keep
+  // polling inside the window and end PENDING — never VERIFIED (3D LOW-1).
   say(
-    `[w8e-c] ${BUCKET} is PRIVATE with unchanged controls. CDN proof: re-requesting the exact primed URL (window ${cdnWindowS}s, every ${cdnIntervalS}s)`,
+    `[w8e-c] ${BUCKET} is PRIVATE with unchanged controls. CDN proof: re-requesting the exact primed URL until HTTP ${[...CONFIRMED_DENIAL_STATUSES].join("/")} (window ${cdnWindowS}s, every ${cdnIntervalS}s)`,
   );
   const attempts = [];
   const started = now();
+  // A probe port that throws is a transport failure of this attempt, not a
+  // crash of the tool after a mutation: it becomes an inconclusive answer.
+  const probeExactUrl = async () => {
+    try {
+      return (await probe(probeUrl, "none")) ?? { error: "no probe result" };
+    } catch (error) {
+      return { error: errorText(error) ?? "probe failed" };
+    }
+  };
   const record = (probed) =>
     attempts.push({
       t: Math.round((now() - started) / 1000),
       status: probed.status ?? null,
+      proof: classifyExactUrlProbe(probed),
+      error: probed.error ?? null,
       cf: probed.headers?.["cf-cache-status"] ?? null,
       ray: probed.headers?.["cf-ray"] ?? null,
     });
-  let latest = await probe(probeUrl, "none");
+  let latest = await probeExactUrl();
   record(latest);
-  showProbe(say, "exact URL", latest);
-  while (is2xx(latest) && now() - started < cdnWindowS * 1000) {
+  showProbe(say, `exact URL (${attempts.at(-1).proof})`, latest);
+  while (
+    classifyExactUrlProbe(latest) !== PROBE_CLASS.denied &&
+    now() - started < cdnWindowS * 1000
+  ) {
     await sleep(cdnIntervalS * 1000);
-    latest = await probe(probeUrl, "none");
+    latest = await probeExactUrl();
     record(latest);
-    showProbe(say, `exact URL +${attempts.at(-1).t}s`, latest);
+    showProbe(say, `exact URL +${attempts.at(-1).t}s (${attempts.at(-1).proof})`, latest);
   }
   const proofScope = cdnHeaderSeen
     ? "CDN edge reached by this client"
     : "origin only (no CDN observed)";
-  if (is2xx(latest)) {
+  const proof = classifyExactUrlProbe(latest);
+  if (proof !== PROBE_CLASS.denied) {
     // Deliberately NOT compensated: the bucket is verifiably private, and
-    // making it public again would expose every object, not one cached copy.
+    // making it public again would expose every object, not one cached copy
+    // (or one edge the operator could not get a clear answer from).
+    const observed = latest.error
+      ? `a transport error (${latest.error})`
+      : `HTTP ${latest.status ?? "without a status"}`;
     return result(
       OUTCOME.privateCdnPending,
       EXIT.pending,
-      { bucket: after, primed, attempts, proofScope },
+      { bucket: after, primed, attempts, proof, proofScope },
       [
         `"${BUCKET}" is verifiably PRIVATE with unchanged controls — do NOT compensate or roll back for this.`,
-        `The exact primed URL STILL returns bytes after ${cdnWindowS}s: a cached public copy is being served.`,
-        "Stage C is NOT complete. Re-run `probe` on the same URL later. If it persists, this is a PO decision:",
+        proof === PROBE_CLASS.accessible
+          ? `The exact primed URL STILL returns ${observed} after ${cdnWindowS}s: a cached public copy is being served.`
+          : `The exact primed URL answered ${observed} at the end of the ${cdnWindowS}s window: INCONCLUSIVE — that is not proof of denial.`,
+        `Only HTTP ${[...CONFIRMED_DENIAL_STATUSES].join(" or ")} completes the CDN proof.`,
+        "Stage C is NOT complete. Re-run `probe` on the same URL later. If it still serves bytes, this is a PO decision:",
         "re-trigger the purge by a controlled public -> private cycle through this tool, or ask Supabase to purge.",
       ],
     );
@@ -505,11 +562,11 @@ export async function runSetPrivate(io) {
   return result(
     OUTCOME.privateVerified,
     EXIT.ok,
-    { bucket: after, primed, attempts, proofScope },
+    { bucket: after, primed, attempts, proof, proofScope },
     [
       `"${BUCKET}" is PRIVATE; file_size_limit and allowed_mime_types unchanged; "${BRANDING}" unchanged and public.`,
       "Anonymous LIST, signing, /object/authenticated and /object/<bucket>/<key> yield nothing.",
-      `The exact primed URL no longer serves bytes (after ~${attempts.at(-1).t}s; scope: ${proofScope}).`,
+      `The exact primed URL answers HTTP ${latest.status} — it no longer serves the object (after ~${attempts.at(-1).t}s; scope: ${proofScope}).`,
       "Continue with 30_verify_attachments_private.sql and the post-Stage-C checks (docs/nora/21 Section 17).",
     ],
   );

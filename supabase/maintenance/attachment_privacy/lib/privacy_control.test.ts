@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   BUCKET,
+  CONFIRMED_DENIAL_STATUSES,
   EXIT,
   OUTCOME,
+  PROBE_CLASS,
   bucketDiff,
   classifyAdminKey,
+  classifyExactUrlProbe,
   parseProbeUrl,
   runSetPrivate,
   runSetPublic,
@@ -81,6 +84,12 @@ const makeWorld = (
     readFailsAfter?: number;
     /** A cached error keeps the public URL dark for N requests after going public. */
     cachedErrorResponses?: number;
+    /**
+     * Scripted answers of the exact URL once the bucket is private, in order
+     * (the last one repeats). "throw" makes the probe port itself reject.
+     * Overrides `cdnStaleResponses`.
+     */
+    exactUrlAfterFlip?: (Probe | "throw")[];
   } = {},
 ) => {
   const stored = new Map<string, Bucket>([
@@ -92,6 +101,7 @@ const makeWorld = (
   let reads = 0;
   let cdnStale = opts.cdnStaleResponses ?? 0;
   let cachedErrors = opts.cachedErrorResponses ?? 0;
+  const script = [...(opts.exactUrlAfterFlip ?? [])];
   let clock = 0;
 
   const admin = {
@@ -147,6 +157,11 @@ const makeWorld = (
           return denied;
         }
         return ok;
+      }
+      if (script.length) {
+        const next = script.length > 1 ? script.shift()! : script[0];
+        if (next === "throw") throw new Error("fetch failed: ECONNRESET");
+        return next;
       }
       if (cdnStale > 0) {
         cdnStale -= 1;
@@ -483,6 +498,349 @@ describe("Stage C: public -> private through the Storage API", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Alpha Storage 3D LOW-1 — the CDN exact-URL proof accepts ONLY a confirmed
+// Storage denial (HTTP 400/404). Everything else is a still-served copy or an
+// inconclusive answer, and neither may ever become PRIVATE / VERIFIED.
+// ---------------------------------------------------------------------------
+const answer = (status: number, bytes = 12): Probe => ({
+  status,
+  bytes,
+  sha256: status < 300 ? "aa" : "bb",
+  headers: {},
+});
+const OBJECT = answer(200); // the original public bytes
+const DENIED_400 = answer(400, 88); // the hosted Production denial shape
+const transportError: Probe = { error: "fetch failed: getaddrinfo ENOTFOUND" };
+type Attempt = { status: number | null; proof: string; error: string | null };
+const attemptsOf = (result: { details: { attempts: Attempt[] } }) =>
+  result.details.attempts;
+const statusesOf = (result: { details: { attempts: Attempt[] } }) =>
+  attemptsOf(result).map((attempt) => attempt.status);
+const proofsOf = (result: { details: { attempts: Attempt[] } }) =>
+  attemptsOf(result).map((attempt) => attempt.proof);
+/** cdnWindowS 60 / cdnIntervalS 10: t = 0, 10, …, 60 */
+const FULL_WINDOW_ATTEMPTS = 7;
+
+describe("CDN exact-URL proof: only HTTP 400/404 is proof (Alpha Storage 3D LOW-1)", () => {
+  describe("classification of one answer", () => {
+    it("the accepted denial set is exactly {400, 404}", () => {
+      expect([...CONFIRMED_DENIAL_STATUSES].sort()).toEqual([400, 404]);
+    });
+
+    it.each([400, 404])("HTTP %i is a confirmed denial", (status) => {
+      expect(classifyExactUrlProbe(answer(status, 88))).toBe(
+        PROBE_CLASS.denied,
+      );
+    });
+
+    it.each([200, 203, 204, 206])(
+      "HTTP %i is still accessible, never a denial",
+      (status) => {
+        expect(classifyExactUrlProbe(answer(status))).toBe(
+          PROBE_CLASS.accessible,
+        );
+      },
+    );
+
+    it.each([
+      301, 302, 304, 307, 401, 403, 405, 408, 409, 410, 425, 429, 500, 502, 503,
+      504,
+    ])("HTTP %i is inconclusive", (status) => {
+      expect(classifyExactUrlProbe(answer(status, 0))).toBe(
+        PROBE_CLASS.inconclusive,
+      );
+    });
+
+    it.each([
+      ["a transport error", transportError],
+      [
+        "a transport error that still carries a status",
+        { status: 400, error: "reset" },
+      ],
+      ["no status", {}],
+      ["a string status", { status: "400" }],
+      ["a fractional status", { status: 400.5 }],
+      ["no result at all", undefined],
+    ])("%s is inconclusive", (_, probed) => {
+      expect(classifyExactUrlProbe(probed as Probe)).toBe(
+        PROBE_CLASS.inconclusive,
+      );
+    });
+  });
+
+  describe("through the real Stage C procedure", () => {
+    it.each([400, 404])(
+      "HTTP %i right after the flip is PRIVATE / VERIFIED, exit 0",
+      async (status) => {
+        const world = makeWorld({ exactUrlAfterFlip: [answer(status, 88)] });
+        const result = await runSetPrivate(world.io(true));
+        expect(result.outcome).toBe(OUTCOME.privateVerified);
+        expect(result.exitCode).toBe(EXIT.ok);
+        expect(result.details.proof).toBe(PROBE_CLASS.denied);
+        expect(statusesOf(result)).toEqual([status]);
+      },
+    );
+
+    it.each([200, 203, 206])(
+      "HTTP %i with the object bytes for the whole window is PENDING (still accessible), not compensated",
+      async (status) => {
+        const world = makeWorld({ exactUrlAfterFlip: [answer(status)] });
+        const result = await runSetPrivate(world.io(true));
+        expect(result.outcome).toBe(OUTCOME.privateCdnPending);
+        expect(result.exitCode).toBe(EXIT.pending);
+        expect(result.details.proof).toBe(PROBE_CLASS.accessible);
+        expect(attemptsOf(result)).toHaveLength(FULL_WINDOW_ATTEMPTS);
+        expect(result.guidance.join(" ")).toMatch(/STILL returns HTTP/);
+        expect(world.updates).toHaveLength(1);
+        expect(world.stored.get("attachments")!.public).toBe(false);
+      },
+    );
+
+    const inconclusive: [string, Probe | "throw"][] = [
+      ["a transport error (fetch threw in the probe process)", transportError],
+      ["a probe port that rejects", "throw"],
+      ["an answer without a status", {}],
+      ["HTTP 301", answer(301, 0)],
+      ["HTTP 302", answer(302, 0)],
+      ["HTTP 401", answer(401, 40)],
+      ["HTTP 403", answer(403, 40)],
+      ["HTTP 429", answer(429, 20)],
+      ["HTTP 500", answer(500, 20)],
+      ["HTTP 503", answer(503, 20)],
+    ];
+    it.each(inconclusive)(
+      "%s for the whole window can never be PRIVATE / VERIFIED: PENDING, exit 4, not compensated",
+      async (_, response) => {
+        const world = makeWorld({ exactUrlAfterFlip: [response] });
+        const result = await runSetPrivate(world.io(true));
+        expect(result.outcome).not.toBe(OUTCOME.privateVerified);
+        expect(result.exitCode).not.toBe(EXIT.ok);
+        expect(result.outcome).toBe(OUTCOME.privateCdnPending);
+        expect(result.exitCode).toBe(EXIT.pending);
+        expect(result.details.proof).toBe(PROBE_CLASS.inconclusive);
+        expect(result.guidance.join(" ")).toMatch(
+          /INCONCLUSIVE — that is not proof of denial/,
+        );
+        // kept polling for the whole bounded window, the same URL every time
+        expect(attemptsOf(result)).toHaveLength(FULL_WINDOW_ATTEMPTS);
+        expect(world.probes.filter((p) => p.url === PROBE_URL)).toHaveLength(
+          2 + FULL_WINDOW_ATTEMPTS,
+        );
+        // uncertainty about one edge copy never re-opens the whole bucket
+        expect(world.updates).toHaveLength(1);
+        expect(world.stored.get("attachments")!.public).toBe(false);
+      },
+    );
+  });
+
+  describe("mixed sequences — the state machine, not single branches", () => {
+    it("A: 200 → 503 → 400 is VERIFIED only at the 400", async () => {
+      const world = makeWorld({
+        exactUrlAfterFlip: [OBJECT, answer(503, 20), DENIED_400],
+      });
+      const result = await runSetPrivate(world.io(true));
+      expect(result.outcome).toBe(OUTCOME.privateVerified);
+      expect(result.exitCode).toBe(EXIT.ok);
+      expect(statusesOf(result)).toEqual([200, 503, 400]);
+      expect(proofsOf(result)).toEqual([
+        "accessible",
+        "inconclusive",
+        "denied",
+      ]);
+    });
+
+    it("B: 200 → transport error → 404 is VERIFIED only at the 404", async () => {
+      const world = makeWorld({
+        exactUrlAfterFlip: [OBJECT, transportError, answer(404, 60)],
+      });
+      const result = await runSetPrivate(world.io(true));
+      expect(result.outcome).toBe(OUTCOME.privateVerified);
+      expect(result.exitCode).toBe(EXIT.ok);
+      expect(statusesOf(result)).toEqual([200, null, 404]);
+      expect(proofsOf(result)).toEqual([
+        "accessible",
+        "inconclusive",
+        "denied",
+      ]);
+      expect(attemptsOf(result)[1].error).toMatch(/ENOTFOUND/);
+    });
+
+    it("C: 503 → 503 → deadline is PENDING, not VERIFIED", async () => {
+      const world = makeWorld({
+        exactUrlAfterFlip: [answer(503, 20), answer(503, 20)],
+      });
+      const result = await runSetPrivate(world.io(true));
+      expect(result.outcome).toBe(OUTCOME.privateCdnPending);
+      expect(result.exitCode).toBe(EXIT.pending);
+      expect(statusesOf(result)).toEqual(Array(FULL_WINDOW_ATTEMPTS).fill(503));
+      expect(result.details.proof).toBe(PROBE_CLASS.inconclusive);
+    });
+
+    it("D: 429 → 200 → deadline is PENDING and reported as still accessible", async () => {
+      const world = makeWorld({ exactUrlAfterFlip: [answer(429, 20), OBJECT] });
+      const result = await runSetPrivate(world.io(true));
+      expect(result.outcome).toBe(OUTCOME.privateCdnPending);
+      expect(result.exitCode).toBe(EXIT.pending);
+      expect(statusesOf(result)).toEqual([
+        429,
+        ...Array(FULL_WINDOW_ATTEMPTS - 1).fill(200),
+      ]);
+      expect(result.details.proof).toBe(PROBE_CLASS.accessible);
+      expect(result.guidance.join(" ")).toMatch(
+        /cached public copy is being served/,
+      );
+    });
+
+    it("E: 400 immediately is VERIFIED after one attempt", async () => {
+      const world = makeWorld({ exactUrlAfterFlip: [DENIED_400] });
+      const result = await runSetPrivate(world.io(true));
+      expect(result.outcome).toBe(OUTCOME.privateVerified);
+      expect(result.exitCode).toBe(EXIT.ok);
+      expect(statusesOf(result)).toEqual([400]);
+    });
+
+    it("200 … 200 → 503 as the LAST observation is PENDING (inconclusive), not VERIFIED", async () => {
+      const world = makeWorld({
+        exactUrlAfterFlip: [
+          ...Array(FULL_WINDOW_ATTEMPTS - 1).fill(OBJECT),
+          answer(503, 20),
+        ],
+      });
+      const result = await runSetPrivate(world.io(true));
+      expect(result.outcome).toBe(OUTCOME.privateCdnPending);
+      expect(result.exitCode).toBe(EXIT.pending);
+      expect(result.details.proof).toBe(PROBE_CLASS.inconclusive);
+      expect(statusesOf(result).at(-1)).toBe(503);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Alpha Storage 3D LOW-2A / LOW-2B — release-critical postconditions in CI
+// ---------------------------------------------------------------------------
+describe("a compensation that leaves a control drifted is an EMERGENCY (3D LOW-2A)", () => {
+  it("public again, but the allowlist the flip dropped is still missing → EMERGENCY, not COMPENSATED", async () => {
+    const world = makeWorld();
+    const io = world.io(true);
+    const result = await runSetPrivate({
+      ...io,
+      admin: {
+        ...io.admin,
+        updateBucket: async (id: string, body: UpdateBody) => {
+          world.updates.push({ id, body: structuredClone(body) });
+          const row = world.stored.get(id)!;
+          row.public = body.public;
+          // the flip drops the MIME allowlist; the compensation restores
+          // `public` but ignores the echoed controls
+          if (body.public === false) row.allowed_mime_types = null;
+          return { data: { message: "Successfully updated" }, error: null };
+        },
+      },
+    });
+    expect(result.outcome).not.toBe(OUTCOME.compensated);
+    expect(result.outcome).toBe(OUTCOME.emergency);
+    expect(result.exitCode).toBe(EXIT.emergency);
+    expect(world.updates.map((call) => call.body.public)).toEqual([
+      false,
+      true,
+    ]);
+    expect(world.stored.get("attachments")).toMatchObject({
+      public: true,
+      allowed_mime_types: null,
+    });
+    expect(result.details.originalFailures.join(" ")).toMatch(
+      /allowed_mime_types/,
+    );
+    expect(result.details.bucket).toMatchObject({
+      public: true,
+      allowed_mime_types: null,
+    });
+    expect(result.guidance.join(" ")).toMatch(/Do NOT revert the runtime/);
+  });
+
+  it("an unrelated failure whose compensation drifts file_size_limit → EMERGENCY, not COMPENSATED", async () => {
+    const world = makeWorld();
+    const io = world.io(true);
+    let flipped = false;
+    const result = await runSetPrivate({
+      ...io,
+      admin: {
+        ...io.admin,
+        updateBucket: async (id: string, body: UpdateBody) => {
+          const answer = await io.admin.updateBucket(id, body);
+          if (body.public === false) flipped = true;
+          if (body.public === true) world.stored.get(id)!.file_size_limit = 1;
+          return answer;
+        },
+      },
+      anon: {
+        from: () => ({
+          list: async () => ({
+            data: flipped ? [{ name: KEY }] : [],
+            error: null,
+          }),
+          createSignedUrl: async () => ({
+            data: null,
+            error: { message: "no" },
+          }),
+        }),
+      },
+    });
+    expect(result.outcome).toBe(OUTCOME.emergency);
+    expect(result.exitCode).toBe(EXIT.emergency);
+    expect(result.details.originalFailures.join(" ")).toMatch(
+      /RLS exposure after the flip/,
+    );
+    expect(result.details.bucket).toMatchObject({
+      public: true,
+      file_size_limit: 1,
+    });
+  });
+});
+
+describe("/object/authenticated after the flip (3D LOW-2B)", () => {
+  const authenticatedUrl = `${URL_BASE}/storage/v1/object/authenticated/attachments/${KEY}`;
+
+  it("the publishable key retrieving the object via /object/authenticated is a critical failure → COMPENSATED", async () => {
+    const world = makeWorld();
+    const io = world.io(true);
+    const served: string[] = [];
+    const result = await runSetPrivate({
+      ...io,
+      probe: async (url: string, auth: string) => {
+        if (url === authenticatedUrl && auth === "publishable") {
+          served.push(auth);
+          return { status: 200, bytes: 12, sha256: "aa", headers: {} };
+        }
+        return io.probe(url, auth);
+      },
+    });
+    expect(served).toEqual(["publishable"]);
+    expect(result.outcome).toBe(OUTCOME.compensated);
+    expect(result.exitCode).toBe(EXIT.compensated);
+    expect(result.details.originalFailures).toEqual([
+      "/object/authenticated served the object to the publishable key",
+    ]);
+    expect(world.updates.map((call) => call.body.public)).toEqual([
+      false,
+      true,
+    ]);
+    expect(world.stored.get("attachments")!.public).toBe(true);
+  });
+
+  it("a denied /object/authenticated read with the publishable key passes that postcondition", async () => {
+    const world = makeWorld();
+    const result = await runSetPrivate(world.io(true));
+    expect(
+      world.probes.some(
+        (p) => p.url === authenticatedUrl && p.auth === "publishable",
+      ),
+    ).toBe(true);
+    expect(result.outcome).toBe(OUTCOME.privateVerified);
+    expect(world.updates).toHaveLength(1);
+  });
+});
 describe("Rollback: private -> public through the Storage API", () => {
   it("restores PUBLIC with the original controls and requires the probe URL to serve bytes", async () => {
     const world = makeWorld({ attachmentsPublic: false });
@@ -695,6 +1053,18 @@ describe("release contract guards", () => {
       expect(section).toMatch(/PUBLIC \/ COMPENSATED/);
       expect(section).toMatch(/EMERGENCY \/ STATE REQUIRES MANUAL RECOVERY/);
       expect(section).toMatch(/exakt[^\n]*URL/i);
+    });
+
+    it("accepts ONLY HTTP 400/404 as the CDN proof — never 'not 200' (3D LOW-1)", () => {
+      expect(section).toMatch(
+        /\*\*nur\*\* dann erbracht, wenn der \*\*letzte\*\* Abruf mit \*\*HTTP 400 oder HTTP 404\*\*/,
+      );
+      for (const inconclusive of ["Transportfehler", "429", "5xx", "3xx"]) {
+        expect(section).toContain(inconclusive);
+      }
+      expect(section).toMatch(/nicht aussagekräftig/);
+      expect(section).not.toMatch(/weiterhin kein HTTP 200/);
+      expect(section).not.toMatch(/exakte URL liefert nichts/);
     });
   });
 });

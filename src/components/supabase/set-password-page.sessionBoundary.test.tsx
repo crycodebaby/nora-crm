@@ -28,6 +28,9 @@ vi.mock("@/components/atomic-crm/providers/supabase/supabase", () => ({
       },
       getSession: async () => ({ data: { session: null } }),
       getUser: async () => ({ data: { user: null } }),
+      // Stops the submit right after its session step; the reset under test
+      // happens before that.
+      updateUser: async () => ({ error: { message: "stop after setSession" } }),
     },
   }),
 }));
@@ -69,5 +72,87 @@ describe("access-link sign-in is an attachment capability boundary", () => {
 
     await expect.poll(() => probe.setSessionCalls).toBe(1);
     expect(cachedWhenSessionStarts).toBe(false);
+  });
+});
+
+/**
+ * Alpha Storage 3D LOW-2D — the SUBMIT fallback of the access link: when the
+ * bootstrap left no session, `submitPassword` establishes one itself through
+ * `setSession`. Session A's cached AND in-flight capabilities must be gone
+ * before that session B exists.
+ */
+describe("the set-password submit fallback is an attachment capability boundary", () => {
+  it("resets session-scoped caches BEFORE its own setSession", async () => {
+    const screen = await render(
+      <StoryWrapper
+        initialEntries={["/set-password?access_token=at-1&refresh_token=rt-1"]}
+      >
+        <SetPasswordPage />
+      </StoryWrapper>,
+    );
+    await expect.poll(() => probe.setSessionCalls).toBe(1); // bootstrap
+    await screen.getByRole("button", { name: "Zugang einrichten" }).click();
+    await expect
+      .element(screen.getByRole("button", { name: "Passwort speichern" }))
+      .toBeVisible();
+
+    // Session A (established by the bootstrap): one cached capability and
+    // one whose signing is still in flight.
+    await getSignedAttachmentCapability(
+      "cached.pdf",
+      async (key) => `https://signed.test/${key}?session=A`,
+    );
+    let releaseA = () => {};
+    const inFlightA = getSignedAttachmentCapability(
+      "inflight.pdf",
+      () =>
+        new Promise<string>((resolve) => {
+          releaseA = () =>
+            resolve("https://signed.test/inflight.pdf?session=A");
+        }),
+    );
+
+    // Session B asks for both at the moment the submit fallback's
+    // setSession runs.
+    const signedForB: string[] = [];
+    const signerB = async (key: string) => {
+      signedForB.push(key);
+      return `https://signed.test/${key}?session=B`;
+    };
+    let cachedUrlAtSubmitSetSession: string | undefined;
+    probe.onSetSession = async () => {
+      if (probe.setSessionCalls !== 2) return;
+      cachedUrlAtSubmitSetSession = (
+        await getSignedAttachmentCapability("cached.pdf", signerB)
+      ).url;
+      // not awaited: joining A's request would never resolve here
+      void getSignedAttachmentCapability("inflight.pdf", signerB).catch(
+        () => {},
+      );
+    };
+
+    const password = "sehr-langes-persoenliches-passwort";
+    await screen
+      .getByRole("textbox", { name: "Passwort", exact: true })
+      .fill(password);
+    await screen
+      .getByRole("textbox", { name: "Passwort wiederholen", exact: true })
+      .fill(password);
+    await screen.getByRole("checkbox").click();
+    await screen.getByRole("button", { name: "Passwort speichern" }).click();
+
+    await expect.poll(() => probe.setSessionCalls).toBe(2); // submit fallback
+    await expect.poll(() => cachedUrlAtSubmitSetSession).toBeDefined();
+    expect(cachedUrlAtSubmitSetSession).toBe(
+      "https://signed.test/cached.pdf?session=B",
+    );
+    expect(signedForB).toEqual(["cached.pdf", "inflight.pdf"]);
+
+    // A's signing resolving late is discarded, never handed to session B.
+    releaseA();
+    await expect(inFlightA).rejects.toThrow(/from an ended session/);
+    expect(
+      (await getSignedAttachmentCapability("inflight.pdf", signerB)).url,
+    ).toBe("https://signed.test/inflight.pdf?session=B");
   });
 });

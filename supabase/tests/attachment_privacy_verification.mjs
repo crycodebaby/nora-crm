@@ -1152,9 +1152,9 @@ check(
 );
 check("F-2 branding untouched and public", bucketPublic(BRANDING), "t");
 check(
-  "F-2 the primed exact URL was re-probed and serves no bytes",
-  stageC.result.attempts?.at(-1)?.status >= 400,
-  true,
+  "F-2 the primed exact URL was re-probed and Storage denies it (HTTP 400/404 only — 3D LOW-1)",
+  `${[400, 404].includes(stageC.result.attempts?.at(-1)?.status)} ${stageC.result.proof}`,
+  "true denied",
 );
 check(
   "F-2 the admin key never appears in the tool output",
