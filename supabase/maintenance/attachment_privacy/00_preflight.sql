@@ -10,6 +10,11 @@
 --
 -- Safe against Production at any moment. No temp objects, no DDL; it runs
 -- inside BEGIN TRANSACTION READ ONLY.
+--
+-- The release procedure (docs/nora/21 Section 17) requires this file
+-- IMMEDIATELY before `10_set_attachments_private.sql`. It is defence in
+-- depth, not the only line: `10` re-checks every gate below itself, including
+-- the unknown-policy gate, and refuses before it writes.
 
 begin transaction read only;
 

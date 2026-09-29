@@ -186,8 +186,10 @@ function clearAuthBootstrapCaches() {
   // W8-E: derived attachment capabilities are per-session. They live only in
   // memory and are never persisted, but a signed URL minted by the employee
   // who just logged out must not be handed to whoever logs in next in the
-  // same tab. This does not retract URLs already issued — that is a bearer
-  // capability and expires on its own — it stops Nora reusing them.
+  // same tab — neither from the cache nor from a signing request that is
+  // still in flight and resolves after this point (U-3). This does not
+  // retract URLs already issued — that is a bearer capability and expires on
+  // its own — it stops Nora reusing them.
   resetAttachmentUrlCache();
 }
 
@@ -205,8 +207,11 @@ export const getAuthProvider = (): AuthProvider => {
         }
         return;
       }
-      // Drop stale identity before a new session is established.
+      // Drop stale identity before a new session is established — including
+      // any attachment capability minted, or still being minted, for a
+      // session that may have existed in this tab before (W8-E U-3).
       clearCurrentSaleCache();
+      resetAttachmentUrlCache();
       return baseAuthProvider.login(params);
     },
     logout: async (params) => {

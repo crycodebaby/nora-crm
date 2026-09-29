@@ -1,6 +1,6 @@
 # 21 – Agent Runbooks (conditional)
 
-Stand: 2026-09-22 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
+Stand: 2026-09-29 · Load-Klasse: **CONDITIONAL** — dieses Dokument wird **nie vollständig** als Standardkontext geladen.
 
 Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für Änderungen an Nora: Testsequenzen, Verifikationsschritte, wiederkehrende Fallstricke. Sie standen früher als `Bei <X> zusätzlich:`-Blöcke in [`07`](07-agent-change-checklist.md) und wurden damit bei **jeder** Aufgabe mitgeladen, auch bei einer reinen Label-Änderung. [`07`](07-agent-change-checklist.md) behält nur das universelle Change Protocol; hier liegt alles Bedingte.
 
@@ -30,6 +30,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 | Service Worker, Update-Hinweis, Live-Smoke nach Deployment | [14. PWA und Update-Verhalten](#14-pwa-und-update-verhalten) |
 | Kunden-/Kontaktanlage, `customer_kind`, Hauptansprechpartner, Kunde eines Vorgangs (`deals.company_id`) | [15. Kunden, Kontakte und Hauptansprechpartner](#15-kunden-kontakte-und-hauptansprechpartner) |
 | E2E-Tests (Playwright), Fixtures, Test-Reset, CI-Job `e2e-test` | [16. E2E-Testinfrastruktur und Isolation](#16-e2e-testinfrastruktur-und-isolation) |
+| W8-E Release: Branding-Umzug, Runtime, Client-Konvergenz, Umstellung des Buckets `attachments` auf privat, Rollback | [17. W8-E Release: privater Anhang-Bucket](#17-w8-e-release-privater-anhang-bucket-stage-a--b--c-rollback) |
 
 ---
 
@@ -114,6 +115,7 @@ Hier stehen die subsystem- und situationsabhängigen operativen Anweisungen für
 - [ ] **Die Warteschlange hat seit S2A1 einen Erzeuger und seit S2A2.2 einen datenbankinternen Ausführungsvertrag, aber keinen Konsumenten; Resolver und Ausführungs-Functions haben keinen produktiven Aufrufer.** Ein Eintrag ist ein Lösch**vorhaben**, ein `dead` eine Momentbeobachtung — beides keine Erlaubnis. **Nie** einen Worker, eine API- oder `service_role`-Ausführungsgrenze, einen Ack-/`done`-Pfad oder einen Storage-`DELETE` ergänzen, solange die S2B-Gates offen sind — Seiteneffekt-Vertrag, getrennte Transaktionen für Claim und Inspektion, quellenübergreifende Schlüssel. S3A hat LOW-1 und das Re-Referenzierungs-Rennen nur für zeilenbasierte `public.attachments`-Verweise geschlossen; seit S3B entstehen echte Vorhaben, und seit S4 sind auch die Bestandsnotizen projiziert — ein veraltetes Formular kann trotzdem ein Vorhaben für einen noch gewollten Anhang erzeugen (S2B-Gate), und ein Objekt, das seine letzte Referenz im Fenster S3B → S4 verloren hätte, trüge in diesem Fall kein erfasstes Löschvorhaben (beobachtet wurde ein solcher Fall nicht, [`17`](17-known-issues-and-planned-waves.md) H.1). Sonst löscht Nora Dateien, die wieder referenziert wurden, oder verliert Vorhaben ([`17`](17-known-issues-and-planned-waves.md) H.1). Ein `service_role`-Recht entsteht nur zusammen mit einem deployten Aufrufer ([`22`](22-security-and-access.md) Abschnitt 6.3). `skipped_live` nicht als „gelöscht" oder „dauerhaft sicher" lesen, `dead` nie speichern oder als „löschbereit" ausdrücken. In Capture-Funktion, Resolver und Ausführungs-Functions kommt **nie** ein HTTP-, `pg_net`-, Storage- oder Edge-Aufruf; ein `exception when others`, das Fehler in `unknown` oder `dead` verwandelt, ist ein Defekt
 - [ ] **Policies auf `storage.objects` nie „aufräumen".** Permissive Policies werden ODER-verknüpft: eine zusätzliche permissive Policy öffnet den Bucket, eine fremde zu löschen kann eine andere Fläche stilllegen. Unbekannte Policies führen zum Abbruch der Migration und zu einer PO-Entscheidung, nicht zu einem `drop policy`
 - [ ] **Nicht behaupten, der Bucket sei privat.** Solange `storage.buckets.public = true` ist, liefert `storage-api` jeden bekannten Objektschlüssel ohne Anmeldung aus — unabhängig von jeder RLS-Policy ([`17`](17-known-issues-and-planned-waves.md) H.1)
+- [ ] **Bucket-Sichtbarkeit von `attachments` ändern (W8-E Stage C) oder zurückdrehen?** Nie ad hoc und nie per Migration — ausschließlich nach Sektion 17, mit den Operator-Dateien unter `supabase/maintenance/attachment_privacy/`
 
 ## 5. Kanonische lokale SQL-Testsequenz
 
@@ -382,3 +384,95 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 ### Fehlersignaturen
 
 - [ ] `First E2E auth user was not bootstrapped as an active admin`, `email_exists` / „already been registered" oder ein `E2E_IDENTITY_*`-Code deuten bei dieser Architektur zuerst auf einen Bruch der Identitäts-Isolation (übrig gebliebener oder zusätzlicher Benutzer), **nicht** automatisch auf einen defekten First-Admin-Trigger — ein weiterer Benutzer auf einem nicht leeren Stack wird korrekt `viewer`
+
+## 17. W8-E Release: privater Anhang-Bucket (Stage A → B → C, Rollback)
+
+**Wann:** der Production-Release von W8-E und jeder Rollback danach. **Status: `RC` — dieses Verfahren ist geschrieben und lokal geprüft, in Production aber noch nie ausgeführt.** Wer diese Sektion liest, hat damit **keine** Freigabe: jede Production-Mutation unten braucht die ausdrückliche Freigabe des Product Owners **für genau diesen Schritt** ([`07`](07-agent-change-checklist.md) „Production-Sicherheit"). Warum die Reihenfolge so ist und was W8-E garantiert: Contract [`22`](22-security-and-access.md) Abschnitt 6.14 — hier steht nur, **was in welcher Reihenfolge zu tun und zu beweisen ist**. Offener Stand: [`17`](17-known-issues-and-planned-waves.md) H.1.
+
+**Die eine Regel, aus der alles folgt:** `altes Runtime + privater Bucket` ist **nicht unterstützt** — das alte Frontend erreicht Anhänge über öffentliche Objekt-URLs, jede Anhangsdarstellung wäre kaputt. Daraus ergeben sich zwei Reihenfolgen, die **nie** umgekehrt werden:
+
+| Richtung | Reihenfolge |
+|---|---|
+| Vorwärts | Stage A (Branding) → Stage B (W8-E-Runtime, Bucket noch öffentlich) → **B.5 Client-Konvergenz** → Stage C (Bucket privat) |
+| Rollback nach C | **zuerst** Bucket wieder öffentlich (mit hartem Nachweis) → **erst dann** Runtime zurück |
+
+Unterstützte Zustände: **A** altes Runtime + altes Branding + öffentlich · **B** altes Runtime + umgezogenes Branding + öffentlich · **C** W8-E-Runtime + umgezogenes Branding + öffentlich · **D** W8-E-Runtime + umgezogenes Branding + privat. Rollback: **D → öffentlich (= C) → altes Runtime (= B)**. Die umgezogenen Branding-Objekte bleiben dabei, wo sie sind.
+
+**Werkzeuge** (alle im Repository, keine anderen verwenden):
+
+| Schritt | Datei | Schreibt? |
+|---|---|---|
+| Branding-Bucket | Migration `supabase/migrations/20260928120000_nora_branding_bucket.sql` | ja (Schema) |
+| Branding-Umzug | `supabase/maintenance/branding_migration/relocate_branding_objects.mjs` | nur mit `--apply` |
+| Gate vor Stage C | `supabase/maintenance/attachment_privacy/00_preflight.sql` | **nein** — strikt read-only |
+| Stage C | `supabase/maintenance/attachment_privacy/10_set_attachments_private.sql` | ja (eine Zeile `storage.buckets`) |
+| Rollback | `supabase/maintenance/attachment_privacy/20_set_attachments_public.sql` | ja (eine Zeile `storage.buckets`) |
+
+**Runner für die SQL-Dateien:** entweder die **ganze Datei unverändert als ein** Supabase-MCP-`execute_sql`-Aufruf (eine implizite Transaktion — jeder Fehler bricht alles ab, zurück kommt nur das letzte Ergebnis), oder `psql -v ON_ERROR_STOP=1 -f <datei>`. **Nie** `psql` ohne `ON_ERROR_STOP`: es läuft nach einem Fehler weiter und endet mit Exit-Code 0. Das Ergebnis einer Invocation ist ihre **Urteilszeile**, nicht ein `NOTICE` und nicht eine spätere Nachfrage. `10` und `20` prüfen ihr Ergebnis selbst und brechen mit stabilem `DETAIL`-Code ab (`NORA_W8E_*`); ein solcher Abbruch heißt **STOP**, nicht „nochmal versuchen".
+
+### Phase 0 — Release-Identität (read-only)
+
+- [ ] `main`-SHA, PR-Head-SHA und Merge-Methode festgehalten (Merge-Commit, kein Squash, kein Rebase — der zertifizierte Baum muss erhalten bleiben)
+- [ ] **exakter Head-CI-Lauf** mit allen sieben Jobs grün (ESLint, Prettier, Typecheck, Test, Build, `e2e-test`, Secret scan) — ein Draft-Lauf mit übersprungenen Jobs zählt nicht
+- [ ] erwartete Migration: genau **eine** neue, `20260928120000_nora_branding_bucket`; `git diff main...<head> -- supabase/migrations` zeigt nichts anderes
+- [ ] **Production-Ausgangszustand read-only** festgehalten (Zielprojekt per `list_projects` nach Name **und** Ref bestätigt): Ledger-Head und -Anzahl, `storage.buckets` (`attachments` = `true`, `branding` fehlt), Objektanzahl je Bucket, Policies auf `storage.objects` (vor Stage A: **genau** `attachments_select_active_user` und `attachments_insert_writer`, sonst nichts), Anzahl der Branding-Verweise (`configuration.lightModeLogo`/`darkModeLogo`, `companies.logo`) in den `attachments`-Bucket, Anhang-Repräsentation (Elemente mit `path`, ohne `src`)
+- [ ] **Rollback-Ziel festgehalten:** die aktuelle Production-Deployment-ID und die darin eingebettete Commit-SHA (Nachweisverfahren: Sektion 14). Dieses Deployment wird bis zum Abschluss von W8-E **nicht** gelöscht
+- [ ] eine unerwartete Abweichung heißt **STOP** und Bericht, kein Weiterarbeiten
+
+### Stage A — Branding-Bucket und Umzug (auf altem Runtime unterstützt)
+
+- [ ] Migration anwenden nach Sektion 1 (bevorzugt `npx supabase db push`; bei `apply_migration` sofort den Ledger prüfen). Danach read-only: `branding` existiert und ist `public = true`, `branding_select_active_user` und `branding_insert_writer` existieren, `attachments` ist **unverändert** `public = true`, keine weitere Policy
+- [ ] Umzug **zuerst trocken**: `node supabase/maintenance/branding_migration/relocate_branding_objects.mjs` mit `SUPABASE_URL`, `SUPABASE_ANON_KEY` (Publishable Key), `NORA_ADMIN_EMAIL`, `NORA_ADMIN_PASSWORD` eines **aktiven** Nora-Admins. Das Werkzeug meldet sich als dieser Admin an und schreibt nur über die normale RLS — **kein** `service_role`. Production-Zugangsdaten gibt nur der PO ein; ein Agent tippt sie nie
+- [ ] Trockenlauf-Ausgabe prüfen: nur die erwarteten Branding-Kandidaten (`would-relocate`), **kein** `refused` (ein `refused` = der Schlüssel ist ein Notiz-Anhang), kein `failed`
+- [ ] dann `--apply`. Exit 0, jede Zeile `relocated` oder `already-relocated`. Das Werkzeug aktualisiert einen Verweis erst, **nachdem** die Kopie anonym gelesen und byte-identisch ist; ein erneuter Lauf nach Abbruch ist die vorgesehene Wiederaufnahme. Bekannte Grenze: der Notiz-Schlüssel-Zensus liest höchstens `max_rows` (1000) Zeilen von `public.attachments` — bei 1000 oder mehr Zeilen das Werkzeug **nicht** verwenden ([`17`](17-known-issues-and-planned-waves.md) H.1)
+- [ ] Verweise verifizieren: `00_preflight.sql` ausführen — `branding bucket exists and is public`, `branding policies installed (2)`, `no branding reference still in the attachments bucket` = **PASS**, `attachments bucket is still public` = **PASS**
+- [ ] Login-Seite in einem **frischen** Browserprofil (keine Sitzung, kein Service Worker) zeigt das Logo aus dem `branding`-Bucket; Kundenlogos werden im angemeldeten Zustand angezeigt
+- [ ] **Keine** Quellobjekte gelöscht — das Aufräumen bleibt S2B
+
+### Stage B — W8-E-Runtime deployen, Bucket noch öffentlich
+
+- [ ] PR mergen (Merge-Commit, erwartete Head-SHA erzwingen); das Production-Deployment läuft über die Git-Integration
+- [ ] **Build-Identität:** die im ausgelieferten Entry-Chunk eingebettete Commit-SHA ist die Merge-SHA (Verfahren Sektion 14 — kein Reload als Nachweis, frisches Profil oder Update-Hinweis)
+- [ ] `attachments` ist **weiterhin** `public = true` (read-only prüfen) — in Stage B wird **keine** Sichtbarkeit geändert
+- [ ] PO-Smoke im angemeldeten Zustand (der Agent gibt keine Zugangsdaten ein): bestehender Notiz-Anhang (Bild und Dokument) wird angezeigt bzw. öffnet sich; im Netzwerk-Tab laufen die Zugriffe über `/storage/v1/object/sign/attachments/…`, nicht über `/object/public/attachments/…`
+- [ ] PO-Smoke: neue Notiz mit neuem Anhang anlegen, danach dieselbe Notiz bearbeiten (Anhang bleibt sichtbar, speichern funktioniert). Danach read-only: das neue Element trägt `path` = Schlüssel **und** `src` = **kanonische öffentliche URL genau dieses Schlüssels** — ohne `?`, ohne Token, keine `/object/sign/`-URL
+- [ ] Kundenlogo-Upload landet im `branding`-Bucket; das Login-Logo lädt weiterhin ohne Sitzung
+
+### Stage B.5 — Client-Konvergenz (menschliches Gate, Pflicht vor Stage C)
+
+**Nora hat heute keinen flottenweiten Nachweis, welches Runtime in welchem Browser läuft.** Nora ist eine PWA im Prompt-Modus ([`24`](24-pwa-and-update-lifecycle.md) §2): ein offener Tab bleibt auf dem alten Build, bis der Update-Hinweis bestätigt oder alle Nora-Fenster geschlossen wurden. Ein solcher Tab wäre nach Stage C genau der nicht unterstützte Zustand. Diese Stufe ist deshalb eine **ausdrückliche, protokollierte Operator-Vorbedingung — keine automatische Garantie**, und wird nie als solche beschrieben.
+
+**Stage C ist verboten, bis der Operator die Konvergenz für die Clients bestätigt hat, die er kontrolliert:**
+
+- [ ] das Production-Deployment entspricht nachweislich der W8-E-Merge-SHA (Stage B)
+- [ ] Liste der Arbeitsplätze und Geräte, auf denen Nora genutzt wird (Büro-PCs, Tablets, Handys, installierte PWA), liegt vor; auf **jedem**: alle Nora-Tabs und -Fenster schließen oder den Hinweis **„Neue Nora-Version verfügbar" → „Jetzt aktualisieren"** abschließen; danach Nora neu öffnen, und es erscheint **kein** Update-Hinweis mehr
+- [ ] auf mindestens einem Arbeitsplatz die eingebettete SHA im laufenden Build geprüft (Sektion 14)
+- [ ] die Mitarbeitenden sind informiert, dass zum Umstellungszeitpunkt keine alten Tabs absichtlich offen bleiben; Stage C möglichst außerhalb der Arbeitszeit
+- [ ] ein **frischer** Browserkontext (neues Profil, keine Sitzung) lädt die Login-Seite samt Logo aus dem `branding`-Bucket
+- [ ] ergänzend, **kein Beweis**: neue Zeilen in `public.operation_errors` seit dem Deployment mit einer `frontend_version` ungleich der W8-E-SHA zeigen noch aktive alte Clients an; ihr Fehlen beweist nichts
+- [ ] Bestätigung mit Uhrzeit und Geräteliste im Release-Protokoll festgehalten
+
+### Stage C — Preflight, dann Umstellung
+
+- [ ] `00_preflight.sql` **unmittelbar davor** ausführen (read-only). **Jedes** Gate `PASS`, Verdikt `GO`. Insbesondere `no unknown policy on storage.objects` = `PASS` — eine unbekannte Policy wird **nicht** gelöscht, um weiterzukommen, sondern führt zu einer PO-Entscheidung (Sektion 4). `GO` bestätigt **nicht** Stage B/B.5 — das tut der Operator
+- [ ] `10_set_attachments_private.sql` als **eine** Invocation (Runner siehe oben). Die Datei prüft dieselben Gates noch einmal **selbst**, bevor sie schreibt (Branding-Bucket und -Policies, W8-B-Policies, **keine unbekannte Policy** — `NORA_W8E_UNKNOWN_STORAGE_POLICY` —, kein Branding-Verweis mehr im `attachments`-Bucket) und bricht sonst ab, ohne etwas zu ändern
+- [ ] erwartetes Ergebnis — genau zwei Zeilen: `attachments` mit `is_public = false` und Urteil `PRIVATE — expected target state …`, `branding` mit `is_public = true` und Urteil `PUBLIC — expected by design …`. Ein Fehler mit `NORA_W8E_ATTACHMENTS_STILL_PUBLIC` oder `NORA_W8E_BRANDING_NOT_PUBLIC` heißt **STOP**
+
+### Nach Stage C — Verifikation
+
+- [ ] **Anonym, cache-sicher:** die öffentliche Objekt-URL eines Anhangs, der während Stage A/B **nicht** anonym abgerufen wurde, liefert **keine** Bytes (HTTP 4xx) — per `curl` ohne `apikey`/`Authorization`, nicht im Browser mit Sitzung. Warum ein nie abgerufenes Objekt: eine vorher öffentlich ausgelieferte Antwort kann in Browser- oder CDN-Caches bis zum Ablauf ihres `Cache-Control` (Upload-Default von supabase-js: 3600 s) weiterleben — das ist Cache-Verhalten, kein Fehlschlag der Umstellung, und wird so protokolliert. Objektschlüssel und URLs gehören ins Release-Protokoll, nie in durable Dokumentation
+- [ ] PO-Smoke je Rolle, die verfügbar ist (`viewer`, `office`, `admin`): Notiz-Anhänge (Bild, Dokument) werden angezeigt bzw. öffnen sich über eine signierte URL; Notiz anzeigen, bearbeiten und speichern funktioniert; ein neuer Anhang lässt sich hochladen
+- [ ] **deaktivierter Mitarbeiter kann keine neue Fähigkeit erzeugen:** mit einem deaktivierten Testkonto (falls vorhanden) scheitert das Signieren. Gibt es keins, wird das nicht simuliert, sondern read-only belegt, dass `attachments_select_active_user` unverändert `nora_private.is_active_user()` verlangt, plus der lokale Verifier-Nachweis — und im Protokoll genau so benannt
+- [ ] Login-Seite in einem frischen Browserkontext: Logo lädt ohne Sitzung (Branding ist absichtlich öffentlich)
+- [ ] read-only: `attachments` = `false`, `branding` = `true`, Policies auf `storage.objects` unverändert, Notiz-JSON und `public.attachments` unverändert (Stage C schreibt nur die Bucket-Zeile)
+
+### Rollback nach Stage C
+
+- [ ] **Zuerst** `20_set_attachments_public.sql` als eine Invocation. Die Datei prüft ihr Ergebnis selbst: fehlt der Bucket, bricht sie mit `NORA_W8E_ATTACHMENTS_BUCKET_MISSING` ab; ist der Bucket nach dem Update nicht öffentlich, rollt ihr eigener Block zurück und sie bricht mit `NORA_W8E_ATTACHMENTS_STILL_PRIVATE` ab. **Erfolg ist ausschließlich** genau eine Zeile `attachments` mit `is_public = true` und Urteil `PUBLIC — expected target state …`. Jede andere Ausgabe — ein Fehler, keine Zeile oder eine Zeile `FAILURE — …` — heißt: **das Runtime NICHT zurückrollen**, sondern untersuchen
+- [ ] anonym prüfen, dass eine öffentliche Objekt-URL wieder Bytes liefert — auch die kanonische `src` eines in Stage B/C hochgeladenen Anhangs
+- [ ] **erst dann** das Runtime auf das in Phase 0 festgehaltene Deployment zurücksetzen und dessen eingebettete SHA prüfen (Sektion 14)
+- [ ] N-1-Repräsentation: im alten Runtime eine Notiz mit einem **unter W8-E hochgeladenen** Anhang öffnen (Bild erscheint, Dokument öffnet sich) und speichern — das alte Runtime liest das persistierte `src`
+- [ ] Branding **nicht** zurückbewegen — der umgezogene Zustand ist auch für das alte Runtime unterstützt (Zustand B)
+- [ ] ein W8-E-Tab, der nach dem Runtime-Rollback noch offen ist, ist unkritisch: W8-E-Runtime + öffentlicher Bucket ist Zustand C
+
+**Lokal geprüft, nicht in Production:** `supabase/tests/attachment_privacy_verification.mjs` führt dieselben Operator-Dateien gegen einen echten lokalen Stack aus — inklusive der Weigerung von Stage C bei einer injizierten fremden Policy und eines erzwungen fehlschlagenden Rollbacks in vier Runner-Formen (psql mit und ohne `ON_ERROR_STOP`, eine Nachricht, eine Nachricht nur mit letztem Ergebnis). Er mutiert den **lokalen** Bucket und stellt ihn am Ende — auch nach einem Fehlschlag — wieder her. Vorher die Attachment-SQL-Suiten aus Sektion 4 laufen lassen: der Verifier schreibt eine echte Notiz, und `attachment_foundation_verification.sql` erwartet eine leere `public.attachments`.

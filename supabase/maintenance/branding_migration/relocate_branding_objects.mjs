@@ -10,16 +10,23 @@
  *
  * WHAT THIS NEVER TOUCHES
  *   * the source objects — nothing is deleted or moved. Physical cleanup of
- *     the now-unreferenced originals stays S2B, and the originals remain
- *     readable for the whole of Stages A–C, which is what makes runtime
- *     rollback possible;
+ *     the now-unreferenced originals stays S2B. The originals stay where they
+ *     are: publicly readable through Stages A and B, and after Stage C only
+ *     through a signed URL for an active user — nothing references them any
+ *     more by then, and a rollback makes them public again;
  *   * `public.attachments`, the deletion queue, the liveness resolver, note
  *     JSON, the S5 read gate;
  *   * `storage.buckets.public` for `attachments` — that is Stage C, a
  *     separate step with its own script;
- *   * any object that is a NOTE attachment. The candidate query excludes
- *     every key present in `public.attachments`, and each candidate is
- *     re-checked immediately before it is copied.
+ *   * any object that is a NOTE attachment. Every key present in
+ *     `public.attachments` is read once at start-up, and each candidate is
+ *     checked against that census immediately before it is copied.
+ *
+ * KNOWN LIMIT — census size. The census is ONE PostgREST read, so it sees at
+ * most the API's `max_rows` (1000 by default). Production holds a few dozen
+ * attachment rows, far below that; with 1000 or more rows the census would be
+ * incomplete and this tool must not be used until it paginates (tracked in
+ * docs/nora/17 H.1).
  *
  * AUTHORIZATION — no `service_role`, deliberately.
  *   The tool signs in as a real Nora administrator and does everything through

@@ -16,13 +16,21 @@
 --   is packaged where its ordering can be controlled.
 --
 -- PRECONDITION — release gate, enforced below, not merely documented.
---   The W8-E runtime MUST already be live and verified (Stage B green). This
---   file cannot observe the deployed frontend, so it enforces what it CAN
---   observe and the operator confirms the rest:
+--   The W8-E runtime MUST already be live and verified (Stage B green), and
+--   the operator MUST have confirmed client convergence (Stage B.5: the
+--   workstations they control run the W8-E runtime — no old PWA tab left).
+--   This file cannot observe browsers, so it enforces what it CAN observe and
+--   the operator confirms the rest (docs/nora/21 Section 17):
 --     * the `branding` bucket exists, is public, and carries its two policies
 --       — without it the login page loses its logo the moment this runs;
 --     * the two W8-B attachments policies are intact — they are what keeps
 --       active employees able to sign URLs once the bucket is private;
+--     * NO other policy exists on `storage.objects`. Permissive policies are
+--       OR-ed: one foreign policy would keep the "private" bucket readable
+--       through the API, so the flip would report success while closing
+--       nothing. This is the same allowlist `00_preflight.sql` shows; it is
+--       enforced HERE as well, so correctness never rests on an operator
+--       having run the preflight first (Alpha Storage 5 U-6);
 --     * no branding reference still points into the `attachments` bucket.
 --       This is the real gate: if Stage A did not complete, flipping now
 --       breaks pre-auth branding.
@@ -38,6 +46,7 @@ do $$
 declare
     v_was_public boolean;
     v_stale_refs bigint;
+    v_foreign_policies text;
 begin
     -- ---------------------------------------------------------------------
     -- Gate 1: the branding bucket must be ready to take over
@@ -72,6 +81,25 @@ begin
         raise exception 'W8-E Stage C refused: the W8-B attachments policies are not intact'
             using errcode = '55000',
                   detail = 'NORA_W8E_ATTACHMENT_POLICIES_MISSING';
+    end if;
+
+    -- ---------------------------------------------------------------------
+    -- Gate 2b: nothing else may grant access to storage.objects
+    -- ---------------------------------------------------------------------
+    -- The exact allowlist of `00_preflight.sql`. An unknown policy is never
+    -- dropped or altered here — it is refused, and a person decides.
+    select string_agg(p.policyname, ', ' order by p.policyname)
+      into v_foreign_policies
+      from pg_policies p
+     where p.schemaname = 'storage' and p.tablename = 'objects'
+       and p.policyname not in ('attachments_select_active_user', 'attachments_insert_writer',
+                                'branding_select_active_user', 'branding_insert_writer');
+
+    if v_foreign_policies is not null then
+        raise exception 'W8-E Stage C refused: unknown policy on storage.objects: %', v_foreign_policies
+            using errcode = '55000',
+                  detail = 'NORA_W8E_UNKNOWN_STORAGE_POLICY',
+                  hint = 'Do not drop it to get past this gate. A foreign permissive policy can keep the private bucket readable; decide about it first, then rerun 00_preflight.sql.';
     end if;
 
     -- ---------------------------------------------------------------------

@@ -250,3 +250,145 @@ describe("useAttachmentUrl renewal follows the capability's own expiry (L-1)", (
     expect(shown(second, "b")).toBe("https://signed.test/k1.pdf?v=2");
   });
 });
+
+/**
+ * Alpha Storage 5 U-2 — renewal must re-arm itself.
+ *
+ * Timers and `Date.now()` are separate clocks. When the renewal timer fires
+ * while the wall clock is still before the held horizon, the access layer
+ * correctly hands back the SAME capability — and before this fix nothing ever
+ * armed another timer, so the link on screen silently went stale. Invariant:
+ * a mounted consumer holding a capability always has a future timer or a
+ * signing in progress; and it never spins faster than the 1 s floor.
+ */
+describe("useAttachmentUrl renewal re-arms itself (U-2)", () => {
+  it("re-arms after a premature timer and renews once the horizon is reached", async () => {
+    const { state, signer } = countingSigner();
+    const screen = await mount(signer, [{ id: "a", storageKey: "k1.pdf" }]);
+    expect(state.calls).toBe(1);
+
+    // The wall clock falls 1 ms behind the timer clock, so the timer fires
+    // 1 ms before the held horizon and gets the same capability back.
+    await advance(1000);
+    vi.setSystemTime(Date.now() - 1);
+    await advance(ATTACHMENT_URL_RENEWAL_MS - 1000);
+    expect(state.calls).toBe(1);
+    expect(shown(screen, "a")).toBe("https://signed.test/k1.pdf?v=1");
+    // ... but it is NOT left without a timer
+    expect(vi.getTimerCount()).toBe(1);
+
+    // the re-armed timer (1 s floor) lands past the horizon: one real renewal
+    await advance(1000);
+    expect(state.calls).toBe(2);
+    expect(shown(screen, "a")).toBe("https://signed.test/k1.pdf?v=2");
+    expect(vi.getTimerCount()).toBe(1);
+
+    // and the cycle continues normally afterwards
+    await advance(ATTACHMENT_URL_RENEWAL_MS);
+    expect(state.calls).toBe(3);
+  });
+
+  it("re-arms against the remaining horizon when the wall clock moves backward", async () => {
+    const { state, signer } = countingSigner();
+    const screen = await mount(signer, [{ id: "a", storageKey: "k1.pdf" }]);
+
+    await advance(1000);
+    const setBack = 60_000;
+    vi.setSystemTime(Date.now() - setBack);
+    await advance(ATTACHMENT_URL_RENEWAL_MS - 1000);
+    // premature by a full minute: same capability, one pending timer
+    expect(state.calls).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // no tight loop while the wall clock catches up
+    await advance(setBack - 1);
+    expect(state.calls).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
+    await advance(1);
+    expect(state.calls).toBe(2);
+    expect(shown(screen, "a")).toBe("https://signed.test/k1.pdf?v=2");
+  });
+
+  it("does not storm while the wall clock stands still, and renews once it moves", async () => {
+    const { state, signer } = countingSigner();
+    const screen = await mount(signer, [{ id: "a", storageKey: "k1.pdf" }]);
+
+    const frozenAt = Date.now() + 1000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => frozenAt);
+    try {
+      for (let cycle = 0; cycle < 3; cycle += 1) {
+        await advance(ATTACHMENT_URL_RENEWAL_MS);
+        // same capability every time, always exactly one pending timer
+        expect(state.calls).toBe(1);
+        expect(vi.getTimerCount()).toBe(1);
+      }
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    // the wall clock runs again (it is now well past the horizon)
+    await advance(ATTACHMENT_URL_RENEWAL_MS);
+    expect(state.calls).toBe(2);
+    expect(shown(screen, "a")).toBe("https://signed.test/k1.pdf?v=2");
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("never renews faster than the 1 s floor, and renews exactly at it", async () => {
+    const { state, signer } = countingSigner();
+    await getSignedAttachmentCapability("k1.pdf", signer);
+    await advance(ATTACHMENT_URL_RENEWAL_MS - 300);
+
+    // mounted with 300 ms of freshness left
+    const screen = await mount(signer, [{ id: "a", storageKey: "k1.pdf" }]);
+    expect(state.calls).toBe(1);
+
+    await advance(300);
+    expect(state.calls).toBe(1);
+    await advance(699);
+    expect(state.calls).toBe(1);
+    await advance(1);
+    expect(state.calls).toBe(2);
+    expect(shown(screen, "a")).toBe("https://signed.test/k1.pdf?v=2");
+  });
+});
+
+/**
+ * Alpha Storage 5 U-1 — `force` belongs to ONE reactive retry.
+ *
+ * A consumer that once recovered from an error must afterwards renew through
+ * the shared cache like everyone else. If it kept forcing, it would throw away
+ * a capability another consumer had just refreshed and sign again — every TTL,
+ * for as long as it stays mounted.
+ */
+describe("a recovered consumer renews through the shared cache (U-1)", () => {
+  it("does not bypass a fresher shared capability at its own horizon", async () => {
+    const { state, signer } = countingSigner();
+    const screen = await mount(signer, [{ id: "a", storageKey: "k1.pdf" }]);
+    await clickRefresh(screen, "a"); // A's one reactive retry
+    expect(state.calls).toBe(2);
+
+    // Halfway through, B arrives and uses ITS reactive retry: the shared
+    // cache now holds a capability that is fresher than the one A holds.
+    await advance(ATTACHMENT_URL_RENEWAL_MS / 2);
+    await screen.rerender(
+      <AttachmentSignerProvider signer={signer}>
+        <Probe key="a" id="a" storageKey="k1.pdf" />
+        <Probe key="b" id="b" storageKey="k1.pdf" />
+      </AttachmentSignerProvider>,
+    );
+    await settle();
+    await clickRefresh(screen, "b");
+    expect(state.calls).toBe(3);
+
+    // A's own horizon: it must pick up B's fresh capability, not re-sign.
+    await advance(ATTACHMENT_URL_RENEWAL_MS / 2);
+    expect(state.calls).toBe(3);
+    expect(shown(screen, "a")).toBe("https://signed.test/k1.pdf?v=3");
+
+    // and over further cycles both renew together: one request per horizon
+    for (let cycle = 1; cycle <= 3; cycle += 1) {
+      await advance(ATTACHMENT_URL_RENEWAL_MS);
+      expect(state.calls).toBe(3 + cycle);
+    }
+  });
+});

@@ -85,3 +85,22 @@ parser. Keep the mechanism; state it accurately.
    `NO_CANDIDATE`. `20_report.sql` may be run at any time for progress.
 3. **Verification** — run the verifier again. **S5 stays blocked** until its
    verdict is `GREEN`.
+
+## `attachment_privacy/` and `branding_migration/` — W8-E
+
+The W8-E release tools. **The procedure, its order and its rollback live in
+`docs/nora/21-agent-runbooks.md` Section 17** — never run these from this
+table alone. The one rule behind the order: *old runtime + private
+`attachments` bucket* is unsupported, so the bucket flip is an operator step,
+not a migration.
+
+| File | Writes? | Classification |
+|---|---|---|
+| `branding_migration/relocate_branding_objects.mjs` | only with `--apply` — copies branding objects into `branding`, rewrites the logo references | business-data mutating (Stage A); dry run by default; signs in as an active admin, **no** `service_role` |
+| `attachment_privacy/00_preflight.sql` | no | **STRICT READ-ONLY** — GO / STOP gate for Stage C; runs inside `BEGIN TRANSACTION READ ONLY` |
+| `attachment_privacy/10_set_attachments_private.sql` | **YES** — `storage.buckets.public = false` for `attachments` | configuration mutating (Stage C); re-checks every preflight gate itself, incl. unknown policies, and verifies its own result |
+| `attachment_privacy/20_set_attachments_public.sql` | **YES** — `storage.buckets.public = true` for `attachments` | configuration mutating (rollback); verifies its own result — mutation and postcondition in one block, plus an independent postcondition |
+
+Runner: the whole file verbatim as ONE Supabase MCP `execute_sql` call, or
+`psql -v ON_ERROR_STOP=1 -f <file>`. Never `psql` without `ON_ERROR_STOP` —
+it carries on past an error and exits 0.

@@ -172,6 +172,16 @@ export const useAttachmentUrl = (
    * full interval would leave a dead link on screen (Alpha Storage 3 L-1).
    * Consumers of the same object share one horizon, so their renewals meet on
    * the same in-flight request in the access layer — one re-sign, not N.
+   *
+   * Invariant (Alpha Storage 5 U-2): while a mounted consumer holds a private
+   * capability, it has a future renewal timer OR a signing is in progress. A
+   * timer can fire while the wall clock is still before the horizon (timers
+   * and `Date.now()` are separate clocks). The access layer then rightly
+   * hands back the SAME capability — so this effect keys on the `signed`
+   * state object itself, not on its fields: every resolution is a new object,
+   * and a renewal that got the identical URL and horizon back re-arms against
+   * the remaining horizon instead of going silent. The 1 s floor keeps that
+   * from ever becoming a tight loop.
    */
   useEffect(() => {
     if (
@@ -186,7 +196,7 @@ export const useAttachmentUrl = (
       Math.max(signed.expiresAt - Date.now(), MIN_RENEWAL_DELAY_MS),
     );
     return () => clearTimeout(timer);
-  }, [storageKey, signed?.status, signed?.url, signed?.expiresAt]);
+  }, [storageKey, signed]);
 
   const refresh = useCallback(
     () => setAttempt((n) => (n < MAX_REFRESH_ATTEMPTS ? n + 1 : n)),

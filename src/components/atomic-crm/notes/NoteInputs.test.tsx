@@ -292,4 +292,34 @@ describe("desktop note-edit list with path-only attachments (M-1)", () => {
       .element(screen.getByRole("link", { name: "b.pdf" }))
       .toHaveAttribute("href", "https://signed.test/k-b.pdf?token=t");
   });
+
+  /**
+   * Alpha Storage 5 U-1 — the list must really be keyed by file identity.
+   *
+   * The link text and href alone cannot tell identity from position: a
+   * position-keyed list re-renders the neighbour into the removed row and ends
+   * up showing the same text. The DOM node can: with identity keys the
+   * surviving row keeps its node (and with it its component state — derived
+   * URL, retry budget); with index or `src` keys it is torn down.
+   */
+  it("keeps the surviving attachment's own row when a neighbour is removed", async () => {
+    const screen = await render(
+      <AttachmentSignerProvider signer={signer}>
+        <NoteInputsStory defaultValues={{ attachments: stored }} />
+      </AttachmentSignerProvider>,
+    );
+    await screen.getByRole("button", { name: "Show options" }).click();
+    await expect
+      .element(screen.getByRole("link", { name: "b.pdf" }))
+      .toHaveAttribute("href", "https://signed.test/k-b.pdf?token=t");
+    const rowB = screen.getByRole("link", { name: "b.pdf" }).element();
+
+    await screen.getByRole("button", { name: "Delete" }).first().click();
+    await expect
+      .element(screen.getByRole("link", { name: "a.pdf" }))
+      .not.toBeInTheDocument();
+
+    expect(rowB.isConnected).toBe(true);
+    expect(screen.getByRole("link", { name: "b.pdf" }).element()).toBe(rowB);
+  });
 });

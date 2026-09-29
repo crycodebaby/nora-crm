@@ -56,8 +56,14 @@ const makeClient = () => {
             error: null,
           };
         },
-        getPublicUrl: (key: string) =>
-          real.storage.from(bucket).getPublicUrl(key),
+        // Every argument is passed through (Alpha Storage 5 U-1): a mock that
+        // dropped the options would hide a `{ download }` or `{ transform }`
+        // variant, whose REAL output carries a query string.
+        getPublicUrl: (
+          ...args: Parameters<
+            ReturnType<typeof real.storage.from>["getPublicUrl"]
+          >
+        ) => real.storage.from(bucket).getPublicUrl(...args),
       }),
     },
   };
@@ -128,6 +134,22 @@ describe("private upload representation (M-2)", () => {
     expect(src).not.toBe(blob);
     expect(src.startsWith("blob:")).toBe(false);
     expect(JSON.stringify(stored)).not.toContain("secret");
+  });
+
+  it("persists the plain object URL, never a download or transform variant", async () => {
+    makeClient();
+    const rawFile = new File(["x"], "c.pdf", { type: "application/pdf" });
+
+    const [stored] = await save([
+      { rawFile, src: URL.createObjectURL(rawFile), title: "c.pdf" },
+    ]);
+
+    // exactly the canonical URL: no `?download=`, no render/transform route
+    expect(new URL(stored.src as string).search).toBe("");
+    expect(stored.src).not.toMatch(/download|render\/image|transform/);
+    expect(stored.src).toBe(
+      `${LOCAL_ORIGIN}/storage/v1/object/public/attachments/${stored.path}`,
+    );
   });
 
   it("keeps an existing stored element as it is, without re-uploading", async () => {

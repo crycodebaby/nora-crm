@@ -20,10 +20,14 @@ import {
  * - deduplicates concurrent signing of the same key, so N components showing
  *   the same object issue ONE request;
  * - refreshes after expiry rather than caching a dead URL;
- * - hands each consumer the capability's OWN expiry horizon, so a component
- *   that receives an almost-expired cached URL renews it when THAT URL lapses,
- *   not a full TTL after it mounted (Alpha Storage 3 L-1). The horizon is
- *   runtime-only: never persisted, never part of any domain record.
+ * - hands each consumer the capability's OWN freshness horizon, so a
+ *   component that receives an almost-stale cached URL renews it when THAT
+ *   URL stops being fresh, not a full TTL after it mounted (Alpha Storage 3
+ *   L-1). The horizon is Nora's own safety margin — local signing time + TTL
+ *   − skew — not the token's `exp` claim read back from the URL. It is
+ *   runtime-only: never persisted, never part of any domain record;
+ * - is bound to the session it was filled in: a reset on an auth boundary
+ *   also invalidates signing requests still in flight (Alpha Storage 5 U-3).
  *
  * A signed URL is a bearer capability. Nora guarantees that a deactivated
  * user cannot obtain a NEW one; it cannot retract one already issued before
@@ -52,7 +56,11 @@ export const ATTACHMENT_URL_RENEWAL_MS =
  */
 export type SignedAttachmentCapability = {
   url: string;
-  /** Epoch ms after which `url` is no longer handed out as fresh. */
+  /**
+   * Epoch ms after which `url` is no longer handed out as fresh: Nora's safe
+   * freshness horizon, deliberately `ATTACHMENT_URL_RENEWAL_MS` after local
+   * signing — i.e. BEFORE the remote token expires, not equal to it.
+   */
   expiresAt: number;
 };
 
@@ -81,6 +89,19 @@ type CacheEntry = {
 };
 
 const cache = new Map<string, CacheEntry>();
+
+/**
+ * Auth epoch of the cache (Alpha Storage 5 U-3).
+ *
+ * Clearing the map is not enough on a security boundary: a signing request
+ * that was already in flight when the previous session ended still resolves
+ * later, and would write the previous session's capability straight back
+ * into the fresh cache. Every request therefore remembers the epoch it was
+ * started in, and a resolution from an older epoch is discarded — never
+ * cached, never handed out as ready. Internal to this module on purpose: no
+ * caller can read it, set it or pass it along.
+ */
+let capabilityGeneration = 0;
 
 const freshCapability = (
   entry: CacheEntry | undefined,
@@ -116,8 +137,16 @@ export const getSignedAttachmentCapability = async (
   if (fresh != null) return fresh;
   if (cached?.inFlight) return cached.inFlight;
 
-  const inFlight = signer(storageKey)
+  const generation = capabilityGeneration;
+  const inFlight: Promise<SignedAttachmentCapability> = signer(storageKey)
     .then((url) => {
+      if (generation !== capabilityGeneration) {
+        // Minted for a session that has ended since the request started
+        // (logout, or a new login in this tab). Not cached, not returned.
+        throw new Error(
+          `discarded a signed URL for ${storageKey} from an ended session`,
+        );
+      }
       const capability = {
         url,
         expiresAt: Date.now() + ATTACHMENT_URL_RENEWAL_MS,
@@ -127,8 +156,12 @@ export const getSignedAttachmentCapability = async (
     })
     .catch((error) => {
       // Never cache a failure: the next mount must be allowed to retry, e.g.
-      // after a transient network error or a session refresh.
-      cache.delete(storageKey);
+      // after a transient network error or a session refresh. Only this
+      // request's own entry is dropped — after a reset the key may already
+      // belong to a request of the new session.
+      if (cache.get(storageKey)?.inFlight === inFlight) {
+        cache.delete(storageKey);
+      }
       throw error;
     });
 
@@ -147,5 +180,16 @@ export const getSignedAttachmentUrl = async (
 ): Promise<string> =>
   (await getSignedAttachmentCapability(storageKey, signer, force)).url;
 
-/** Test/teardown seam. Never called by application code. */
-export const resetAttachmentUrlCache = () => cache.clear();
+/**
+ * Security-boundary reset: forgets every derived capability AND invalidates
+ * every signing request still in flight, so nothing minted for the previous
+ * session can reach the next one. Called by the auth provider on logout, on a
+ * failed session check and before a new login; also the test/teardown seam.
+ *
+ * It does not retract URLs already issued — a signed URL is a bearer
+ * capability and expires on its own — it stops Nora reusing them.
+ */
+export const resetAttachmentUrlCache = () => {
+  capabilityGeneration += 1;
+  cache.clear();
+};

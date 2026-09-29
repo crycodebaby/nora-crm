@@ -35,6 +35,24 @@
  *        PUBLIC = expected by design, and a still-public attachments bucket
  *        is a hard error, not a line of text.
  *
+ * Alpha Storage 5 (production-readiness hardening) adds:
+ *
+ *   U-6  Stage C refuses, BEFORE mutating, when a foreign policy exists on
+ *        `storage.objects` (an injected permissive policy; the bucket must
+ *        stay public and the policy untouched), and the preflight says STOP.
+ *   U-7  the rollback verifies its own result: with the flip back to public
+ *        forced to fail by an injected trigger, it is a hard error in every
+ *        runner shape (psql + ON_ERROR_STOP, psql without it, one message,
+ *        one message showing only the last result) and never reports
+ *        `PUBLIC —`; a missing bucket is a hard error too.
+ *   U-1  Stage C's branding postcondition is asserted on its own, so
+ *        deleting it fails this suite.
+ *   U-9  every mutation of shared local state (bucket flags, injected
+ *        policy/trigger) is undone in `finally`, and a failed cleanup is
+ *        reported next to the primary failure instead of hiding it. The
+ *        "deactivated identity" read check now really presents that
+ *        identity's JWT, so it can fail independently of the anonymous one.
+ *
  * THE ASSERTION THAT CHANGED. `attachment_storage_policy_verification.mjs`
  * records anonymous readability of a known key as RESIDUAL T1 — expected, not
  * a failure, because the bucket was public by design. Here, in the private
@@ -66,16 +84,17 @@
  *   npm run signing-keys:ensure
  *   npx supabase start
  *
- * Verified 2026-09-28: on a volume created by the pinned CLI (2.118.0,
- * storage-api v1.72.1) uploads work with NO index workaround and this suite
- * passes 24/24. Never add a unique index to `storage.objects` to work around
- * a stale volume — that encodes a local artefact as product schema.
+ * Verified on a volume created by the pinned CLI (2.118.0): uploads work with
+ * NO index workaround and every assertion of this suite passes (the count is
+ * printed at the end of each run; it grows with the suite, so it is not
+ * repeated here). Never add a unique index to `storage.objects` to work
+ * around a stale volume — that encodes a local artefact as product schema.
  *
  * Exit 0 = all assertions passed · 1 = assertion failure · 2 = prerequisites.
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -284,6 +303,123 @@ const scriptFrom = (script, marker) => {
 
 const verdictOf = (rows, bucket) =>
   rows.find((row) => row[0] === bucket)?.[3] ?? "<missing>";
+
+/**
+ * Alpha Storage 5 U-7 — the runner shapes an operator (or an agent) may use.
+ * Each returns exit code, stdout and stderr; none throws, because what a
+ * runner does AFTER an error is exactly what is under test.
+ */
+const RUNNER_SHAPES = {
+  "psql stdin + ON_ERROR_STOP": (sql) => ({
+    args: ["-v", "ON_ERROR_STOP=1", "-At"],
+    input: sql,
+  }),
+  "psql stdin without ON_ERROR_STOP": (sql) => ({ args: ["-At"], input: sql }),
+  "one message (psql -c)": (sql) => ({ args: ["-At", "-c", sql] }),
+  "one message, last result only (MCP-like)": (sql) => ({
+    args: ["-At", "-v", "SHOW_ALL_RESULTS=off", "-c", sql],
+  }),
+};
+const psqlShape = (shape, sql) => {
+  const { args, input } = RUNNER_SHAPES[shape](sql);
+  const result = spawnSync(
+    "docker",
+    [
+      "exec",
+      "-i",
+      DB_CONTAINER,
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      ...args,
+    ],
+    { input: input ?? "", encoding: "utf8" },
+  );
+  return {
+    code: result.status,
+    out: result.stdout ?? "",
+    err: result.stderr ?? "",
+  };
+};
+
+// Names of the objects this run may inject. Unique per run, and removed in
+// `finally` whatever happens (U-9).
+const INJECTED_POLICY = `w8e_verify_${run}_foreign_read`;
+const INJECTED_TRIGGER = `w8e_verify_${run}_keep_private`;
+const INJECTED_FUNCTION = `public.w8e_verify_${run}_keep_private`;
+
+/** Makes every UPDATE of the attachments bucket row keep it PRIVATE. */
+const injectKeepPrivate = () =>
+  psql(`create function ${INJECTED_FUNCTION}() returns trigger
+          language plpgsql as $f$
+        begin
+            if new.id = 'attachments' then
+                new.public := false;
+            end if;
+            return new;
+        end;
+        $f$;
+        create trigger ${INJECTED_TRIGGER}
+            before update on storage.buckets
+            for each row execute function ${INJECTED_FUNCTION}();`);
+
+const removeInjections = () =>
+  psql(`drop trigger if exists ${INJECTED_TRIGGER} on storage.buckets;
+        drop function if exists ${INJECTED_FUNCTION}();
+        drop policy if exists ${INJECTED_POLICY} on storage.objects;`);
+
+const bucketPublic = (bucket) =>
+  psql(`select public from storage.buckets where id = '${bucket}';`);
+
+const unknownPolicyCount = () =>
+  psql(`select count(*) from pg_policies
+         where schemaname = 'storage' and tablename = 'objects'
+           and policyname not in ('attachments_select_active_user', 'attachments_insert_writer',
+                                  'branding_select_active_user', 'branding_insert_writer');`);
+
+// ---------------------------------------------------------------------------
+// U-9 — shared local state is put back however this process ends
+// ---------------------------------------------------------------------------
+// Success, a failed check, a prerequisite abort (`process.exit(2)`) or an
+// unexpected exception all end in the 'exit' event, and every restore step is
+// a synchronous psql call, so one listener covers them all without wrapping
+// the suite. It never replaces the primary result: that has been printed by
+// the time it runs, and a cleanup failure is printed NEXT to it and turns a
+// passing exit code into a failing one.
+process.on("exit", (code) => {
+  const problems = [];
+  const restored = [];
+  const step = (label, action) => {
+    try {
+      const note = action();
+      if (note) restored.push(note);
+    } catch (error) {
+      problems.push(
+        `${label}: ${String(error.stderr ?? error.message).trim()}`,
+      );
+    }
+  };
+  step("remove injected policy/trigger/function", () => {
+    removeInjections();
+  });
+  for (const bucket of [ATTACHMENTS, BRANDING]) {
+    step(`restore ${bucket}.public = true`, () => {
+      if (bucketPublic(bucket) === "t") return null;
+      if (setPublic(bucket, true) !== "t") throw new Error("still not public");
+      return `${bucket} had been left PRIVATE — restored to public`;
+    });
+  }
+  for (const note of restored) console.error(`[w8e] CLEANUP: ${note}`);
+  if (problems.length) {
+    console.error(
+      `[w8e] CLEANUP FAILED (primary result above, exit code ${code}):`,
+    );
+    for (const problem of problems) console.error(`[w8e]   - ${problem}`);
+    if (code === 0) process.exitCode = 1;
+  }
+});
 
 // ---------------------------------------------------------------------------
 // M-2 — the S3B grammar, asked directly (it has no API grant; postgres only)
@@ -516,6 +652,89 @@ check(
   );
 }
 
+// --- U-6: Stage C itself refuses a foreign policy, before any mutation -----
+// A permissive policy is OR-ed with the W8-B ones: with it installed, a
+// "private" bucket stays readable through the API. The gate must live in the
+// mutating script, not only in the preflight an operator may skip.
+console.log(
+  "\n--- U-6 unknown storage.objects policy (attachments PUBLIC) ---",
+);
+{
+  check(
+    "U-6 precondition: no foreign policy on storage.objects",
+    unknownPolicyCount(),
+    "0",
+  );
+  psql(`create policy ${INJECTED_POLICY} on storage.objects
+          for select to anon using (bucket_id = 'attachments');`);
+  const preflight = psqlTry(operatorScript("00_preflight.sql"));
+  check(
+    "U-6 preflight verdict is STOP while a foreign policy exists",
+    (preflight.rows ?? []).some(
+      (row) => row[0] === "== VERDICT ==" && row[1] === "STOP",
+    ),
+    true,
+  );
+  const refused = psqlTry(operatorScript("10_set_attachments_private.sql"));
+  check(
+    "U-6 Stage C REFUSES with NORA_W8E_UNKNOWN_STORAGE_POLICY",
+    /NORA_W8E_UNKNOWN_STORAGE_POLICY/.test(refused.error ?? ""),
+    true,
+  );
+  check(
+    "U-6 Stage C refusal names the foreign policy",
+    (refused.error ?? "").includes(INJECTED_POLICY),
+    true,
+  );
+  check(
+    "U-6 attachments.public is UNCHANGED after the refusal",
+    bucketPublic(ATTACHMENTS),
+    "t",
+  );
+  check(
+    "U-6 the foreign policy was neither dropped nor altered by Stage C",
+    psql(`select count(*) from pg_policies
+           where schemaname = 'storage' and tablename = 'objects'
+             and policyname = '${INJECTED_POLICY}' and cmd = 'SELECT'
+             and roles = '{anon}';`),
+    "1",
+  );
+  removeInjections();
+  check(
+    "U-6 cleanup: the injected policy is gone again",
+    unknownPolicyCount(),
+    "0",
+  );
+}
+
+// --- U-7: the rollback refuses a missing bucket -----------------------------
+// Run on a session-local stand-in for storage.buckets with NO attachments row,
+// so the real bucket is never touched.
+{
+  const onTempTable = operatorScript("20_set_attachments_public.sql").replace(
+    /storage\.buckets/g,
+    "pg_temp.w8e_buckets",
+  );
+  const setup =
+    "create temp table w8e_buckets (id text primary key, public boolean not null);\n";
+  const stop = psqlShape("psql stdin + ON_ERROR_STOP", setup + onTempTable);
+  check(
+    "U-7 rollback: a missing attachments bucket is a HARD error (NORA_W8E_ATTACHMENTS_BUCKET_MISSING)",
+    stop.code !== 0 && /NORA_W8E_ATTACHMENTS_BUCKET_MISSING/.test(stop.err),
+    true,
+  );
+  const lax = psqlShape(
+    "psql stdin without ON_ERROR_STOP",
+    setup + onTempTable,
+  );
+  check(
+    "U-7 rollback: a missing bucket never reports PUBLIC, even to a runner that ignores errors",
+    /NORA_W8E_ATTACHMENTS_BUCKET_MISSING/.test(lax.err) &&
+      !lax.out.includes("PUBLIC —"),
+    true,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // STATE PRIVATE — Stage C, the target
 // ---------------------------------------------------------------------------
@@ -619,9 +838,29 @@ check(
   await canSign(disabled.client, ATTACHMENTS, noteKey),
   false,
 );
+// U-9: these two present the deactivated identity's OWN still-valid JWT, so
+// they test that identity — not a repeat of the anonymous checks above. The
+// /object/authenticated route is decided by the `is_active_user()` policy
+// alone and fails independently if that check ever regresses.
+const disabledToken = (await disabled.client.auth.getSession()).data.session
+  ?.access_token;
+const asDisabled = {
+  apikey: config.anon,
+  Authorization: `Bearer ${disabledToken}`,
+};
+check(
+  "C deactivated identity still holds a live JWT (precondition of the next checks)",
+  typeof disabledToken === "string" && disabledToken.length > 0,
+  true,
+);
 check(
   "C deactivated identity with a live JWT cannot read the public route either",
-  await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody),
+  await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody, asDisabled),
+  false,
+);
+check(
+  "C deactivated identity with a live JWT cannot read /object/authenticated",
+  await yieldsBytes(authedUrl(ATTACHMENTS, noteKey), noteBody, asDisabled),
   false,
 );
 
@@ -740,6 +979,104 @@ check(
   false,
 );
 
+// --- U-1: Stage C's branding postcondition, on its own ----------------------
+// Gate 1 already refuses a non-public branding bucket BEFORE the flip, so the
+// full script can never reach this branch on a sane stack. Asserting the
+// section directly is what makes deleting it fail this suite.
+{
+  const script = operatorScript("10_set_attachments_private.sql");
+  setPublic(BRANDING, false);
+  try {
+    const post = psqlTry(scriptFrom(script, "-- POSTCONDITION"));
+    check(
+      "U-1 Stage C postcondition is a HARD error when branding is not public",
+      /NORA_W8E_BRANDING_NOT_PUBLIC/.test(post.error ?? ""),
+      true,
+    );
+    const report = psqlTry(
+      scriptFrom(script, "-- The invocation returns its own result."),
+    );
+    check(
+      "U-1 Stage C report calls a non-public branding bucket a FAILURE",
+      verdictOf(report.rows ?? [], "branding").startsWith("FAILURE"),
+      true,
+    );
+  } finally {
+    setPublic(BRANDING, true);
+  }
+  check(
+    "U-1 branding is public again after the postcondition probe",
+    bucketPublic(BRANDING),
+    "t",
+  );
+}
+
+// --- U-7: a rollback that does not take effect is a failure in EVERY runner --
+// An injected trigger keeps the bucket private whatever the UPDATE says. The
+// rollback must then never look like success: not in the exit code where the
+// runner honours errors, and never as a `PUBLIC —` row where it does not.
+console.log("\n--- U-7 rollback postcondition across runner shapes ---");
+{
+  const script = operatorScript("20_set_attachments_public.sql");
+  injectKeepPrivate();
+  try {
+    const shapes = Object.fromEntries(
+      Object.keys(RUNNER_SHAPES).map((shape) => [
+        shape,
+        psqlShape(shape, script),
+      ]),
+    );
+    for (const [shape, result] of Object.entries(shapes)) {
+      check(
+        `U-7 [${shape}] reports NORA_W8E_ATTACHMENTS_STILL_PRIVATE`,
+        /NORA_W8E_ATTACHMENTS_STILL_PRIVATE/.test(result.err),
+        true,
+      );
+      check(
+        `U-7 [${shape}] never reports PUBLIC —`,
+        result.out.includes("PUBLIC —"),
+        false,
+      );
+    }
+    const stop = shapes["psql stdin + ON_ERROR_STOP"];
+    check(
+      "U-7 [psql stdin + ON_ERROR_STOP] exits non-zero at the IN-BLOCK postcondition",
+      stop.code !== 0 && /still not public after the update/.test(stop.err),
+      true,
+    );
+    // A runner that ignores errors exits 0 — which is why the runbook forbids
+    // it. Even there both postconditions fire and the last row says FAILURE.
+    const lax = shapes["psql stdin without ON_ERROR_STOP"];
+    check(
+      "U-7 [psql stdin without ON_ERROR_STOP] both postconditions fire",
+      (lax.err.match(/NORA_W8E_ATTACHMENTS_STILL_PRIVATE/g) ?? []).length,
+      2,
+    );
+    check(
+      "U-7 [psql stdin without ON_ERROR_STOP] last row is an explicit FAILURE verdict",
+      /^attachments\|f\|FAILURE — /m.test(lax.out.trim().split("\n").at(-1)),
+      true,
+    );
+    for (const shape of [
+      "one message (psql -c)",
+      "one message, last result only (MCP-like)",
+    ]) {
+      check(
+        `U-7 [${shape}] returns an error and no result row at all`,
+        shapes[shape].code !== 0 && !shapes[shape].out.includes("|"),
+        true,
+      );
+    }
+    check(
+      "U-7 the bucket is still PRIVATE — nothing claimed a rollback that did not happen",
+      bucketPublic(ATTACHMENTS),
+      "f",
+    );
+  } finally {
+    removeInjections();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ROLLBACK — public again
 // ---------------------------------------------------------------------------
@@ -759,6 +1096,11 @@ check(
     "PUBLIC —",
   ),
   true,
+);
+check(
+  "rollback end state really is public (not just reported)",
+  bucketPublic(ATTACHMENTS),
+  "t",
 );
 check(
   "M-2 [rollback] the persisted canonical src yields bytes again (old runtime route)",
