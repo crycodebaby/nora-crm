@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/avatar";
 import { useRecordContext } from "ra-core";
 
+import { useAttachmentUrl } from "../attachments/useAttachmentUrl";
 import type { Contact } from "../types";
 
 export const Avatar = (props: {
@@ -14,6 +15,11 @@ export const Avatar = (props: {
   title?: string;
 }) => {
   const record = useRecordContext<Contact>(props);
+  // A person photo is personal data, not branding: it stays in the private
+  // bucket. Today every stored contact avatar is an external URL, which the
+  // hook passes through without a round trip — only an avatar that really is
+  // a Nora storage object costs a signing request.
+  const access = useAttachmentUrl(record?.avatar, "private");
   // If we come from company page, the record is defined (to pass the company as a prop),
   // but neither of those fields are and this lead to an error when creating contact.
   if (!record?.avatar && !record?.first_name && !record?.last_name) {
@@ -30,7 +36,7 @@ export const Avatar = (props: {
 
   return (
     <ShadcnAvatar className={sizeClass} title={props.title}>
-      <AvatarImage src={record.avatar?.src ?? undefined} />
+      <AvatarImage src={access.previewUrl} />
       <AvatarFallback className={size && size < 40 ? "text-[10px]" : "text-sm"}>
         {record.first_name?.charAt(0).toUpperCase()}
         {record.last_name?.charAt(0).toUpperCase()}

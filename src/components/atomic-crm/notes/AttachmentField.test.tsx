@@ -2,6 +2,8 @@ import { RecordContextProvider } from "ra-core";
 import { render } from "vitest-browser-react";
 
 import { AttachmentField } from "./AttachmentField";
+import { AttachmentSignerProvider } from "../attachments/useAttachmentUrl";
+import { resetAttachmentUrlCache } from "../attachments/attachmentAccess";
 import { StoryWrapper } from "@/test/StoryWrapper";
 
 /**
@@ -71,15 +73,32 @@ describe("AttachmentField never emits an unsafe href", () => {
   );
 
   it.each(UNSAFE)(
-    "does not wrap an image with %s in a clickable anchor",
+    "renders an image with %s as its title, with no anchor and no img",
     async (_label, src) => {
       const screen = await render(<Host record={image(src)} />);
 
-      // the preview is still shown, it just must not be clickable
-      await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+      // W8-E tightened this. Before, a rejected value was still handed to
+      // `<img src>` — harmless (an `<img>` never executes a scheme) but
+      // pointless, and it produced a broken-image box. Now the value is
+      // rejected by the ONE URL authority before it reaches the DOM at all,
+      // and the attachment degrades to its file name so nothing silently
+      // disappears from the UI.
+      await expect.element(screen.getByText("bild.png")).toBeVisible();
       expect(anchors(screen)).toEqual([]);
+      expect(screen.container.querySelector("img")).toBeNull();
     },
   );
+
+  it("still previews inline image content that was never uploaded", async () => {
+    // The cropper produces a `data:image/...` value before the upload runs.
+    // It is renderable but, being a document scheme, never navigable.
+    const screen = await render(
+      <Host record={image("data:image/png;base64,iVBORw0KGgo=")} />,
+    );
+
+    await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+  });
 });
 
 describe("AttachmentField keeps safe attachment links working", () => {
@@ -182,6 +201,78 @@ describe("AttachmentField keeps the in-session file preview clickable", () => {
   });
 });
 
+/**
+ * W8-E — an attachment already stored in the private bucket.
+ *
+ * In the real edit form this is the common case: the note was saved earlier,
+ * so the element carries a `path`. The field must then show the object
+ * through a DERIVED capability, and must ignore whatever `src` happens to be
+ * sitting next to that key.
+ */
+describe("AttachmentField derives access for a stored attachment", () => {
+  const SignedHost = ({
+    record,
+    signer,
+  }: {
+    record: Record<string, unknown>;
+    signer: (key: string) => Promise<string>;
+  }) => (
+    <StoryWrapper>
+      <AttachmentSignerProvider signer={signer}>
+        <RecordContextProvider value={record}>
+          <AttachmentField source="src" title="title" target="_blank" />
+        </RecordContextProvider>
+      </AttachmentSignerProvider>
+      <span>committed</span>
+    </StoryWrapper>
+  );
+
+  beforeEach(() => resetAttachmentUrlCache());
+
+  it("links a stored document through its signed URL, not its stored src", async () => {
+    const screen = await render(
+      <SignedHost
+        record={{ ...doc("https://cdn.test/legacy.pdf"), path: "k2.pdf" }}
+        signer={async (key) => `https://signed.test/${key}?token=abc`}
+      />,
+    );
+
+    await expect
+      .element(screen.getByRole("link", { name: "angebot.pdf" }))
+      .toBeVisible();
+    expect(anchors(screen)).toEqual(["https://signed.test/k2.pdf?token=abc"]);
+  });
+
+  it("ignores a hostile stored src when a storage key is present", async () => {
+    const screen = await render(
+      <SignedHost
+        record={{ ...image("javascript:alert(1)"), path: "k1.png" }}
+        signer={async (key) => `https://signed.test/${key}?token=abc`}
+      />,
+    );
+
+    await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+    expect(screen.container.querySelector("img")?.getAttribute("src")).toBe(
+      "https://signed.test/k1.png?token=abc",
+    );
+    expect(anchors(screen)).toEqual(["https://signed.test/k1.png?token=abc"]);
+  });
+
+  it("shows the file name and no link when access cannot be derived", async () => {
+    const screen = await render(
+      <SignedHost
+        record={{ ...doc("https://cdn.test/legacy.pdf"), path: "k2.pdf" }}
+        signer={async () => {
+          throw new Error("no session");
+        }}
+      />,
+    );
+
+    await expect.element(screen.getByText("angebot.pdf")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+  });
+});
+
 describe("AttachmentField degrades safely without a URL", () => {
   it("renders no attachment at all when src is absent", async () => {
     const screen = await render(<Host record={doc(undefined)} />);
@@ -198,4 +289,171 @@ describe("AttachmentField degrades safely without a URL", () => {
     await expect.element(screen.getByText("committed")).toBeVisible();
     expect(anchors(screen)).toEqual([]);
   });
+});
+
+/**
+ * Alpha Storage 3 M-1 — the canonical W8-E element `{ path, title, type }`
+ * has no `src`. The field used to treat "no src" as "no attachment" and
+ * rendered nothing, so a stored attachment vanished from the edit form.
+ * Existence is now the key (or a picked file, or a stored src); access is
+ * derived from the key in every state, and the file name stays on screen
+ * whatever the capability is doing.
+ */
+describe("AttachmentField shows a path-only stored attachment (M-1)", () => {
+  const pathOnlyDoc = {
+    path: "k2.pdf",
+    title: "angebot.pdf",
+    type: "application/pdf",
+  };
+  const pathOnlyImage = {
+    path: "k1.png",
+    title: "bild.png",
+    type: "image/png",
+  };
+
+  const Signed = ({
+    record,
+    signer,
+  }: {
+    record: Record<string, unknown>;
+    signer: (key: string) => Promise<string>;
+  }) => (
+    <StoryWrapper>
+      <AttachmentSignerProvider signer={signer}>
+        <RecordContextProvider value={record}>
+          <AttachmentField source="src" title="title" target="_blank" />
+        </RecordContextProvider>
+      </AttachmentSignerProvider>
+      <span>committed</span>
+    </StoryWrapper>
+  );
+
+  const pending = () => new Promise<string>(() => {});
+  const signed = async (key: string) => `https://signed.test/${key}?token=t`;
+  const failing = async () => {
+    throw new Error("no session");
+  };
+
+  beforeEach(() => resetAttachmentUrlCache());
+
+  it("keeps a document visible, and unlinked, while access is loading", async () => {
+    const screen = await render(
+      <Signed record={pathOnlyDoc} signer={pending} />,
+    );
+
+    await expect.element(screen.getByText("angebot.pdf")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+    expect(screen.container.querySelector('[aria-busy="true"]')).not.toBeNull();
+  });
+
+  it("links a document through the key-derived URL once access is ready", async () => {
+    const screen = await render(
+      <Signed record={pathOnlyDoc} signer={signed} />,
+    );
+
+    await expect
+      .element(screen.getByRole("link", { name: "angebot.pdf" }))
+      .toBeVisible();
+    expect(anchors(screen)).toEqual(["https://signed.test/k2.pdf?token=t"]);
+  });
+
+  it("keeps a document visible, and unlinked, when signing fails", async () => {
+    const screen = await render(
+      <Signed record={pathOnlyDoc} signer={failing} />,
+    );
+
+    await expect.element(screen.getByText("angebot.pdf")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+    expect(screen.container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it("keeps an image visible as its file name while access is loading", async () => {
+    const screen = await render(
+      <Signed record={pathOnlyImage} signer={pending} />,
+    );
+
+    await expect.element(screen.getByText("bild.png")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+    expect(screen.container.querySelector("img")).toBeNull();
+  });
+
+  it("previews an image through the key-derived URL once access is ready", async () => {
+    const screen = await render(
+      <Signed record={pathOnlyImage} signer={signed} />,
+    );
+
+    await expect.element(screen.getByAltText("bild.png")).toBeVisible();
+    expect(screen.container.querySelector("img")?.getAttribute("src")).toBe(
+      "https://signed.test/k1.png?token=t",
+    );
+    expect(anchors(screen)).toEqual(["https://signed.test/k1.png?token=t"]);
+  });
+
+  it("keeps an image visible as its file name when signing fails", async () => {
+    const screen = await render(
+      <Signed record={pathOnlyImage} signer={failing} />,
+    );
+
+    await expect.element(screen.getByText("bild.png")).toBeVisible();
+    expect(anchors(screen)).toEqual([]);
+    expect(screen.container.querySelector("img")).toBeNull();
+  });
+});
+
+/**
+ * The M-2 remediation persists a canonical public URL next to the key again,
+ * as inert N-1 rollback metadata. That must not reopen `src` as an authority:
+ * whatever sits in `src`, access is derived from `path` and only from it.
+ */
+describe("AttachmentField: the key always wins over any src (M-2 invariant)", () => {
+  const HOSTILE_SRC: [string, string][] = [
+    ["javascript:", "javascript:alert(document.cookie)"],
+    ["data: document", "data:text/html,<script>alert(1)</script>"],
+    ["data: image", "data:image/png;base64,iVBORw0KGgo="],
+    ["attacker HTTPS", "https://attacker.test/steal.pdf"],
+    [
+      "canonical public URL of ANOTHER key",
+      "http://127.0.0.1:54321/storage/v1/object/public/attachments/other.pdf",
+    ],
+    [
+      "stale canonical public URL of THIS key",
+      "http://127.0.0.1:54321/storage/v1/object/public/attachments/k2.pdf",
+    ],
+  ];
+
+  beforeEach(() => resetAttachmentUrlCache());
+
+  it.each(HOSTILE_SRC)(
+    "derives access from path, never from a %s src",
+    async (_label, src) => {
+      const signedKeys: string[] = [];
+      const screen = await render(
+        <StoryWrapper>
+          <AttachmentSignerProvider
+            signer={async (key) => {
+              signedKeys.push(key);
+              return `https://signed.test/${key}?token=t`;
+            }}
+          >
+            <RecordContextProvider
+              value={{
+                path: "k2.pdf",
+                src,
+                title: "angebot.pdf",
+                type: "application/pdf",
+              }}
+            >
+              <AttachmentField source="src" title="title" target="_blank" />
+            </RecordContextProvider>
+          </AttachmentSignerProvider>
+        </StoryWrapper>,
+      );
+
+      await expect
+        .element(screen.getByRole("link", { name: "angebot.pdf" }))
+        .toBeVisible();
+      expect(anchors(screen)).toEqual(["https://signed.test/k2.pdf?token=t"]);
+      expect(signedKeys).toEqual(["k2.pdf"]);
+    },
+  );
 });

@@ -1,25 +1,32 @@
 import { Paperclip, TriangleAlert } from "lucide-react";
 import { useTranslate } from "ra-core";
 
-import { safeHref } from "@/lib/safeHref";
 import type { AttachmentNote } from "../types";
 
 /**
- * Read-only recovery view for QUARANTINED note attachments (W8-C S5).
+ * Read-only recovery view for QUARANTINED note attachments (W8-C S5, W8-E).
  *
  * It is shown when `public.attachments` could not vouch for a note's legacy
  * JSON array — either the two disagree (`drift`) or the read carried no
- * relational rows at all (`unverified`). The data it renders is explicitly
- * NOT verified, so it deliberately offers no inline preview, no input and no
- * way back into the form:
+ * relational rows at all (`unverified`).
  *
- * - no `<img>` and no image branch — an unverified key must not be rendered
- *   as trusted content
- * - no `FileInput` / `AttachmentField`, no remove controls
- * - no react-hook-form registration, never `setValue("attachments")`
+ * W8-E tightened this from "read-only" to "metadata-only". A degraded
+ * attachment reference no longer mints ANY content capability:
  *
- * It only tells the user that historical attachment content exists and lets
- * them open it.
+ * - no `<img>` and no image branch — unchanged from S5;
+ * - **no signed URL**: `useAttachmentUrl` is deliberately not imported here,
+ *   so there is no code path from a degraded record to private bucket
+ *   content. Degradation means "we cannot vouch that this belongs to this
+ *   note"; deriving access from it anyway would make the gate decorative;
+ * - **no anchor at all**: before W8-E the legacy public `src` was still
+ *   clickable. Once the bucket is private that URL is dead, and keeping it as
+ *   a link would be both broken and an alternate escape hatch around the
+ *   gate. The affordance is intentionally gone (approved product decision);
+ * - no `FileInput` / `AttachmentField`, no remove controls, no react-hook-form
+ *   registration, never `setValue("attachments")`.
+ *
+ * What remains is exactly what recovery needs: the evidence that historical
+ * attachment content exists, and its file name.
  */
 export const NoteAttachmentsRecovery = ({
   attachments,
@@ -38,38 +45,20 @@ export const NoteAttachmentsRecovery = ({
         <TriangleAlert className="mt-0.5 size-4 shrink-0" />
         <span>
           {translate("resources.notes.attachments_recovery.unverified_hint", {
-            _: "These attachments could not be verified. They are shown read-only and cannot be changed right now.",
+            _: "These attachments could not be verified. They are listed read-only and cannot be opened or changed right now.",
           })}
         </span>
       </div>
       <ul className="flex flex-col gap-1">
-        {attachments.map((attachment, index) => {
-          // Quarantined data is by definition the LEAST trustworthy attachment
-          // source in the app, so its href goes through the same URL policy as
-          // every other stored link: an unsafe scheme degrades to plain text.
-          const href = safeHref(attachment.src);
-          return (
-            <li
-              key={attachment.path ?? attachment.src ?? index}
-              className="flex items-center gap-2 text-sm"
-            >
-              <Paperclip className="size-4 shrink-0" />
-              {href == null ? (
-                <span>{attachment.title}</span>
-              ) : (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:no-underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {attachment.title}
-                </a>
-              )}
-            </li>
-          );
-        })}
+        {attachments.map((attachment, index) => (
+          <li
+            key={attachment.path ?? attachment.src ?? index}
+            className="flex items-center gap-2 text-sm text-muted-foreground"
+          >
+            <Paperclip className="size-4 shrink-0" />
+            <span>{attachment.title}</span>
+          </li>
+        ))}
       </ul>
     </div>
   );

@@ -46,8 +46,16 @@ declare
 begin
     select * into v_bucket from storage.buckets where id = 'attachments';
     if not found then raise exception 'FAIL: bucket attachments missing'; end if;
-    if not v_bucket.public then
-        raise exception 'FAIL: bucket attachments must stay public in W8-B (public read is W8-E)';
+    -- Bucket publicness is stage-dependent since W8-E: public through Stages
+    -- A and B, private from Stage C on. Both are legitimate; what must never
+    -- happen is the bucket changing without anyone noticing, so this asserts
+    -- against an explicit expectation rather than against a constant.
+    -- Override with:  set nora.attachments_expected_public = 'false';
+    if v_bucket.public is distinct from
+       coalesce(nullif(current_setting('nora.attachments_expected_public', true), ''), 'true')::boolean then
+        raise exception 'FAIL: bucket attachments public = %, expected % (W8-E stage mismatch)',
+            v_bucket.public,
+            coalesce(nullif(current_setting('nora.attachments_expected_public', true), ''), 'true');
     end if;
     if v_bucket.file_size_limit is distinct from 52428800 then
         raise exception 'FAIL: file_size_limit = %, expected 52428800', v_bucket.file_size_limit;
@@ -55,7 +63,7 @@ begin
     if not (v_bucket.allowed_mime_types @> v_expected and v_bucket.allowed_mime_types <@ v_expected) then
         raise exception 'FAIL: allowed_mime_types = %', v_bucket.allowed_mime_types;
     end if;
-    raise notice 'OK  1. bucket controls (public, 50 MiB, 9 MIME types)';
+    raise notice 'OK  1. bucket controls (expected publicness, 50 MiB, 9 MIME types)';
 
     if not (select relrowsecurity from pg_class where oid = 'storage.objects'::regclass) then
         raise exception 'FAIL: RLS disabled on storage.objects';
@@ -64,8 +72,22 @@ begin
                and policyname in ('Attachments 1mt4rzk_0', 'Attachments 1mt4rzk_1', 'Attachments 1mt4rzk_3')) then
         raise exception 'FAIL: legacy bucket-only attachment policies still installed';
     end if;
-    if (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects') <> 2 then
-        raise exception 'FAIL: storage.objects must carry exactly the two W8-B policies';
+    -- W8-E added the `branding` bucket, so `storage.objects` now carries four
+    -- policies. The assertion is NOT loosened to "at least two": permissive
+    -- policies are OR-combined, so an unknown policy still re-opens a bucket.
+    -- It is restated as an exact, named set.
+    if exists (select 1 from pg_policies
+                where schemaname = 'storage' and tablename = 'objects'
+                  and policyname not in ('attachments_select_active_user', 'attachments_insert_writer',
+                                         'branding_select_active_user', 'branding_insert_writer')) then
+        raise exception 'FAIL: unexpected policy on storage.objects: %',
+            (select string_agg(policyname, ', ' order by policyname) from pg_policies
+              where schemaname = 'storage' and tablename = 'objects'
+                and policyname not in ('attachments_select_active_user', 'attachments_insert_writer',
+                                       'branding_select_active_user', 'branding_insert_writer'));
+    end if;
+    if (select count(*) from pg_policies where schemaname = 'storage' and tablename = 'objects') <> 4 then
+        raise exception 'FAIL: storage.objects must carry the two W8-B and the two W8-E policies';
     end if;
     if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
                    and policyname = 'attachments_select_active_user' and cmd = 'SELECT' and permissive = 'PERMISSIVE'

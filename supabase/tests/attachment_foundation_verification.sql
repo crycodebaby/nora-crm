@@ -791,10 +791,18 @@ begin
         v_failures := array_append(v_failures, 'the removed W8-B pg_net delete path reappeared');
     end if;
 
-    -- W8-B is untouched: still exactly its two storage policies, bucket public
+    -- W8-B is untouched. Since W8-E the expected set is four NAMED policies
+    -- (two per bucket), not a count of two: an unknown policy must still be a
+    -- failure, because permissive policies are OR-combined.
+    if exists (select 1 from pg_policies p
+                where p.schemaname = 'storage' and p.tablename = 'objects'
+                  and p.policyname not in ('attachments_select_active_user', 'attachments_insert_writer',
+                                         'branding_select_active_user', 'branding_insert_writer')) then
+        v_failures := array_append(v_failures, 'an unknown policy appeared on storage.objects');
+    end if;
     if (select count(*) from pg_policies p
-        where p.schemaname = 'storage' and p.tablename = 'objects') <> 2 then
-        v_failures := array_append(v_failures, 'the storage.objects policy set changed (W8-B must stay untouched)');
+        where p.schemaname = 'storage' and p.tablename = 'objects') <> 4 then
+        v_failures := array_append(v_failures, 'the storage.objects policy set changed (W8-B/W8-E must stay untouched)');
     end if;
     if not exists (select 1 from storage.buckets where id = 'attachments' and file_size_limit = 52428800
                      and cardinality(allowed_mime_types) = 9) then
