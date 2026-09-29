@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-import waMigration from "../../../../../supabase/migrations/20260922120000_nora_work_read_model.sql?raw";
 import applicationSource from "../../application/queries/getWorkItems.ts?raw";
 import adapterSource from "./workItemsRpcAdapter.ts?raw";
 import {
@@ -11,8 +10,13 @@ import {
   type GetWorkItemsRpcArgs,
 } from "./workItemsRpcAdapter";
 import {
+  WORK_CARRIERS,
+  WORK_DUE_PRECISIONS,
+  WORK_INVALID_REASONS,
   WORK_SCOPES,
+  WORK_STATES,
   WORK_STATE_SCOPES,
+  WORK_VALIDITIES,
   WorkQueryError,
   getWorkItems,
   type WorkItemsCursor,
@@ -138,13 +142,61 @@ describe("Work read adapter — transport → Application DTO", () => {
     });
   });
 
-  it("keeps the server's work_id as the stable identity", async () => {
-    const rpc = answering(envelope([rawItem({ work_id: WORK_C })]));
-    const first = await readWorkItemsViaRpc(request(), rpc);
-    const second = await readWorkItemsViaRpc(request(), rpc);
-    expect(first.items[0].workId).toBe(WORK_C);
-    expect(second.items[0].workId).toBe(first.items[0].workId);
+  it("takes the identity from the server's work_id alone — never derived from content", async () => {
+    // Identical content, different ids: two Work items, not one.
+    const twins = await readWorkItemsViaRpc(
+      request(),
+      answering(
+        envelope([rawItem({ work_id: WORK_C }), rawItem({ work_id: WORK_D })]),
+      ),
+    );
+    expect(twins.items.map((item) => item.workId)).toEqual([WORK_C, WORK_D]);
+
+    // Different content, same id: still the same Work item.
+    const edited = await readWorkItemsViaRpc(
+      request(),
+      answering(
+        envelope([
+          rawItem({
+            work_id: WORK_C,
+            title: "Anderer Titel",
+            due_at: null,
+            holder: null,
+            is_unassigned: true,
+          }),
+        ]),
+      ),
+    );
+    expect(edited.items[0].workId).toBe(WORK_C);
   });
+
+  it.each([
+    ["infinity", "infinity"],
+    ["-infinity", "-infinity"],
+    ["a five-digit year", "20266-01-01T00:00:00+00:00"],
+    ["a BC date with a seconds offset", "0044-03-15T00:00:00+00:53:28 BC"],
+  ])(
+    "passes %s through verbatim — a timestamp a JS Date cannot parse is still the authority's answer",
+    async (_label, dueAt) => {
+      const first = await readWorkItemsViaRpc(
+        request(),
+        answering(
+          envelope([rawItem({ work_id: WORK_E, due_at: dueAt })], {
+            next_cursor: { due_at: dueAt, work_id: WORK_E },
+          }),
+        ),
+      );
+      expect(first.items[0].dueAt).toBe(dueAt);
+      expect(first.nextCursor).not.toBeNull();
+
+      const rpc = answering(envelope([]));
+      await readWorkItemsViaRpc(request({ cursor: first.nextCursor }), rpc);
+      expect(rpc.mock.calls[0][1]).toMatchObject({
+        p_cursor_due_at: dueAt,
+        p_cursor_work_id: WORK_E,
+      });
+    },
+  );
 
   it("preserves every null the authority returns — no default, no substitute", async () => {
     const page = await readWorkItemsViaRpc(
@@ -517,10 +569,12 @@ describe("Work read adapter — RPC invocation and pagination", () => {
       `wc1.${btoa(JSON.stringify({ s: "mine", t: "open", d: null, w: "7" }))}`,
     ],
     [
-      "a payload whose due_at is not a timestamp",
-      `wc1.${btoa(
-        JSON.stringify({ s: "mine", t: "open", d: "morgen", w: WORK_A }),
-      )}`,
+      "a payload whose due_at is not a string",
+      `wc1.${btoa(JSON.stringify({ s: "mine", t: "open", d: 42, w: WORK_A }))}`,
+    ],
+    [
+      "a payload with an empty due_at",
+      `wc1.${btoa(JSON.stringify({ s: "mine", t: "open", d: "", w: WORK_A }))}`,
     ],
   ])(
     "refuses %s as a cursor before asking anything",
@@ -536,6 +590,18 @@ describe("Work read adapter — RPC invocation and pagination", () => {
       expect(rpc).not.toHaveBeenCalled();
     },
   );
+
+  it("refuses a page size beyond the query's integer parameter before asking, and passes the largest one through", async () => {
+    const rpc = answering(envelope([], { limit: 200 }));
+    await expectWorkQueryError(
+      readWorkItemsViaRpc(request({ pageSize: 3_000_000_000 }), rpc),
+      "invalid_request",
+    );
+    expect(rpc).not.toHaveBeenCalled();
+
+    await readWorkItemsViaRpc(request({ pageSize: 2_147_483_647 }), rpc);
+    expect(rpc.mock.calls[0][1].p_limit).toBe(2_147_483_647);
+  });
 
   it("refuses a cursor taken from another scope or state scope", async () => {
     const mineCursor = encodeWorkItemsCursor({
@@ -597,6 +663,70 @@ describe("Work read adapter — failures are failures, never an empty list", () 
     );
     expect(error.code).toBeNull();
     expect(error.normalized?.messageKey).toBe("crm.errors.not_authenticated");
+  });
+
+  it("keeps `code` to what the authority sent: a refusal without DETAIL is permission_denied with no code", async () => {
+    // e.g. a grant regression — an access refusal, but not the W-A actor refusal
+    const error = await expectWorkQueryError(
+      readWorkItemsViaRpc(
+        request(),
+        answering(
+          null,
+          {
+            code: "42501",
+            details: null,
+            hint: null,
+            message: "permission denied for view sales_identities",
+          },
+          403,
+        ),
+      ),
+      "permission_denied",
+    );
+    expect(error.code).toBeNull();
+    // the generic normalization is still there for presentation
+    expect(error.normalized?.code).toBe(NORA_ERROR_CODES.PERMISSION_DENIED);
+  });
+
+  it("carries any other canonical DETAIL as `code` without turning it into a permission refusal", async () => {
+    const error = await expectWorkQueryError(
+      readWorkItemsViaRpc(
+        request(),
+        answering(
+          null,
+          {
+            code: "P0001",
+            details: "NORA_IDEMPOTENCY_CONFLICT",
+            hint: null,
+            message: "conflict",
+          },
+          409,
+        ),
+      ),
+      "failed",
+    );
+    expect(error.code).toBe(NORA_ERROR_CODES.IDEMPOTENCY_CONFLICT);
+  });
+
+  it("does not read a free-text 'disabled' as an access refusal", async () => {
+    const error = await expectWorkQueryError(
+      readWorkItemsViaRpc(
+        request(),
+        answering(
+          null,
+          {
+            code: "XX000",
+            details: null,
+            hint: null,
+            message: "statement timeout disabled",
+          },
+          500,
+        ),
+      ),
+      "failed",
+    );
+    expect(error.normalized?.kind).toBe("disabled_user");
+    expect(error.code).toBeNull();
   });
 
   it("keeps the transport class of other failures (network, service, rejected parameters)", async () => {
@@ -725,9 +855,10 @@ describe("Work read adapter — failures are failures, never an empty list", () 
       envelope([rawItem({ work_id: "task:7" })]),
     ],
     [
-      "a due_at that is not a timestamp",
-      envelope([rawItem({ due_at: "morgen" })]),
+      "a due_at that is not a string",
+      envelope([rawItem({ due_at: 1790071200000 })]),
     ],
+    ["an empty due_at", envelope([rawItem({ due_at: "" })])],
     [
       "a holder id sent as a string",
       envelope([rawItem({ holder: { sales_id: "3", display_name: null } })]),
@@ -785,16 +916,117 @@ describe("Work read adapter — failures are failures, never an empty list", () 
   );
 });
 
-describe("Work read adapter — alignment with the W-A authority", () => {
-  const signature = waMigration.match(
-    /create or replace function public\.get_work_items\(([\s\S]*?)\)\s*returns jsonb/,
+/**
+ * Drift guard against the authority. It reads the LATEST migration that
+ * (re)defines public.get_work_items — so a later migration changing the
+ * signature or the projection fails here — and parses its
+ * jsonb_build_object calls structurally.
+ */
+const migrations = import.meta.glob(
+  "../../../../../supabase/migrations/*.sql",
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+) as Record<string, string>;
+
+const DEFINES_WORK_QUERY =
+  /create\s+(?:or\s+replace\s+)?function\s+public\.get_work_items\s*\(/i;
+
+const [authorityFile, authoritySql] = Object.entries(migrations)
+  .filter(([, sql]) => DEFINES_WORK_QUERY.test(sql))
+  .sort(([a], [b]) => a.localeCompare(b))
+  .at(-1) ?? ["", ""];
+
+const definitionStart = authoritySql.search(DEFINES_WORK_QUERY);
+const bodyStart = authoritySql.indexOf("$$", definitionStart);
+const workQuerySignature = authoritySql.slice(definitionStart, bodyStart);
+const workQueryBody = authoritySql
+  .slice(bodyStart + 2, authoritySql.indexOf("$$", bodyStart + 2))
+  .replace(/--[^\n]*/g, "");
+
+type JsonbObject = { keys: string[]; values: string[] };
+
+/** Every jsonb_build_object(k1, v1, k2, v2, …) call, split at top-level commas. */
+const jsonbObjects = (sql: string): JsonbObject[] => {
+  const marker = "jsonb_build_object(";
+  const objects: JsonbObject[] = [];
+  for (
+    let at = sql.indexOf(marker);
+    at !== -1;
+    at = sql.indexOf(marker, at + 1)
+  ) {
+    const args: string[] = [];
+    let depth = 0;
+    let quoted = false;
+    let current = "";
+    for (let i = at + marker.length; i < sql.length; i++) {
+      const ch = sql[i];
+      if (quoted) {
+        current += ch;
+        if (ch === "'") quoted = false;
+        continue;
+      }
+      if (ch === "'") quoted = true;
+      else if (ch === "(") depth++;
+      else if (ch === ")" && depth === 0) {
+        args.push(current.trim());
+        break;
+      } else if (ch === ")") depth--;
+      else if (ch === "," && depth === 0) {
+        args.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+    objects.push({
+      keys: args
+        .filter((_, i) => i % 2 === 0)
+        .map((key) => key.replace(/^'|'$/g, "")),
+      values: args.filter((_, i) => i % 2 === 1),
+    });
+  }
+  return objects;
+};
+
+const projection = jsonbObjects(workQueryBody);
+const projected = (hasKey: string, andKey?: string): JsonbObject => {
+  const found = projection.find(
+    (object) =>
+      object.keys.includes(hasKey) &&
+      (andKey === undefined || object.keys.includes(andKey)),
+  );
+  if (!found) throw new Error(`no jsonb_build_object with ${hasKey}`);
+  return found;
+};
+const rowObject = () => projected("work_id", "carrier");
+const envelopeObject = () => projected("next_cursor");
+const contextObject = () => projected("customer", "contact");
+const holderObject = () => projected("sales_id", "display_name");
+const cursorObject = () =>
+  projection.find(
+    (object) => object.keys.length === 2 && object.keys.includes("work_id"),
   );
 
+const sorted = (values: readonly string[]) => [...values].sort();
+const literalsOf = (rowKey: string) => {
+  const row = rowObject();
+  const value = row.values[row.keys.indexOf(rowKey)] ?? "";
+  return sorted([...value.matchAll(/'(\w+)'::text/g)].map((match) => match[1]));
+};
+
+describe("Work read adapter — alignment with the W-A authority", () => {
+  it("finds the migration that currently defines the Work query", () => {
+    expect(authorityFile).toMatch(/\.sql$/);
+    expect(workQueryBody).toContain("jsonb_build_object");
+  });
+
   it("sends exactly the named arguments of public.get_work_items", () => {
-    expect(signature).not.toBeNull();
-    const argumentNames = [
-      ...(signature?.[1] ?? "").matchAll(/(p_\w+)\s/g),
-    ].map((match) => match[1]);
+    const argumentNames = [...workQuerySignature.matchAll(/(p_\w+)\s/g)].map(
+      (match) => match[1],
+    );
     const sent: Array<keyof GetWorkItemsRpcArgs> = [
       "p_scope",
       "p_state_scope",
@@ -805,59 +1037,86 @@ describe("Work read adapter — alignment with the W-A authority", () => {
     expect(argumentNames).toEqual(sent);
   });
 
-  it("reads exactly the envelope and row keys the authority projects", () => {
-    for (const key of [
-      "data",
-      "limit",
-      "scope",
-      "state_scope",
-      "next_cursor",
-    ]) {
-      expect(waMigration).toContain(`'${key}',`);
-    }
-    for (const key of [
-      "work_id",
-      "carrier",
-      "title",
-      "work_type",
-      "validity",
-      "invalid_reason",
-      "state",
-      "context",
-      "customer",
-      "contact",
-      "holder",
-      "sales_id",
-      "display_name",
-      "is_mine",
-      "is_unassigned",
-      "due_at",
-      "due_precision",
-      "actionable",
-      "overdue",
-      "due_today",
-    ]) {
-      expect(waMigration).toContain(`'${key}',`);
-      expect(adapterSource).toContain(`"${key}"`);
+  it("uses fixtures whose keys are exactly the authority's projection", () => {
+    const item = rawItem();
+    expect(sorted(Object.keys(item))).toEqual(sorted(rowObject().keys));
+    expect(sorted(Object.keys(item.context))).toEqual(
+      sorted(contextObject().keys),
+    );
+    expect(sorted(Object.keys(item.holder))).toEqual(
+      sorted(holderObject().keys),
+    );
+    expect(sorted(Object.keys(envelope([])))).toEqual(
+      sorted(envelopeObject().keys),
+    );
+    expect(sorted(cursorObject()?.keys ?? [])).toEqual(["due_at", "work_id"]);
+  });
+
+  it("requires every key the authority projects — none may silently go missing", async () => {
+    const without = (object: Record<string, unknown>, key: string) => {
+      const copy = { ...object };
+      delete copy[key];
+      return copy;
+    };
+    const cases: Array<[string, unknown]> = [
+      ...rowObject().keys.map((key): [string, unknown] => [
+        `row.${key}`,
+        envelope([without(rawItem(), key)]),
+      ]),
+      ...contextObject().keys.map((key): [string, unknown] => [
+        `context.${key}`,
+        envelope([rawItem({ context: without(rawItem().context, key) })]),
+      ]),
+      ...holderObject().keys.map((key): [string, unknown] => [
+        `holder.${key}`,
+        envelope([rawItem({ holder: without(rawItem().holder, key) })]),
+      ]),
+      ...envelopeObject().keys.map((key): [string, unknown] => [
+        `envelope.${key}`,
+        without(envelope([]), key),
+      ]),
+    ];
+    expect(cases.length).toBe(16 + 2 + 2 + 5);
+    for (const [label, data] of cases) {
+      const error = await readWorkItemsViaRpc(request(), answering(data)).then(
+        () => null,
+        (rejection: unknown) => rejection,
+      );
+      expect(error, label).toBeInstanceOf(WorkQueryError);
+      expect((error as WorkQueryError).reason, label).toBe(
+        "malformed_response",
+      );
     }
   });
 
-  it("uses exactly the authority's closed scope vocabularies", () => {
-    const vocabulary = (guard: RegExp) =>
-      [...(waMigration.match(guard)?.[1] ?? "").matchAll(/'(\w+)'/g)].map(
+  it("accepts exactly the authority's closed vocabularies", () => {
+    const guarded = (guard: RegExp) =>
+      [...(workQueryBody.match(guard)?.[1] ?? "").matchAll(/'(\w+)'/g)].map(
         (match) => match[1],
       );
-    expect(vocabulary(/v_scope not in \(([^)]*)\)/)).toEqual([...WORK_SCOPES]);
-    expect(vocabulary(/v_state_scope not in \(([^)]*)\)/)).toEqual([
+    expect(guarded(/v_scope not in \(([^)]*)\)/)).toEqual([...WORK_SCOPES]);
+    expect(guarded(/v_state_scope not in \(([^)]*)\)/)).toEqual([
       ...WORK_STATE_SCOPES,
     ]);
+    expect(literalsOf("carrier")).toEqual(sorted(WORK_CARRIERS));
+    expect(literalsOf("validity")).toEqual(sorted(WORK_VALIDITIES));
+    expect(literalsOf("invalid_reason")).toEqual(sorted(WORK_INVALID_REASONS));
+    expect(literalsOf("state")).toEqual(sorted(WORK_STATES));
+    // The frozen due-precision vocabulary (25 §7) is deliberately wider than
+    // what W-A emits (only `unknown`, §7.6): every emitted value is accepted.
+    expect(literalsOf("due_precision").length).toBeGreaterThan(0);
+    for (const precision of literalsOf("due_precision")) {
+      expect(WORK_DUE_PRECISIONS).toContain(precision);
+    }
   });
 
-  it("contains no raw task read, no client-side date classification and no task predicate", () => {
+  it("contains no raw task read, no client-side date handling and no task predicate", () => {
     for (const source of [adapterSource, applicationSource]) {
       expect(source).not.toMatch(/\.from\(\s*["']tasks["']/);
       expect(source).not.toMatch(/tasksPredicate/);
-      expect(source).not.toMatch(/new Date\(|getTimezoneOffset|toLocale/);
+      expect(source).not.toMatch(
+        /new Date\(|Date\.(?:parse|now|UTC)\(|getTimezoneOffset|toLocale/,
+      );
     }
   });
 });

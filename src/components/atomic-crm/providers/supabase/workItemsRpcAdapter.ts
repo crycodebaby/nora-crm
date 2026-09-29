@@ -26,18 +26,26 @@
  * is untyped); the transport shape below is therefore validated at runtime,
  * by hand, in the style of the other fail-closed read-model mappers.
  */
-import { NORA_ERROR_CODES } from "../../domain/noraErrorCodes";
+import {
+  NORA_ERROR_CODES,
+  extractNoraErrorCode,
+} from "../../domain/noraErrorCodes";
 import { normalizeCrmError } from "../../misc/normalizeCrmError";
 import {
+  WORK_CARRIERS,
+  WORK_DUE_PRECISIONS,
+  WORK_INVALID_REASONS,
   WORK_SCOPES,
+  WORK_STATES,
   WORK_STATE_SCOPES,
+  WORK_VALIDITIES,
   WorkQueryError,
-  type WorkDuePrecision,
   type WorkHolder,
   type WorkItem,
   type WorkItemsCursor,
   type WorkItemsPage,
   type WorkItemsRequest,
+  type WorkRowValidity,
   type WorkScope,
   type WorkStateScope,
 } from "../../application/queries/getWorkItems";
@@ -54,6 +62,9 @@ export type GetWorkItemsRpcArgs = {
 };
 
 /** The narrow slice of the Supabase RPC call this adapter needs. */
+/** `p_limit` is a Postgres `integer`; larger values are a transport error, not a page size. */
+const PG_INTEGER_MAX = 2_147_483_647;
+
 export type GetWorkItemsRpc = (
   fn: typeof GET_WORK_ITEMS_RPC,
   args: GetWorkItemsRpcArgs,
@@ -121,7 +132,7 @@ export const decodeWorkItemsCursor = (
   if (
     typeof w !== "string" ||
     !UUID_PATTERN.test(w) ||
-    !(d === null || isTimestamp(d))
+    !(d === null || isServerTimestamp(d))
   ) {
     throw cursorRejected();
   }
@@ -147,6 +158,12 @@ export const readWorkItemsViaRpc = async (
     request.cursor === null
       ? null
       : decodeWorkItemsCursor(request.cursor, request);
+  if (request.pageSize !== null && request.pageSize > PG_INTEGER_MAX) {
+    throw new WorkQueryError(
+      "invalid_request",
+      "pageSize exceeds what the Work query accepts",
+    );
+  }
 
   let result: Awaited<ReturnType<GetWorkItemsRpc>>;
   try {
@@ -172,9 +189,15 @@ export const readWorkItemsViaRpc = async (
 
 /**
  * One mapping point for transport failures: the existing normalizeCrmError
- * decides the class (docs/nora/03 §6). The HTTP status travels along so an
- * expired/absent session (401) is recognized as such; the original error is
- * kept as `cause` for diagnostics.
+ * decides the transport class (docs/nora/03 §6). The HTTP status travels
+ * along so an expired/absent session (401) is recognized as such; the
+ * original error is kept as `cause` for diagnostics.
+ *
+ * `code` is only what the authority itself sent as `DETAIL` — never the
+ * generic permission normalization — so a consumer can tell the W-A actor
+ * refusal (`NORA_PERMISSION_DENIED`) from any other access refusal.
+ * `permission_denied` means exactly: that code, or an access refusal the
+ * transport reports (401/403, RLS). A free-text "disabled" match is not one.
  */
 const fromTransportError = (
   error: unknown,
@@ -184,16 +207,16 @@ const fromTransportError = (
     ? { ...error, ...(typeof status === "number" ? { status } : {}) }
     : error;
   const normalized = normalizeCrmError(diagnostic);
+  const code = extractNoraErrorCode(error);
   const denied =
-    normalized.code === NORA_ERROR_CODES.PERMISSION_DENIED ||
-    normalized.kind === "permission_denied" ||
-    normalized.kind === "disabled_user";
+    code === NORA_ERROR_CODES.PERMISSION_DENIED ||
+    normalized.kind === "permission_denied";
   return new WorkQueryError(
     denied ? "permission_denied" : "failed",
     denied
       ? "the session may not read Work"
       : `the Work query did not answer (${normalized.kind})`,
-    { code: normalized.code ?? null, normalized, cause: error },
+    { code, normalized, cause: error },
   );
 };
 
@@ -214,8 +237,15 @@ function fail(path: string, expectation: string): never {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
-const isTimestamp = (value: unknown): value is string =>
-  typeof value === "string" && value !== "" && !Number.isNaN(Date.parse(value));
+/**
+ * A server timestamp is taken as the authority rendered it and never
+ * interpreted: Postgres legitimately renders `infinity`, five-digit years,
+ * `BC` dates and second-precision offsets, none of which a JS `Date`
+ * parses. Refusing them here would fail a valid page — and, because such a
+ * row sorts before the NULLS LAST tail, every page after it.
+ */
+const isServerTimestamp = (value: unknown): value is string =>
+  typeof value === "string" && value !== "";
 
 /** A field must be PRESENT — an explicit `null` is an answer, a missing key is not. */
 const field = (
@@ -258,12 +288,6 @@ const oneOf = <T extends string>(
     ? (value as T)
     : fail(path, `is not one of: ${vocabulary.join(", ")}`);
 
-const DUE_PRECISIONS: readonly WorkDuePrecision[] = [
-  "day",
-  "instant",
-  "unknown",
-];
-
 const mapHolder = (value: unknown, path: string): WorkHolder | null => {
   if (value === null) return null;
   const holder = record(value, path);
@@ -283,51 +307,50 @@ const mapWorkItem = (value: unknown, path: string): WorkItem => {
   const workId = text(at("work_id"), `${path}.work_id`);
   if (!UUID_PATTERN.test(workId)) fail(`${path}.work_id`, "is not a UUID");
 
-  if (at("carrier") !== "task") fail(`${path}.carrier`, "is not task");
+  const carrier = oneOf(WORK_CARRIERS, at("carrier"), `${path}.carrier`);
 
   const dueAt = at("due_at");
-  if (!(dueAt === null || isTimestamp(dueAt))) {
-    fail(`${path}.due_at`, "is neither null nor a timestamp");
+  if (!(dueAt === null || isServerTimestamp(dueAt))) {
+    fail(`${path}.due_at`, "is neither null nor a timestamp string");
   }
 
   const context = record(at("context"), `${path}.context`);
-  const validity = oneOf(
-    ["valid", "incomplete"] as const,
-    at("validity"),
-    `${path}.validity`,
-  );
+  const validity = oneOf(WORK_VALIDITIES, at("validity"), `${path}.validity`);
   const title = nullableText(at("title"), `${path}.title`);
   const invalidReason = at("invalid_reason");
 
   // Row validity is one tagged fact (25 §5.2 / §21.3: title is null exactly
   // when the row is incomplete, and only then is there a reason). The shape
   // is checked; the classification itself is the server's and is not redone.
-  let rowValidity: Pick<WorkItem, "validity" | "title" | "invalidReason">;
+  let rowValidity: WorkRowValidity;
   if (validity === "valid") {
     if (title === null || invalidReason !== null) {
       fail(path, "is valid but carries no title or an invalid_reason");
     }
-    rowValidity = { validity, title: title as string, invalidReason: null };
+    rowValidity = { validity, title, invalidReason: null };
   } else {
-    if (title !== null || invalidReason !== "missing_title") {
-      fail(
-        path,
-        "is incomplete but carries a title or no missing_title reason",
-      );
-    }
-    rowValidity = { validity, title: null, invalidReason: "missing_title" };
+    if (title !== null) fail(path, "is incomplete but carries a title");
+    rowValidity = {
+      validity,
+      title: null,
+      invalidReason: oneOf(
+        WORK_INVALID_REASONS,
+        invalidReason,
+        `${path}.invalid_reason`,
+      ),
+    };
   }
 
   return {
     workId,
-    carrier: "task",
+    carrier,
     ...rowValidity,
     workType: nullableText(at("work_type"), `${path}.work_type`),
-    state: oneOf(["open", "done"] as const, at("state"), `${path}.state`),
+    state: oneOf(WORK_STATES, at("state"), `${path}.state`),
     holder: mapHolder(at("holder"), `${path}.holder`),
     dueAt: dueAt as string | null,
     duePrecision: oneOf(
-      DUE_PRECISIONS,
+      WORK_DUE_PRECISIONS,
       at("due_precision"),
       `${path}.due_precision`,
     ),
@@ -348,7 +371,7 @@ const mapWorkItem = (value: unknown, path: string): WorkItem => {
       isMine: bool(at("is_mine"), `${path}.is_mine`),
       isUnassigned: bool(at("is_unassigned"), `${path}.is_unassigned`),
     },
-  } as WorkItem;
+  };
 };
 
 const mapEnvelope = (value: unknown): WorkItemsPage => {

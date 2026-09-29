@@ -73,7 +73,14 @@ export type WorkItemsCursor = string & {
 /** Stable per-row Work identity (UUID). Not an authorization token. */
 export type WorkId = string;
 
-export type WorkState = "open" | "done";
+/** Closed value vocabularies of a Work row (25 §5, §6.2, §7, §21.3). */
+export const WORK_CARRIERS = ["task"] as const;
+export const WORK_STATES = ["open", "done"] as const;
+export const WORK_VALIDITIES = ["valid", "incomplete"] as const;
+export const WORK_INVALID_REASONS = ["missing_title"] as const;
+export const WORK_DUE_PRECISIONS = ["day", "instant", "unknown"] as const;
+
+export type WorkState = (typeof WORK_STATES)[number];
 
 /**
  * The full frozen due-precision vocabulary (25 §7). W-A emits only
@@ -81,7 +88,7 @@ export type WorkState = "open" | "done";
  * contracted meaning. A consumer never interprets the precision itself —
  * `overdue` / `dueToday` in `derived` already carry the consequence.
  */
-export type WorkDuePrecision = "day" | "instant" | "unknown";
+export type WorkDuePrecision = (typeof WORK_DUE_PRECISIONS)[number];
 
 /** The current holder. `displayName` is for display only — never identity. */
 export type WorkHolder = {
@@ -130,6 +137,12 @@ export type WorkItem = {
   state: WorkState;
   holder: WorkHolder | null;
   /** The server's timestamptz rendering, verbatim. `null` = no due date set (valid). */
+  /**
+   * The server's timestamptz rendering, verbatim. `null` = no due date set
+   * (valid). It is NOT guaranteed to be parseable by a JS `Date`: Postgres
+   * may render `infinity`, five-digit years or `BC` dates. Never re-derive
+   * `overdue` / `dueToday` from it.
+   */
   dueAt: string | null;
   duePrecision: WorkDuePrecision;
   context: WorkContext;
@@ -177,6 +190,10 @@ export type WorkItemsRequest = {
  * The port. Implemented by the data providers (Supabase: the W-A RPC
  * adapter; FakeRest: an explicit `unavailable` refusal). A reader either
  * resolves with a page or rejects with a WorkQueryError.
+ *
+ * Consumers (UI, a future MCP binding) call `getWorkItems`, never a reader
+ * directly: only `getWorkItems` validates untyped input and refuses fields
+ * outside the contract.
  */
 export type WorkItemsReader = {
   getWorkItems(request: WorkItemsRequest): Promise<WorkItemsPage>;
@@ -204,7 +221,11 @@ export type WorkQueryFailureReason =
 
 export class WorkQueryError extends Error {
   readonly reason: WorkQueryFailureReason;
-  /** Recognized canonical Nora code, if the authority sent one. */
+  /**
+   * The canonical Nora code the authority itself sent (its `DETAIL`), or
+   * `null`. Never inferred from status or message text — a generic access
+   * refusal without `DETAIL` is `permission_denied` with `code = null`.
+   */
   readonly code: NoraErrorCode | null;
   /**
    * The existing transport classification (kind, messageKey, status,
