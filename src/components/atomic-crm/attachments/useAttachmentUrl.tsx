@@ -15,8 +15,7 @@ import {
   type StorageReferenceInput,
 } from "../providers/commons/storageReference";
 import {
-  ATTACHMENT_URL_RENEWAL_MS,
-  getSignedAttachmentUrl,
+  getSignedAttachmentCapability,
   supabaseAttachmentSigner,
   type AttachmentSigner,
 } from "./attachmentAccess";
@@ -84,6 +83,15 @@ const UNAVAILABLE = { status: "unavailable" as const };
 const MAX_REFRESH_ATTEMPTS = 1;
 
 /**
+ * Floor for one renewal timer. The horizon normally lies minutes ahead; this
+ * only matters when it is already (almost) reached — a capability that lapsed
+ * while the component was rendering, or a timer that fired a hair early and
+ * got the same still-fresh URL back. Without a floor either case would re-arm
+ * a 0 ms timer; with it, renewal can never spin faster than once a second.
+ */
+const MIN_RENEWAL_DELAY_MS = 1000;
+
+/**
  * Derives a temporary access URL for one attachment-ish value.
  *
  * Only a `private` reference costs a round trip. Inline content, local
@@ -107,6 +115,8 @@ export const useAttachmentUrl = (
     key: string;
     status: "loading" | "ready" | "error";
     url?: string;
+    /** Horizon of the capability behind `url` — runtime-only, never stored. */
+    expiresAt?: number;
   } | null>(null);
   const [attempt, setAttempt] = useState(0);
   // Bumped by a timer shortly before the current capability expires. Separate
@@ -116,6 +126,11 @@ export const useAttachmentUrl = (
   // Guards against a resolved promise writing state after unmount, and
   // against a slow response for a key the component no longer shows.
   const activeKey = useRef<string | undefined>(undefined);
+  // The last `attempt` that has already been turned into a forced re-sign.
+  // `force` must fire ONCE per error retry, not on every later renewal: a
+  // consumer that once recovered from an error would otherwise bypass the
+  // shared cache on every TTL and multiply signing requests.
+  const forcedAttempt = useRef(0);
 
   useEffect(() => {
     activeKey.current = storageKey;
@@ -124,11 +139,13 @@ export const useAttachmentUrl = (
       return;
     }
     let cancelled = false;
+    const force = attempt > forcedAttempt.current;
+    forcedAttempt.current = attempt;
     setSigned({ key: storageKey, status: "loading" });
-    getSignedAttachmentUrl(storageKey, signer, attempt > 0)
-      .then((url) => {
+    getSignedAttachmentCapability(storageKey, signer, force)
+      .then(({ url, expiresAt }) => {
         if (cancelled || activeKey.current !== storageKey) return;
-        setSigned({ key: storageKey, status: "ready", url });
+        setSigned({ key: storageKey, status: "ready", url, expiresAt });
       })
       .catch(() => {
         if (cancelled || activeKey.current !== storageKey) return;
@@ -148,15 +165,28 @@ export const useAttachmentUrl = (
    * because an anchor never fires one. So while a consumer is mounted, the
    * capability is refreshed just before it lapses and whatever is in the DOM
    * stays live. It stops the moment the component unmounts.
+   *
+   * The timer is measured against the horizon of the capability actually
+   * held (`expiresAt`), NOT against this component's mount: a URL served from
+   * the shared cache may have minutes or seconds left, and waiting a fresh
+   * full interval would leave a dead link on screen (Alpha Storage 3 L-1).
+   * Consumers of the same object share one horizon, so their renewals meet on
+   * the same in-flight request in the access layer — one re-sign, not N.
    */
   useEffect(() => {
-    if (storageKey == null || signed?.status !== "ready") return;
+    if (
+      storageKey == null ||
+      signed?.status !== "ready" ||
+      signed.expiresAt == null
+    ) {
+      return;
+    }
     const timer = setTimeout(
       () => setRenewal((n) => n + 1),
-      ATTACHMENT_URL_RENEWAL_MS,
+      Math.max(signed.expiresAt - Date.now(), MIN_RENEWAL_DELAY_MS),
     );
     return () => clearTimeout(timer);
-  }, [storageKey, signed?.status, signed?.url]);
+  }, [storageKey, signed?.status, signed?.url, signed?.expiresAt]);
 
   const refresh = useCallback(
     () => setAttempt((n) => (n < MAX_REFRESH_ATTEMPTS ? n + 1 : n)),

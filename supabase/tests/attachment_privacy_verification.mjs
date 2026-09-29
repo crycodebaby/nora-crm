@@ -18,6 +18,23 @@
  * Plus the branding bucket in every state: public read without a session,
  * write restricted to an active writer, and never a home for note content.
  *
+ * Alpha Storage 4 (remediation) adds two things:
+ *
+ *   M-2  the REPRESENTATION a private upload persists — `path` = the key,
+ *        `src` = the canonical public URL of exactly that key, derived by the
+ *        same supabase-js helper the app uses — is accepted by the S3B
+ *        grammar through a REAL note write, while every near-miss `src` is
+ *        still rejected; the canonical `src` yields bytes while public, NO
+ *        bytes while private, and bytes again after the rollback, and the
+ *        persisted JSON survives the flips unchanged. Set
+ *        NORA_W8E_REPRESENTATION_OUT=<file> to export the persisted
+ *        attachment JSON for the old-runtime rollback proof.
+ *   L-2  Stage C and the rollback run through the REAL operator scripts in
+ *        supabase/maintenance/attachment_privacy/, and their per-bucket
+ *        verdicts are asserted: attachments PRIVATE = expected, branding
+ *        PUBLIC = expected by design, and a still-public attachments bucket
+ *        is a hard error, not a line of text.
+ *
  * THE ASSERTION THAT CHANGED. `attachment_storage_policy_verification.mjs`
  * records anonymous readability of a known key as RESIDUAL T1 — expected, not
  * a failure, because the bucket was public by design. Here, in the private
@@ -60,6 +77,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const ATTACHMENTS = "attachments";
 const BRANDING = "branding";
@@ -99,7 +117,7 @@ const clientOptions = {
 const service = createClient(config.url, config.service, clientOptions);
 const anon = createClient(config.url, config.anon, clientOptions);
 
-const psql = (sql) =>
+const psql = (sql, stdio = undefined) =>
   execFileSync(
     "docker",
     [
@@ -115,7 +133,7 @@ const psql = (sql) =>
       "ON_ERROR_STOP=1",
       "-At",
     ],
-    { input: sql, encoding: "utf8" },
+    { input: sql, encoding: "utf8", stdio },
   ).trim();
 
 const run = randomUUID().slice(0, 8);
@@ -235,6 +253,63 @@ const signedYieldsBytes = async (client, bucket, key, expected) => {
 };
 
 // ---------------------------------------------------------------------------
+// Operator scripts — Stage C and its rollback run as the REAL files
+// ---------------------------------------------------------------------------
+const operatorScript = (name) =>
+  readFileSync(
+    new URL(`../maintenance/attachment_privacy/${name}`, import.meta.url),
+    "utf8",
+  ).replace(/\r\n/g, "\n");
+
+/** Runs SQL; returns `{ rows }` on success or `{ error }` with psql's stderr. */
+const psqlTry = (sql) => {
+  try {
+    return {
+      rows: psql(sql, ["pipe", "pipe", "pipe"])
+        .split("\n")
+        .filter((line) => line.includes("|"))
+        .map((line) => line.split("|")),
+    };
+  } catch (error) {
+    return { error: String(error.stderr ?? error.message) };
+  }
+};
+
+/** The part of an operator script from the line holding `marker` to its end. */
+const scriptFrom = (script, marker) => {
+  const at = script.indexOf(marker);
+  if (at < 0) throw new Error(`operator script has no section "${marker}"`);
+  return script.slice(script.lastIndexOf("\n", at) + 1);
+};
+
+const verdictOf = (rows, bucket) =>
+  rows.find((row) => row[0] === bucket)?.[3] ?? "<missing>";
+
+// ---------------------------------------------------------------------------
+// M-2 — the S3B grammar, asked directly (it has no API grant; postgres only)
+// ---------------------------------------------------------------------------
+// The grammar's allowlist (migration 20260918120000) knows exactly one local
+// origin. A stack on other ports still proves every REJECTION below, but the
+// app-derived src of such a stack is `unknown` to the grammar by design, so
+// the real-write acceptance needs the default local origin.
+const GRAMMAR_LOCAL_ORIGIN = "http://127.0.0.1:54321";
+const grammarAccepts = (element) => {
+  const tag = `j${run}`;
+  const { rows, error } = psqlTry(
+    `select 'n|' || count(*) from nora_private.note_attachment_reference_rows(
+       array[$${tag}$${JSON.stringify(element)}$${tag}$::jsonb]);`,
+  );
+  if (error) {
+    if (!error.includes("NORA_ATTACHMENT_REFERENCE_INVALID")) {
+      console.error(`[w8e] unexpected grammar error: ${error}`);
+      process.exitCode = 1;
+    }
+    return false;
+  }
+  return rows[0]?.[1] === "1";
+};
+
+// ---------------------------------------------------------------------------
 // STATE PUBLIC — Stage A / Stage B
 // ---------------------------------------------------------------------------
 console.log(
@@ -259,11 +334,218 @@ check(
   true,
 );
 
+// --- M-2: the representation a Stage B private upload persists -------------
+console.log("\n--- M-2 private upload representation (Stage B, public) ---");
+// Uploaded by an ordinary active employee under an app-shaped key, exactly as
+// `uploadToBucket(fi, "private")` does it.
+const repKey = `${randomUUID()}.txt`;
+const repBody = `rep-secret-${run}`;
+{
+  const { error } = await office.client.storage
+    .from(ATTACHMENTS)
+    .upload(repKey, new Blob([repBody], { type: "text/plain" }));
+  if (error) {
+    console.error(`[w8e] could not upload the M-2 fixture: ${error.message}`);
+    process.exit(2);
+  }
+}
+// The SAME helper the app calls — not a hand-built string.
+const canonicalSrc = office.client.storage
+  .from(ATTACHMENTS)
+  .getPublicUrl(repKey).data.publicUrl;
+const representation = {
+  path: repKey,
+  src: canonicalSrc,
+  title: "angebot.txt",
+  type: "text/plain",
+};
+
+check(
+  "M-2 supabase-js getPublicUrl yields the canonical public URL of exactly that key",
+  canonicalSrc,
+  publicUrl(ATTACHMENTS, repKey),
+);
+
+// Grammar, element level. The accepted form is built on the allowlisted local
+// origin so the check means the same thing on every local stack.
+const grammarCanonical = `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/object/public/attachments/${repKey}`;
+const signedForRep = (
+  await office.client.storage.from(ATTACHMENTS).createSignedUrl(repKey, 60)
+).data?.signedUrl;
+check(
+  "M-2 grammar ACCEPTS path + canonical public URL of that same path",
+  grammarAccepts({ ...representation, src: grammarCanonical }),
+  true,
+);
+check(
+  "M-2 grammar ACCEPTS path with no src (path-only stays valid)",
+  grammarAccepts({ path: repKey, title: "a.txt", type: "text/plain" }),
+  true,
+);
+for (const [label, src] of [
+  [
+    "canonical URL of ANOTHER key",
+    `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/object/public/attachments/other-${repKey}`,
+  ],
+  [
+    "canonical-shaped URL of ANOTHER bucket",
+    `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/object/public/branding/${repKey}`,
+  ],
+  ["a real Signed URL of that key", signedForRep ?? "<no signed url>"],
+  [
+    "attacker host",
+    `https://attacker.example/storage/v1/object/public/attachments/${repKey}`,
+  ],
+  [
+    "modified object path (double slash)",
+    `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/object/public/attachments//${repKey}`,
+  ],
+  [
+    "modified object path (authenticated route)",
+    `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/object/authenticated/attachments/${repKey}`,
+  ],
+  [
+    "modified object path (render route)",
+    `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/render/image/public/attachments/${repKey}`,
+  ],
+  ["query-bearing capability URL", `${grammarCanonical}?token=abc.def`],
+  ["fragment", `${grammarCanonical}#x`],
+  ["padding", ` ${grammarCanonical}`],
+  ["javascript:", "javascript:alert(1)"],
+  ["data:", "data:text/plain,x"],
+]) {
+  check(
+    `M-2 grammar REJECTS src = ${label}`,
+    grammarAccepts({ ...representation, src }),
+    false,
+  );
+}
+
+// Grammar, through a REAL note write (PostgREST -> AFTER trigger projection).
+const onAllowlistedOrigin = config.url === GRAMMAR_LOCAL_ORIGIN;
+let repNoteId = null;
+if (onAllowlistedOrigin) {
+  const contact = await office.client
+    .from("contacts")
+    .insert({ first_name: "W8E", last_name: `rep-${run}` })
+    .select("id")
+    .single();
+  if (contact.error) {
+    console.error(`[w8e] could not create a contact: ${contact.error.message}`);
+    process.exit(2);
+  }
+  const accepted = await office.client
+    .from("contact_notes")
+    .insert({
+      contact_id: contact.data.id,
+      text: `w8e rep ${run}`,
+      attachments: [representation],
+    })
+    .select("id")
+    .single();
+  repNoteId = accepted.data?.id ?? null;
+  check(
+    "M-2 a REAL note write with the app-derived canonical src is accepted",
+    accepted.error?.message ?? "accepted",
+    "accepted",
+  );
+  check(
+    "M-2 the projection indexed the element by its key",
+    psql(
+      `select count(*) from public.attachments where storage_key = '${repKey}';`,
+    ),
+    "1",
+  );
+  const mismatched = await office.client.from("contact_notes").insert({
+    contact_id: contact.data.id,
+    text: `w8e mismatch ${run}`,
+    attachments: [
+      {
+        ...representation,
+        src: `${GRAMMAR_LOCAL_ORIGIN}/storage/v1/object/public/attachments/other-${repKey}`,
+      },
+    ],
+  });
+  check(
+    "M-2 a REAL note write whose src names another key is rejected",
+    mismatched.error?.details ?? "accepted",
+    "NORA_ATTACHMENT_REFERENCE_INVALID",
+  );
+} else {
+  console.log(
+    `SKIP M-2 real note writes: ${config.url} is not the grammar's allowlisted local origin ${GRAMMAR_LOCAL_ORIGIN}`,
+  );
+}
+
+check(
+  "M-2 [Stage B] the canonical src yields bytes anonymously while public [RESIDUAL T1]",
+  await yieldsBytes(canonicalSrc, repBody),
+  true,
+);
+check(
+  "M-2 [Stage B] the W8-E runtime path (key -> signed URL) yields bytes",
+  await signedYieldsBytes(office.client, ATTACHMENTS, repKey, repBody),
+  true,
+);
+
+// --- L-2: the Stage C verdict logic, observed while attachments is PUBLIC ---
+// Simulates "the flip did not take effect": the postcondition must be a hard
+// error and the report must call it a failure — for attachments only.
+{
+  const script = operatorScript("10_set_attachments_private.sql");
+  const post = psqlTry(scriptFrom(script, "-- POSTCONDITION"));
+  check(
+    "L-2 Stage C postcondition is a HARD error while attachments is still public",
+    /NORA_W8E_ATTACHMENTS_STILL_PUBLIC/.test(post.error ?? ""),
+    true,
+  );
+  const report = psqlTry(
+    scriptFrom(script, "-- The invocation returns its own result."),
+  );
+  check(
+    "L-2 Stage C report calls a still-public attachments bucket a FAILURE",
+    verdictOf(report.rows ?? [], "attachments").startsWith("FAILURE"),
+    true,
+  );
+  check(
+    "L-2 Stage C report calls public branding EXPECTED BY DESIGN",
+    verdictOf(report.rows ?? [], "branding").startsWith(
+      "PUBLIC — expected by design",
+    ),
+    true,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // STATE PRIVATE — Stage C, the target
 // ---------------------------------------------------------------------------
+// Stage C runs as the REAL operator script, gates and all.
+const stageC = psqlTry(operatorScript("10_set_attachments_private.sql"));
+if (stageC.error) {
+  console.error(`[w8e] Stage C operator script refused: ${stageC.error}`);
+  process.exit(2);
+}
 console.log(
-  `\n=== STATE PRIVATE (attachments.public=${setPublic(ATTACHMENTS, false)}) — Stage C ===`,
+  `\n=== STATE PRIVATE (attachments.public=${psql(
+    "select public from storage.buckets where id = 'attachments';",
+  )}) — Stage C ===`,
+);
+check(
+  "L-2 Stage C reports attachments PRIVATE as the expected target state",
+  verdictOf(stageC.rows, "attachments").startsWith(
+    "PRIVATE — expected target state",
+  ),
+  true,
+);
+check(
+  "L-2 Stage C reports branding PUBLIC as expected by design",
+  verdictOf(stageC.rows, "branding").startsWith("PUBLIC — expected by design"),
+  true,
+);
+check(
+  "L-2 Stage C output never says STILL PUBLIC for a correct end state",
+  stageC.rows.some((row) => row.join("|").includes("STILL PUBLIC")),
+  false,
 );
 
 // --- the closure itself: no anonymous route returns the bytes
@@ -289,6 +571,16 @@ check(
   "C anonymous client cannot derive a signed URL",
   await canSign(anon, ATTACHMENTS, noteKey),
   false,
+);
+check(
+  "M-2 [Stage C] the persisted canonical src yields NO bytes anonymously",
+  await yieldsBytes(canonicalSrc, repBody),
+  false,
+);
+check(
+  "M-2 [Stage C] the W8-E runtime path (key -> signed URL) still yields bytes",
+  await signedYieldsBytes(viewer.client, ATTACHMENTS, repKey, repBody),
+  true,
 );
 
 // --- the app must still work for everyone who is entitled to the content
@@ -451,9 +743,61 @@ check(
 // ---------------------------------------------------------------------------
 // ROLLBACK — public again
 // ---------------------------------------------------------------------------
+const rollback = psqlTry(operatorScript("20_set_attachments_public.sql"));
+if (rollback.error) {
+  console.error(`[w8e] rollback operator script failed: ${rollback.error}`);
+  process.exit(2);
+}
 console.log(
-  `\n=== ROLLBACK (attachments.public=${setPublic(ATTACHMENTS, true)}) ===`,
+  `\n=== ROLLBACK (attachments.public=${psql(
+    "select public from storage.buckets where id = 'attachments';",
+  )}) ===`,
 );
+check(
+  "rollback operator script reports PUBLIC",
+  (rollback.rows.find((row) => row[0] === "attachments")?.[2] ?? "").startsWith(
+    "PUBLIC —",
+  ),
+  true,
+);
+check(
+  "M-2 [rollback] the persisted canonical src yields bytes again (old runtime route)",
+  await yieldsBytes(canonicalSrc, repBody),
+  true,
+);
+if (repNoteId != null) {
+  // The flips never touch data: what the old runtime will read back is
+  // exactly what the W8-E runtime wrote.
+  const readBack = await office.client
+    .from("contact_notes")
+    .select("attachments")
+    .eq("id", repNoteId)
+    .single();
+  const element = readBack.data?.attachments?.[0] ?? {};
+  check(
+    "M-2 [rollback] the persisted element is unchanged: path = key",
+    element.path,
+    repKey,
+  );
+  check(
+    "M-2 [rollback] the persisted element is unchanged: src = canonical URL",
+    element.src,
+    canonicalSrc,
+  );
+  if (process.env.NORA_W8E_REPRESENTATION_OUT) {
+    writeFileSync(
+      process.env.NORA_W8E_REPRESENTATION_OUT,
+      JSON.stringify(
+        { attachments: readBack.data.attachments, body: repBody },
+        null,
+        2,
+      ),
+    );
+    console.log(
+      `[w8e] persisted representation written to ${process.env.NORA_W8E_REPRESENTATION_OUT}`,
+    );
+  }
+}
 check(
   "rollback restores the pre-W8-E public read path for the old runtime",
   await yieldsBytes(publicUrl(ATTACHMENTS, noteKey), noteBody),

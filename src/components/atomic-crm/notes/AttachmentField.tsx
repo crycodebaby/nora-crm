@@ -53,7 +53,18 @@ export const AttachmentField = (props: FileFieldProps) => {
         },
   );
 
-  if (sourceValue == null) {
+  // W8-E M-1 remediation: an attachment EXISTS when it has a stable storage key,
+  // a file picked in this session, or a stored `src`. `src` alone is not the
+  // definition any more — the S3B grammar allows a stored element without
+  // one, and the key is enough to derive access. Treating a key-only element
+  // as "empty" made it vanish from the edit form, where saving would then
+  // silently drop it.
+  const exists =
+    sourceValue != null ||
+    hasStorageKey(record?.path) ||
+    record?.rawFile instanceof File;
+
+  if (!exists) {
     if (!empty) {
       return null;
     }
@@ -84,11 +95,16 @@ export const AttachmentField = (props: FileFieldProps) => {
 
   // No navigable URL: either the URL authority rejected the stored value (a
   // `javascript:` value would otherwise execute in the signed-in user's
-  // context on click), or access could not be derived. Keep the attachment
-  // visible but never clickable, so nothing silently disappears from the UI.
+  // context on click), access is still being derived, or it could not be
+  // derived. Keep the attachment visible but never clickable, so nothing
+  // silently disappears from the UI.
   if (href == null) {
     return (
-      <div className={cn("inline-block", className)} {...rest}>
+      <div
+        className={cn("inline-block", className)}
+        aria-busy={access.status === "loading" || undefined}
+        {...rest}
+      >
         {isImage && access.previewUrl ? (
           preview
         ) : (
@@ -114,6 +130,9 @@ export const AttachmentField = (props: FileFieldProps) => {
     </div>
   );
 };
+
+const hasStorageKey = (path: unknown): boolean =>
+  typeof path === "string" && path.length > 0;
 
 /**
  * Checks whether a mime type corresponds to an image.

@@ -1068,16 +1068,30 @@ const applyFullTextSearch = (columns: string[]) => (params: GetListParams) => {
  * W8-E — which bucket a file class belongs to, and therefore how it is
  * addressed afterwards.
  *
- * `private`  the `attachments` bucket. The upload persists the storage KEY and
- *            deliberately persists NO URL: after W8-E a note attachment is
- *            reached through a derived signed URL (`useAttachmentUrl`), and a
- *            persisted URL would be neither the identity nor the authority.
- *            Leaving `src` unset is explicitly permitted by the S3B reference
- *            grammar (`src` absent | null | the canonical public URL of this
- *            exact key), so this changes no database contract.
+ * `private`  the `attachments` bucket. Two fields are persisted, with two very
+ *            different jobs:
+ *
+ *            - `path` = the storage key: the stable IDENTITY of the object and
+ *              the only input access is ever derived from. The W8-E runtime
+ *              reaches the object through `path -> short-lived signed URL`
+ *              (`useAttachmentUrl`) and ignores `src` whenever a key exists.
+ *            - `src`  = the canonical public URL of exactly that key. INERT
+ *              legacy metadata for the N-1 runtime only, NOT the identity and
+ *              NOT an authorization source. The pre-W8-E runtime dereferences
+ *              `src` unconditionally, so an element without one breaks a
+ *              runtime rollback (Alpha Storage 3 M-2). Once the bucket is
+ *              private this URL returns no bytes to anyone; after a rollback
+ *              restores the public bucket it serves the old runtime again.
+ *
+ *            It is never a signed URL, never carries a token or query string,
+ *            and is never taken from the incoming value — it is re-derived
+ *            from the key that was just uploaded. That is exactly the one
+ *            non-null `src` the S3B reference grammar accepts (`src` absent |
+ *            null | the canonical public URL of this exact key), so this
+ *            changes no database contract.
  * `branding` the `branding` bucket. These assets are public BY DESIGN and must
  *            render without a session, so the public URL is persisted exactly
- *            as before.
+ *            as before — there it IS the rendering address.
  */
 type UploadTarget = "private" | "branding";
 
@@ -1137,18 +1151,17 @@ const uploadToBucket = async (fi: RAFile, target: UploadTarget = "private") => {
     throw new Error("Failed to upload attachment");
   }
 
+  // `path` = stable identity / authority.
   fi.path = filePath;
 
-  if (target === "branding") {
-    const { data } = getSupabaseClient()
-      .storage.from(bucket)
-      .getPublicUrl(filePath);
-    fi.src = data.publicUrl;
-  } else {
-    // No persisted URL for private content. `undefined` (not `""`) so the key
-    // is simply absent from the JSON the note write sends.
-    fi.src = undefined as unknown as string;
-  }
+  // `src` = for branding, the public rendering address; for private content,
+  // inert N-1 compatibility metadata (see `UploadTarget`). Both are derived
+  // HERE from the freshly generated key through the ordinary public-URL
+  // helper — never a signed URL, never the incoming blob:/data: value.
+  const { data } = getSupabaseClient()
+    .storage.from(bucket)
+    .getPublicUrl(filePath);
+  fi.src = data.publicUrl;
 
   // save MIME type
   const mimeType = file.type;

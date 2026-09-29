@@ -113,15 +113,48 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- POSTCONDITION — a HARD failure, not a line of text to be read.
+--
+-- The target state is exactly: attachments PRIVATE, branding PUBLIC. Either
+-- one being wrong aborts the invocation with an error, so an operator can
+-- never mistake a failed flip for a finished one.
+-- ---------------------------------------------------------------------------
+do $$
+begin
+    if (select b.public from storage.buckets b where b.id = 'attachments') is not false then
+        raise exception 'W8-E Stage C FAILED: bucket "attachments" is still public after the flip'
+            using errcode = '55000',
+                  detail = 'NORA_W8E_ATTACHMENTS_STILL_PUBLIC';
+    end if;
+    if (select b.public from storage.buckets b where b.id = 'branding') is not true then
+        raise exception 'W8-E Stage C FAILED: bucket "branding" is not public — pre-auth branding is broken'
+            using errcode = '55000',
+                  detail = 'NORA_W8E_BRANDING_NOT_PUBLIC';
+    end if;
+end;
+$$;
+
 -- The invocation returns its own result. No second query, no second session.
+--
+-- One verdict PER BUCKET, because the two buckets have OPPOSITE target
+-- states: `attachments` must now be private, `branding` must stay public by
+-- design (Decision A — the login-page logo renders with no session). Judging
+-- both rows by "is it private?" would report the correct branding state as a
+-- failed flip (Alpha Storage 3 L-2).
 select
     b.id                                            as bucket,
     b.public                                        as is_public,
     (select count(*) from storage.objects o
       where o.bucket_id = b.id)                     as object_count,
-    case when b.public is false
-         then 'PRIVATE — verify anonymously that a former public object URL no longer returns bytes'
-         else 'STILL PUBLIC — the flip did not take effect'
+    case
+        when b.id = 'attachments' and b.public is false
+            then 'PRIVATE — expected target state; verify anonymously that a former public object URL no longer returns bytes'
+        when b.id = 'attachments'
+            then 'FAILURE — attachments is STILL PUBLIC, the flip did not take effect'
+        when b.id = 'branding' and b.public is true
+            then 'PUBLIC — expected by design (pre-auth branding); not part of the flip'
+        else 'FAILURE — branding is NOT public; the login-page logo is broken'
     end                                             as verdict
 from storage.buckets b
 where b.id in ('attachments', 'branding')

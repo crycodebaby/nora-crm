@@ -19,7 +19,11 @@ import {
  *   record: the signed URL lives only in this module's runtime cache;
  * - deduplicates concurrent signing of the same key, so N components showing
  *   the same object issue ONE request;
- * - refreshes after expiry rather than caching a dead URL.
+ * - refreshes after expiry rather than caching a dead URL;
+ * - hands each consumer the capability's OWN expiry horizon, so a component
+ *   that receives an almost-expired cached URL renews it when THAT URL lapses,
+ *   not a full TTL after it mounted (Alpha Storage 3 L-1). The horizon is
+ *   runtime-only: never persisted, never part of any domain record.
  *
  * A signed URL is a bearer capability. Nora guarantees that a deactivated
  * user cannot obtain a NEW one; it cannot retract one already issued before
@@ -30,13 +34,27 @@ import {
 const REFRESH_SKEW_SECONDS = 30;
 
 /**
- * When a mounted consumer should renew a capability it is still displaying.
+ * How long a FRESHLY signed capability is handed out: the TTL minus the skew.
  *
- * Identical to the cache horizon, so the renewal lands exactly when the cached
- * URL stops being handed out — one re-sign per object per TTL, no earlier.
+ * This is the horizon stamped on a new cache entry. A mounted consumer renews
+ * at the horizon of the capability it actually holds (`expiresAt`), which for
+ * a fresh one lands exactly here — one re-sign per object per TTL, no earlier.
  */
 export const ATTACHMENT_URL_RENEWAL_MS =
   (ATTACHMENT_SIGNED_URL_TTL_SECONDS - REFRESH_SKEW_SECONDS) * 1000;
+
+/**
+ * A derived capability plus the moment it stops being handed out.
+ *
+ * Internal to the access layer and its hook: components only ever see a URL
+ * and a status. `expiresAt` is what lets a consumer schedule its renewal off
+ * the capability it holds instead of off its own mount time.
+ */
+export type SignedAttachmentCapability = {
+  url: string;
+  /** Epoch ms after which `url` is no longer handed out as fresh. */
+  expiresAt: number;
+};
 
 export type AttachmentSigner = (storageKey: string) => Promise<string>;
 
@@ -59,42 +77,53 @@ type CacheEntry = {
   /** Epoch ms after which the URL must not be handed out any more. */
   expiresAt: number;
   /** In-flight request, so concurrent callers share one round trip. */
-  inFlight?: Promise<string>;
+  inFlight?: Promise<SignedAttachmentCapability>;
 };
 
 const cache = new Map<string, CacheEntry>();
 
-const freshUrl = (entry: CacheEntry | undefined): string | undefined =>
-  entry?.url != null && entry.expiresAt > Date.now() ? entry.url : undefined;
+const freshCapability = (
+  entry: CacheEntry | undefined,
+): SignedAttachmentCapability | undefined =>
+  entry?.url != null && entry.expiresAt > Date.now()
+    ? { url: entry.url, expiresAt: entry.expiresAt }
+    : undefined;
 
 /**
- * Returns a usable signed URL for `storageKey`, signing only when necessary.
+ * Returns a usable signed capability for `storageKey`, signing only when
+ * necessary, together with the horizon after which it is no longer fresh.
+ *
+ * A cached capability keeps the horizon it was issued with: a consumer that
+ * arrives late gets the remaining lifetime, never a new full TTL.
  *
  * `force` drops a cached entry first — used when a consumer observes that a
  * URL stopped working (an expired capability, a rotated session) so the UI can
- * recover without a reload.
+ * recover without a reload. A signing request that is already in flight is
+ * joined rather than discarded: it IS the fresh derivation `force` asks for,
+ * and starting a second one would only multiply requests.
  */
-export const getSignedAttachmentUrl = async (
+export const getSignedAttachmentCapability = async (
   storageKey: string,
   signer: AttachmentSigner,
   force = false,
-): Promise<string> => {
-  if (force) cache.delete(storageKey);
+): Promise<SignedAttachmentCapability> => {
+  if (force && cache.get(storageKey)?.inFlight == null) {
+    cache.delete(storageKey);
+  }
 
   const cached = cache.get(storageKey);
-  const fresh = freshUrl(cached);
+  const fresh = freshCapability(cached);
   if (fresh != null) return fresh;
   if (cached?.inFlight) return cached.inFlight;
 
   const inFlight = signer(storageKey)
     .then((url) => {
-      cache.set(storageKey, {
+      const capability = {
         url,
-        expiresAt:
-          Date.now() +
-          (ATTACHMENT_SIGNED_URL_TTL_SECONDS - REFRESH_SKEW_SECONDS) * 1000,
-      });
-      return url;
+        expiresAt: Date.now() + ATTACHMENT_URL_RENEWAL_MS,
+      };
+      cache.set(storageKey, capability);
+      return capability;
     })
     .catch((error) => {
       // Never cache a failure: the next mount must be allowed to retry, e.g.
@@ -106,6 +135,17 @@ export const getSignedAttachmentUrl = async (
   cache.set(storageKey, { expiresAt: 0, inFlight });
   return inFlight;
 };
+
+/**
+ * URL-only view of `getSignedAttachmentCapability`, for callers that hold no
+ * mounted state to renew (the header avatar resolved in `getIdentity`).
+ */
+export const getSignedAttachmentUrl = async (
+  storageKey: string,
+  signer: AttachmentSigner,
+  force = false,
+): Promise<string> =>
+  (await getSignedAttachmentCapability(storageKey, signer, force)).url;
 
 /** Test/teardown seam. Never called by application code. */
 export const resetAttachmentUrlCache = () => cache.clear();
