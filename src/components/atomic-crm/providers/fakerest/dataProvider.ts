@@ -63,6 +63,11 @@ import type {
 } from "../../audit/auditTypes";
 import type { CrmDataProvider } from "../types";
 import {
+  WorkQueryError,
+  type WorkItemsPage,
+  type WorkItemsRequest,
+} from "../../application/queries/getWorkItems";
+import {
   filterDemoEntityAuditEvents,
   filterDemoGlobalAuditEvents,
   getDemoAuditStorageStats,
@@ -1505,6 +1510,29 @@ export const createDataProvider = ({
       return { data, limit };
     },
     getAuditStorageStats: async () => getDemoAuditStorageStats(),
+    /**
+     * Work read port (Alpha Work 2) — deliberately NOT emulated.
+     *
+     * The Work authority is the server-side W-A query: Europe/Berlin
+     * business day, row validity, holder/actor resolution from the session,
+     * total order and keyset pagination all live in SQL. A FakeRest copy
+     * would be a second, unreviewed implementation of those rules that the
+     * demo would then present as authoritative, and reading the raw `tasks`
+     * fixtures instead would be exactly the fallback the Work contract
+     * forbids. The missing demo equivalent is an accepted limitation
+     * (docs/nora/17 G.7); a demo Work surface needs its own decision.
+     *
+     * So the demo answers with an explicit `unavailable` — never with `[]`,
+     * which would claim "you have no Work".
+     */
+    getWorkItems: async (
+      _request: WorkItemsRequest,
+    ): Promise<WorkItemsPage> => {
+      throw new WorkQueryError(
+        "unavailable",
+        "the demo data provider has no authoritative Work query",
+      );
+    },
   };
 
   const dataProvider = withLifecycleCallbacks(
