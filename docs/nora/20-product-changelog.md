@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-09-28
+Stand: 2026-10-07
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,12 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-10-07 — Anhänge sind nur noch für angemeldete Nora-Benutzer abrufbar
+
+**Was ändert sich für Sie:** Dateien und Bilder, die an Notizen hängen, sind jetzt geschützt: Sie lassen sich nur noch öffnen, wenn Sie in Nora angemeldet sind. Wer nur den Link zu einer Datei kennt, kommt ohne Anmeldung nicht mehr heran. Im Alltag ändert sich nichts — Anhänge öffnen, ansehen und hochladen funktioniert wie bisher. Firmen- und Kundenlogos bleiben bewusst öffentlich sichtbar, weil sie keine vertraulichen Inhalte sind. Sollte ein Anhang einmal nicht angezeigt werden, etwa auf einem Gerät, auf dem Nora schon lange offen ist: Nora neu laden oder den Hinweis „Jetzt aktualisieren" bestätigen.
+
+**Technischer Hinweis:** eine Migration (eigener Speicherbereich für Logos), keine Datenlöschung; vorhandene Anhänge bleiben erhalten. Bereits heruntergeladene Dateien sind naturgemäß nicht betroffen.
 
 ## 2026-09-28 — „Produktionsfreigabe Fenster" ist aus Nora entfernt (Vorabversion, noch nicht live)
 
