@@ -1129,10 +1129,18 @@ begin
             'the queue is not empty — S2A1 performs no backfill and the test fixtures must roll back');
     end if;
 
-    -- W8-B boundary: still exactly the two storage policies, still no physical
-    -- delete path anywhere in the database
+    -- W8-B/W8-E boundary: exactly the four named storage policies, still no
+    -- physical delete path anywhere in the database
+    if exists (select 1 from pg_policies
+                where schemaname = 'storage' and tablename = 'objects'
+                  and policyname not in ('attachments_select_active_user', 'attachments_insert_writer',
+                                         'branding_select_active_user', 'branding_insert_writer')) then
+        v_failures := array_append(v_failures,
+            'an unknown policy appeared on storage.objects');
+    end if;
+    -- Four since W8-E: two per bucket. Named above, so the set stays exact.
     if (select count(*) from pg_policies
-        where schemaname = 'storage' and tablename = 'objects') <> 2 then
+        where schemaname = 'storage' and tablename = 'objects') <> 4 then
         v_failures := array_append(v_failures,
             'the storage.objects policy set changed — S2A1 must not touch W8-B');
     end if;

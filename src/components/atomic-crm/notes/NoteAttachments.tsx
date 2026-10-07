@@ -1,6 +1,7 @@
 import { Paperclip } from "lucide-react";
+import { useTranslate } from "ra-core";
 
-import { safeHref } from "@/lib/safeHref";
+import { useAttachmentUrl } from "../attachments/useAttachmentUrl";
 import type { AttachmentNote } from "../types";
 
 /**
@@ -12,6 +13,10 @@ import type { AttachmentNote } from "../types";
  * resource is not type-compatible with this component, so unverified legacy
  * data cannot reach the inline image renderer below. Quarantined data goes to
  * `NoteAttachmentsRecovery` instead.
+ *
+ * W8-E: the URL is DERIVED from the attachment's stable storage key through
+ * `useAttachmentUrl`, never read from the persisted `src`. This component
+ * constructs no Storage URL and knows no bucket.
  *
  * @param props.attachments - Verified attachments to render.
  * @returns `null` when there are no attachments, otherwise attachment previews and links.
@@ -36,61 +41,101 @@ export const NoteAttachments = ({
     <div className="mt-2 flex flex-col gap-2">
       {imageAttachments.length > 0 && (
         <div className="grid grid-cols-4 gap-8">
-          {imageAttachments.map((attachment: AttachmentNote, index: number) => {
-            const href = safeHref(attachment.src);
-            const preview = (
-              <img
-                src={attachment.src}
-                alt={attachment.title}
-                className="w-[200px] h-[100px] object-cover cursor-pointer object-left border border-border"
-              />
-            );
-            return (
-              <div key={index}>
-                {href == null ? (
-                  // Unsafe scheme: show the preview, but never as a clickable
-                  // anchor — a `javascript:` href would run on click in the
-                  // signed-in user's context.
-                  preview
-                ) : (
-                  <a
-                    href={href}
-                    title={attachment.title}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {preview}
-                  </a>
-                )}
-              </div>
-            );
-          })}
+          {imageAttachments.map((attachment: AttachmentNote, index: number) => (
+            <VerifiedImageAttachment
+              key={attachment.path ?? index}
+              attachment={attachment}
+            />
+          ))}
         </div>
       )}
       {otherAttachments.length > 0 &&
-        otherAttachments.map((attachment: AttachmentNote, index: number) => {
-          const href = safeHref(attachment.src);
-          return (
-            <div key={index} className="flex items-center gap-2">
-              <Paperclip className="w-4 h-4" />
-              {href == null ? (
-                <span>{attachment.title}</span>
-              ) : (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline hover:no-underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {attachment.title}
-                </a>
-              )}
-            </div>
-          );
-        })}
+        otherAttachments.map((attachment: AttachmentNote, index: number) => (
+          <VerifiedFileAttachment
+            key={attachment.path ?? index}
+            attachment={attachment}
+          />
+        ))}
+    </div>
+  );
+};
+
+const VerifiedImageAttachment = ({
+  attachment,
+}: {
+  attachment: AttachmentNote;
+}) => {
+  const access = useAttachmentUrl(attachment);
+  const translate = useTranslate();
+
+  if (access.status !== "ready" || !access.previewUrl) {
+    return (
+      <div className="w-[200px] h-[100px] border border-border bg-muted/40 flex items-center justify-center text-xs text-muted-foreground">
+        {access.status === "loading"
+          ? translate("resources.notes.attachments_access.loading", {
+              _: "Loading…",
+            })
+          : translate("resources.notes.attachments_access.unavailable", {
+              _: "Not available",
+            })}
+      </div>
+    );
+  }
+
+  const preview = (
+    <img
+      src={access.previewUrl}
+      alt={attachment.title}
+      // A capability that expired while the tab sat open yields a broken
+      // image; re-deriving once is the whole recovery path.
+      onError={access.refresh}
+      className="w-[200px] h-[100px] object-cover cursor-pointer object-left border border-border"
+    />
+  );
+
+  return (
+    <div>
+      {access.href == null ? (
+        preview
+      ) : (
+        <a
+          href={access.href}
+          title={attachment.title}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {preview}
+        </a>
+      )}
+    </div>
+  );
+};
+
+const VerifiedFileAttachment = ({
+  attachment,
+}: {
+  attachment: AttachmentNote;
+}) => {
+  const access = useAttachmentUrl(attachment);
+
+  return (
+    <div className="flex items-center gap-2">
+      <Paperclip className="w-4 h-4" />
+      {access.href == null ? (
+        <span>{attachment.title}</span>
+      ) : (
+        <a
+          href={access.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:no-underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {attachment.title}
+        </a>
+      )}
     </div>
   );
 };

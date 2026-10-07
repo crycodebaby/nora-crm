@@ -88,6 +88,7 @@ import {
 import { NORA_ERROR_CODES, throwNoraError } from "../../domain/noraErrorCodes";
 import {
   ATTACHMENTS_BUCKET,
+  BRANDING_BUCKET,
   assertStoredAttachment,
   createAttachmentObjectKey,
 } from "../commons/attachments";
@@ -121,7 +122,9 @@ const processCompanyLogo = async (params: any) => {
   const logo = params.data.logo;
 
   if (logo?.rawFile instanceof File) {
-    await uploadToBucket(logo);
+    // A customer logo is a public brand mark, not a business document — it
+    // goes to the deliberately public branding bucket (W8-E Decision A).
+    await uploadToBucket(logo, "branding");
   }
 
   return {
@@ -868,7 +871,10 @@ export type CrmDataProvider = ReturnType<
 const processConfigLogo = async (logo: any): Promise<string> => {
   if (typeof logo === "string") return logo;
   if (logo?.rawFile instanceof File) {
-    await uploadToBucket(logo);
+    // The Nora light/dark logos are public, non-sensitive brand assets stored
+    // by their stable public URL, so they are public by design (W8-E
+    // Decision A) — not because the login page needs them (it does not).
+    await uploadToBucket(logo, "branding");
     return logo.src;
   }
   return logo?.src ?? "";
@@ -943,7 +949,9 @@ const lifeCycleCallbacks: ResourceCallbacks[] = [
     resource: "sales",
     beforeSave: async (data: Sale, _, __) => {
       if (data.avatar) {
-        await uploadToBucket(data.avatar);
+        // An employee photo is personal data, NOT branding: it stays in the
+        // private bucket and is rendered through the derived-access path.
+        await uploadToBucket(data.avatar, "private");
       }
       return data;
     },
@@ -1057,22 +1065,63 @@ const applyFullTextSearch = (columns: string[]) => (params: GetListParams) => {
   };
 };
 
-const uploadToBucket = async (fi: RAFile) => {
-  if (!fi.src.startsWith("blob:") && !fi.src.startsWith("data:")) {
-    // Sign URL check if path exists in the bucket
-    if (fi.path) {
-      const { error } = await getSupabaseClient()
-        .storage.from(ATTACHMENTS_BUCKET)
-        .createSignedUrl(fi.path, 60);
+/**
+ * W8-E — which bucket a file class belongs to, and therefore how it is
+ * addressed afterwards.
+ *
+ * `private`  the `attachments` bucket. Two fields are persisted, with two very
+ *            different jobs:
+ *
+ *            - `path` = the storage key: the stable IDENTITY of the object and
+ *              the only input access is ever derived from. The W8-E runtime
+ *              reaches the object through `path -> short-lived signed URL`
+ *              (`useAttachmentUrl`) and ignores `src` whenever a key exists.
+ *            - `src`  = the canonical public URL of exactly that key. INERT
+ *              legacy metadata for the N-1 runtime only, NOT the identity and
+ *              NOT an authorization source. The pre-W8-E runtime dereferences
+ *              `src` unconditionally, so an element without one breaks a
+ *              runtime rollback (Alpha Storage 3 M-2). Once the bucket is
+ *              private this URL returns no bytes to anyone; after a rollback
+ *              restores the public bucket it serves the old runtime again.
+ *
+ *            It is never a signed URL, never carries a token or query string,
+ *            and is never taken from the incoming value — it is re-derived
+ *            from the key that was just uploaded. That is exactly the one
+ *            non-null `src` the S3B reference grammar accepts (`src` absent |
+ *            null | the canonical public URL of this exact key), so this
+ *            changes no database contract.
+ * `branding` the `branding` bucket. These assets are public BY DESIGN and must
+ *            render without a session, so the public URL is persisted exactly
+ *            as before — there it IS the rendering address.
+ */
+type UploadTarget = "private" | "branding";
 
-      if (!error) {
-        return fi;
-      }
+const TARGET_BUCKET: Record<UploadTarget, string> = {
+  private: ATTACHMENTS_BUCKET,
+  branding: BRANDING_BUCKET,
+};
+
+const uploadToBucket = async (fi: RAFile, target: UploadTarget = "private") => {
+  const bucket = TARGET_BUCKET[target];
+  const src = typeof fi.src === "string" ? fi.src : null;
+
+  // An element that already carries a storage key is an existing object. It is
+  // re-verified through a short-lived signed URL rather than re-uploaded — a
+  // check that works identically on a public and on a private bucket, because
+  // signing has always been governed by the W8-B `SELECT` policy, not by
+  // bucket publicness.
+  if (fi.path && !src?.startsWith("blob:") && !src?.startsWith("data:")) {
+    const { error } = await getSupabaseClient()
+      .storage.from(bucket)
+      .createSignedUrl(fi.path, 60);
+
+    if (!error) {
+      return fi;
     }
   }
 
-  const dataContent = fi.src
-    ? await fetch(fi.src)
+  const dataContent = src
+    ? await fetch(src)
         .then((res) => {
           if (res.status !== 200) {
             return null;
@@ -1095,7 +1144,7 @@ const uploadToBucket = async (fi: RAFile) => {
   const file = fi.rawFile;
   const filePath = createAttachmentObjectKey(file.name);
   const { error: uploadError } = await getSupabaseClient()
-    .storage.from(ATTACHMENTS_BUCKET)
+    .storage.from(bucket)
     .upload(filePath, dataContent);
 
   if (uploadError) {
@@ -1103,11 +1152,16 @@ const uploadToBucket = async (fi: RAFile) => {
     throw new Error("Failed to upload attachment");
   }
 
-  const { data } = getSupabaseClient()
-    .storage.from(ATTACHMENTS_BUCKET)
-    .getPublicUrl(filePath);
-
+  // `path` = stable identity / authority.
   fi.path = filePath;
+
+  // `src` = for branding, the public rendering address; for private content,
+  // inert N-1 compatibility metadata (see `UploadTarget`). Both are derived
+  // HERE from the freshly generated key through the ordinary public-URL
+  // helper — never a signed URL, never the incoming blob:/data: value.
+  const { data } = getSupabaseClient()
+    .storage.from(bucket)
+    .getPublicUrl(filePath);
   fi.src = data.publicUrl;
 
   // save MIME type

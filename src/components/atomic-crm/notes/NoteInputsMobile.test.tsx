@@ -2,6 +2,9 @@ import { composeStories } from "@storybook/react-vite";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import * as stories from "./NoteInputsMobile.stories";
+import { AttachmentSignerProvider } from "../attachments/useAttachmentUrl";
+import { resetAttachmentUrlCache } from "../attachments/attachmentAccess";
+import { NoteInputsMobileStory } from "./NoteInputsMobile.stories";
 
 const {
   AttachmentsNotEditable,
@@ -153,5 +156,88 @@ describe("NoteInputsMobile", () => {
     await expect
       .element(screen.getByRole("link", { name: "logo.svg" }))
       .not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Alpha Storage 3 M-1 — the mobile note-edit list with W8-E stored elements.
+ *
+ * Every element is `{ path, title, type }` with no `src`: before the
+ * remediation these rendered nothing, and the list keyed them by `src`/index.
+ * Each must stay visible, derive its own link from its own key, and keep its
+ * own identity when a neighbour is removed.
+ */
+describe("mobile note-edit list with path-only attachments (M-1)", () => {
+  beforeEach(() => resetAttachmentUrlCache());
+
+  const signer = async (key: string) => `https://signed.test/${key}?token=t`;
+  const stored = [
+    { path: "k-a.pdf", title: "a.pdf", type: "application/pdf" },
+    { path: "k-b.pdf", title: "b.pdf", type: "application/pdf" },
+  ];
+
+  it("shows every stored attachment, each linked through its own key", async () => {
+    const screen = await render(
+      <AttachmentSignerProvider signer={signer}>
+        <NoteInputsMobileStory defaultValues={{ attachments: stored }} />
+      </AttachmentSignerProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("link", { name: "a.pdf" }))
+      .toHaveAttribute("href", "https://signed.test/k-a.pdf?token=t");
+    await expect
+      .element(screen.getByRole("link", { name: "b.pdf" }))
+      .toHaveAttribute("href", "https://signed.test/k-b.pdf?token=t");
+  });
+
+  it("keeps the remaining attachment's own link after a neighbour is removed", async () => {
+    const screen = await render(
+      <AttachmentSignerProvider signer={signer}>
+        <NoteInputsMobileStory defaultValues={{ attachments: stored }} />
+      </AttachmentSignerProvider>,
+    );
+
+    await expect
+      .element(screen.getByRole("link", { name: "a.pdf" }))
+      .toBeVisible();
+
+    await screen.getByRole("button", { name: "Delete" }).first().click();
+
+    await expect
+      .element(screen.getByRole("link", { name: "a.pdf" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("link", { name: "b.pdf" }))
+      .toHaveAttribute("href", "https://signed.test/k-b.pdf?token=t");
+  });
+
+  /**
+   * Alpha Storage 5 U-1 — the list must really be keyed by file identity.
+   *
+   * The link text and href alone cannot tell identity from position: a
+   * position-keyed list re-renders the neighbour into the removed row and ends
+   * up showing the same text. The DOM node can: with identity keys the
+   * surviving row keeps its node (and with it its component state — derived
+   * URL, retry budget); with index or `src` keys it is torn down.
+   */
+  it("keeps the surviving attachment's own row when a neighbour is removed", async () => {
+    const screen = await render(
+      <AttachmentSignerProvider signer={signer}>
+        <NoteInputsMobileStory defaultValues={{ attachments: stored }} />
+      </AttachmentSignerProvider>,
+    );
+    await expect
+      .element(screen.getByRole("link", { name: "b.pdf" }))
+      .toHaveAttribute("href", "https://signed.test/k-b.pdf?token=t");
+    const rowB = screen.getByRole("link", { name: "b.pdf" }).element();
+
+    await screen.getByRole("button", { name: "Delete" }).first().click();
+    await expect
+      .element(screen.getByRole("link", { name: "a.pdf" }))
+      .not.toBeInTheDocument();
+
+    expect(rowB.isConnected).toBe(true);
+    expect(screen.getByRole("link", { name: "b.pdf" }).element()).toBe(rowB);
   });
 });

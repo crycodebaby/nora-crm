@@ -4,6 +4,42 @@ export const ATTACHMENTS_BUCKET =
   import.meta.env.VITE_ATTACHMENTS_BUCKET || "attachments";
 
 /**
+ * W8-E — the deliberately PUBLIC branding bucket.
+ *
+ * It exists because two of Nora's file classes are not business documents at
+ * all: the configuration light/dark logos and the customer logos, which are
+ * public brand marks of the firms Nora works with. They are intentionally
+ * public, non-sensitive presentation assets whose stable public URLs are part
+ * of the configuration model (the URL itself is what is stored). Keeping them
+ * public avoids signed-URL capability machinery — or a privileged broker —
+ * for assets that need no protection, so the two classes are separated by
+ * bucket. (Not an authentication requirement: the employee login page renders
+ * bundled logos, not these.)
+ *
+ * The name must NOT contain the substring `attachments`: the S2A2.1 liveness
+ * resolver classifies any storage-looking URL mentioning `attachments` as
+ * `unknown` (fail-closed), which would make every branding URL permanently
+ * ambiguous to the deletion contract. `branding` classifies cleanly as `none`.
+ *
+ * Nothing that is a note or document attachment may ever be uploaded here.
+ */
+export const BRANDING_BUCKET =
+  import.meta.env.VITE_BRANDING_BUCKET || "branding";
+
+/**
+ * Lifetime of a derived attachment access URL, in seconds.
+ *
+ * ONE place, on purpose: a TTL scattered across components cannot be reasoned
+ * about, and this value is a security parameter, not styling. See
+ * `attachments/attachmentAccess.ts` for how it is refreshed and
+ * docs/nora/22 §6.14 for the measurements behind the number.
+ *
+ * It is the lifetime NORA requests, not a platform bound: anyone the Storage
+ * policy lets sign can call the signing API directly with another expiry.
+ */
+export const ATTACHMENT_SIGNED_URL_TTL_SECONDS = 900;
+
+/**
  * Upload policy of the attachments bucket (W8-B).
  *
  * Mirrors `storage.buckets.file_size_limit` / `allowed_mime_types` from

@@ -50,6 +50,7 @@ import { normalizePersonName } from "@/components/atomic-crm/misc/personName";
 import { DEMO_SALES_BY_ROLE } from "@/components/atomic-crm/providers/fakerest/demoSession";
 import { setCurrentSaleCache } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
+import { resetSessionScopedCaches } from "@/components/atomic-crm/providers/supabase/authProvider";
 
 /** V1A password contract: a recommendation, not a Nora minimum. Supabase validates. */
 const PASSWORD_GUIDANCE =
@@ -267,6 +268,7 @@ export const SetPasswordPage = () => {
         // Establishing the session here (rather than at submit time) is what
         // lets the welcome screen greet the employee truthfully.
         if (hasInviteTokens && access_token && refresh_token) {
+          resetSessionScopedCaches();
           const { error } = await client.auth.setSession({
             access_token,
             refresh_token,
@@ -366,6 +368,7 @@ export const SetPasswordPage = () => {
         if (hasInviteTokens && access_token && refresh_token) {
           const { data: sessionData } = await client.auth.getSession();
           if (!sessionData.session) {
+            resetSessionScopedCaches();
             const { error: sessionError } = await client.auth.setSession({
               access_token,
               refresh_token,
