@@ -388,7 +388,7 @@ Jede Suite direkt nach der vorigen, **je zweimal** (leere DB und mit Fixtures); 
 
 ## 17. W8-E Release: privater Anhang-Bucket (Stage A → B → C, Rollback)
 
-**Wann:** der Production-Release von W8-E und jeder Rollback danach. **Status: `RC` — dieses Verfahren ist geschrieben und lokal geprüft, in Production aber noch nie ausgeführt.** Wer diese Sektion liest, hat damit **keine** Freigabe: jede Production-Mutation unten braucht die ausdrückliche Freigabe des Product Owners **für genau diesen Schritt** ([`07`](07-agent-change-checklist.md) „Production-Sicherheit"). Warum die Reihenfolge so ist und was W8-E garantiert: Contract [`22`](22-security-and-access.md) Abschnitt 6.14 — hier steht nur, **was in welcher Reihenfolge zu tun und zu beweisen ist**. Offener Stand: [`17`](17-known-issues-and-planned-waves.md) H.1.
+**Wann:** der Production-Release von W8-E und jeder Rollback danach. **Status: in Production ausgeführt am 2026-10-07 (Stage A → B → B.5 → C, ohne Rollback; Ausführungsstand am Ende dieser Sektion).** Das Verfahren bleibt das gültige für jede Wiederholung und für den Rollback. Wer diese Sektion liest, hat damit **keine** Freigabe: jede Production-Mutation unten braucht die ausdrückliche Freigabe des Product Owners **für genau diesen Schritt** ([`07`](07-agent-change-checklist.md) „Production-Sicherheit"). Warum die Reihenfolge so ist und was W8-E garantiert: Contract [`22`](22-security-and-access.md) Abschnitt 6.14 — hier steht nur, **was in welcher Reihenfolge zu tun und zu beweisen ist**. Offener Stand: [`17`](17-known-issues-and-planned-waves.md) H.1.
 
 **Die eine Regel, aus der alles folgt:** `altes Runtime + privater Bucket` ist **nicht unterstützt** — das alte Frontend erreicht Anhänge über öffentliche Objekt-URLs, jede Anhangsdarstellung wäre kaputt. Daraus ergeben sich zwei Reihenfolgen, die **nie** umgekehrt werden:
 
@@ -546,5 +546,27 @@ Fehlschlag in Phase 0 → **STOP, keine Mutation**, Bericht an den PO.
 ### Nach dem Release — Dokumentationsabschluss
 
 - [ ] [`16`](16-current-state.md) (was ist live), [`17`](17-known-issues-and-planned-waves.md) H.1 (Status, Restpunkte), [`06`](06-decision-log.md) (Status der W8-E-Einträge), [`20`](20-product-changelog.md) (benutzerspürbar: Anhänge nur noch angemeldet) und die Release-Evidenz in `releases/2026-09.md` (SHAs, Ledger, `NORA_W8E_RESULT`-Zeilen, Probe-Ergebnisse — Objektschlüssel und URLs nur dort, nie in durable Dokumenten)
+
+### Ausführungsstand (Release 2026-10-07)
+
+Nur Evidenz der **einen** Ausführung — das Verfahren oben bleibt davon getrennt und allgemein. Vollständige Zahlen und Probe-Ergebnisse: Archiv `releases/2026-10.md`.
+
+| Punkt | Ergebnis |
+|---|---|
+| Merge-Commit (Stage B) | `b282eccfe659b1e6ff29162667feb81fd140cda8` (PR #5, Merge-Commit); vorheriger `main` `ab1b292c2ed302add979f1c6530b5c04a1b00861` |
+| Zertifizierter RC / Tree | `783735c37d6e79c762aa223cc649acab7f144f0f` / `593bb005e8da6e602098eaea4a9e22de39ed9042` |
+| Stage A | Migration `20260928120000` angewendet (Ledger 72); 4 Branding-Objekte umgezogen, 1 externes Logo übersprungen, 0 failed, 0 refused; Wiederholung idempotent — `W8-E STAGE A COMPLETE` |
+| Stage B | Production lieferte den Merge-Build aus; `attachments` blieb öffentlich; vier Smokes bestanden — `W8-E STAGE B COMPLETE` |
+| Stage B.5 | 2 reale Geräte verifiziert; weitere Geräte nicht einzeln verifiziert; Restrisiko vom Product Owner angenommen — **nicht** „alle Geräte konvergiert" (`B.5 CLOSED WITH PO-ACCEPTED RESIDUAL RISK`, [`06`](06-decision-log.md) „2026-10-07 – W8-E Release") |
+| Stage-C-Preflight | 10/10 `PASS`, `GO` |
+| Stage C | über das Storage-API-Werkzeug, nicht per SQL; `RESULT: PRIVATE / VERIFIED`; Dateigrößenlimit und MIME-Typen unverändert; Operator-Schlüssel nur in der lokalen Shell, danach entfernt |
+| Sofortbeweis | `/object/authenticated/…` 400; `/object/<bucket>/…` anonym 400; exakte vorab gewärmte URL: 200/`HIT` → nach ≈ 11 s 400/`BYPASS`, Klassifikation `denied` |
+| Verzögerter Nachweis | ≈ 17 min nach der Umstellung: alle drei Routen wieder 400 / `denied` — CDN-Nachweis geschlossen |
+| Postflight | `30_verify_attachments_private.sql` 10/10, `VERIFIED` |
+| Production-Smoke (PO) | Bild- und Dokument-Anhang öffnen sich über signierte URLs; Branding und Einstellungen rendern |
+| Rollback | **nicht ausgeführt, nicht erforderlich** |
+| Ergebnis | `W8-E STAGE C COMPLETE / PRIVATE VERIFIED` → `W8-E STORAGE RELEASE COMPLETE` |
+
+Beobachtungen für künftige Ausführungen: neue Anhang-Objektschlüssel sind UUIDs; Stage A kopiert und stellt Verweise um, es löscht nichts — die Quellobjekte bleiben als S2B-Aufräumrest in `attachments` ([`17`](17-known-issues-and-planned-waves.md) H.1). Der Dokumentationsabschluss dieser Sektion („Nach dem Release") ist für diese Ausführung erledigt.
 
 **Lokal geprüft, nicht in Production:** `supabase/maintenance/attachment_privacy/lib/privacy_control.test.ts` (läuft in CI) treibt das Stage-C-Verfahren mit Fakes durch jede Kompensationsgrenze und hält Repository und diese Sektion gegen die 3C-Befunde fest. `supabase/tests/attachment_privacy_verification.mjs` führt dasselbe Werkzeug und die SQL-Dateien gegen einen echten lokalen Stack aus — inklusive der Weigerung bei fremder oder gleichnamig erweiterter Policy, abgeschalteter RLS, einer Policy auf `storage.buckets`, erzwungener API-Fehler, Kompensation, `EMERGENCY`, der SQL-Fallback-Matrix in vier Runner-Formen und einer aufgeschobenen Constraint-Rücknahme. Er mutiert den **lokalen** Bucket und stellt Bucket, Kontrollen, Policies und RLS am Ende — auch nach einem Fehlschlag — wieder her; er verlangt zu Beginn einen Preflight `GO`. Vorher die Attachment-SQL-Suiten aus Sektion 4 laufen lassen: der Verifier schreibt eine echte Notiz, und `attachment_foundation_verification.sql` erwartet eine leere `public.attachments`. **Einen CDN gibt es lokal nicht:** lokal belegt ist der Kontrollpfad (die API-Umstellung löst genau einen Bucket-Purge aus, SQL keinen), nicht die Invalidierung am Edge.
