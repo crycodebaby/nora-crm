@@ -5,11 +5,18 @@ import { defineConfig } from "vitest/config";
 // These files are written for Deno and use JSR imports (jsr:@supabase/supabase-js@2)
 // that Vite cannot resolve. We alias jsr: imports to their npm equivalents so
 // Vitest can run the tests in a Node environment without a Deno runtime.
+//
+// It also runs the unit tests of the operator tools under supabase/maintenance/
+// (W8-E Stage C control plane): they are Node code, like the functions, and
+// must run in CI rather than only in a local verifier.
 export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["supabase/functions/**/*.test.ts"],
+    include: [
+      "supabase/functions/**/*.test.ts",
+      "supabase/maintenance/**/*.test.ts",
+    ],
     exclude: ["**/node_modules/**", ".supabase-e2e/**"],
   },
   resolve: {

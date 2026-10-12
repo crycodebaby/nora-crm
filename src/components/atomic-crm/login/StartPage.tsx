@@ -8,6 +8,7 @@ import { isNoraDemoMode } from "@/components/atomic-crm/misc/noraDemoMode";
 import { useFinalizeDemoLogin } from "@/components/atomic-crm/misc/useSwitchDemoRole";
 import { useConfigurationContext } from "@/components/atomic-crm/root/ConfigurationContext";
 import { getSupabaseClient } from "@/components/atomic-crm/providers/supabase/supabase";
+import { resetSessionScopedCaches } from "@/components/atomic-crm/providers/supabase/authProvider";
 import { SSOAuthButton } from "./SSOAuthButton";
 import {
   EmployeeAccessShell,
@@ -313,6 +314,9 @@ const InviteActivationPanel = ({
       const email = String(values.email ?? "").trim();
       const token = String(values.invite_code ?? "").trim();
 
+      // verifyOtp establishes a session without authProvider.login: reset
+      // the per-session caches here, before the new session exists.
+      resetSessionScopedCaches();
       const { error } = await getSupabaseClient().auth.verifyOtp({
         email,
         token,

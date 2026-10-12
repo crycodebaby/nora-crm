@@ -1,7 +1,7 @@
 import { useFieldValue, useRecordContext, useTranslate } from "ra-core";
 import type { FileFieldProps } from "@/components/admin";
-import { safeHref } from "@/lib/safeHref";
 import { cn } from "@/lib/utils";
+import { useAttachmentUrl } from "../attachments/useAttachmentUrl";
 
 /**
  * Displays a preview for a single attachment record.
@@ -10,10 +10,12 @@ import { cn } from "@/lib/utils";
  * usage inside a `<FileInput>`, where the current attachment is provided through
  * the record context.
  *
- * Every stored `src` goes through `safeHref` before it can become a clickable
- * `href`; one that is not a safe navigable URL is still shown, but without an
- * anchor. The only exception is the local `blob:` preview of a file picked in
- * this session, which is not stored data — see below.
+ * W8-E: the URL is derived through `useAttachmentUrl`, which owns the whole
+ * policy — the stable storage key wins over any persisted `src`, a private
+ * object is reached through a short-lived signed URL, and a stored value that
+ * is not a safe navigable URL yields no `href` at all (it is still shown,
+ * just never clickable). The local `blob:` preview of a file picked in this
+ * session stays the one narrow exemption; it is not stored data.
  *
  * @param props - FileFieldProps provided by react-admin file inputs.
  * @returns An image preview for image attachments, or a regular link for other files.
@@ -39,8 +41,30 @@ export const AttachmentField = (props: FileFieldProps) => {
       source: title,
     })?.toString() ?? title;
   const translate = useTranslate();
+  // Hooks may not sit behind the early return below, so access is derived for
+  // every render. `useAttachmentUrl` is a no-op for a null/!private value.
+  const access = useAttachmentUrl(
+    record == null
+      ? null
+      : {
+          src: sourceValue == null ? null : sourceValue.toString(),
+          path: record.path,
+          rawFile: record.rawFile,
+        },
+  );
 
-  if (sourceValue == null) {
+  // W8-E M-1 remediation: an attachment EXISTS when it has a stable storage key,
+  // a file picked in this session, or a stored `src`. `src` alone is not the
+  // definition any more — the S3B grammar allows a stored element without
+  // one, and the key is enough to derive access. Treating a key-only element
+  // as "empty" made it vanish from the edit form, where saving would then
+  // silently drop it.
+  const exists =
+    sourceValue != null ||
+    hasStorageKey(record?.path) ||
+    record?.rawFile instanceof File;
+
+  if (!exists) {
     if (!empty) {
       return null;
     }
@@ -53,40 +77,39 @@ export const AttachmentField = (props: FileFieldProps) => {
   }
 
   const type = record?.type ?? record?.rawFile?.type;
-  const srcValue = sourceValue.toString();
   const isImage = isImageMimeType(type);
+  const href = access.href;
 
-  // A file the user just picked in THIS session is not part of the stored-XSS
-  // surface: `FileInput.transformFile` / `NoteInputsMobile.handleFileChange`
-  // put the real `File` on `rawFile` and a locally minted `blob:` object URL on
-  // `src`. Both halves have to hold — a value deserialized from note JSON can
-  // never be a `File` instance, and `URL.createObjectURL` only ever yields a
-  // `blob:` URL — so this cannot be reached by stored data. Everything else,
-  // which is every persisted and therefore attacker-influenceable `src`, goes
-  // through `safeHref` below.
-  const isLocalPreview =
-    record?.rawFile instanceof File && srcValue.startsWith("blob:");
-  const href = isLocalPreview ? srcValue : safeHref(srcValue);
+  const preview =
+    isImage && access.previewUrl ? (
+      <img
+        alt={titleValue}
+        title={titleValue}
+        src={access.previewUrl}
+        onError={access.refresh}
+        className="w-[200px] h-[100px] object-cover cursor-pointer object-left border border-border"
+      />
+    ) : (
+      titleValue
+    );
 
-  const preview = isImage ? (
-    <img
-      alt={titleValue}
-      title={titleValue}
-      src={srcValue}
-      className="w-[200px] h-[100px] object-cover cursor-pointer object-left border border-border"
-    />
-  ) : (
-    titleValue
-  );
-
-  // Rejected by the URL authority (a `javascript:` value would otherwise
-  // execute in the signed-in user's context on click). Keep the attachment
-  // visible but never clickable — the degradation `NoteAttachments` applies
-  // too (W8-C S5), so nothing silently disappears from the UI.
+  // No navigable URL: either the URL authority rejected the stored value (a
+  // `javascript:` value would otherwise execute in the signed-in user's
+  // context on click), access is still being derived, or it could not be
+  // derived. Keep the attachment visible but never clickable, so nothing
+  // silently disappears from the UI.
   if (href == null) {
     return (
-      <div className={cn("inline-block", className)} {...rest}>
-        {isImage ? preview : <span title={titleValue}>{titleValue}</span>}
+      <div
+        className={cn("inline-block", className)}
+        aria-busy={access.status === "loading" || undefined}
+        {...rest}
+      >
+        {isImage && access.previewUrl ? (
+          preview
+        ) : (
+          <span title={titleValue}>{titleValue}</span>
+        )}
       </div>
     );
   }
@@ -107,6 +130,9 @@ export const AttachmentField = (props: FileFieldProps) => {
     </div>
   );
 };
+
+const hasStorageKey = (path: unknown): boolean =>
+  typeof path === "string" && path.length > 0;
 
 /**
  * Checks whether a mime type corresponds to an image.

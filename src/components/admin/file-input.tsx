@@ -24,6 +24,7 @@ import { useDropzone } from "react-dropzone";
 import { XCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { fileListKey } from "@/lib/fileListKey";
 import { FormError, FormField, FormLabel } from "@/components/admin/form";
 import { InputHelperText } from "@/components/admin/input-helper-text";
 import { Button } from "@/components/ui/button";
@@ -265,7 +266,7 @@ export const FileInput = (props: FileInputProps) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             files.map((file: any, index: number) => (
               <FileInputPreview
-                key={index}
+                key={fileListKey(file, index)}
                 file={file}
                 onRemove={onRemove(file)}
                 removeIcon={removeIcon}

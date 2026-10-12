@@ -9,6 +9,7 @@ import {
 } from "ra-core";
 import { AutocompleteInput, ReferenceInput } from "@/components/admin";
 import { FileInputPreview } from "@/components/admin/file-input";
+import { fileListKey } from "@/lib/fileListKey";
 import { useFormContext, useWatch } from "react-hook-form";
 
 import { contactOptionText } from "../misc/ContactOption";
@@ -176,7 +177,7 @@ const AttachmentPreviewsMobile = () => {
     <div className="flex flex-col gap-1">
       {attachments.map((file, index: number) => (
         <FileInputPreview
-          key={file.src}
+          key={fileListKey(file, index)}
           file={file}
           onRemove={() => onRemove(index)}
         >
