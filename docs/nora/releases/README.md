@@ -12,6 +12,7 @@ Dieses Verzeichnis ist das **Release-History-Archiv** von Nora CRM. Es enthält 
 | `2026-07.md` | Juli 2026 | v0.3f–v0.3l (Demo-Daten, UX, Rollen-UX, CRM-Audit), v0.4a–v0.4c.2c (RBAC/RLS, Google Kalender), Mitarbeiterzugang-Redesign, DB-Lint |
 | `2026-08.md` | August 2026 | Foundation Waves 1–3, Stabilization Gates, Kernindizes, Customer & Contact Workflow, Unified Tasks, Self Contact, Pre-Production Hardening, Error Contract, Idempotency, Operation Status, Security-Advisor-Bewertungen, Notification 7A/7B, Kanban Navigation Rail, PWA-1B–1C.3 |
 | `2026-09.md` | September 2026 | PWA Update State Contract V2 / Visual Polish 2 / Completion Acknowledgement, Customer Create Speed & Clarity, Employee Onboarding & Access V1A/V1B/V1C-A/V1C-B, Security Hardening Wave 0, User Lifecycle W1–W5 |
+| `2026-10.md` | Oktober 2026 | W8-E Private Attachment Storage (Stage A/B/B.5/C, CDN-Nachweis, Postflight, Production-Smoke) |
 
 Jede Monatsdatei beginnt mit einer **Release-Chronik** (Tabelle: Welle, Status, Release-SHA, Migration, Edge, Evidenz) und enthält danach die **unverändert** aus `06-decision-log.md` (Stand `96fb1082`) verschobenen Originaleinträge.
 

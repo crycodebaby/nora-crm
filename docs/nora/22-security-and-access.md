@@ -194,7 +194,7 @@ Beide Views sind `security_invoker = false` über genau eine Tabelle und damit a
 
 ### 6.5 Storage: der Bucket `attachments`
 
-Stand seit W8-B (`PRODUCTION VERIFIED` 2026-09-16, Migration `20260915120000_nora_attachment_storage_hardening`). Ein **einziger** Bucket `attachments` trägt Notiz-Anhänge, Kundenlogos und Branding-Logos.
+Stand seit W8-B (`PRODUCTION VERIFIED` 2026-09-16, Migration `20260915120000_nora_attachment_storage_hardening`); **seit W8-E (`PRODUCTION VERIFIED` 2026-10-07) ist der Bucket privat** (unten und Abschnitt 6.14). Bis W8-E trug dieser **einzige** Bucket Notiz-Anhänge, Kundenlogos und Branding-Logos; seitdem trägt `attachments` die Notiz-Anhänge und der eigene, bewusst öffentliche Bucket `branding` das Branding (Konfigurations- und Kundenlogos).
 
 **Die entscheidende Unterscheidung.** Storage kennt zwei getrennte Fragen, und nur eine davon beantworten RLS-Policies:
 
@@ -203,18 +203,18 @@ Stand seit W8-B (`PRODUCTION VERIFIED` 2026-09-16, Migration `20260915120000_nor
 | **Storage-API-Autorisierung** — auflisten, signierte URLs erzeugen, hochladen, überschreiben, verschieben, kopieren, löschen | RLS auf `storage.objects` (unten) |
 | **Abruf eines bekannten Objektschlüssels** aus einem `public`-Bucket | **niemand** — `storage-api` liefert ihn ohne Anmeldung aus und fragt RLS nicht |
 
-> **Der Bucket ist `public = true` und die W8-B-Policies machen ihn nicht privat.** Wer einen Objektschlüssel kennt, lädt die Datei ohne Konto herunter. Das ist ein bewusst getragenes Restrisiko ([`17`](17-known-issues-and-planned-waves.md) Abschnitt H) und wird in einer eigenen Welle (Umstellung auf einen privaten Bucket) entschieden — nicht nebenbei.
+> **Historisch (W8-B bis W8-E Stage C): Der Bucket war `public = true`, und die W8-B-Policies machten ihn nicht privat.** Wer einen Objektschlüssel kannte, lud die Datei ohne Konto herunter. Das war ein bewusst getragenes Restrisiko und wurde in einer eigenen Welle (W8-E) entschieden — nicht nebenbei. **Seit der Stage-C-Umstellung am 2026-10-07 ist `attachments` `public = false`:** ein bekannter Objektschlüssel liefert ohne Sitzung keine Bytes mehr (HTTP 400 an allen drei Routen, auch am CDN-Edge nachgewiesen).
 
-> **W8-E schließt genau dieses Restrisiko — Stand `RC`, nicht Production.** Der Vertrag des privaten Buckets, die abgeleitete Zugriffs-URL und der eigene Branding-Bucket stehen in Abschnitt 6.14. **Bis die Stage-C-Umstellung tatsächlich in Production ausgeführt ist, gilt dieser Abschnitt 6.5 unverändert:** der Bucket ist öffentlich, und die Matrix unten beschreibt den Ist-Zustand. Die W8-B-Policies selbst ändert W8-E **nicht** — sie sind es, die nach der Umstellung die einzige Lesefähigkeit tragen.
+> **W8-E hat dieses Restrisiko geschlossen — `PRODUCTION VERIFIED` 2026-10-07.** Der Vertrag des privaten Buckets, die abgeleitete Zugriffs-URL und der eigene Branding-Bucket stehen in Abschnitt 6.14. Die W8-B-Policies selbst hat W8-E **nicht** geändert — sie tragen seit der Umstellung die einzige Lesefähigkeit (signierte URL). Die Matrix unten beschreibt den Ist-Zustand nach Stage C.
 
-**Zugriffsmatrix (Ist-Zustand Production):**
+**Zugriffsmatrix (Ist-Zustand Production seit W8-E Stage C, 2026-10-07):**
 
-| Aufrufer | Auflisten / signierte URL | Hochladen | Überschreiben (`UPDATE`) | Löschen | Bekannten öffentlichen Schlüssel abrufen |
+| Aufrufer | Auflisten / signierte URL | Hochladen | Überschreiben (`UPDATE`) | Löschen | Bekannten Schlüssel ohne Sitzung abrufen |
 |---|:---:|:---:|:---:|:---:|:---:|
-| nicht angemeldet (`anon`) | ❌ | ❌ | ❌ | ❌ | ✅ (Bucket ist öffentlich) |
-| `admin` / `office`, aktiv | ✅ | ✅ | ❌ | ❌ | ✅ |
-| `viewer`, aktiv | ✅ | ❌ | ❌ | ❌ | ✅ |
-| deaktivierter Mitarbeiter mit noch gültigem JWT | ❌ | ❌ | ❌ | ❌ | ✅ |
+| nicht angemeldet (`anon`) | ❌ | ❌ | ❌ | ❌ | ❌ (Bucket ist privat) |
+| `admin` / `office`, aktiv | ✅ | ✅ | ❌ | ❌ | ❌ (Lesen nur über signierte URL) |
+| `viewer`, aktiv | ✅ | ❌ | ❌ | ❌ | ❌ (Lesen nur über signierte URL) |
+| deaktivierter Mitarbeiter mit noch gültigem JWT | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `service_role` | RLS-Bypass — kein deployter Nora-Aufrufer | | | | |
 
 Technische Grundlage:
@@ -549,7 +549,7 @@ Operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4 und 5.
 
 ### 6.14 Privater Anhang-Bucket und abgeleiteter Zugriff (W8-E)
 
-Stand: **`RC`, nicht Production** (Migration `20260928120000_nora_branding_bucket`; Remediation nach unabhängiger Review Alpha Storage 3 am 2026-09-29, M-1/M-2/L-1/L-2; gezielte Nachprüfung Alpha Storage 3B bestanden; Production-Readiness-Härtung Alpha Storage 5 am 2026-09-29; Release-Readiness-Review Alpha Storage 3C: `REMEDIATION REQUIRED`; CDN-sicheres Release-Verfahren Alpha Storage 6 am 2026-09-29; die gezielte unabhängige Nachprüfung steht aus). **Neunte Fläche, neunter Contract:** wie Anhänge erreicht werden, wenn der Bucket `attachments` nicht mehr öffentlich ist — und warum Branding davon ausgenommen ist. Solange die Stage-C-Umstellung nicht ausgeführt ist, beschreibt dieser Abschnitt den **Zielzustand**, nicht den Ist-Zustand; Abschnitt 6.5 bleibt bis dahin die Ist-Beschreibung.
+Stand: **`PRODUCTION VERIFIED` 2026-10-07** (Release-Evidenz `releases/2026-10.md`; Migration `20260928120000_nora_branding_bucket`; Remediation nach unabhängiger Review Alpha Storage 3 am 2026-09-29, M-1/M-2/L-1/L-2; gezielte Nachprüfung Alpha Storage 3B bestanden; Production-Readiness-Härtung Alpha Storage 5 am 2026-09-29; Release-Readiness-Review Alpha Storage 3C: `REMEDIATION REQUIRED`; CDN-sicheres Release-Verfahren Alpha Storage 6 am 2026-09-29; Nachprüfungen Alpha Storage 3D und 3E bestanden). **Neunte Fläche, neunter Contract:** wie Anhänge erreicht werden, wenn der Bucket `attachments` nicht mehr öffentlich ist — und warum Branding davon ausgenommen ist. Die Stage-C-Umstellung ist am 2026-10-07 ausgeführt: dieser Abschnitt beschreibt den **Ist-Zustand**; Abschnitt 6.5 beschreibt Zugriffsmatrix, Bucket-Grenzen und Policies des Buckets `attachments`.
 
 > **W8-E ändert den Zugriffsweg, nicht die Autorität.** Keine neue Rolle, kein neuer Grant, keine neue Policy auf `storage.objects` für `attachments`, kein `service_role`-Pfad, kein Broker, keine Änderung an `public.attachments`, an der Warteschlange, am Liveness-Resolver, an der Projektion oder am S5-Lese-Gate. **S6-B1, S6-B2 und S2B bleiben geschlossen.**
 
