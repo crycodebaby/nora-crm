@@ -779,3 +779,7 @@ Objektive Korrekturen vor der PO-Sichtprüfung, ohne die gewählte Richtung zu �
 
 ## Redesign zur Freigabe (2026-09-25, noch nicht live)
 Kompaktes Logo und großzügige Navigation für Desktop und Tablet; das bestehende Hotboard bleibt erhalten. Keine neue Arbeitskorb-/Posteingangsfläche. Vorgänge zeigen Titel → Kunde → Einsatzort. Kontakte und Demo-Rolle liegen in Einstellungen; Demo-Rollen schaffen keine Berechtigungen.
+
+## Arbeitskorb (Alpha UI 2 — Contract eingefroren 2026-10-13, nicht implementiert)
+
+Der Darstellungs-Contract der Arbeitskorb-Oberfläche — Gruppen als Beschriftung der Server-Sequenz, Datumsdarstellung in `Europe/Berlin` ohne Uhrzeit, Dringlichkeit nie nur über Farbe, Desktop-Zeile ohne eigenes Ziel, mobiles read-only Blatt, Zustände und Texte, Motion mit den bestehenden `--nora-motion-*`-Tokens, Accessibility — steht ausschließlich in [`26`](26-arbeitskorb-ui-contract.md). Er führt **keine** neuen Farb- oder Motion-Tokens ein; Überfällig-Datumstexte nutzen die bestehenden `nora-urgency-*`-Töne, nie die Brandfarbe als Textfarbe. Hier wird nichts davon dupliziert.
