@@ -1,6 +1,6 @@
 # 20 – Nora Produkt-Changelog
 
-Stand: 2026-10-07
+Stand: 2026-10-13
 
 ## Wozu dieses Dokument
 
@@ -26,6 +26,14 @@ Heute zeigt die Seite `/changelog` in Nora noch die Atomic-CRM-Datei `CHANGELOG.
 - Neueste Einträge oben.
 
 ---
+
+## 2026-10-13 — Neu: der Arbeitskorb zeigt Ihre offene Arbeit an einem Ort
+
+**Was ändert sich für Sie:** Es gibt einen neuen Bereich „Arbeitskorb". Am Computer finden Sie ihn als vierten Eintrag in der oberen Navigation, auf dem Handy über die Startseite. Der Arbeitskorb listet Ihre offenen Aufgaben, sortiert nach Fälligkeit — unter „Meine Arbeit" das, wofür Sie zuständig sind, unter „Team" die offene Arbeit des ganzen Teams. Zu jedem Eintrag sehen Sie, zu welchem Kunden oder Ansprechpartner er gehört, und können direkt dorthin springen und wieder zurück. Fälligkeiten werden immer nach deutscher Zeit angezeigt, auch wenn Ihr Gerät anders eingestellt ist. Auf dem Handy öffnet ein Tipp auf einen Eintrag eine kurze Detailansicht.
+
+Der Arbeitskorb ist **nur zum Ansehen**: Aufgaben erledigen, zuweisen oder bearbeiten Sie weiterhin dort, wo Sie es bisher tun. Hotboard und die bisherige Aufgabenansicht bleiben unverändert; die Startseite auf dem Handy hat lediglich den neuen Einstieg zum Arbeitskorb bekommen. Bei Aufgaben ohne Fälligkeitsdatum kann die bisherige Aufgabenansicht „Überfällig" zeigen, wo der Arbeitskorb richtig „Ohne Fälligkeit" anzeigt — das ist bekannt und wird separat bereinigt.
+
+**Technischer Hinweis:** keine Migration, keine Datenänderung, keine neue Berechtigung; der Arbeitskorb liest dieselbe serverseitige Work-Abfrage, die seit 2026-09-22 bereitsteht. Im Demo-Modus zeigt er nur einen Hinweis, keine Daten.
 
 ## 2026-10-07 — Anhänge sind nur noch für angemeldete Nora-Benutzer abrufbar
 
