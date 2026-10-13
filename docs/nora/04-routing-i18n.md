@@ -60,9 +60,9 @@ Unbekannte bzw. nicht registrierte Pfade landen heute im ra-core-Standard-Catch-
 - Kanonischer Link auf einen Vorgang ist immer `/vorgaenge/:id/show`; `/deals/...` ist nur Legacy-Eingang (siehe oben).
 - Begründung: [`06`](06-decision-log.md) „2026-09-13 – Mobile Vorgang-Details: nur die Show-Fläche".
 
-### Arbeitskorb-Route (Contract eingefroren 2026-10-13, noch nicht registriert)
+### Arbeitskorb-Route (Contract eingefroren 2026-10-13, registriert und ausgeliefert 2026-10-13)
 
-Der Arbeitskorb wird unter `/arbeitskorb` (Laufzeit `/#/arbeitskorb?sicht=mine|team`) in den layout-tragenden `CustomRoutes` **beider** Oberflächen registriert — als eigene Route, nicht als Resource und nicht in der Resource-Alias-Map. **Heute ist die Route nicht registriert.** Vollständiger Contract (Sicht-Parameter, Normalisierung, Ziele der Kontext-Links je Oberfläche): [`26`](26-arbeitskorb-ui-contract.md) Abschnitte 4 und 10.
+Der Arbeitskorb wird unter `/arbeitskorb` (Laufzeit `/#/arbeitskorb?sicht=mine|team`) in den layout-tragenden `CustomRoutes` **beider** Oberflächen registriert — als eigene Route, nicht als Resource und nicht in der Resource-Alias-Map. **Seit Alpha UI 2 (2026-10-13, Merge-Commit `e967c619…`) ist die Route in beiden Oberflächen registriert und in Production ausgeliefert.** Vollständiger Contract (Sicht-Parameter, Normalisierung, Ziele der Kontext-Links je Oberfläche): [`26`](26-arbeitskorb-ui-contract.md) Abschnitte 4 und 10.
 
 ## Öffentliche Auth-Routen (Welle 6a)
 

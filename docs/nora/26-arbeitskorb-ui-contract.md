@@ -1,10 +1,10 @@
 # 26 – Arbeitskorb (Alpha UI 2) – Oberflächen-Contract
 
-Stand: 2026-10-13 · Status: **CONTRACT FROZEN / READY FOR IMPLEMENTATION REVIEW** · Umsetzungsstand: **nicht implementiert, nicht ausgeliefert** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-10-13 · Status: **CONTRACT FROZEN** · Umsetzungsstand: **implementiert und `PRODUCTION VERIFIED` (2026-10-13, PR #10, Merge-Commit `e967c619…`, Release-Gates Abschnitt 18)** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dieses Dokument ist der **eingefrorene Implementierungs-Contract für die erste Work-Oberfläche**, den Arbeitskorb (Alpha UI 2). Er legt fest, wie die bereits ausgelieferte Application-Leseschnittstelle `getWorkItems` ([`25`](25-universal-work-model.md) Abschnitt 21.6) konsumiert, orchestriert und dargestellt wird — und woran eine Implementierung objektiv gemessen wird.
 
-**Was dieses Dokument nicht ist:** kein Live-Zustand (es gibt **keine** Arbeitskorb-Oberfläche in der Anwendung; [`16`](16-current-state.md) bleibt bis zur Auslieferung unverändert), keine Work-Semantik (die besitzt ausschließlich [`25`](25-universal-work-model.md)), keine Security-Durchsetzung ([`22`](22-security-and-access.md) Abschnitt 6.13). Bei einem Widerspruch zu [`25`](25-universal-work-model.md) gewinnt `25`, und der Widerspruch ist ein Befund.
+**Was dieses Dokument nicht ist:** kein Live-Zustand (der steht in [`16`](16-current-state.md), Release-Evidenz in [`releases/2026-10.md`](releases/2026-10.md)), keine Work-Semantik (die besitzt ausschließlich [`25`](25-universal-work-model.md)), keine Security-Durchsetzung ([`22`](22-security-and-access.md) Abschnitt 6.13). Bei einem Widerspruch zu [`25`](25-universal-work-model.md) gewinnt `25`, und der Widerspruch ist ein Befund.
 
 **Begründung:** [`06`](06-decision-log.md) „2026-10-13 – Alpha UI 2". **Offene und nachgelagerte Punkte:** [`17`](17-known-issues-and-planned-waves.md) G.7 und I. **Basis:** `main` `c3611d3c526bbc4bb6a6ee1452983222c7e2bcd7` (Alpha Work 2 ausgeliefert).
 
@@ -538,6 +538,19 @@ Diese Punkte sind beim Contract-Freeze **nicht** verifiziert und werden nicht al
 | RG-6 | finale E2E-Flüsse grün | CI-Lauf (AC-30) |
 | RG-7 | implementierte Sitzungs-/Cache-Isolation mit zwei **echten** Mitarbeiterkonten (in E2E nicht möglich, AC-18) | AC-18 grün + manuelle Prüfung: Abmelden, mit zweitem Konto anmelden, keine fremde Zeile sichtbar — Desktop und Mobil |
 | RG-8 | **Production-Smoke nach dem Release** mit echter Mitarbeiter-Sitzung: beide Sichten, ein Kontext-Link je Oberfläche, Rückweg; Build-Identität nach [`21`](21-agent-runbooks.md) Sektion 14 | Release-Evidenz in `releases/` |
+
+**Ergebnis des Releases (2026-10-13, PR #10, Merge-Commit `e967c6198baac6cfb3414784e98c1ad7841c6f49`; Evidenz [`releases/2026-10.md`](releases/2026-10.md)):**
+
+| # | Ergebnis |
+|---|---|
+| RG-1 | iOS (echtes iPhone, installierte PWA): **PASS** laut Product Owner. Android: **UNVERIFIED / PRODUCT_OWNER_RISK_ACCEPTED** |
+| RG-2 | VoiceOver (iOS): **PASS** laut Product Owner. TalkBack (Android): **UNVERIFIED / PRODUCT_OWNER_RISK_ACCEPTED** |
+| RG-3 | **PASS** (echtes Gerät, Product Owner) |
+| RG-4 | iOS: **PASS** laut Product Owner. Android (responsiv / Gestenbereich): **UNVERIFIED / PRODUCT_OWNER_RISK_ACCEPTED** |
+| RG-5 | **PASS** — CI: Entry 1047 kB ≤ 1 050 kB, gesamt im Budget; AC-29 (geändert): Code/Einstiege +1 232 B ≤ 5 kB, Kataloge gesondert +9 624 B |
+| RG-6 | **PASS** — PR-CI `38402773685` und `main`-CI `38470336850` grün (auf dem PR-Lauf ein flaky Test, LOW E-1) |
+| RG-7 | **UNVERIFIED / PRODUCT_OWNER_RISK_ACCEPTED** (AC-18 automatisiert grün; manuelle Prüfung mit zwei echten Konten nicht durchgeführt) |
+| RG-8 | **PASS** — Desktop und Mobil mit echter Mitarbeiter-Sitzung (Product Owner); Build-Identität `e967c619…` im ausgelieferten Entry-Chunk bestätigt |
 
 ---
 
