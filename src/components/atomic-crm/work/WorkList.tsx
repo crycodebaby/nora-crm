@@ -132,10 +132,10 @@ const DesktopRow = ({
         <DueText row={row} noneAsDash />
       </div>
       <div className="min-w-0">
-        <p className="font-medium leading-snug text-foreground">
+        <p className="font-medium leading-snug text-foreground [overflow-wrap:anywhere]">
           <WorkTitle row={row} id={id} />
         </p>
-        <p className="mt-0.5 text-sm text-[var(--nora-text-muted)]">
+        <p className="mt-0.5 text-sm text-[var(--nora-text-muted)] [overflow-wrap:anywhere]">
           {row.workType !== null ? (
             <>
               <span>{row.workType}</span>
@@ -208,10 +208,10 @@ const MobileRow = ({
         onClick={() => onOpen(row.workId)}
         className="flex min-h-16 w-full flex-col gap-0.5 rounded-md px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nora-brand-ring)]"
       >
-        <span className="line-clamp-3 font-medium leading-snug text-foreground">
+        <span className="line-clamp-3 font-medium leading-snug text-foreground [overflow-wrap:anywhere]">
           <WorkTitle row={row} />
         </span>
-        <span className="text-sm text-[var(--nora-text-muted)]">
+        <span className="text-sm text-[var(--nora-text-muted)] [overflow-wrap:anywhere]">
           <DueText row={row} />
           {row.workType !== null ? (
             <>
@@ -221,7 +221,7 @@ const MobileRow = ({
           ) : null}
         </span>
         {row.customerId != null || row.contactId != null ? (
-          <span className="text-sm text-[var(--nora-text-muted)]">
+          <span className="text-sm text-[var(--nora-text-muted)] [overflow-wrap:anywhere]">
             {row.customerId != null ? (
               <ContextText
                 kind="customer"
@@ -240,7 +240,7 @@ const MobileRow = ({
           </span>
         ) : null}
         {row.holder ? (
-          <span className="text-sm text-[var(--nora-text-muted)]">
+          <span className="text-sm text-[var(--nora-text-muted)] [overflow-wrap:anywhere]">
             <span className="sr-only">
               {translate("crm.work.holder.prefix")}{" "}
             </span>

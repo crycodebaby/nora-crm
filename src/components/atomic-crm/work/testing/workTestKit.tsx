@@ -208,14 +208,15 @@ export const renderSurface = async ({
     silent: true,
   });
   const getManyCalls: GetManyCall[] = [];
+  let nameMode = nameLookup;
   const dataProvider = {
     ...base,
     getMany: (resource: string, params: GetManyParams) => {
       getManyCalls.push({ resource, params });
-      if (nameLookup === "fail") {
+      if (nameMode === "fail") {
         return Promise.reject(new Error("name lookup failed"));
       }
-      if (nameLookup === "hang") return new Promise<never>(() => undefined);
+      if (nameMode === "hang") return new Promise<never>(() => undefined);
       // Like PostgREST: unknown IDs are simply absent from the answer.
       return Promise.all(
         params.ids.map((id) =>
@@ -287,6 +288,10 @@ export const renderSurface = async ({
     heard,
     live,
     rowIds,
+    /** Changes how later name lookups answer. */
+    setNameLookup: (mode: "normal" | "fail" | "hang") => {
+      nameMode = mode;
+    },
     location: () =>
       document.querySelector('[data-testid="location"]')?.textContent ?? "",
     waitForRequests: (count: number) =>

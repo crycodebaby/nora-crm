@@ -126,6 +126,27 @@ describe("Arbeitskorb mobile sheet", () => {
     expect(dialog.element().textContent).toContain("Rückruf Ada");
   });
 
+  it("closing the sheet of a vanished row focuses its neighbour (AC-20)", async () => {
+    const t = await setup();
+    await t.rowButton("Rückruf Ada").click();
+    const dialog = t.screen.getByRole("dialog");
+    await expect.element(dialog).toBeVisible();
+    void t.queryClient.invalidateQueries({ queryKey: ["work"] });
+    await t.waitForRequests(2);
+    t.work.respond(1, [t.customerOnly], null);
+    await expect
+      .element(dialog)
+      .toHaveTextContent(
+        "Diese Aufgabe ist nach der Aktualisierung nicht mehr in dieser Ansicht.",
+      );
+    // The notice is announced (it is a status), not only shown.
+    expect(
+      dialog.element().querySelector('[role="status"]')?.textContent,
+    ).toContain("nicht mehr in dieser Ansicht");
+    await t.screen.getByRole("button", { name: "Schließen" }).click();
+    await expect.element(t.rowButton("Angebot prüfen")).toHaveFocus();
+  });
+
   it("closes at once on permission_denied and focuses the tab panel", async () => {
     const t = await setup();
     await t.rowButton("Rückruf Ada").click();

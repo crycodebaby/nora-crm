@@ -676,3 +676,108 @@ describe("Arbeitskorb surface — keyboard and view tabs (AC-05 C, AC-19 C, AC-2
     expect(document.activeElement?.getAttribute("role")).toBe("tabpanel");
   });
 });
+
+describe("Arbeitskorb surface — focus rules (AC-20, §13.4)", () => {
+  const firstLink = (workId: string) =>
+    document.querySelector<HTMLElement>(`li[data-work-id="${workId}"] a`);
+  const panel = () =>
+    document.querySelector<HTMLElement>('[role="tabpanel"]:not([hidden])');
+
+  const loaded = async (items: WorkItem[]) => {
+    const t = await renderSurface({ companies: [buildCompany({ id: 1 })] });
+    await t.waitForRequests(1);
+    t.work.respond(0, items, null);
+    await expect.poll(() => t.rowIds().length).toBe(items.length);
+    let calls = 1;
+    const revalidate = async (next: WorkItem[]) => {
+      void t.queryClient.invalidateQueries({ queryKey: ["work"] });
+      calls += 1;
+      await t.waitForRequests(calls);
+      t.work.respond(calls - 1, next, null);
+      await expect.poll(() => t.rowIds().length).toBe(next.length);
+    };
+    return { ...t, revalidate };
+  };
+
+  it("hands focus of a vanished row to the next row, else the previous one, else the tab panel", async () => {
+    const [a, b, c] = [buildWorkItem(), buildWorkItem(), buildWorkItem()];
+    const t = await loaded([a, b, c]);
+    firstLink(b.workId)!.focus();
+    await t.revalidate([a, c]);
+    expect(document.activeElement).toBe(firstLink(c.workId));
+    await t.revalidate([a]);
+    expect(document.activeElement).toBe(firstLink(a.workId));
+    await t.revalidate([]);
+    await expect.poll(() => document.activeElement).toBe(panel());
+  });
+
+  it("never pulls focus back once the user left the list (R3-1)", async () => {
+    const [a, b] = [buildWorkItem(), buildWorkItem()];
+    const t = await loaded([a, b]);
+    firstLink(a.workId)!.focus();
+    // Clicking plain text outside the tab panel moves focus to the page.
+    await userEvent.click(document.querySelector("h1")!);
+    expect(document.activeElement).toBe(document.body);
+    await t.revalidate([b]);
+    await sleep(50);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("moves focus to the tab panel after a successful retry", async () => {
+    const t = await renderSurface({ companies: [buildCompany({ id: 1 })] });
+    await t.waitForRequests(1);
+    t.work.fail(0, "failed");
+    const retry = t.screen.getByRole("button", { name: "Erneut versuchen" });
+    await retry.click();
+    await t.waitForRequests(2);
+    t.work.respond(1, [buildWorkItem()], null);
+    await expect.poll(() => t.rowIds().length).toBe(1);
+    await expect.poll(() => document.activeElement).toBe(panel());
+  });
+
+  it("moves focus to the tab panel when the names hint disappears after its retry", async () => {
+    const t = await renderSurface({
+      companies: [buildCompany({ id: 1, name: "Fensterbau Nord" })],
+      nameLookup: "fail",
+    });
+    await t.waitForRequests(1);
+    t.work.respond(0, [buildWorkItem()], null);
+    const hintRetry = t.screen.getByRole("button", {
+      name: "Erneut versuchen",
+    });
+    await expect.element(hintRetry).toBeVisible();
+    t.setNameLookup("normal");
+    await hintRetry.click();
+    await expect.element(hintRetry).not.toBeInTheDocument();
+    await expect.poll(() => document.activeElement).toBe(panel());
+    expect(document.body.textContent).toContain("Fensterbau Nord");
+  });
+});
+
+describe("Arbeitskorb surface — no Work request without a resolved identity (§5.2)", () => {
+  it("shows the load error and keeps refresh and retry from fetching", async () => {
+    const t = await renderSurface({
+      identity: new Error("no identity") as never,
+    });
+    // ra-core retries the identity query before it reports the failure.
+    await expect
+      .poll(() => document.body.textContent, { timeout: 15_000 })
+      .toContain("Der Arbeitskorb konnte nicht geladen werden.");
+    expect(document.body.textContent).not.toContain("Keine offenen Aufgaben");
+    const refresh = t.screen.getByRole("button", {
+      name: "Arbeitskorb aktualisieren",
+    });
+    await expect.element(refresh).toHaveAttribute("aria-disabled", "true");
+    // A DOM click reaches the handler despite aria-disabled.
+    (refresh.element() as HTMLElement).click();
+    await sleep(100);
+    expect(t.work.calls).toHaveLength(0);
+    // The disabled observer's idle entry holds no Work.
+    for (const entry of t.queryClient
+      .getQueryCache()
+      .findAll({ queryKey: ["work"] })) {
+      expect(entry.state.data).toBeUndefined();
+      expect(entry.state.dataUpdatedAt).toBe(0);
+    }
+  });
+});

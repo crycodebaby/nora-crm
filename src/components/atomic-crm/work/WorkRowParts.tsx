@@ -56,17 +56,24 @@ export const DueText = ({
   return (
     <span
       className={cn(
-        "whitespace-nowrap",
         row.group === "overdue" && "nora-arbeitskorb-overdue-date",
         row.group === "today" && "font-semibold text-foreground",
       )}
     >
-      <span aria-hidden="true">{visible}</span>
+      <span aria-hidden="true" className="whitespace-nowrap">
+        {visible}
+      </span>
       <span className="sr-only">{spokenDue(translate, row)}</span>
       {row.alsoDueToday ? (
-        <span aria-hidden="true" className="ml-1 text-xs font-medium">
-          · {translate("crm.work.due_today_too")}
-        </span>
+        <>
+          {" "}
+          <span
+            aria-hidden="true"
+            className="whitespace-nowrap text-xs font-medium"
+          >
+            · {translate("crm.work.due_today_too")}
+          </span>
+        </>
       ) : null}
     </span>
   );
@@ -135,7 +142,7 @@ export const ContextLink = ({
       aria-label={label.accessible ?? undefined}
       aria-describedby={describedBy}
       data-work-focus={focusTarget}
-      className="rounded-sm text-foreground/90 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nora-brand-ring)]"
+      className="rounded-sm text-foreground underline decoration-[var(--nora-text-muted)] underline-offset-2 [overflow-wrap:anywhere] hover:decoration-current focus-visible:decoration-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nora-brand-ring)]"
     >
       {label.prefix ? <span className="sr-only">{label.prefix} </span> : null}
       {label.visible}

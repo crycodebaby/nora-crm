@@ -246,11 +246,20 @@ test.describe("desktop", () => {
     await expect(customerLink).toHaveAccessibleName(
       "Kunde: Hausverwaltung Sonnenhof",
     );
+    // The row element carries no React click handler (§8).
     expect(
-      await dachrinne.evaluate(
-        (li) => li.getAttribute("onclick") === null && li.tagName === "LI",
-      ),
-    ).toBe(true);
+      await dachrinne.evaluate((li) => {
+        const key = Object.keys(li).find((k) => k.startsWith("__reactProps$"));
+        const props = key
+          ? (li as unknown as Record<string, Record<string, unknown>>)[key]
+          : null;
+        return {
+          tag: li.tagName,
+          react: !!props,
+          onClick: typeof props?.onClick,
+        };
+      }),
+    ).toEqual({ tag: "LI", react: true, onClick: "undefined" });
     await expect(surface(page).locator("a button, button a")).toHaveCount(0);
 
     // AC-05: view switch by replace, holder only in Team, reload keeps it.
@@ -703,7 +712,7 @@ test.describe("mobile", () => {
     );
   });
 
-  test("no horizontal overflow at 320, 375 and 390 px", async ({
+  test("no horizontal overflow at 320, 375 and 390 px, also in the sheet", async ({
     page,
     e2eAdmin,
     createCompany,
@@ -711,32 +720,60 @@ test.describe("mobile", () => {
     createTasks,
     loginAsAdmin,
   }) => {
+    const weg = (
+      await createCompany({
+        name: "Wohnungseigentümergemeinschaft Musterstraße 12–14 Hausverwaltung",
+        salesId: e2eAdmin.id,
+      })
+    ).id;
     await seedBasket({
       adminId: e2eAdmin.id,
       createCompany,
       createContact,
       createTasks,
-      extra: ({ nord }) => [
+      extra: () => [
         {
           text: "Sehr langer Aufgabentitel mit Hausverwaltungsgesellschaftsbezeichnung und Fensterreinigungsauftragsnummer ohne Leerzeichenumbruchmöglichkeitsgarantie",
           due_date: at(4),
           sales_id: e2eAdmin.id,
-          company_id: nord,
+          company_id: weg,
           type: "Besichtigungstermintyp",
         },
       ],
     });
     await loginAsAdmin(e2eAdmin);
     await openArbeitskorb(page, "?sicht=team");
+    const overflow = (selector: string) =>
+      page.evaluate((sel) => {
+        const element = document.querySelector(sel);
+        return element ? element.scrollWidth - element.clientWidth : -1;
+      }, selector);
     for (const width of [320, 375, 390]) {
       await page.setViewportSize({ width, height: 800 });
       await expect(rows(page).first()).toBeVisible();
-      const overflow = await page.evaluate(
-        () =>
-          document.documentElement.scrollWidth -
-          document.documentElement.clientWidth,
-      );
-      expect({ width, overflow }).toEqual({ width, overflow: 0 });
+      expect({ width, page: await overflow("html") }).toEqual({
+        width,
+        page: 0,
+      });
+      expect({ width, main: await overflow("main") }).toEqual({
+        width,
+        main: 0,
+      });
+      await row(page, "Sehr langer Aufgabentitel").getByRole("button").click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toContainText("Wohnungseigentümergemeinschaft");
+      expect({ width, sheet: await overflow('[role="dialog"]') }).toEqual({
+        width,
+        sheet: 0,
+      });
+      for (const action of await dialog.getByRole("link").all()) {
+        const fits = await action.evaluate(
+          (el) => el.scrollWidth <= el.clientWidth + 1,
+        );
+        expect({ width, fits }).toEqual({ width, fits: true });
+      }
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
     }
   });
 });

@@ -104,6 +104,12 @@ describe("Arbeitskorb authority boundary (docs/nora/26 §2.1, AC-01)", () => {
     }
   });
 
+  it("never destructures dueAt (which would escape the === null guard)", () => {
+    expect(
+      offenders(/\{[^}]*\bdueAt\b[^}]*\}\s*=/, ["formatWorkDueDate.ts"]),
+    ).toEqual([]);
+  });
+
   it("keeps no Work or cursor in browser storage and no cross-view placeholder", () => {
     expect(offenders(/localStorage|sessionStorage|indexedDB/)).toEqual([]);
     // The Work query never shows another view's rows as placeholder. (The
@@ -164,10 +170,14 @@ describe("Arbeitskorb entry files (docs/nora/26 §4, §14, AC-29)", () => {
         /<Route path=\{ARBEITSKORB_PATH\} element=\{<ArbeitskorbPageMobile \/>\} \/>/g,
       ),
     ).toHaveLength(1);
-    // No Work resource, no alias-map entry, no noLayout route.
+    // No Work resource, no alias-map entry, not inside a noLayout block.
     expect(crm).not.toMatch(/<Resource[^>]*name=["']work/);
-    expect(crm).not.toMatch(
-      /arbeitskorb[^\n]*noLayout|noLayout[^\n]*arbeitskorb/i,
-    );
+    const noLayoutBlocks = [
+      ...crm.matchAll(/<CustomRoutes noLayout>([\s\S]*?)<\/CustomRoutes>/g),
+    ].map((match) => match[1]);
+    expect(noLayoutBlocks.length).toBeGreaterThan(0);
+    for (const block of noLayoutBlocks) {
+      expect(block).not.toMatch(/ARBEITSKORB_PATH|Arbeitskorb/);
+    }
   });
 });

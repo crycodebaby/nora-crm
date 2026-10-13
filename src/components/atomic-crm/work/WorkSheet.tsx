@@ -74,7 +74,7 @@ export const WorkSheet = ({
           className="max-h-[85svh] gap-0 overflow-y-auto rounded-t-xl pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
           <SheetHeader className="gap-1 pb-2">
-            <SheetTitle className="text-lg leading-snug">
+            <SheetTitle className="text-lg leading-snug [overflow-wrap:anywhere]">
               {row.incomplete || row.title === null ? (
                 <span className="inline-flex flex-wrap items-center gap-x-2">
                   <span className="italic text-[var(--nora-text-muted)]">
@@ -86,7 +86,10 @@ export const WorkSheet = ({
                 row.title
               )}
             </SheetTitle>
-            <SheetDescription>{spokenDue(translate, row)}</SheetDescription>
+            {/* Spoken with the dialog; shown once, in the "Fälligkeit" row. */}
+            <SheetDescription className="sr-only">
+              {spokenDue(translate, row)}
+            </SheetDescription>
           </SheetHeader>
 
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 text-sm">
@@ -113,7 +116,10 @@ export const WorkSheet = ({
           </dl>
 
           {vanished ? (
-            <p className="mx-4 mt-3 rounded-md border border-border px-3 py-2 text-sm">
+            <p
+              role="status"
+              className="mx-4 mt-3 rounded-md border border-border px-3 py-2 text-sm"
+            >
               {translate("crm.work.sheet.vanished")}
             </p>
           ) : null}
@@ -123,13 +129,11 @@ export const WorkSheet = ({
               <SheetAction
                 to={contactPath(row.contactId)}
                 action={translate("crm.work.sheet.open_contact")}
-                name={
-                  contextLabel(
-                    translate,
-                    "contact",
-                    names.contactName(row.contactId),
-                  ).visible
-                }
+                label={contextLabel(
+                  translate,
+                  "contact",
+                  names.contactName(row.contactId),
+                )}
                 onNavigate={onClose}
               />
             ) : null}
@@ -137,13 +141,11 @@ export const WorkSheet = ({
               <SheetAction
                 to={customerPath(row.customerId)}
                 action={translate("crm.work.sheet.open_customer")}
-                name={
-                  contextLabel(
-                    translate,
-                    "customer",
-                    names.customerName(row.customerId),
-                  ).visible
-                }
+                label={contextLabel(
+                  translate,
+                  "customer",
+                  names.customerName(row.customerId),
+                )}
                 onNavigate={onClose}
                 secondary={row.contactId != null}
               />
@@ -168,24 +170,31 @@ export const WorkSheet = ({
 const SheetAction = ({
   to,
   action,
-  name,
+  label,
   onNavigate,
   secondary = false,
 }: {
   to: string;
   action: string;
-  name: string;
+  label: ReturnType<typeof contextLabel>;
   onNavigate: () => void;
   secondary?: boolean;
 }) => (
   <Button
     asChild
     variant={secondary ? "outline" : "default"}
-    className="h-auto min-h-12 flex-col items-start gap-0 py-2 text-left"
+    className="h-auto min-h-12 flex-col items-start gap-0 whitespace-normal py-2 text-left"
   >
     <Link to={to} onClick={onNavigate}>
       <span className="font-semibold">{action}</span>
-      <span className="text-sm font-normal opacity-90">{name}</span>
+      <span className="max-w-full text-sm font-normal opacity-90 [overflow-wrap:anywhere]">
+        <span aria-hidden={label.accessible ? "true" : undefined}>
+          {label.visible}
+        </span>
+        {label.accessible ? (
+          <span className="sr-only">{label.accessible}</span>
+        ) : null}
+      </span>
     </Link>
   </Button>
 );

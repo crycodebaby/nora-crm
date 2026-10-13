@@ -140,27 +140,57 @@ export const ArbeitskorbSurface = ({
     [focusPanel, focusRow],
   );
 
-  const lastFocusedRow = useRef<string | null>(null);
+  /** The focused element inside a row, as long as focus stays there. */
+  const lastFocusedRow = useRef<{
+    workId: string;
+    element: HTMLElement;
+  } | null>(null);
+  /** Any focused element inside the tab panel (rows, state controls, "Weitere laden"). */
+  const lastFocusedInPanel = useRef<HTMLElement | null>(null);
   const onFocusIn = (event: FocusEvent<HTMLElement>) => {
-    const row = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-work-id]",
-    );
-    lastFocusedRow.current = row?.dataset.workId ?? null;
+    const element = event.target as HTMLElement;
+    lastFocusedInPanel.current = element;
+    const row = element.closest<HTMLElement>("[data-work-id]");
+    lastFocusedRow.current = row?.dataset.workId
+      ? { workId: row.dataset.workId, element }
+      : null;
   };
   const onFocusOut = (event: FocusEvent<HTMLElement>) => {
     const next = event.relatedTarget as Node | null;
     if (next && !event.currentTarget.contains(next)) {
       lastFocusedRow.current = null;
+      lastFocusedInPanel.current = null;
+      return;
+    }
+    if (!next) {
+      // Focus went to the page itself. If the element is still there, the
+      // user left the list (e.g. clicked plain text) — never pull focus back.
+      // If it was removed by a re-render, the layout effect below hands focus
+      // on first (it runs within the same commit, before this check).
+      const left = lastFocusedRow.current;
+      const leftElement = event.target as HTMLElement;
+      queueMicrotask(() => {
+        if (!leftElement.isConnected) return;
+        if (lastFocusedRow.current === left) lastFocusedRow.current = null;
+        if (lastFocusedInPanel.current === leftElement) {
+          lastFocusedInPanel.current = null;
+        }
+      });
     }
   };
 
   useLayoutEffect(() => {
     const active = document.activeElement;
     const lost = !active || active === document.body;
-    if (lost && lastFocusedRow.current !== null) {
-      const workId = lastFocusedRow.current;
-      if (phase === "data") focusRowOrNeighbour(workId, previousOrder.current);
-      else focusPanel();
+    const focused = lastFocusedRow.current;
+    // §13.4: only a focused element that disappeared hands focus on.
+    if (lost && focused !== null && !focused.element.isConnected) {
+      lastFocusedRow.current = null;
+      if (phase === "data") {
+        focusRowOrNeighbour(focused.workId, previousOrder.current);
+      } else {
+        focusPanel();
+      }
     }
     previousOrder.current = order;
     // Runs when the delivered sequence or the state changes.
@@ -172,9 +202,9 @@ export const ArbeitskorbSurface = ({
     if (phase !== "denied") return;
     const active = document.activeElement;
     const panel = panels.current[scopeRef.current];
-    if (!active || active === document.body || panel?.contains(active)) {
-      focusPanel();
-    }
+    const lost = !active || active === document.body;
+    const vanished = lastFocusedInPanel.current?.isConnected === false;
+    if (panel?.contains(active) || (lost && vanished)) focusPanel();
   }, [phase, focusPanel]);
 
   // --- announcements (§13.5) ----------------------------------------------
@@ -313,7 +343,14 @@ export const ArbeitskorbSurface = ({
   }, [names.failedAt, say, translate]);
 
   // --- actions -------------------------------------------------------------
+  // No refresh without a resolved identity (§5.2), and none that would only
+  // join a running "Weitere laden" instead of restarting at page 1.
+  const refreshBlocked =
+    work.isIdentityPending ||
+    work.identityError != null ||
+    work.isFetchingNextPage;
   const onRefresh = async () => {
+    if (refreshBlocked) return;
     manualRefresh.current = true;
     await work.refresh();
   };
@@ -360,12 +397,17 @@ export const ArbeitskorbSurface = ({
   // --- mobile sheet --------------------------------------------------------
   const [sheetWorkId, setSheetWorkId] = useState<string | null>(null);
   const lastSeenRow = useRef<WorkRowView | null>(null);
+  /** The sequence in which the sheet's row was last seen (neighbour rule). */
+  const lastSeenOrder = useRef<string[]>([]);
   const sheetFocus = useRef<"row" | "panel">("row");
   const currentSheetRow =
     sheetWorkId !== null && rows
       ? (rows.find((row) => row.workId === sheetWorkId) ?? null)
       : null;
-  if (currentSheetRow) lastSeenRow.current = currentSheetRow;
+  if (currentSheetRow) {
+    lastSeenRow.current = currentSheetRow;
+    lastSeenOrder.current = order;
+  }
   // Render invariant (§5.4): outside the data state the sheet shows nothing.
   const sheetRow =
     phase === "data" && sheetWorkId !== null
@@ -384,6 +426,7 @@ export const ArbeitskorbSurface = ({
 
   const onOpenRow = (workId: string) => {
     lastSeenRow.current = rows?.find((row) => row.workId === workId) ?? null;
+    lastSeenOrder.current = order;
     sheetFocus.current = "row";
     setSheetWorkId(workId);
   };
@@ -396,7 +439,7 @@ export const ArbeitskorbSurface = ({
     event.preventDefault();
     const workId = closingWorkId.current ?? lastSeenRow.current?.workId;
     if (sheetFocus.current === "panel" || !workId) focusPanel();
-    else focusRowOrNeighbour(workId, previousOrder.current);
+    else focusRowOrNeighbour(workId, lastSeenOrder.current);
     closingWorkId.current = null;
   };
 
@@ -451,6 +494,7 @@ export const ArbeitskorbSurface = ({
           size="icon"
           className="nora-touch-target shrink-0"
           aria-label={translate("crm.work.refresh")}
+          aria-disabled={refreshBlocked ? "true" : undefined}
           onClick={onRefresh}
         >
           <RefreshCw

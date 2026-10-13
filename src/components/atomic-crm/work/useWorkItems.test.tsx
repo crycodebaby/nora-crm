@@ -35,9 +35,13 @@ const Probe = ({
 const setup = async ({
   identity = 7 as number | Error,
   scope = "mine" as WorkScope,
+  identityPending = false,
 } = {}) => {
   const work = createControlledReader();
   const auth = createSwitchableAuthProvider(identity);
+  if (identityPending) {
+    auth.authProvider.getIdentity = () => new Promise(() => undefined);
+  }
   const queryClient = new QueryClient();
   const dataProvider = {
     ...createDataProvider({ db: createCrmDb({}), silent: true }),
@@ -69,6 +73,8 @@ const setup = async ({
     state,
     ids,
     setScope: (next: WorkScope) => screen.rerender(<Tree scope={next} />),
+    unmount: () => screen.unmount(),
+    remount: (next: WorkScope) => render(<Tree scope={next} />),
     waitForRequests: (count: number) =>
       expect.poll(() => work.calls.length).toBe(count),
   };
@@ -437,5 +443,53 @@ describe("useWorkItems — Berlin day change (docs/nora/26 §5.5)", () => {
     window.dispatchEvent(new Event("focus"));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(t.work.calls).toHaveLength(2);
+  });
+});
+
+describe("useWorkItems — refusal without a mounted surface (docs/nora/26 §5.4)", () => {
+  it("drops the refused snapshot and the other view's entry even after unmount", async () => {
+    const t = await setup();
+    await t.waitForRequests(1);
+    t.work.respond(0, [buildWorkItem({ title: "Mine vorher" })]);
+    await expect.poll(() => t.ids()?.length).toBe(1);
+    await t.setScope("team");
+    await t.waitForRequests(2);
+    t.work.respond(1, [buildWorkItem({ title: "Team vorher" })]);
+    await expect.poll(() => t.ids()?.length).toBe(1);
+    void t.state().refresh();
+    await t.waitForRequests(3);
+    // The user leaves the surface while the revalidation is in flight.
+    await t.unmount();
+    t.work.fail(2, "permission_denied");
+    await expect
+      .poll(
+        () =>
+          t.queryClient
+            .getQueryCache()
+            .findAll({ queryKey: ["work", "items", 7] })
+            .filter((entry) => entry.state.data !== undefined).length,
+      )
+      .toBe(0);
+
+    // Back in Meine Arbeit: no pre-denial row before a new answer.
+    await t.remount("mine");
+    await t.waitForRequests(4);
+    expect(t.state().items).toBeUndefined();
+    t.work.respond(3, [buildWorkItem({ title: "Mine nachher" })]);
+    await expect
+      .poll(() => t.state().items?.map((item) => item.title))
+      .toEqual(["Mine nachher"]);
+  });
+});
+
+describe("useWorkItems — no fetch before the identity (docs/nora/26 §5.2)", () => {
+  it("ignores refresh and load-more while the identity is pending", async () => {
+    const t = await setup({ identityPending: true });
+    await expect.poll(() => t.state().isIdentityPending).toBe(true);
+    expect(await t.state().refresh()).toEqual({ ok: false, error: null });
+    expect(await t.state().loadMore()).toEqual({ ok: false, error: null });
+    expect(await t.state().retry()).toEqual({ ok: false, error: null });
+    expect(t.work.calls).toHaveLength(0);
+    expect(t.state().items).toBeUndefined();
   });
 });

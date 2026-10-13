@@ -23,6 +23,7 @@ import {
   onlineManager,
   useInfiniteQuery,
   useQueryClient,
+  type Query,
   type QueryClient,
 } from "@tanstack/react-query";
 
@@ -58,21 +59,13 @@ export const WORK_ITEMS_FRESHNESS = {
 } as const;
 
 /**
- * Per-key denial marker (docs/nora/26 §5.4): set when the authority refuses
- * a key with `permission_denied`, cleared only by a later success. It lets
- * the surface tell "a denied entry is revalidating" from a plain first load
- * (no extra loading announcement). Scoped to the QueryClient, so it dies
- * with the Admin's cache; it never holds Work data.
+ * Denial marker (docs/nora/26 §5.4): set on the cache entry the authority
+ * refused with `permission_denied`, cleared by a later success. It lets the
+ * surface tell "a denied entry is revalidating" from a plain first load (no
+ * extra loading announcement). Bound to the Query instance, so it dies with
+ * the entry (logout `clear()`, gc, `removeQueries`); it never holds Work data.
  */
-const deniedKeysByClient = new WeakMap<QueryClient, Set<string>>();
-const deniedKeys = (client: QueryClient): Set<string> => {
-  let keys = deniedKeysByClient.get(client);
-  if (!keys) {
-    keys = new Set();
-    deniedKeysByClient.set(client, keys);
-  }
-  return keys;
-};
+const deniedQueries = new WeakSet<Query>();
 
 const subscribeOnline = (onChange: () => void) =>
   onlineManager.subscribe(onChange);
@@ -131,7 +124,7 @@ const outcome = (result: {
     : { ok: false, error: toWorkQueryError(result.error) };
 
 /**
- * permission_denied: drop the shown entry's data WITHOUT removing the entry —
+ * permission_denied: drop the refused entry's data WITHOUT removing the entry —
  * removing it would immediately refetch and loop (docs/nora/26 §5.4) — and
  * reset `dataUpdatedAt` with it (R3-19), so no "Stand" or day-change logic
  * can still read the refused snapshot.
@@ -150,6 +143,26 @@ const dropRefusedSnapshot = (
   ) {
     entry.setState({ data: undefined, dataUpdatedAt: 0 });
   }
+};
+
+/**
+ * Everything a refusal implies (docs/nora/26 §5.4), done from the query
+ * itself so it also happens when no surface is mounted any more: drop the
+ * refused snapshot and discard the inactive Work entries of this identity.
+ * Runs after the cache has stored the error (next task), so the drop sees it.
+ */
+const handleRefusal = (
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  identityPartition: Identifier,
+) => {
+  setTimeout(() => {
+    dropRefusedSnapshot(queryClient, queryKey);
+    queryClient.removeQueries({
+      queryKey: workItemsIdentityPrefix(identityPartition),
+      type: "inactive",
+    });
+  }, 0);
 };
 
 const toWorkQueryError = (error: unknown): WorkQueryError | null => {
@@ -176,7 +189,7 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
 
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: async ({ pageParam }) => {
+    queryFn: async ({ pageParam, queryKey: key }) => {
       try {
         return await getWorkItems(dataProvider, {
           scope,
@@ -186,7 +199,13 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
         });
       } catch (error) {
         if (isWorkQueryError(error) && error.reason === "permission_denied") {
-          deniedKeys(queryClient).add(queryHash);
+          const entry = queryClient
+            .getQueryCache()
+            .find({ queryKey: key, exact: true });
+          if (entry) deniedQueries.add(entry);
+          if (identityPartition != null) {
+            handleRefusal(queryClient, key, identityPartition);
+          }
         }
         throw error;
       }
@@ -201,23 +220,13 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
   const error = toWorkQueryError(query.error);
   const isDenied = error?.reason === "permission_denied";
 
-  // permission_denied: drop the refused snapshot and discard the inactive
-  // entries of this identity (the other view).
-  useEffect(() => {
-    if (!isDenied || identityPartition == null) return;
-    dropRefusedSnapshot(queryClient, queryKey);
-    queryClient.removeQueries({
-      queryKey: workItemsIdentityPrefix(identityPartition),
-      type: "inactive",
-    });
-    // queryKey is fully described by queryHash.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDenied, query.errorUpdatedAt, queryHash, queryClient]);
-
+  const entry = queryClient.getQueryCache().find({ queryKey, exact: true }) as
+    | Query
+    | undefined;
   const isSettledSuccess = query.status === "success" && !query.isFetching;
   useEffect(() => {
-    if (isSettledSuccess) deniedKeys(queryClient).delete(queryHash);
-  }, [isSettledSuccess, query.dataUpdatedAt, queryClient, queryHash]);
+    if (isSettledSuccess && entry) deniedQueries.delete(entry);
+  }, [isSettledSuccess, query.dataUpdatedAt, entry]);
 
   // A view switch revalidates a view that is served from its own cache entry
   // (docs/nora/26 §5.2); a never-loaded or denied entry fetches by itself.
@@ -263,12 +272,16 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
 
   // A revalidation of a refused entry must start from "no snapshot", even when
   // it is triggered before the denial effect above has run.
+  // Never without a resolved identity: `refetch` ignores `enabled`, and an
+  // unpartitioned entry would be shared by every unresolved session (§5.2).
+  const hasIdentity = identityPartition != null;
   const refresh = useCallback(async () => {
+    if (!hasIdentity) return { ok: false, error: null };
     dropRefusedSnapshot(queryClient, queryKey);
     return outcome(await refetch({ cancelRefetch: false }));
     // queryKey is fully described by queryHash.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryClient, queryHash, refetch]);
+  }, [hasIdentity, queryClient, queryHash, refetch]);
 
   const retry = useCallback(async () => {
     if (identityError) {
@@ -284,9 +297,11 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
     // Never during any running fetch of the list: a load-more must not cancel
     // a revalidation and append to old pages (docs/nora/26 §8). With
     // `cancelRefetch: false` a second activation joins the first one.
-    if (isFetching || !hasNextPage) return { ok: false, error: null };
+    if (!hasIdentity || isFetching || !hasNextPage) {
+      return { ok: false, error: null };
+    }
     return outcome(await fetchNextPage({ cancelRefetch: false }));
-  }, [fetchNextPage, hasNextPage, isFetching]);
+  }, [fetchNextPage, hasIdentity, hasNextPage, isFetching]);
 
   return {
     scope,
@@ -304,7 +319,10 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
     errorUpdatedAt: query.errorUpdatedAt,
     isDenied,
     isDeniedRevalidation:
-      !isDenied && query.isFetching && deniedKeys(queryClient).has(queryHash),
+      !isDenied &&
+      query.isFetching &&
+      entry !== undefined &&
+      deniedQueries.has(entry),
     dataUpdatedAt: items === undefined ? 0 : query.dataUpdatedAt,
     refresh,
     retry,
