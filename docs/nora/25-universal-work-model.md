@@ -1,6 +1,6 @@
 # 25 – Universal Work Model v1 (Domain Contract)
 
-Stand: 2026-09-22 · Status: **FROZEN** · Umsetzungsstand W-A: **CLOSED / PRODUCTION VERIFIED** · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-09-29 · Status: **FROZEN** · Umsetzungsstand W-A: **CLOSED / PRODUCTION VERIFIED** · Application-Leseschnittstelle: Abschnitt 21.6 · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dies ist der **kanonische, eingefrorene Domain- und Application-Contract für Work** in Nora: was ein Arbeitsgegenstand ist, welche Persistenz ihn tragen darf, welchen Lebenszyklus er hat, wie Fälligkeit und Zuständigkeit bewertet werden, wer als Akteur gilt, was der Arbeitskorb standardmäßig liefert — und was die erste Umsetzungswelle **W-A** beweisen muss.
 
@@ -798,6 +798,19 @@ Der spätere RPC **muss**:
 > **Production-Fakten:** `public.get_work_items(text, text, integer, timestamptz, uuid)` — `STABLE`, `SECURITY INVOKER`, Owner `postgres`, `search_path = ''`, `EXECUTE` **nur** für `authenticated`; `anon`, `service_role` und `PUBLIC` sind entzogen. Der Security-Contract dazu steht in [`22`](22-security-and-access.md) Abschnitt 6.13.
 
 > **Benannte Kollision mit offenen Tracks.** Eine `SECURITY DEFINER` Application Query umgeht `is_active_user()` und **vergrößert** die Fläche, die die offene Security-Welle ([`17`](17-known-issues-and-planned-waves.md) A) vorfindet. W-A muss so gebaut werden, dass es sie nicht vergrößert. Ebenfalls benannt: für eine serverseitige Application Query existiert heute **kein** FakeRest-Äquivalent ([`03`](03-data-model-guardrails.md) §5) — eine reale, bewusst akzeptierte W-A-Kost. Und: es gibt **zwei** belegte stille Work-Löschpfade — `tasks_company_id_fkey ON DELETE CASCADE` löscht Arbeit bei einer **Kundenlöschung** still mit, und `delete_contact_only_tasks_before_contact_delete_trigger` (BEFORE DELETE auf `public.contacts` → `nora_private.delete_contact_only_tasks()`) löscht bei einer **Kontaktlöschung** die kontaktgebundenen Aufgaben **ohne** Customer-Kontext (`company_id IS NULL`); Aufgaben mit `company_id` überleben und behalten diesen historischen Kontext. Normativ unverändert: **kein Work-Pfad darf Aufgaben als dauerhaft annehmen.**
+
+### 21.6 Application-Leseschnittstelle (Alpha Work 2) — Umsetzungsstand, keine Contract-Erweiterung
+
+Seit Alpha Work 2 (2026-09-29) liest die Anwendung Work über **eine** typisierte Application Query, `getWorkItems` (`src/components/atomic-crm/application/queries/getWorkItems.ts`). Sie ist der vorgesehene Einstieg für eine künftige Arbeitskorb-Oberfläche und für künftige MCP-Werkzeuge (G-11); **heute hat sie keinen Aufrufer** — es gibt weiterhin keine Work-Oberfläche. Autorität bleibt ausschließlich `public.get_work_items(...)`; keine Migration, keine neue Berechtigung. Begründung: [`06`](06-decision-log.md) „2026-09-29 – Alpha Work 2".
+
+| Frage | Antwort |
+|---|---|
+| Eingaben | `scope` (`mine` \| `team`), `stateScope` (`open` Default \| `done` \| `all`), `pageSize` (positive ganze Zahl bis zum Wertebereich des Query-Parameters `integer`, darüber `invalid_request`; die fachliche Obergrenze setzt die Query und meldet die angewandte Größe), `cursor` (opak). **Kein Actor-Feld**; jedes andere Eingabefeld wird abgewiesen, nie ignoriert. Konsumenten rufen `getWorkItems` auf, nie den Port darunter — nur dort wird ungetypte Eingabe geprüft |
+| Zeile | die Felder aus 21.3 in Application-Namen: `workId`, `carrier`, `title`/`validity`/`invalidReason` als getaggte Union, `workType`, `state`, `holder` (`salesId`, `displayName` nur zur Anzeige), `dueAt` (Server-Zeitstempel wörtlich und nie interpretiert — auch `infinity` oder fünfstellige Jahre, die ein JS-`Date` nicht liest), `duePrecision`, `context` (`customerId`, `contactId` — `null` heißt „kein Kontext", 14.2), und der abgeleitete Lesezustand gebündelt unter `derived` (`actionable`, `overdue`, `dueToday`, `isMine`, `isUnassigned`, 16.1). Kein Vorgangskontext, kein `allowed_actions` |
+| Reihenfolge, Pagination | exakt die der Query (21.4); `nextCursor = null` genau auf der letzten Seite. Der Cursor ist an Scope und Zustandsumfang gebunden und wird nie von einem Konsumenten gebaut oder gelesen |
+| Fehler | `WorkQueryError` mit `reason` `invalid_request` \| `permission_denied` \| `unavailable` \| `malformed_response` \| `failed`, dazu `code` (kanonischer `NoraErrorCode` ausschließlich aus dem `DETAIL` des Servers — eine Zugriffsablehnung ohne `DETAIL` ist `permission_denied` mit `code = null`) und `normalized` (die bestehende Transportklassifikation). **Ein Fehler ist nie eine leere Liste** |
+| Toleranz | unbekannte zusätzliche Felder werden ignoriert und nie weitergereicht; fehlende Felder, falsche Typen und Werte außerhalb eines geschlossenen Vokabulars lassen die **ganze Seite** geschlossen scheitern |
+| Demo / FakeRest | antwortet ausdrücklich `unavailable` — keine Nachbildung der Query, kein Lesen der rohen `tasks`, kein `[]` ([`17`](17-known-issues-and-planned-waves.md) G.7) |
 
 ---
 
