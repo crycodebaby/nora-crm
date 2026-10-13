@@ -1188,7 +1188,6 @@ export const frenchCrmMessages = {
       page_title: "Corbeille de travail",
       navigation: "Corbeille de travail",
       start_entry: "Corbeille de travail",
-      start_entry_hint: "Tâches ouvertes pour moi et l'équipe",
       views: {
         label: "Vue",
         mine: "Mon travail",

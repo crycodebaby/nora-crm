@@ -124,3 +124,50 @@ describe("Arbeitskorb authority boundary (docs/nora/26 §2.1, AC-01)", () => {
     expect(offenders(/\.sort\(|\.toSorted\(/)).toEqual([]);
   });
 });
+
+const entryFiles = import.meta.glob<string>(
+  [
+    "../root/CRM.tsx",
+    "../layout/Header.tsx",
+    "../dashboard/MobileDashboard.tsx",
+  ],
+  { query: "?raw", import: "default", eager: true },
+);
+
+describe("Arbeitskorb entry files (docs/nora/26 §4, §14, AC-29)", () => {
+  it("import nothing from work/ statically except the path constant", () => {
+    expect(Object.keys(entryFiles)).toHaveLength(3);
+    for (const [path, text] of Object.entries(entryFiles)) {
+      const staticWorkImports = [
+        ...text.matchAll(/^import[^;]*from\s*["']\.\.\/work\/([^"']+)["']/gm),
+      ].map((match) => match[1]);
+      expect({ path, staticWorkImports }).toEqual({
+        path,
+        staticWorkImports: ["arbeitskorbPath"],
+      });
+    }
+  });
+
+  it("registers both pages as route-wise lazy chunks in both Admin trees", () => {
+    const crm = entryFiles["../root/CRM.tsx"];
+    expect(crm).toMatch(
+      /lazy\(\(\) => import\("\.\.\/work\/ArbeitskorbPage"\)\)/,
+    );
+    expect(crm).toMatch(/import\("\.\.\/work\/ArbeitskorbPageMobile"\)/);
+    expect(
+      crm.match(
+        /<Route path=\{ARBEITSKORB_PATH\} element=\{<ArbeitskorbPage \/>\} \/>/g,
+      ),
+    ).toHaveLength(1);
+    expect(
+      crm.match(
+        /<Route path=\{ARBEITSKORB_PATH\} element=\{<ArbeitskorbPageMobile \/>\} \/>/g,
+      ),
+    ).toHaveLength(1);
+    // No Work resource, no alias-map entry, no noLayout route.
+    expect(crm).not.toMatch(/<Resource[^>]*name=["']work/);
+    expect(crm).not.toMatch(
+      /arbeitskorb[^\n]*noLayout|noLayout[^\n]*arbeitskorb/i,
+    );
+  });
+});

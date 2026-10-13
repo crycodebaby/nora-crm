@@ -1201,7 +1201,6 @@ export const germanCrmMessages = {
       page_title: "Arbeitskorb",
       navigation: "Arbeitskorb",
       start_entry: "Arbeitskorb",
-      start_entry_hint: "Offene Aufgaben für mich und das Team",
       views: {
         label: "Ansicht",
         mine: "Meine Arbeit",

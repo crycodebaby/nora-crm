@@ -5,7 +5,7 @@ import type {
   LayoutComponent,
 } from "ra-core";
 import { CustomRoutes, localStorageStore, Resource } from "ra-core";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, useEffect, useMemo, useState } from "react";
 import { Route } from "react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { Admin } from "@/components/admin/admin";
@@ -66,6 +66,13 @@ import { useNoraResourceAliasRoutes } from "../routing/NoraResourceAliasRoutes";
 import { OperationProvider } from "../operations/OperationProvider";
 import { NotificationProvider } from "../notifications/NotificationProvider";
 import { purgeLegacyReactQueryPersistence } from "./browserPersistence";
+import { ARBEITSKORB_PATH } from "../work/arbeitskorbPath";
+
+// Arbeitskorb (Alpha UI 2): loaded per route, never in the entry chunk.
+const ArbeitskorbPage = lazy(() => import("../work/ArbeitskorbPage"));
+const ArbeitskorbPageMobile = lazy(
+  () => import("../work/ArbeitskorbPageMobile"),
+);
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -302,6 +309,7 @@ const DesktopAdmin = (
         <Route path={ImportPage.path} element={<ImportPage />} />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
         <Route path={AuditPage.path} element={<AuditPage />} />
+        <Route path={ARBEITSKORB_PATH} element={<ArbeitskorbPage />} />
         <Route
           path={GoogleCalendarAdminPage.path}
           element={<GoogleCalendarAdminPage />}
@@ -391,6 +399,7 @@ const MobileAdmin = (
         />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
         <Route path={AuditPage.path} element={<AuditPage />} />
+        <Route path={ARBEITSKORB_PATH} element={<ArbeitskorbPageMobile />} />
         {noraAliasRoutes}
       </CustomRoutes>
       <Resource

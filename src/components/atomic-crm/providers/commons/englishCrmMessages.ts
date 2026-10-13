@@ -1166,7 +1166,6 @@ export const englishCrmMessages = {
       page_title: "Work basket",
       navigation: "Work basket",
       start_entry: "Work basket",
-      start_entry_hint: "Open tasks for me and the team",
       views: {
         label: "View",
         mine: "My work",
