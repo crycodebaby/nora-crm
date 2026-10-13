@@ -171,7 +171,7 @@ Der laufende Gegenbeleg ist der **Kalender**: der Code liegt vollständig auf `m
 
 **W8-E (Private Attachment Storage) ist am 2026-10-07 abgeschlossen und in Production verifiziert** (`W8-E STORAGE RELEASE COMPLETE`, Evidenz `releases/2026-10.md`). Auch daraus beginnt keine neue Welle.
 
-**Alpha Work 2 (Application-Leseschnittstelle `getWorkItems`) ist am 2026-10-13 gemergt und in Production ausgeliefert** (PR #6, Merge-Commit `95099841…`, `MERGED / PRODUCTION DEPLOYED / CERTIFIED`, Evidenz `releases/2026-10.md`). Es ist eine reine Lesefähigkeit ohne Aufrufer — keine Oberfläche, kein MCP, keine Work-Commands, keine DB- oder Storage-Änderung; das W8-E-Verhalten stammt aus `main` und ist unverändert. Auch daraus beginnt keine neue Welle.
+**Alpha Work 2 (Application-Leseschnittstelle `getWorkItems`) ist am 2026-10-13 gemergt und in Production ausgeliefert** (PR #6, Merge-Commit `95099841…`, `MERGED / PRODUCTION DEPLOYED / CERTIFIED`, Evidenz `releases/2026-10.md`). Es war beim Release eine reine Lesefähigkeit ohne Aufrufer (ihr erster Aufrufer ist seit Alpha UI 2 der Arbeitskorb) — keine Oberfläche, kein MCP, keine Work-Commands, keine DB- oder Storage-Änderung; das W8-E-Verhalten stammt aus `main` und ist unverändert. Auch daraus beginnt keine neue Welle.
 
 **Alpha UI 2 (Arbeitskorb, read-only) ist am 2026-10-13 gemergt und in Production verifiziert** (PR #10, Merge-Commit `e967c619…`, `PRODUCTION VERIFIED`, Evidenz `releases/2026-10.md`). Es ist die erste Work-Oberfläche — read-only, ohne Work-Commands, ohne MCP, ohne DB-Änderung; die Ablösung von Hotboard/Arbeitsboard (G-10) ist damit **nicht** erfolgt. Auch daraus beginnt keine neue Welle.
 
