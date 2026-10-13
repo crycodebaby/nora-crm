@@ -84,7 +84,11 @@ describe("Arbeitskorb authority boundary (docs/nora/26 §2.1, AC-01)", () => {
   });
 
   it("reads dueAt only as === null / !== null outside the formatter, and never parses dates", () => {
-    expect(offenders(/new Date\(|Date\.parse\(/)).toEqual([]);
+    // Only the one due-date formatter may build a Date (from its own grammar).
+    expect(
+      offenders(/new Date\(|Date\.parse\(/, ["formatWorkDueDate.ts"]),
+    ).toEqual([]);
+    expect(sources["./formatWorkDueDate.ts"]).not.toMatch(/Date\.parse\(/);
     for (const [path, text] of files) {
       if (path.endsWith("formatWorkDueDate.ts")) continue;
       const loose = [...text.matchAll(/\.dueAt\b(?!\s*[!=]==\s*null)/g)].filter(
@@ -102,7 +106,14 @@ describe("Arbeitskorb authority boundary (docs/nora/26 §2.1, AC-01)", () => {
 
   it("keeps no Work or cursor in browser storage and no cross-view placeholder", () => {
     expect(offenders(/localStorage|sessionStorage|indexedDB/)).toEqual([]);
-    expect(offenders(/placeholderData|keepPreviousData/)).toEqual([]);
+    // The Work query never shows another view's rows as placeholder. (The
+    // name enrichment may keep previous *names* while a grown ID set loads.)
+    expect(sources["./useWorkItems.ts"]).not.toMatch(
+      /placeholderData|keepPreviousData/,
+    );
+    expect(
+      offenders(/placeholderData|keepPreviousData/, ["useWorkContextNames.ts"]),
+    ).toEqual([]);
     expect(offenders(/refetchInterval/)).toEqual([]);
   });
 

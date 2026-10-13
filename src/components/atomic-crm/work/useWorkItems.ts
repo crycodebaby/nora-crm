@@ -10,7 +10,13 @@
  * builds or reads a cursor, never names an actor, and never turns a failure
  * into an empty list. Future consumers (MCP) call `getWorkItems`, not this.
  */
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { useDataProvider, useGetIdentity, type Identifier } from "ra-core";
 import {
   hashKey,
@@ -105,13 +111,24 @@ export type WorkItemsState = {
   isDeniedRevalidation: boolean;
   /** Instant of the last successful fetch of the shown snapshot, `0` without one. */
   dataUpdatedAt: number;
-  /** Manual "Aktualisieren"; resolves `true` on success. */
-  refresh: () => Promise<boolean>;
+  /** Manual "Aktualisieren". */
+  refresh: () => Promise<WorkActionResult>;
   /** "Erneut versuchen" (first-load error or unresolved identity). */
-  retry: () => Promise<boolean>;
-  /** "Weitere laden"; a no-op while any fetch of the list runs. */
-  loadMore: () => Promise<boolean>;
+  retry: () => Promise<WorkActionResult>;
+  /** "Weitere laden"; a no-op (`ok: false`, no error) while any fetch of the list runs. */
+  loadMore: () => Promise<WorkActionResult>;
 };
+
+/** Outcome of a user-triggered fetch; `error` is set only for a real failure. */
+export type WorkActionResult = { ok: boolean; error: WorkQueryError | null };
+
+const outcome = (result: {
+  status: string;
+  error: unknown;
+}): WorkActionResult =>
+  result.status === "success" && result.error == null
+    ? { ok: true, error: null }
+    : { ok: false, error: toWorkQueryError(result.error) };
 
 /**
  * permission_denied: drop the shown entry's data WITHOUT removing the entry —
@@ -225,10 +242,13 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
 
   const isOnline = useSyncExternalStore(subscribeOnline, getOnline, getOnline);
 
-  const items =
-    isDenied || query.data === undefined
-      ? undefined
-      : query.data.pages.flatMap((page) => page.items);
+  const items = useMemo(
+    () =>
+      isDenied || query.data === undefined
+        ? undefined
+        : query.data.pages.flatMap((page) => page.items),
+    [isDenied, query.data],
+  );
 
   const errorPhase: WorkItemsErrorPhase | null =
     error == null
@@ -245,8 +265,7 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
   // it is triggered before the denial effect above has run.
   const refresh = useCallback(async () => {
     dropRefusedSnapshot(queryClient, queryKey);
-    const result = await refetch({ cancelRefetch: false });
-    return result.status === "success";
+    return outcome(await refetch({ cancelRefetch: false }));
     // queryKey is fully described by queryHash.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryClient, queryHash, refetch]);
@@ -254,7 +273,9 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
   const retry = useCallback(async () => {
     if (identityError) {
       const result = await refetchIdentity();
-      return result.status === "success";
+      return result.status === "success"
+        ? { ok: true, error: null }
+        : { ok: false, error: toWorkQueryError(result.error) };
     }
     return refresh();
   }, [identityError, refetchIdentity, refresh]);
@@ -263,9 +284,8 @@ export const useWorkItems = (scope: WorkScope): WorkItemsState => {
     // Never during any running fetch of the list: a load-more must not cancel
     // a revalidation and append to old pages (docs/nora/26 §8). With
     // `cancelRefetch: false` a second activation joins the first one.
-    if (isFetching || !hasNextPage) return false;
-    const result = await fetchNextPage({ cancelRefetch: false });
-    return result.status === "success" && !result.isFetchNextPageError;
+    if (isFetching || !hasNextPage) return { ok: false, error: null };
+    return outcome(await fetchNextPage({ cancelRefetch: false }));
   }, [fetchNextPage, hasNextPage, isFetching]);
 
   return {

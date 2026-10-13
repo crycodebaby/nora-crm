@@ -160,7 +160,7 @@ describe("useWorkItems — pagination", () => {
     void t.state().refresh();
     await t.waitForRequests(2);
     await expect.poll(() => t.state().isFetching).toBe(true);
-    expect(await t.state().loadMore()).toBe(false);
+    expect(await t.state().loadMore()).toEqual({ ok: false, error: null });
     expect(t.work.calls).toHaveLength(2);
   });
 });
@@ -194,7 +194,7 @@ describe("useWorkItems — coherent revalidation", () => {
     await t.waitForRequests(6);
     expect(t.work.requests()[5].cursor).toBe("new-2");
     t.work.respond(5, [fresh[2]], null);
-    expect(await refreshed).toBe(true);
+    expect(await refreshed).toEqual({ ok: true, error: null });
     await expect.poll(() => t.ids()).toEqual(fresh.map((i) => i.workId));
     // No old continuation page was combined with the fresh page 1.
     expect(t.ids()).not.toContain(old[1].workId);

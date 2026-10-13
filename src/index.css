@@ -4386,3 +4386,103 @@ input[type="time"] {
     }
   }
 }
+
+/* ------------------------------------------------------------------------
+   Arbeitskorb (Alpha UI 2, docs/nora/26 §8, §12) — existing tokens only.
+   Urgency is never colour alone: word + icon + line (§13.2).
+   ------------------------------------------------------------------------ */
+.nora-arbeitskorb-row {
+  transition: background-color var(--nora-motion-fast) var(--nora-motion-ease);
+}
+
+.nora-arbeitskorb-row:hover {
+  background-color: color-mix(in oklab, var(--muted) 55%, transparent);
+}
+
+.nora-arbeitskorb-overdue-line {
+  box-shadow: inset 2px 0 0 var(--nora-accent-strong);
+}
+
+.dark .nora-arbeitskorb-overdue-line {
+  box-shadow: inset 2px 0 0 var(--nora-accent);
+}
+
+.nora-arbeitskorb-overdue-date {
+  color: var(--nora-accent-text);
+}
+
+.nora-arbeitskorb-overdue-icon {
+  color: var(--nora-accent-strong);
+}
+
+.dark .nora-arbeitskorb-overdue-icon {
+  color: var(--nora-accent);
+}
+
+/* M3: the selection indicator glides between the two equal-width tabs. */
+.nora-arbeitskorb-tab-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: calc(var(--radius) - 2px);
+  background-color: var(--background);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  transition: transform var(--nora-motion-base) var(--nora-motion-ease);
+}
+
+.dark .nora-arbeitskorb-tab-indicator {
+  background-color: color-mix(in oklab, var(--input) 30%, var(--muted));
+  box-shadow: inset 0 0 0 1px var(--input);
+}
+
+.nora-arbeitskorb-tabs[data-selected="team"] .nora-arbeitskorb-tab-indicator {
+  transform: translateX(100%);
+}
+
+/* M1 / M6: the list or empty state as a whole; no per-row stagger. */
+@keyframes nora-arbeitskorb-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes nora-arbeitskorb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.nora-arbeitskorb-rise {
+  animation: nora-arbeitskorb-rise var(--nora-motion-base)
+    var(--nora-motion-ease) both;
+}
+
+/* M4: rows appended by "Weitere laden". */
+.nora-arbeitskorb-append {
+  animation: nora-arbeitskorb-fade var(--nora-motion-fast)
+    var(--nora-motion-ease) both;
+}
+
+/* §12: with reduced motion nothing of the surface moves — including the
+   sheet and its overlay. The overlay rule reaches other sheets too, only
+   under reduced motion (accepted, purely attenuating side effect). */
+@media (prefers-reduced-motion: reduce) {
+  [data-arbeitskorb],
+  [data-arbeitskorb] *,
+  [data-arbeitskorb-sheet],
+  [data-arbeitskorb-sheet] *,
+  [data-slot="sheet-overlay"] {
+    animation: none !important;
+    transition-duration: 0s !important;
+  }
+}

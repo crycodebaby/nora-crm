@@ -5,7 +5,27 @@
  * tests run the real `getWorkItems` Application query, the real Admin
  * QueryClient wiring and the real hook — only the transport is faked.
  */
-import type { AuthProvider, Identifier } from "ra-core";
+/* eslint-disable react-refresh/only-export-components -- test-only kit, never hot-reloaded */
+import {
+  CoreAdminContext,
+  memoryStore,
+  mergeTranslations,
+  type AuthProvider,
+  type GetManyParams,
+  type Identifier,
+} from "ra-core";
+import polyglotI18nProvider from "ra-i18n-polyglot";
+import englishMessages from "ra-language-english";
+import germanMessages from "ra-language-german";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { QueryClient } from "@tanstack/react-query";
+import { render } from "vitest-browser-react";
+
+import { createCrmDb } from "@/test/StoryWrapper";
+import { germanCrmMessages } from "../../providers/commons/germanCrmMessages";
+import { createDataProvider } from "../../providers/fakerest";
+import type { Company, Contact } from "../../types";
+import { ArbeitskorbSurface } from "../ArbeitskorbSurface";
 
 import {
   WorkQueryError,
@@ -136,5 +156,140 @@ export const createSwitchableAuthProvider = (initial: Identifier | Error) => {
     setIdentity: (next: Identifier | Error) => {
       identity = next;
     },
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Surface harness (component level): real Admin context, German catalog,
+// stubbed Work reader, spied name lookups.
+// ---------------------------------------------------------------------------
+
+/** German Nora catalog, independent of the test browser's language. */
+export const germanTestI18nProvider = polyglotI18nProvider(
+  () => mergeTranslations(englishMessages, germanMessages, germanCrmMessages),
+  "de",
+  [{ locale: "de", name: "Deutsch" }],
+  { allowMissing: true },
+);
+
+export type GetManyCall = { resource: string; params: GetManyParams };
+
+/** Shows the current router location for assertions. */
+export const LocationProbe = () => {
+  const location = useLocation();
+  return (
+    <output data-testid="location" hidden>
+      {`${location.pathname}${location.search}`}
+    </output>
+  );
+};
+
+export const renderSurface = async ({
+  variant = "desktop",
+  initialEntry = "/arbeitskorb",
+  identity = 7,
+  companies = [],
+  contacts = [],
+  nameLookup = "normal",
+}: {
+  variant?: "desktop" | "mobile";
+  initialEntry?: string;
+  identity?: Identifier;
+  companies?: Company[];
+  contacts?: Contact[];
+  /** `fail` rejects getMany; `hang` never answers. */
+  nameLookup?: "normal" | "fail" | "hang";
+} = {}) => {
+  const work = createControlledReader();
+  const auth = createSwitchableAuthProvider(identity);
+  const queryClient = new QueryClient();
+  const base = createDataProvider({
+    db: createCrmDb({ companies, contacts }),
+    silent: true,
+  });
+  const getManyCalls: GetManyCall[] = [];
+  const dataProvider = {
+    ...base,
+    getMany: (resource: string, params: GetManyParams) => {
+      getManyCalls.push({ resource, params });
+      if (nameLookup === "fail") {
+        return Promise.reject(new Error("name lookup failed"));
+      }
+      if (nameLookup === "hang") return new Promise<never>(() => undefined);
+      // Like PostgREST: unknown IDs are simply absent from the answer.
+      return Promise.all(
+        params.ids.map((id) =>
+          base
+            .getOne(resource, { id })
+            .then((result) => result.data)
+            .catch(() => null),
+        ),
+      ).then((records) => ({ data: records.filter((r) => r !== null) }));
+    },
+    getWorkItems: work.reader.getWorkItems,
+  } as typeof base;
+  const screen = await render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <CoreAdminContext
+        dataProvider={dataProvider}
+        authProvider={auth.authProvider}
+        i18nProvider={germanTestI18nProvider}
+        queryClient={queryClient}
+        store={memoryStore()}
+      >
+        <Routes>
+          <Route
+            path="/arbeitskorb"
+            element={
+              <main>
+                <ArbeitskorbSurface variant={variant} />
+                <LocationProbe />
+              </main>
+            }
+          />
+          <Route path="*" element={<LocationProbe />} />
+        </Routes>
+      </CoreAdminContext>
+    </MemoryRouter>,
+  );
+  const region = (channel: "polite" | "alert") =>
+    screen.container.querySelector<HTMLElement>(
+      `[data-arbeitskorb-live="${channel}"]`,
+    );
+  const live = (channel: "polite" | "alert") =>
+    region(channel)?.textContent ?? "";
+  /** Every message placed in a live region, in order. */
+  const heard: { channel: "polite" | "alert"; text: string }[] = [];
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        const channel = (mutation.target as HTMLElement).dataset
+          ?.arbeitskorbLive as "polite" | "alert" | undefined;
+        if (channel && node.textContent) {
+          heard.push({ channel, text: node.textContent });
+        }
+      }
+    }
+  });
+  await expect.poll(() => region("polite") && region("alert")).toBeTruthy();
+  observer.observe(region("polite")!, { childList: true });
+  observer.observe(region("alert")!, { childList: true });
+  const rowIds = () =>
+    [...screen.container.querySelectorAll<HTMLElement>("li[data-work-id]")].map(
+      (li) => li.dataset.workId,
+    );
+  return {
+    screen,
+    work,
+    auth,
+    queryClient,
+    getManyCalls,
+    heard,
+    live,
+    rowIds,
+    location: () =>
+      document.querySelector('[data-testid="location"]')?.textContent ?? "",
+    waitForRequests: (count: number) =>
+      expect.poll(() => work.calls.length).toBe(count),
   };
 };
