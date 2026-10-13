@@ -801,7 +801,7 @@ Der spätere RPC **muss**:
 
 ### 21.6 Application-Leseschnittstelle (Alpha Work 2) — Umsetzungsstand, keine Contract-Erweiterung
 
-Seit Alpha Work 2 (2026-09-29) liest die Anwendung Work über **eine** typisierte Application Query, `getWorkItems` (`src/components/atomic-crm/application/queries/getWorkItems.ts`). Sie ist der vorgesehene Einstieg für eine künftige Arbeitskorb-Oberfläche und für künftige MCP-Werkzeuge (G-11); **heute hat sie keinen Aufrufer** — es gibt weiterhin keine Work-Oberfläche. Autorität bleibt ausschließlich `public.get_work_items(...)`; keine Migration, keine neue Berechtigung. Begründung: [`06`](06-decision-log.md) „2026-09-29 – Alpha Work 2".
+Seit Alpha Work 2 (2026-09-29; gemergt und in Production ausgeliefert 2026-10-13, Merge-Commit `95099841…`) liest die Anwendung Work über **eine** typisierte Application Query, `getWorkItems` (`src/components/atomic-crm/application/queries/getWorkItems.ts`). Sie ist der vorgesehene Einstieg für eine künftige Arbeitskorb-Oberfläche und für künftige MCP-Werkzeuge (G-11); **heute hat sie keinen Aufrufer** — es gibt weiterhin keine Work-Oberfläche. Autorität bleibt ausschließlich `public.get_work_items(...)`; keine Migration, keine neue Berechtigung. Begründung: [`06`](06-decision-log.md) „2026-09-29 – Alpha Work 2".
 
 | Frage | Antwort |
 |---|---|
