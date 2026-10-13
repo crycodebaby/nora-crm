@@ -12,6 +12,10 @@ Sichtbare URLs sollen deutsch sein:
 
 Die internen Resource-Namen bleiben wegen React Admin, DataProvider und Supabase stabil.
 
+### Laufzeit-URLs tragen `#/` (HashRouter)
+
+Nora läuft auf dem Standard-Router von ra-core, einem **HashRouter** — auch in Production. Die tatsächliche Browser-URL einer Kundenakte ist `/#/kunden/1/show`, nicht `/kunden/1/show`; die Pfade in diesem Dokument sind Routenpfade **innerhalb** des Hash. Ein Server-Pfad ohne `#` rendert still die Startseite statt eines Fehlers (verifiziert 2026-10-13). Folge für Tests und Dokumentation: Playwright navigiert auf `/#/…`, und Contracts nennen die Laufzeit-URL mit `#/`. Query-Parameter einer Route stehen ebenfalls im Hash (`/#/arbeitskorb?sicht=team`) und überleben „Zurück" und Reload.
+
 ## Legacy-Redirects
 
 Alte Pfade sollen nicht hart brechen:
@@ -55,6 +59,10 @@ Unbekannte bzw. nicht registrierte Pfade landen heute im ra-core-Standard-Catch-
 - Weil mobil keine Vorgangsliste existiert, bieten mobile Flächen keine klickbaren Listen-Links wie „Alle Vorgänge" oder „+N weitere" an.
 - Kanonischer Link auf einen Vorgang ist immer `/vorgaenge/:id/show`; `/deals/...` ist nur Legacy-Eingang (siehe oben).
 - Begründung: [`06`](06-decision-log.md) „2026-09-13 – Mobile Vorgang-Details: nur die Show-Fläche".
+
+### Arbeitskorb-Route (Contract eingefroren 2026-10-13, noch nicht registriert)
+
+Der Arbeitskorb wird unter `/arbeitskorb` (Laufzeit `/#/arbeitskorb?sicht=mine|team`) in den layout-tragenden `CustomRoutes` **beider** Oberflächen registriert — als eigene Route, nicht als Resource und nicht in der Resource-Alias-Map. **Heute ist die Route nicht registriert.** Vollständiger Contract (Sicht-Parameter, Normalisierung, Ziele der Kontext-Links je Oberfläche): [`26`](26-arbeitskorb-ui-contract.md) Abschnitte 4 und 10.
 
 ## Öffentliche Auth-Routen (Welle 6a)
 
