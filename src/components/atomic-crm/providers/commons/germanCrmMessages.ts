@@ -1197,5 +1197,113 @@ export const germanCrmMessages = {
       login_hint:
         "Demo-Konten: admin@nora.demo, office@nora.demo, viewer@nora.demo (Passwort: demo)",
     },
+    work: {
+      page_title: "Arbeitskorb",
+      navigation: "Arbeitskorb",
+      start_entry: "Arbeitskorb",
+      views: {
+        label: "Ansicht",
+        mine: "Meine Arbeit",
+        team: "Team",
+      },
+      refresh: "Arbeitskorb aktualisieren",
+      status: {
+        stand: "Stand %{stand}",
+        updating: "Wird aktualisiert …",
+        refresh_failed: "Stand %{stand} · Aktualisierung fehlgeschlagen",
+        offline: "Offline · Stand %{stand}",
+        outdated: "Stand %{stand} · veraltet",
+      },
+      summary: {
+        overdue: "%{count} überfällig",
+        today: "%{count} heute",
+        open: "%{count} offen",
+        partial:
+          "1 Aufgabe geladen · weitere vorhanden |||| %{smart_count} Aufgaben geladen · weitere vorhanden",
+      },
+      list_end:
+        "1 offene Aufgabe angezeigt |||| Alle %{smart_count} offenen Aufgaben angezeigt",
+      load_more: "Weitere laden",
+      load_more_failed: "Weitere Aufgaben konnten nicht geladen werden.",
+      groups: {
+        overdue: "Überfällig",
+        today: "Heute",
+        upcoming: "Demnächst",
+        none: "Ohne Fälligkeit",
+      },
+      due_today_too: "heute fällig",
+      date: {
+        none: "Ohne Fälligkeit",
+        unreadable: "Datum unlesbar",
+      },
+      title_missing: "Ohne Bezeichnung",
+      incomplete: "Unvollständig",
+      holder: {
+        prefix: "Zuständig:",
+        me: "Ich",
+        unassigned: "Nicht zugewiesen",
+        unnamed: "Mitarbeiter ohne Namen",
+        unknown: "Zuständigkeit unbekannt",
+      },
+      context: {
+        customer_prefix: "Kunde:",
+        contact_prefix: "Kontakt:",
+        customer_pending: "Kunde",
+        contact_pending: "Kontakt",
+        customer_pending_label: "Kunde (Name wird geladen)",
+        contact_pending_label: "Kontakt (Name wird geladen)",
+        customer_failed: "Kunde (Name nicht geladen)",
+        contact_failed: "Kontakt (Name nicht geladen)",
+        customer_missing: "Kunde (Name nicht verfügbar)",
+        contact_missing: "Kontakt (Name nicht verfügbar)",
+        customer_empty: "Kunde (ohne Namen)",
+        contact_empty: "Kontakt (ohne Namen)",
+      },
+      names_failed:
+        "Einige Kunden- oder Kontaktnamen konnten nicht geladen werden.",
+      retry: "Erneut versuchen",
+      states: {
+        loading: "Arbeitskorb wird geladen.",
+        empty_mine: "Keine offenen Aufgaben in Meine Arbeit.",
+        empty_team: "Im Team sind keine offenen Aufgaben.",
+        show_team: "Team ansehen",
+        demo: "Der Arbeitskorb nutzt Live-Daten und ist im Demo-Modus nicht verfügbar.",
+        unavailable: "Der Arbeitskorb ist gerade nicht erreichbar.",
+        denied:
+          "Kein Zugriff auf den Arbeitskorb. Bitte neu anmelden, falls das unerwartet ist.",
+        home: "Zur Startseite",
+        failed: "Der Arbeitskorb konnte nicht geladen werden.",
+        code: "Code: %{code}",
+        failed_again: "Erneut fehlgeschlagen · %{time}",
+        offline_empty:
+          "Keine Verbindung. Der Arbeitskorb lädt, sobald Nora wieder online ist.",
+      },
+      announce: {
+        open_count: "1 offene Aufgabe |||| %{smart_count} offene Aufgaben",
+        overdue_count: "%{count} überfällig",
+        today_count: "%{count} heute",
+        complete: "%{view}: %{parts}.",
+        partial:
+          "%{view}: 1 Aufgabe geladen, weitere vorhanden. |||| %{view}: %{smart_count} Aufgaben geladen, weitere vorhanden.",
+        updated: "Arbeitskorb aktualisiert.",
+        updated_none: "Arbeitskorb aktualisiert, keine Änderungen.",
+        refresh_failed:
+          "Aktualisierung fehlgeschlagen. Angezeigt ist der Stand von %{stand}.",
+        more_loaded:
+          "1 weitere Aufgabe geladen. |||| %{smart_count} weitere Aufgaben geladen.",
+        offline_data: "Keine Verbindung. Angezeigt ist der Stand von %{stand}.",
+      },
+      sheet: {
+        type: "Art",
+        due: "Fälligkeit",
+        open_contact: "Kontakt öffnen",
+        open_customer: "Kundenakte öffnen",
+        no_contact_hint:
+          "In der mobilen Ansicht zeigt die Kundenakte keine Aufgaben.",
+        vanished:
+          "Diese Aufgabe ist nach der Aktualisierung nicht mehr in dieser Ansicht.",
+        close: "Schließen",
+      },
+    },
   },
 } satisfies CrmMessages;

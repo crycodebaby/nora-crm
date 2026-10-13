@@ -1184,5 +1184,112 @@ export const frenchCrmMessages = {
       login_hint:
         "Comptes démo : admin@nora.demo, office@nora.demo, viewer@nora.demo (mot de passe : demo)",
     },
+    work: {
+      page_title: "Corbeille de travail",
+      navigation: "Corbeille de travail",
+      start_entry: "Corbeille de travail",
+      views: {
+        label: "Vue",
+        mine: "Mon travail",
+        team: "Équipe",
+      },
+      refresh: "Actualiser la corbeille de travail",
+      status: {
+        stand: "État %{stand}",
+        updating: "Actualisation …",
+        refresh_failed: "État %{stand} · Échec de l'actualisation",
+        offline: "Hors ligne · État %{stand}",
+        outdated: "État %{stand} · obsolète",
+      },
+      summary: {
+        overdue: "%{count} en retard",
+        today: "%{count} aujourd'hui",
+        open: "%{count} ouvertes",
+        partial:
+          "1 tâche chargée · d'autres disponibles |||| %{smart_count} tâches chargées · d'autres disponibles",
+      },
+      list_end:
+        "1 tâche ouverte affichée |||| Les %{smart_count} tâches ouvertes sont affichées",
+      load_more: "Charger plus",
+      load_more_failed: "Les tâches suivantes n'ont pas pu être chargées.",
+      groups: {
+        overdue: "En retard",
+        today: "Aujourd'hui",
+        upcoming: "Prochainement",
+        none: "Sans échéance",
+      },
+      due_today_too: "échéance aujourd'hui",
+      date: {
+        none: "Sans échéance",
+        unreadable: "Date illisible",
+      },
+      title_missing: "Sans intitulé",
+      incomplete: "Incomplète",
+      holder: {
+        prefix: "Responsable :",
+        me: "Moi",
+        unassigned: "Non attribuée",
+        unnamed: "Collaborateur sans nom",
+        unknown: "Responsable inconnu",
+      },
+      context: {
+        customer_prefix: "Client :",
+        contact_prefix: "Contact :",
+        customer_pending: "Client",
+        contact_pending: "Contact",
+        customer_pending_label: "Client (nom en cours de chargement)",
+        contact_pending_label: "Contact (nom en cours de chargement)",
+        customer_failed: "Client (nom non chargé)",
+        contact_failed: "Contact (nom non chargé)",
+        customer_missing: "Client (nom indisponible)",
+        contact_missing: "Contact (nom indisponible)",
+        customer_empty: "Client (sans nom)",
+        contact_empty: "Contact (sans nom)",
+      },
+      names_failed:
+        "Certains noms de clients ou de contacts n'ont pas pu être chargés.",
+      retry: "Réessayer",
+      states: {
+        loading: "Chargement de la corbeille de travail.",
+        empty_mine: "Aucune tâche ouverte dans Mon travail.",
+        empty_team: "Aucune tâche ouverte dans l'équipe.",
+        show_team: "Voir l'équipe",
+        demo: "La corbeille de travail utilise des données réelles et n'est pas disponible en mode démo.",
+        unavailable: "La corbeille de travail est momentanément indisponible.",
+        denied:
+          "Pas d'accès à la corbeille de travail. Veuillez vous reconnecter si cela est inattendu.",
+        home: "Vers la page d'accueil",
+        failed: "La corbeille de travail n'a pas pu être chargée.",
+        code: "Code : %{code}",
+        failed_again: "Nouvel échec · %{time}",
+        offline_empty:
+          "Pas de connexion. La corbeille de travail se chargera dès que Nora sera de nouveau en ligne.",
+      },
+      announce: {
+        open_count: "1 tâche ouverte |||| %{smart_count} tâches ouvertes",
+        overdue_count: "%{count} en retard",
+        today_count: "%{count} aujourd'hui",
+        complete: "%{view} : %{parts}.",
+        partial:
+          "%{view} : 1 tâche chargée, d'autres disponibles. |||| %{view} : %{smart_count} tâches chargées, d'autres disponibles.",
+        updated: "Corbeille de travail actualisée.",
+        updated_none: "Corbeille de travail actualisée, aucun changement.",
+        refresh_failed: "Échec de l'actualisation. État affiché : %{stand}.",
+        more_loaded:
+          "1 tâche supplémentaire chargée. |||| %{smart_count} tâches supplémentaires chargées.",
+        offline_data: "Pas de connexion. État affiché : %{stand}.",
+      },
+      sheet: {
+        type: "Type",
+        due: "Échéance",
+        open_contact: "Ouvrir le contact",
+        open_customer: "Ouvrir la fiche client",
+        no_contact_hint:
+          "Dans la vue mobile, la fiche client n'affiche pas de tâches.",
+        vanished:
+          "Cette tâche ne figure plus dans cette vue après l'actualisation.",
+        close: "Fermer",
+      },
+    },
   },
 } satisfies CrmMessages;

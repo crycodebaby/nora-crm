@@ -21,6 +21,7 @@ import { ChangelogPage } from "../misc/ChangelogPage";
 import { AuditPage } from "../audit/AuditPage";
 import { GoogleCalendarAdminPage } from "../calendar/GoogleCalendarAdminPage";
 import { getActiveNoraResource, noraCreatePath } from "../routing/noraRoutes";
+import { ARBEITSKORB_PATH } from "../work/arbeitskorbPath";
 import noraMonogram from "@/assets/nora-monogram.png";
 
 const Header = () => {
@@ -31,6 +32,8 @@ const Header = () => {
   const activeResource = getActiveNoraResource(location.pathname);
   if (matchPath("/", location.pathname)) {
     currentPath = "/";
+  } else if (matchPath(ARBEITSKORB_PATH, location.pathname)) {
+    currentPath = ARBEITSKORB_PATH;
   } else if (activeResource === "companies") {
     currentPath = "companies";
   } else if (activeResource === "deals") {
@@ -69,6 +72,11 @@ const Header = () => {
                   label="Startseite"
                   to="/"
                   isActive={currentPath === "/"}
+                />
+                <NavigationTab
+                  label={translate("crm.work.navigation")}
+                  to={ARBEITSKORB_PATH}
+                  isActive={currentPath === ARBEITSKORB_PATH}
                 />
                 <NavigationTab
                   label={translate("resources.companies.name", {

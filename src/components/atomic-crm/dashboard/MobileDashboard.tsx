@@ -9,6 +9,9 @@ import { Hotboard } from "./Hotboard";
 import { MobileContent } from "../layout/MobileContent";
 import MobileHeader from "../layout/MobileHeader";
 import { Link } from "react-router";
+import { ChevronRight, Inbox } from "lucide-react";
+import { useTranslate } from "ra-core";
+import { ARBEITSKORB_PATH } from "../work/arbeitskorbPath";
 import noraMonogram from "@/assets/nora-monogram.png";
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => {
@@ -95,6 +98,7 @@ export const MobileDashboard = () => {
   return (
     <Wrapper>
       <div className="flex flex-col gap-8 mt-1">
+        <ArbeitskorbEntry />
         {error ? (
           <NoraQueryError
             error={error}
@@ -110,5 +114,31 @@ export const MobileDashboard = () => {
         <DashboardActivityLog />
       </div>
     </Wrapper>
+  );
+};
+
+/**
+ * Arbeitskorb entry of the regular mobile start state (docs/nora/26 §14):
+ * one full-width row above the Hotboard — not a seventh bottom-nav item.
+ */
+const ArbeitskorbEntry = () => {
+  const translate = useTranslate();
+  return (
+    <Link
+      to={ARBEITSKORB_PATH}
+      className="flex min-h-11 items-center gap-3 rounded-md border border-border bg-card px-3 py-2.5 text-foreground no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--nora-brand-ring)]"
+    >
+      <Inbox
+        aria-hidden="true"
+        className="size-5 shrink-0 text-muted-foreground"
+      />
+      <span className="min-w-0 flex-1 font-semibold">
+        {translate("crm.work.start_entry")}
+      </span>
+      <ChevronRight
+        aria-hidden="true"
+        className="size-4 shrink-0 text-muted-foreground"
+      />
+    </Link>
   );
 };
