@@ -77,7 +77,7 @@ export const WorkSheet = ({
             <SheetTitle className="text-lg leading-snug">
               {row.incomplete || row.title === null ? (
                 <span className="inline-flex flex-wrap items-center gap-x-2">
-                  <span className="italic text-muted-foreground">
+                  <span className="italic text-[var(--nora-text-muted)]">
                     {translate("crm.work.title_missing")}
                   </span>
                   <IncompleteMark />
@@ -92,19 +92,19 @@ export const WorkSheet = ({
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 px-4 text-sm">
             {row.workType !== null ? (
               <>
-                <dt className="text-muted-foreground">
+                <dt className="text-[var(--nora-text-muted)]">
                   {translate("crm.work.sheet.type")}
                 </dt>
                 <dd>{row.workType}</dd>
               </>
             ) : null}
-            <dt className="text-muted-foreground">
+            <dt className="text-[var(--nora-text-muted)]">
               {translate("crm.work.sheet.due")}
             </dt>
             <dd>{spokenDue(translate, row)}</dd>
             {row.holder ? (
               <>
-                <dt className="text-muted-foreground">
+                <dt className="text-[var(--nora-text-muted)]">
                   {translate("crm.work.holder.prefix")}
                 </dt>
                 <dd>{holderText(translate, row.holder)}</dd>
@@ -149,7 +149,7 @@ export const WorkSheet = ({
               />
             ) : null}
             {row.contactId == null ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-[var(--nora-text-muted)]">
                 {translate("crm.work.sheet.no_contact_hint")}
               </p>
             ) : null}

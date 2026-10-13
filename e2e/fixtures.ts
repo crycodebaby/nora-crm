@@ -153,6 +153,49 @@ async function createContact({
   return data;
 }
 
+export type E2eTaskSeed = {
+  text: string | null;
+  due_date: string | null;
+  /** `null` leaves the task unassigned (service_role has no auth.uid()). */
+  sales_id: string | number | null;
+  company_id?: string | number | null;
+  contact_id?: string | number | null;
+  type?: string | null;
+};
+
+// Seeds open tasks (Work rows) in one insert. `tasks` is part of the
+// business reset scope, so no extra cleanup is needed.
+async function createTasks(tasks: E2eTaskSeed[]) {
+  const { data, error } = await adminSupabase
+    .from("tasks")
+    .insert(
+      tasks.map(
+        ({
+          text,
+          due_date,
+          sales_id,
+          company_id = null,
+          contact_id = null,
+          type = null,
+        }) => ({
+          text,
+          due_date,
+          sales_id,
+          company_id,
+          contact_id,
+          type,
+        }),
+      ),
+    )
+    .select("id");
+
+  if (error) {
+    throw new Error(`Failed to create tasks: ${error.message}`);
+  }
+
+  return data;
+}
+
 const getMenuMethod = ({ page }: { page: Page; isMobile: boolean }) => ({
   goToDashboard: async () => {
     await page.goto("/#/");
@@ -188,6 +231,7 @@ export const test = base.extend<
     createCompany: typeof createCompany;
     createContact: typeof createContact;
     createNotes: typeof createNotes;
+    createTasks: typeof createTasks;
     menu: ReturnType<typeof getMenuMethod>;
     loginAsAdmin: (credentials: {
       email: string;
@@ -250,6 +294,10 @@ export const test = base.extend<
   // eslint-disable-next-line no-empty-pattern
   createNotes: async ({}, cb) => {
     await cb(createNotes);
+  },
+  // eslint-disable-next-line no-empty-pattern
+  createTasks: async ({}, cb) => {
+    await cb(createTasks);
   },
   menu: async ({ page, isMobile }, cb) => {
     await cb(getMenuMethod({ page, isMobile }));

@@ -444,7 +444,7 @@ export const ArbeitskorbSurface = ({
         ))}
       </TabsList>
       <div className="flex min-h-11 items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{statusText}</p>
+        <p className="text-sm text-[var(--nora-text-muted)]">{statusText}</p>
         <Button
           type="button"
           variant="ghost"
@@ -515,7 +515,7 @@ export const ArbeitskorbSurface = ({
               )}
             </p>
             {error.reason !== "unavailable" ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-[var(--nora-text-muted)]">
                 {translate("crm.work.states.code", {
                   code: [error.reason, error.code].filter(Boolean).join(" · "),
                 })}
@@ -572,7 +572,7 @@ export const ArbeitskorbSurface = ({
               onOpenRow={onOpenRow}
             />
             {complete ? (
-              <p className="px-1 text-sm text-muted-foreground">
+              <p className="px-1 text-sm text-[var(--nora-text-muted)]">
                 {translate("crm.work.list_end", { smart_count: items.length })}
               </p>
             ) : (
@@ -713,7 +713,7 @@ const RetryBlock = ({
   return (
     <div className="flex flex-col items-start gap-2">
       {failedAt !== null ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-[var(--nora-text-muted)]">
           {translate("crm.work.states.failed_again", {
             time: formatBerlinClock(failedAt),
           })}
@@ -750,7 +750,7 @@ const WorkSummaryLine = ({
   const summary = summarizeWork(items, complete);
   if (!summary.complete) {
     return (
-      <p className="px-1 text-sm text-muted-foreground">
+      <p className="px-1 text-sm text-[var(--nora-text-muted)]">
         {translate("crm.work.summary.partial", {
           smart_count: summary.loaded,
         })}
@@ -768,7 +768,9 @@ const WorkSummaryLine = ({
   }
   parts.push(translate("crm.work.summary.open", { count: summary.total }));
   return (
-    <p className="px-1 text-sm text-muted-foreground">{parts.join(" · ")}</p>
+    <p className="px-1 text-sm text-[var(--nora-text-muted)]">
+      {parts.join(" · ")}
+    </p>
   );
 };
 

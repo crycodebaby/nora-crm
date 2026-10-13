@@ -61,7 +61,7 @@ export const WorkList = ({
                 "mb-1 flex items-center gap-1.5 px-1 text-sm font-semibold",
                 group.key === "overdue" || group.key === "today"
                   ? "text-foreground"
-                  : "text-muted-foreground",
+                  : "text-[var(--nora-text-muted)]",
               )}
             >
               <GroupIcon group={group.key} />
@@ -135,7 +135,7 @@ const DesktopRow = ({
         <p className="font-medium leading-snug text-foreground">
           <WorkTitle row={row} id={id} />
         </p>
-        <p className="mt-0.5 text-sm text-muted-foreground">
+        <p className="mt-0.5 text-sm text-[var(--nora-text-muted)]">
           {row.workType !== null ? (
             <>
               <span>{row.workType}</span>
@@ -166,7 +166,7 @@ const DesktopRow = ({
         </p>
       </div>
       {row.holder ? (
-        <p className="pt-0.5 text-sm text-muted-foreground">
+        <p className="pt-0.5 text-sm text-[var(--nora-text-muted)]">
           <span className="sr-only">
             {translate("crm.work.holder.prefix")}{" "}
           </span>
@@ -211,7 +211,7 @@ const MobileRow = ({
         <span className="line-clamp-3 font-medium leading-snug text-foreground">
           <WorkTitle row={row} />
         </span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-[var(--nora-text-muted)]">
           <DueText row={row} />
           {row.workType !== null ? (
             <>
@@ -221,7 +221,7 @@ const MobileRow = ({
           ) : null}
         </span>
         {row.customerId != null || row.contactId != null ? (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-[var(--nora-text-muted)]">
             {row.customerId != null ? (
               <ContextText
                 kind="customer"
@@ -240,7 +240,7 @@ const MobileRow = ({
           </span>
         ) : null}
         {row.holder ? (
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-[var(--nora-text-muted)]">
             <span className="sr-only">
               {translate("crm.work.holder.prefix")}{" "}
             </span>

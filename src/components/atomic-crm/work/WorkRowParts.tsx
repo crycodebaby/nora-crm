@@ -95,7 +95,7 @@ export const WorkTitle = ({
       id={id}
       className={cn("inline-flex flex-wrap items-center gap-x-2", className)}
     >
-      <span className="italic text-muted-foreground">
+      <span className="italic text-[var(--nora-text-muted)]">
         {translate("crm.work.title_missing")}
       </span>
       <IncompleteMark />
@@ -106,7 +106,7 @@ export const WorkTitle = ({
 export const IncompleteMark = () => {
   const translate = useTranslate();
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium not-italic text-muted-foreground">
+    <span className="inline-flex items-center gap-1 text-xs font-medium not-italic text-[var(--nora-text-muted)]">
       <CircleDashed aria-hidden="true" className="size-3.5" />
       {translate("crm.work.incomplete")}
     </span>
@@ -167,7 +167,7 @@ export const ContextText = ({
 };
 
 export const Separator = () => (
-  <span aria-hidden="true" className="px-1 text-muted-foreground">
+  <span aria-hidden="true" className="px-1 text-[var(--nora-text-muted)]">
     ·
   </span>
 );
