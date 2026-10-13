@@ -149,7 +149,7 @@ Ein kleiner, reiner Formatter (Arbeitsname `formatWorkDueDate`) mit:
 ["work", "items", <Identitäts-Partition>, <scope>, "open", 50]
 ```
 
-- **Identitäts-Partition** = die Identität des angemeldeten Mitarbeiters aus dem bestehenden Auth-Provider (`useGetIdentity()`). Sie **partitioniert nur den Cache**; sie wird **nie** an `getWorkItems` übergeben. Die Query startet erst, wenn die Identität aufgelöst ist.
+- **Identitäts-Partition** = die Identität des angemeldeten Mitarbeiters aus dem bestehenden Auth-Provider (`useGetIdentity()`). Sie **partitioniert nur den Cache**; sie wird **nie** an `getWorkItems` übergeben und in `work/**` ausschließlich an den Baustein übergeben, der den Query-Schlüssel bildet. Die Query startet erst, wenn die Identität aufgelöst ist. Scheitert die Auflösung der Identität, zeigt die Fläche den allgemeinen Ladefehler („Der Arbeitskorb konnte nicht geladen werden." mit „Erneut versuchen", Abschnitt 11) — nie den Leerzustand und nie ein endloses Skelett.
 - Ein Sichtwechsel wählt einen anderen Schlüssel und beginnt mit Cursor `null`. **Zeilen einer anderen Sicht werden nie als Platzhalter unter dem neuen Sichtnamen gezeigt** (kein `placeholderData`/`keepPreviousData` über Sichtgrenzen). Eine früher geladene Sicht darf aus **ihrem eigenen** Cache-Eintrag erscheinen und wird dabei nach 5.3 revalidiert.
 - Eine verspätete Antwort einer Sicht füllt nur ihren eigenen Eintrag und erscheint nie unter einer anderen Sicht oder Identität.
 
@@ -174,7 +174,9 @@ Jede Revalidierung — automatisch (Mount, Fokus, Reconnect, Tageswechsel) **und
 
 ### 5.5 Berliner Tageswechsel
 
-Bleibt die Seite über die Berliner Tagesgrenze offen, werden frische Server-Flags **durch Revalidierung** geholt: gemerkt wird der Berliner Kalendertag der letzten erfolgreichen Abfrage; weicht der aktuelle Berliner Kalendertag davon ab, wird die Query invalidiert. Auslöser: Fokus, `visibilitychange` und ein einzelner Timer auf die nächste Berliner Mitternacht. **Verglichen werden nur zwei Kalendertage (Abrufzeit vs. jetzt)** — nie das Fälligkeitsdatum einer Zeile, nie ein `overdue`/`dueToday`.
+Bleibt die Seite über die Berliner Tagesgrenze offen, werden frische Server-Flags **durch Revalidierung** geholt: gemerkt wird der Berliner Kalendertag der letzten erfolgreichen Abfrage; weicht der aktuelle Berliner Kalendertag davon ab, wird die Query invalidiert. Auslöser: Fokus, `visibilitychange` und ein einzelner Timer auf die nächste Berliner Mitternacht **plus 2 Minuten Sicherheitsabstand** (eine vorgehende Geräteuhr soll nicht vor der Server-Mitternacht abfragen und die alten Flags als „neuen Tag" übernehmen). **Verglichen werden nur zwei Kalendertage (Abrufzeit vs. jetzt)** — nie das Fälligkeitsdatum einer Zeile, nie ein `overdue`/`dueToday`.
+
+**Veralteter Tag wird sichtbar gemacht.** Ist der Berliner Kalendertag der letzten erfolgreichen Abfrage ein anderer als der aktuelle (z. B. offline oder nach gescheiterter Revalidierung über Mitternacht), trägt die Statuszeile das Datum: „Stand 12.10.2026, 17:45 · veraltet" — damit ein gestriges „Heute" nicht als heutiges gelesen wird. Auch das ist nur ein Vergleich zweier Kalendertage.
 
 ### 5.6 Sitzung, Abmeldung, Fehlerbehandlung
 
@@ -225,11 +227,12 @@ Darstellung nach Abschnitt 3.1: `date` → Kurz- und Langtext; `none` → „Ohn
 | Wert | Anzeige |
 |---|---|
 | `derived.isMine` | „Ich" |
-| `derived.isUnassigned` | „Nicht zugewiesen" |
-| sonst `holder.displayName` | Name |
-| `holder.displayName === null` | „Mitarbeiter ohne Namen" |
+| sonst `derived.isUnassigned` | „Nicht zugewiesen" |
+| sonst `holder !== null` und `holder.displayName !== null` | Name |
+| sonst `holder !== null` und `holder.displayName === null` | „Mitarbeiter ohne Namen" |
+| sonst (`holder === null` ohne Flag) | „Zuständigkeit unbekannt" |
 
-„Ich" folgt **ausschließlich** `derived.isMine`, nie einem Vergleich von `holder.salesId` mit der eigenen Identität. In „Meine Arbeit" wird der Halter nicht angezeigt. Der Halter ist **kein** Link.
+„Ich" folgt **ausschließlich** `derived.isMine`, „Nicht zugewiesen" **ausschließlich** `derived.isUnassigned` — nie einem Vergleich von `holder.salesId` mit der eigenen Identität und nie dem Schluss `holder === null` ⇒ „nicht zugewiesen". In „Meine Arbeit" wird der Halter nicht angezeigt. Der Halter ist **kein** Link. Sichtbare bzw. gesprochene Beschriftung: „Zuständig: …" (im Blatt sichtbar; in der Desktop-Spalte und der mobilen Zeile als visuell versteckter Präfix).
 
 ### 6.5 Nie angezeigt
 
@@ -239,7 +242,9 @@ Darstellung nach Abschnitt 3.1: `date` → Kurz- und Langtext; `none` → „Ohn
 
 - **Nur wenn die Menge vollständig geladen ist** (letzte geladene Seite hat `nextCursor === null`): „{a} überfällig · {b} heute · {n} offen" — `a` = Zeilen mit `overdue`, `b` = Zeilen mit `dueToday && !overdue`, `n` = alle geladenen Zeilen. Teile mit 0 entfallen, `n` steht immer.
 - Sonst: „{n} Aufgaben geladen · weitere vorhanden". Nie eine Gesamtzahl über eine unvollständige Menge.
-- Listenende bei vollständiger Menge: „Alle {n} offenen Aufgaben angezeigt"; sonst der Knopf „Weitere laden".
+- Listenende bei vollständiger Menge: „Alle {n} offenen Aufgaben angezeigt" (bei `n = 1`: „1 offene Aufgabe angezeigt"); sonst der Knopf „Weitere laden".
+- Bei 0 Zeilen gibt es weder Zusammenfassungszeile noch Listenende — nur den Leerzustand (Abschnitt 11).
+- Alle Zahlen dieser Zeile und der Ansagen (Abschnitt 13.5) stammen ausschließlich aus `derived.overdue`/`derived.dueToday` und der Zeilenzahl — nie aus `dueAt`.
 
 ---
 
@@ -251,11 +256,11 @@ Darstellung nach Abschnitt 3.1: `date` → Kurz- und Langtext; `none` → „Ohn
 |---|---|
 | Quelle | bestehende, autorisierte Provider-Lesevorgänge auf `companies` bzw. `contacts` (Basistabellen, RLS wie bei `tasks`). **Work 2 wird dafür nicht erweitert** |
 | Felder | `companies`: `meta.columns = ["id", "name"]` · `contacts`: `meta.columns = ["id", "first_name", "last_name"]` — so landen Teilzeilen nicht im Detail-Cache der Akten (der Cache-Schlüssel enthält `meta`) |
-| Batching | IDs je Ressource gesammelt und gebündelt gelesen (`useGetManyAggregate` oder ein `getMany` je Ressource über die gesammelten IDs). Die Zahl der Anfragen wächst höchstens mit der Zahl geladener Seiten, **nie mit der Zahl der Zeilen**; keine Anfrage trägt mehr IDs, als eine Work-Seite enthalten kann (≤ 50) |
+| Batching | IDs je Ressource gesammelt und gebündelt gelesen (`useGetManyAggregate` oder ein `getMany` je Ressource über die gesammelten IDs). Die Zahl der Anfragen wächst höchstens mit der Zahl geladener Seiten, **nie mit der Zahl der Zeilen**. (`useGetManyAggregate` darf dabei die IDs mehrerer gleichzeitig gerenderter Seiten in **eine** Anfrage zusammenführen; bei Noras Bestand ist die URL-Länge kein Engpass.) |
 | ID-Filter | `id != null` — nie eine Truthiness-Prüfung; **`0` ist eine gültige ID** und wird gelesen. `null` erzeugt keine Anfrage |
 | Zuordnung | über die ID, nie über Position oder Name |
 | Name | Kunde: `name` (getrimmt); Kontakt: `first_name` + `last_name` (getrimmt, Leerraum zusammengezogen); leer → „Kunde (ohne Namen)" / „Kontakt (ohne Namen)" |
-| ausstehend | neutraler Text „Kunde" / „Kontakt" — der Link funktioniert bereits |
+| ausstehend | sichtbarer Text „Kunde" / „Kontakt", zugänglicher Name „Kunde (Name wird geladen)" / „Kontakt (Name wird geladen)" — kein doppelter Präfix; der Link funktioniert bereits |
 | Lesefehler | „Kunde (Name nicht geladen)" / „Kontakt (Name nicht geladen)", Link bleibt; **ein** ruhiger Hinweis über der Liste „Einige Kunden- oder Kontaktnamen konnten nicht geladen werden." mit „Erneut versuchen" |
 | Datensatz fehlt in erfolgreicher Antwort | „Kunde (Name nicht verfügbar)" / „Kontakt (Name nicht verfügbar)", Link bleibt, kein Hinweis |
 
@@ -273,37 +278,46 @@ Die Anreicherung **DARF NICHT**: Work entfernen, Work verändern, die Ordnung ä
 - **Liste:** eine Spalte, Inhaltsbreite höchstens ca. 880 px, linksbündig an der Inhaltskante; Gruppen mit Überschrift (Abschnitt 6.1); Zeilenhöhe ca. 56–64 px.
 - **Zeilenaufbau:** Datumsspalte (Wochentag + vollständiges Datum, ohne Abschneiden) · Titel (primär, vollständig, ohne Kürzung) und darunter Metazeile „Art · Kunde · Kontakt" · Halterspalte **nur in Team**.
 - **Interaktion:** **die Zeile ist kein Link und hat keinen Klick-Handler** (es gibt kein Work-Detail und zwei mögliche Kontexte). Interaktiv sind ausschließlich die Kontext-Links, jeweils ein echtes `<a>` (Mittelklick und „in neuem Tab" funktionieren). Hover hebt die Zeile dezent hervor, Links werden unterstrichen.
-- **Kontext-Links:** Kunde → `#/kunden/:customerId/show/tasks` (öffnet direkt den Aufgaben-Reiter der Kundenakte); Kontakt → `#/kontakte/:contactId/show`. Erzeugt über `noraCreatePath(...)` (Kunde plus Reiter-Suffix `/tasks`), nie hartcodiert englisch ([`04`](04-routing-i18n.md)). Sichtbarer Text ist der Name (Abschnitt 7); der zugängliche Name beginnt mit der Art („Kunde: …", „Kontakt: …") über einen visuell versteckten Präfix, der sichtbare Text bleibt Teil des zugänglichen Namens.
-- **Dringlichkeit:** Überschrift „Überfällig" mit Icon **und** Wort; Datumstext dieser Gruppe in einem dunklen, AA-tauglichen Aufmerksamkeitston (bestehende `nora-urgency-*`-Töne, **nie** Brand-Orange/-Rot als Textfarbe); eine 2-px-Linie links an der Zeile. „Heute": Icon + Wort, Datum fett. „Demnächst"/„Ohne Fälligkeit": neutral. Keine roten Flächen, kein Pulsieren, kein Badge pro Zeile.
-- **Pagination:** Knopf „Weitere laden" am Listenende, während des Ladens deaktiviert. Kein Endlos-Scrollen.
+- **Kontext-Links:** Kunde → `#/kunden/:customerId/show/tasks` (öffnet direkt den Aufgaben-Reiter der Kundenakte); Kontakt → `#/kontakte/:contactId/show`. Erzeugt über `noraCreatePath(...)` (Kunde plus Reiter-Suffix `/tasks`), nie hartcodiert englisch ([`04`](04-routing-i18n.md)). Sichtbarer Text ist der Name (Abschnitt 7); der zugängliche Name beginnt mit der Art („Kunde: …", „Kontakt: …") über einen visuell versteckten Präfix, der sichtbare Text bleibt Teil des zugänglichen Namens (bei ausstehendem Namen gilt die Sonderform aus Abschnitt 7). Jeder Kontext-Link verweist per `aria-describedby` auf den Titel seiner Zeile, damit gleichlautende Links in einer Linkliste unterscheidbar sind.
+- **Dringlichkeit:** Überschrift „Überfällig" mit Icon **und** Wort; eine 2-px-Linie links an der Zeile. „Heute": Icon + Wort, Datum fett. „Demnächst"/„Ohne Fälligkeit": neutral. Keine Farbflächen, kein Pulsieren, kein Badge pro Zeile. **Töne (bestehende Tokens, keine neuen):**
+
+  | Element | hell | dunkel |
+  |---|---|---|
+  | Datumstext der Gruppe „Überfällig" | `--nora-accent-text` | `--nora-accent-text` |
+  | Linie und Icon „Überfällig" | `--nora-accent-strong` | `--nora-accent` |
+  | übrige Texte | bestehende Text-Tokens | bestehende Text-Tokens |
+
+  **Verboten** als Text- oder Indikatorfarbe sind `--nora-accent` im hellen Modus (erreicht auf dem App-Grund keine 3:1) und das frühere Brand-Rot `#ff3b1f`. Die Kontrastschwellen aus Abschnitt 13.6 werden gegen den **tatsächlichen** Zeilenhintergrund gemessen, auch im Hover-Zustand.
+- **Pagination:** Knopf „Weitere laden" am Listenende. Er ist **während jeder laufenden Abfrage** der Liste (auch einer Revalidierung, nicht nur beim Nachladen) per `aria-disabled="true"` gesperrt — nicht per `disabled`, damit der Fokus auf ihm bleibt —, sodass ein Nachladen nie eine laufende Revalidierung abbricht und an alte Seiten anhängt. Kein Endlos-Scrollen.
 
 ---
 
 ## 9. Mobil (< 768 CSS px)
 
-Dieselbe Work-Wahrheit, für die schmale Fläche neu komponiert.
+Dieselbe Work-Wahrheit, für die schmale Fläche neu komponiert. Maßgeblich ist die **Oberfläche** (< 768 CSS px → `MobileAdmin`), nicht das Gerät.
 
-- **Seite** in `MobileLayout`: `MobileHeader` mit `h1` „Arbeitskorb" (ohne Zurück-Knopf — der Arbeitskorb ist eine Einstiegsseite), Inhalt in `MobileContent` (stellt `main` und den Abstand zur festen unteren Navigation). Kein Tagesdatum.
-- **Sichtwahl** volle Breite, unter dem Header klebend, mindestens 44 px hoch. Darunter Status/Aktualisieren und die Zusammenfassungszeile.
+- **Seite** in `MobileLayout` nach dem bestehenden Hausmuster: `MobileHeader` mit `h1` „Arbeitskorb" (ohne Zurück-Knopf — der Arbeitskorb ist eine Einstiegsseite) als Geschwister von `MobileContent`, das `main` und den Abstand zur festen unteren Navigation stellt. Das `h1` liegt damit mobil **außerhalb** von `main` (wie auf allen mobilen Nora-Seiten). Kein Tagesdatum. `MobileHeader` und `MobileContent` werden **nicht** geändert.
+- **Sichtwahl** volle Breite, mindestens 44 px hoch, als erstes Element in `MobileContent`; sie scrollt mit dem Inhalt (kein Kleben — `MobileContent` ist ein eigener Scroll-Container, in dem `position: sticky` nicht greift). Darunter Status/Aktualisieren und die Zusammenfassungszeile.
 - **Zeile:** ein einziges Tap-Ziel (`button`, mindestens 64 px hoch), kartenlos:
   - Zeile 1: Titel (bis 3 Zeilen, dann gekürzt; vollständig im Blatt) bzw. „Ohne Bezeichnung" + „Unvollständig"
-  - Zeile 2: Datum · Kundenname
-  - Zeile 3: Kontaktname · Halter (nur Team)
-  - Namen sind hier **Text, keine Links**.
-- **Blatt (Bottom Sheet):** Tippen öffnet ein Blatt aus dem bestehenden Primitive `ui/sheet.tsx` (`side="bottom"`). Es ist **ausschließlich eine read-only Darstellung des bereits geladenen DTO plus optionaler Anzeigenamen** — **keine** Work-Detail-Abfrage, keine Task-Route, kein Editor, keine Aktion auf Work. Inhalt:
+  - Zeile 2: Datum (mit denselben Dringlichkeitstönen wie Desktop, Abschnitt 8; „Heute" fett) · Art (falls vorhanden)
+  - Zeile 3: Kundenname · Kontaktname (vorhandene Teile)
+  - Zeile 4 (nur Team): Zuständig (Abschnitt 6.4)
+  - Namen sind hier **Text, keine Links**. Die Gruppenüberschriften und die 2-px-Linie gelten wie auf Desktop.
+- **Blatt (Bottom Sheet):** Tippen öffnet ein Blatt aus dem bestehenden Primitive `ui/sheet.tsx` (`side="bottom"`) **mit `showClose={false}`** (wie `CreateSheet`/`EditSheet`; der eingebaute Schließen-Knopf ist englisch beschriftet und zu klein). Es ist **ausschließlich eine read-only Darstellung des bereits geladenen DTO plus optionaler Anzeigenamen** — **keine** Work-Detail-Abfrage, keine Task-Route, kein Editor, keine Aktion auf Work. Das Blatt ist an die `workId` gebunden und zeigt immer die Zeile des **aktuellen** Schnappschusses; nur wenn sie nach einer Revalidierung fehlt, zeigt es den zuletzt gesehenen Stand mit dem Hinweis „Diese Aufgabe ist nach der Aktualisierung nicht mehr in dieser Ansicht." Inhalt:
   - Titel (Blatt-Titel) bzw. „Ohne Bezeichnung" + „Unvollständig"
   - Art (falls vorhanden)
   - Fälligkeit in Worten: Gruppenbezeichnung + Langdatum, bzw. „Ohne Fälligkeit" / „Datum unlesbar"
-  - Halter (nur Team)
+  - „Zuständig: …" (nur Team)
   - Aktionen, je mindestens 48 px hoch, in dieser Reihenfolge:
     1. **„Kontakt öffnen"** mit Kontaktname — wenn `contactId != null`; die bevorzugte operative Aktion (die mobile Kontaktakte hat einen Aufgaben-Reiter)
     2. **„Kundenakte öffnen"** mit Kundenname — wenn `customerId != null`; als Kontextinformation
-  - Ist kein Kontakt vorhanden, steht unter den Aktionen der Hinweis: „Auf dem Telefon zeigt die Kundenakte keine Aufgaben."
-  - Schließen-Knopf „Schließen"; Escape schließt; der Fokus kehrt zum auslösenden Zeilen-Knopf zurück. Eine Navigation aus dem Blatt schließt es.
+  - Ist kein Kontakt vorhanden, steht unter den Aktionen der Hinweis: „In der mobilen Ansicht zeigt die Kundenakte keine Aufgaben."
+  - eigener, sichtbarer Knopf **„Schließen"** (mindestens 48 px); Escape schließt ebenfalls. Die Fokusrückgabe wird **ausdrücklich** über `onCloseAutoFocus` umgesetzt (das Blatt wird programmatisch aus dem Zeilen-Knopf geöffnet, Radix kennt dann keinen Auslöser): Fokus zurück auf den Zeilen-Knopf, sonst nach Abschnitt 13.4. Eine Navigation aus dem Blatt schließt es.
 - **Verbotene Beschriftungen** für die Kundenaktion: „Aufgabe öffnen", „Aufgabe bearbeiten", „Weiter zur Aufgabe" oder jede Formulierung, die verspricht, dass die mobile Kundenakte die Aufgabe zeigt. Sie zeigt mobil **keine** Aufgaben.
 - **Ziele:** `#/kontakte/:contactId/show` und `#/kunden/:customerId/show` (beide mobil registriert). Kein Vorgang, kein Reiter-Suffix auf Mobil.
-- **Blatt und Aktualisierung:** Das Blatt ist **kein** URL-Zustand. Ist die geöffnete Zeile nach einer Revalidierung nicht mehr im Schnappschuss, bleibt das Blatt offen und zeigt „Diese Aufgabe ist nach der Aktualisierung nicht mehr in dieser Ansicht."; beim Schließen gilt die Fokusregel aus Abschnitt 13.4. Die Kontext-Aktionen bleiben benutzbar (der Kontext existiert unabhängig davon).
-- Die mobile Kundenakte wird in Alpha **nicht** erweitert ([`17`](17-known-issues-and-planned-waves.md) G, „Mobile Aufgaben-Bereich auf der Kundenakte").
+- Das Blatt ist **kein** URL-Zustand. Ein Sichtwechsel über die URL („Zurück") schließt es.
+- Die mobile Kundenakte wird in Alpha **nicht** erweitert ([`17`](17-known-issues-and-planned-waves.md) G.2, „Mobile ‚Aufgaben'-Bereich auf der Kundenakte").
 
 ---
 
@@ -316,9 +330,9 @@ Dieselbe Work-Wahrheit, für die schmale Fläche neu komponiert.
 | Mobil: „Kontakt öffnen" | `#/kontakte/:id/show` | `contactId != null` | Kontaktakte; Aufgaben über deren Reiter „N Aufgabe(n)" (nicht direkt verlinkbar, nicht der Start-Reiter) |
 | Mobil: „Kundenakte öffnen" | `#/kunden/:id/show` | `customerId != null` | nur die Kundenakte als Kontextinformation |
 | Zeile (Desktop) / Halter / Vorgang / Task / Mitarbeiter | — | — | **kein Ziel.** Keine Work→Task-Route, keine Vorgang-Ableitung ([`25`](25-universal-work-model.md) Abschnitt 14.3), kein Mitarbeiterprofil |
-| leere „Meine Arbeit" | `#/arbeitskorb?sicht=team` | — | „Team ansehen" wechselt die Sicht |
+| leere „Meine Arbeit" | Sicht Team | — | „Team ansehen" ist ein **Knopf** (kein Link), der denselben Sichtwechsel per replace auslöst wie der Tab und den Fokus auf den Tab „Team" setzt |
 
-**Rückweg.** Der Rückweg in den Arbeitskorb ist die **normale Browser-/System-History**. Verifiziert ist: „Zurück" stellt die exakte Hash-URL inklusive `sicht` und die Scrollposition wieder her. Die Nora-Komponente `MobileBackButton` navigiert zu festen Zielen (Kontakt → Kontaktliste, Kunde → Start) und **wird in Alpha nicht umgebaut**. Ob ein **installierter PWA-Client** auf echten Geräten einen verlässlichen Rückweg hat, ist ein **Release-Gate** (RG-1); fehlt er, ist das ein begrenzter Navigationspunkt mit eigener PO-Entscheidung **vor** dem Release — kein globaler Umbau des `MobileBackButton` während der Implementierung.
+**Rückweg.** Der Rückweg in den Arbeitskorb ist die **normale Browser-/System-History**. Verifiziert ist (an einer Ersatzroute mit bereits vorhandenen Daten): „Zurück" stellt die exakte Hash-URL inklusive `sicht` wieder her, und die Scrollposition kommt zurück, solange die Liste beim Rendern bereits Daten hat. Für den Arbeitskorb heißt das: bei Rückkehr innerhalb der `gcTime` (5 min) erscheint der zwischengespeicherte Schnappschuss sofort, die Scrollposition wird wiederhergestellt und im Hintergrund revalidiert; nach längerer Abwesenheit beginnt die Liste mit dem Erstladezustand oben — in Alpha akzeptiert. Der Fokus wird nach „Zurück" nicht auf den zuletzt benutzten Link zurückgesetzt (Abschnitt 22). Die Nora-Komponente `MobileBackButton` navigiert zu festen Zielen (Kontakt → Kontaktliste, Kunde → Start) und **wird in Alpha nicht umgebaut**. Ob ein **installierter PWA-Client** auf echten Geräten einen verlässlichen Rückweg hat, ist ein **Release-Gate** (RG-1); fehlt er, ist das ein begrenzter Navigationspunkt mit eigener PO-Entscheidung **vor** dem Release — kein globaler Umbau des `MobileBackButton` während der Implementierung.
 
 ---
 
@@ -327,20 +341,22 @@ Dieselbe Work-Wahrheit, für die schmale Fläche neu komponiert.
 | Zustand | Auslöser | Darstellung | Aktion |
 |---|---|---|---|
 | Erstladen | noch keine Daten | Kopf und Sichtwahl sofort; Liste reserviert, `aria-busy="true"`; Skelettzeilen erst nach **300 ms** | — |
-| Leer — Meine Arbeit | Erfolg, 0 Zeilen, `nextCursor === null` | „Keine offenen Aufgaben in Meine Arbeit." | Link „Team ansehen" |
+| Leer — Meine Arbeit | Erfolg, 0 Zeilen, `nextCursor === null` | „Keine offenen Aufgaben in Meine Arbeit." | Knopf „Team ansehen" (Abschnitt 10) |
 | Leer — Team | dito | „Im Team sind keine offenen Aufgaben." | — |
 | Demo nicht verfügbar | `reason = unavailable` **und** Demo-Modus (`isNoraDemoMode`) | Info-Zustand: „Der Arbeitskorb nutzt Live-Daten und ist im Demo-Modus nicht verfügbar." | — |
 | nicht erreichbar | `reason = unavailable` (kein Demo) | „Der Arbeitskorb ist gerade nicht erreichbar." | „Erneut versuchen" |
 | Zugriff verweigert | `reason = permission_denied` | „Kein Zugriff auf den Arbeitskorb. Bitte neu anmelden, falls das unerwartet ist." | Link zur Startseite; keine Wiederholschleife |
-| Ungültige Anfrage / fehlerhafte Antwort / sonstiger Fehler | `invalid_request` · `malformed_response` · `failed` | „Der Arbeitskorb konnte nicht geladen werden." + kleiner technischer Code (`reason`, ggf. `code`) — nie die rohe Fehlermeldung | „Erneut versuchen" |
+| Ungültige Anfrage / fehlerhafte Antwort / sonstiger Fehler / Identität nicht auflösbar | `invalid_request` · `malformed_response` · `failed` · Identitätsfehler (5.2) | „Der Arbeitskorb konnte nicht geladen werden." + kleiner technischer Code (`reason`, ggf. `code`) — nie die rohe Fehlermeldung | „Erneut versuchen" |
+| Wiederholung erneut gescheitert | wie oben, nach „Erneut versuchen" | Panel bleibt, ergänzt um „Erneut fehlgeschlagen · 14:33" | „Erneut versuchen" |
 | Revalidierung läuft | Daten vorhanden | Zeilen bleiben; Aktualisieren-Icon dreht sich; Status „Wird aktualisiert …" | — |
-| Revalidierung fehlgeschlagen | Fehler bei vorhandenem Schnappschuss | Schnappschuss bleibt; Status „Stand 14:32 · Aktualisierung fehlgeschlagen"; Liste wird **nie** geleert | „Erneut versuchen" |
-| „Weitere laden" fehlgeschlagen | Fehler auf Folgeseite | geladene Zeilen bleiben; Inline-Fehler am Listenende | „Erneut versuchen" |
+| Revalidierung fehlgeschlagen (`unavailable`, `failed`, `malformed_response`, `invalid_request`) | Fehler bei vorhandenem Schnappschuss | Schnappschuss bleibt; Status „Stand 14:32 · Aktualisierung fehlgeschlagen" (bei anderem Berliner Tag mit Datum, 5.5); Liste wird **nie** geleert | „Erneut versuchen" |
+| Revalidierung mit `permission_denied` | Zugriff bei vorhandenem Schnappschuss entzogen | Schnappschuss wird **entfernt** und durch den Zustand „Zugriff verweigert" ersetzt — keine Daten ohne gültigen Zugriff | Link zur Startseite |
+| „Weitere laden" fehlgeschlagen | Fehler auf Folgeseite | geladene Zeilen bleiben; über dem Knopf der Inline-Text „Weitere Aufgaben konnten nicht geladen werden." (per `aria-describedby` am Knopf); der Knopf „Weitere laden" ist zugleich die Wiederholung | „Weitere laden" |
 | Offline ohne Daten | Abfrage pausiert, kein Schnappschuss | „Keine Verbindung. Der Arbeitskorb lädt, sobald Nora wieder online ist." | — |
-| Offline mit Daten | pausiert, Schnappschuss vorhanden | Schnappschuss bleibt; Status „Offline · Stand 14:32" | — |
+| Offline mit Daten | pausiert, Schnappschuss vorhanden | Schnappschuss bleibt; Status „Offline · Stand 14:32" (bei anderem Berliner Tag mit Datum) | — |
 | Namen nicht geladen | Anreicherung scheitert | Abschnitt 7; Work unverändert sichtbar | „Erneut versuchen" (nur Namen) |
 
-**Ein Fehler wird nie als erfolgreicher Leerzustand dargestellt** — für jeden `reason`. Der Leerzustand erscheint ausschließlich nach erfolgreicher Antwort mit 0 Zeilen und `nextCursor === null`. **Ein Anreicherungsfehler wird nie zum Work-Fehler.** Nora-Ton nach [`02`](02-design-system.md) „Begriffliche Regeln": kein „Alles erledigt!", kein Konfetti, keine Illustration — leer heißt „nichts offen", nicht „du hast alles geschafft".
+**Ein Fehler wird nie als erfolgreicher Leerzustand dargestellt** — für jeden `reason`. Der Leerzustand erscheint ausschließlich nach erfolgreicher Antwort mit 0 Zeilen und `nextCursor === null`. **Ein Anreicherungsfehler wird nie zum Work-Fehler.** Dieser Contract führt für den Arbeitskorb zusätzlich eine Tonregel ein (im Geist von [`02`](02-design-system.md) „Begriffliche Regeln"): kein „Alles erledigt!", kein Konfetti, keine Illustration — leer heißt „nichts offen", nicht „du hast alles geschafft".
 
 ---
 
@@ -356,9 +372,9 @@ Dieselbe Work-Wahrheit, für die schmale Fläche neu komponiert.
 | M4 | „Weitere laden" | angehängte Zeilen 150 ms einblenden | sofort |
 | M5 | Wiederholen | Spinner im Knopf; erneutes Scheitern ändert den Text, **kein Schütteln** | nur Text |
 | M6 | Leerzustand | 220 ms einblenden | sofort |
-| M7 | Blatt (mobil) | Übergänge des bestehenden Sheet-Primitives | ohne Bewegung |
+| M7 | Blatt (mobil) | Übergänge des bestehenden Sheet-Primitives | ohne Bewegung (siehe unten) |
 
-**Ausgeschlossen in Alpha:** animiertes Verschwinden oder Erscheinen einzelner Zeilen bei einer Revalidierung (Zeilen wechseln ohne Choreografie; die Statusansage trägt die Information), Hervorhebung „neu hinzugekommener" Zeilen, Pulsieren oder Animation überfälliger Zeilen, Scroll-Reveal, eigene Routenübergänge, jede Bewegung, die die Server-Reihenfolge verändert oder vortäuscht. **Bewegung ersetzt nie einen Ladezustand** und wartet nie auf die Antwort. Mit `prefers-reduced-motion: reduce` läuft **keine** Transition und **keine** Animation der Fläche (inkl. Skelett); jede Information bleibt ohne Bewegung verständlich.
+**Ausgeschlossen in Alpha:** animiertes Verschwinden oder Erscheinen einzelner Zeilen bei einer Revalidierung (Zeilen wechseln ohne Choreografie; die Statusansage trägt die Information), Hervorhebung „neu hinzugekommener" Zeilen, Pulsieren oder Animation überfälliger Zeilen, Scroll-Reveal, eigene Routenübergänge, jede Bewegung, die die Server-Reihenfolge verändert oder vortäuscht. **Bewegung ersetzt nie einen Ladezustand** und wartet nie auf die Antwort. Mit `prefers-reduced-motion: reduce` läuft **keine** Transition und **keine** Animation der Fläche — einschließlich Skelett, Blatt und Overlay; jede Information bleibt ohne Bewegung verständlich. Mechanismus: schlichte CSS-Deklarationen in `src/index.css` unter `@media (prefers-reduced-motion: reduce)` — für das Blatt über ein Arbeitskorb-eigenes Attribut am `SheetContent`, für das Overlay über das vorhandene `[data-slot="sheet-overlay"]` (das Overlay nimmt über `SheetContent` keine Klasse an; die Regel wirkt deshalb auch auf andere Blätter, und zwar nur unter reduzierter Bewegung — eine bewusst in Kauf genommene, rein abschwächende Nebenwirkung). `ui/sheet.tsx` bleibt unverändert.
 
 ---
 
@@ -366,7 +382,7 @@ Dieselbe Work-Wahrheit, für die schmale Fläche neu komponiert.
 
 ### 13.1 Struktur
 
-- Genau **ein** `main` (Desktop: `Layout`; Mobil: `MobileContent`), innerhalb dessen **genau ein** `h1` „Arbeitskorb" (mobil im `MobileHeader`; die vorbestehende App-Kopfzeile ist nicht Teil dieses Contracts).
+- Genau **ein** `main` (Desktop: `Layout`; Mobil: `MobileContent`) und genau **ein** `h1` „Arbeitskorb" der Seite: auf Desktop **innerhalb** von `main`, auf Mobil im Seitenkopf `MobileHeader` (Hausmuster, außerhalb von `main`). Die vorbestehende Desktop-App-Kopfzeile (`<h1>Nora</h1>` im globalen Header) ist nicht Teil dieses Contracts.
 - Jede Gruppe ist ein `<section aria-labelledby>` mit `h2`; die Zeilen einer Gruppe stehen in einer **geordneten Liste** (`<ol>`), weil die Reihenfolge Bedeutung hat.
 - Keine verschachtelten interaktiven Elemente (kein Link in einem Knopf, kein Knopf in einem Link); keine klickbaren `div`s; echte Links und Knöpfe.
 
@@ -376,31 +392,49 @@ Dringlichkeit wird **gesprochen**, nicht nur gefärbt: der zugängliche Text ein
 
 ### 13.3 Sichtwahl
 
-`role="tablist"` mit zwei `tab`s („Meine Arbeit", „Team"), die **ein** `tabpanel` (die Liste) steuern; Pfeiltasten wechseln, der gewählte Tab ist per Tab-Taste erreichbar; die Auswahl spiegelt die URL (Abschnitt 4). Mindesthöhe 44 px; sichtbarer Fokusring (bestehende Fokus-Klassen).
+`role="tablist"` mit zwei `tab`s („Meine Arbeit", „Team"), die **ein** `tabpanel` (den Listenbereich) steuern; Pfeiltasten wechseln, der gewählte Tab ist per Tab-Taste erreichbar; die Auswahl spiegelt die URL (Abschnitt 4). Das `tabpanel` ist — wie im Radix-Standard — **ein** Tabstopp und zugleich das **Fokus-Ersatzziel** (13.4). Mindesthöhe der Tabs 44 px; sichtbarer Fokusring (bestehende Fokus-Klassen).
 
 ### 13.4 Fokus
 
-- Tab-Reihenfolge Desktop: Sichtwahl → Aktualisieren → Kontext-Links in Server-Reihenfolge → „Weitere laden".
-- Fokus geht bei einer Revalidierung nie verloren: verschwindet das fokussierte Element, geht der Fokus auf die nächste Zeile, sonst die vorherige, sonst die Listenüberschrift.
-- Nach erfolgreichem „Weitere laden" geht der Fokus auf die **erste neu angehängte Zeile** (Desktop: das Listenelement, programmatisch fokussierbar mit `tabindex="-1"`; Mobil: deren Zeilen-Knopf).
-- Mobiles Blatt: modale Fokusfalle, Escape und sichtbarer Schließen-Knopf, Fokusrückgabe zum Auslöser — bzw. nach der Regel oben, wenn der Auslöser nicht mehr existiert. Zeilen-Knopf trägt `aria-haspopup="dialog"`. Blatt mit zugänglichem Titel.
-- Laden von Folgeseiten und Namen stiehlt nie den Fokus (außer der Regel für „Weitere laden").
+- **Tab-Reihenfolge** (beide Oberflächen): Sichtwahl → „Arbeitskorb aktualisieren" → Hinweis-Knöpfe, falls vorhanden (Namen) → Listenbereich (`tabpanel`) → je Zeile in Server-Reihenfolge die Kontext-Links (Desktop) bzw. der Zeilen-Knopf (Mobil) → „Weitere laden".
+- **Fokus-Ersatzziel** ist das `tabpanel`. „Nächste Zeile" heißt auf Desktop: deren erster Kontext-Link (jede Zeile hat mindestens einen Kontext, [`25`](25-universal-work-model.md) Abschnitt 21.3); auf Mobil: deren Zeilen-Knopf.
+- Verschwindet das fokussierte Element durch eine Revalidierung: Fokus auf die nächste Zeile, sonst die vorherige, sonst das Ersatzziel.
+- Erfolgreiches „Erneut versuchen" nach einem Erstladefehler, erfolgreiches Neuladen der Namen und das Verschwinden eines Hinweis-Knopfs: Fokus auf das Ersatzziel.
+- „Weitere laden" bleibt fokussiert, solange es `aria-disabled` ist; nach Erfolg geht der Fokus auf die **erste neu angehängte Zeile** (Desktop: deren erster Kontext-Link; Mobil: deren Zeilen-Knopf); nach Misserfolg bleibt er auf dem Knopf.
+- „Team ansehen" setzt den Fokus auf den Tab „Team".
+- Mobiles Blatt: modale Fokusfalle, Escape und eigener „Schließen"-Knopf, Fokusrückgabe über `onCloseAutoFocus` zum Zeilen-Knopf — bzw. nach den Regeln oben, wenn er nicht mehr existiert. Zeilen-Knopf trägt `aria-haspopup="dialog"`. Blatt mit zugänglichem Titel.
+- Laden von Folgeseiten und Namen stiehlt sonst nie den Fokus.
 
 ### 13.5 Ansagen
 
-Eine `aria-live="polite"`-Region für den Listenstatus:
+Eine `aria-live="polite"`-Region (`role="status"`) für den Listenstatus; Fehler beim Erstladen und „Zugriff verweigert" über `role="alert"`. Feste Texte (Pluralform: „1 offene Aufgabe" / „{n} offene Aufgaben"; Teile mit 0 entfallen, die Gesamtzahl steht immer; `{Stand}` ist „14:32" bzw. bei anderem Berliner Tag „12.10.2026, 17:45"):
 
-- nach dem Laden: „Meine Arbeit: 9 offene Aufgaben, 2 überfällig, 3 heute." (nur bei vollständiger Menge; sonst „Meine Arbeit: 50 Aufgaben geladen, weitere vorhanden.")
-- nach einer Revalidierung **nur wenn sich die geladene `workId`-Folge geändert hat**: „Arbeitskorb aktualisiert." plus Zusammenfassung — **nie** „erledigt" (eine Zeile kann auch durch Umverteilung die Sicht verlassen)
-- Laden wird nur angesagt, wenn es länger als 1 s dauert
-- Fehlerpanel `role="alert"`, einmal; Benachrichtigungen bleiben beim bestehenden `NoraNotificationAnnouncer` (keine Doppelansage)
-- Die ganze Liste wird nie wiederholt vorgelesen.
+| Übergang | Text | Kanal |
+|---|---|---|
+| Erstladen > 1 s | „Arbeitskorb wird geladen." | polite |
+| Erfolg, vollständig | „{Sicht}: {n} offene Aufgaben, {a} überfällig, {b} heute." | polite |
+| Erfolg, unvollständig | „{Sicht}: {n} Aufgaben geladen, weitere vorhanden." | polite |
+| Erfolg, leer | Text des Leerzustands | polite |
+| Revalidierung mit Änderung (`workId`-Folge **oder** Gruppenschlüssel **oder** Zahlen geändert) | „Arbeitskorb aktualisiert." + Zusammenfassung | polite |
+| manuelles „Aktualisieren" ohne Änderung | „Arbeitskorb aktualisiert, keine Änderungen." | polite |
+| automatische Revalidierung ohne Änderung | keine Ansage | — |
+| Revalidierung fehlgeschlagen | „Aktualisierung fehlgeschlagen. Angezeigt ist der Stand von {Stand}." | polite |
+| „Weitere laden" erfolgreich | „{k} weitere Aufgaben geladen." (bei `k = 1`: „1 weitere Aufgabe geladen.") | polite |
+| „Weitere laden" fehlgeschlagen | „Weitere Aufgaben konnten nicht geladen werden." | polite |
+| offline mit Daten | „Keine Verbindung. Angezeigt ist der Stand von {Stand}." | polite |
+| offline ohne Daten | Text des Offline-Zustands | polite |
+| Namen nicht geladen | „Einige Kunden- oder Kontaktnamen konnten nicht geladen werden." (einmal je Fehlschlag) | polite |
+| Erstladefehler | Text des Fehlerpanels | alert |
+| erneut gescheitert | „Erneut fehlgeschlagen · {Uhrzeit}" — wird **jedes Mal erneut** angesagt | alert |
+| Zugriff verweigert | Text des Zustands | alert |
+
+Nie „erledigt" (eine Zeile kann auch durch Umverteilung die Sicht verlassen); die ganze Liste wird nie vorgelesen; Benachrichtigungen bleiben beim bestehenden `NoraNotificationAnnouncer` (keine Doppelansage).
 
 ### 13.6 Berührung, Breite, Kontrast
 
-- Tap-Ziele mindestens **44 × 44 px**, Aktionen im Blatt mindestens **48 px**.
+- Tap-Ziele mindestens **44 × 44 px**, Aktionen im Blatt einschließlich „Schließen" mindestens **48 px**.
 - Keine horizontale Seitenüberbreite bis hinab zu **320 CSS px**; Desktop ohne Abschneiden der Hauptnavigation bei 768, 1024 und 1280 px.
-- Textkontrast mindestens **4,5:1** (inkl. gedämpftem Metatext und Überfällig-Datum), Nicht-Text-Indikatoren mindestens **3:1** — im hellen **und** dunklen Modus.
+- Textkontrast mindestens **4,5:1** (inkl. gedämpftem Metatext und Überfällig-Datum), Nicht-Text-Indikatoren mindestens **3:1** — im hellen **und** dunklen Modus, gegen den tatsächlichen Hintergrund (Abschnitt 8).
 
 ---
 
@@ -444,38 +478,45 @@ Hotboard (`HotboardOpenTasks`), die mobile „Aufgaben"-Fläche und die Aufgaben
 
 Jedes Kriterium ist objektiv prüfbar. Ebenen: **S** statisch (Quelltext-/Import-Prüfung im Test oder Review-Skript), **U** Unit, **C** Komponente (Vitest Browser), **I** Integration (echter Admin-/Query-Kontext, gestubbter Leser), **E** E2E (Playwright gegen die isolierte lokale Supabase, [`21`](21-agent-runbooks.md) Sektion 16), **CI** Pipeline, **Release** Release-Protokoll. Die Fläche liegt im neuen Verzeichnis `src/components/atomic-crm/work/` (heute nicht vorhanden); statische Prüfungen beziehen sich darauf plus die geänderten Einstiegsdateien aus Abschnitt 19.
 
+**Stilabhängige Kriterien** (Bewegung, Kontrast, Maße in px) werden **nur auf Ebene E** geprüft: die Vitest-Browser-Umgebung kompiliert `index.css` ohne Tailwind ([`02`](02-design-system.md)), eine Komponentenprüfung dieser Punkte liefe leer. **Accessibility wird ohne neue Abhängigkeit geprüft** — kein `axe-core`; stattdessen die expliziten Rollen-, Struktur- und Kontrastzusicherungen unten und das manuelle Audit RG-2. Wo ein Test eine Bedingung der Umgebung voraussetzt (Zeitzone, reduzierte Bewegung, Offline), weist er zuerst nach, dass sie tatsächlich wirkt.
+
 | # | Kriterium | Ebene |
 |---|---|---|
-| AC-01 | Die Arbeitskorb-Fläche liest Work **nur** über `getWorkItems`: kein Vorkommen von `get_work_items`, `p_scope`, `rpc(` in `work/**`; kein Lesen von `tasks` (`useGetList`/`getList`/`getMany` auf `"tasks"`); kein direkter Aufruf `dataProvider.getWorkItems`; kein Import von `tasksPredicate`, `NoraUrgencyBadge`, `getFollowUpStatus` | S, I |
+| AC-01 | Die Fläche liest Work **nur** über `getWorkItems`: in `work/**` kein `get_work_items`, kein `p_scope`, kein `rpc(`, **kein Ressourcenname `"tasks"`** (das Pfad-Suffix `/tasks` des Kunden-Reiters ist erlaubt), kein Member-Aufruf `.getWorkItems(` (erlaubt ist nur die importierte Application-Funktion), kein Import von `tasksPredicate`, `NoraUrgencyBadge`, `getFollowUpStatus`. `dueAt` wird außerhalb von `formatWorkDueDate` nur mit `=== null`/`!== null` gelesen (kein `new Date(dueAt)`, kein `Date.parse`). Die Identität wird nur an den Baustein übergeben, der den Query-Schlüssel bildet | S, I |
 | AC-02 | Jeder Aufruf erhält exakt `{ scope, stateScope: "open", pageSize: 50, cursor }`; nie ein Akteur-/`sales`-Feld; die Identität erscheint nur im Query-Schlüssel | I |
 | AC-03 | Bei jeder Fixture (inkl. nicht zusammenhängender Gruppenfolge über eine Seitengrenze) gilt `renderedWorkIds === flatten(pages).map(workId)`; eine wiederkehrende Gruppe erzeugt eine zweite Überschrift statt Umordnung | U, C |
 | AC-04 | Gruppen folgen nur `derived.overdue`, `derived.dueToday`, `dueAt === null`: Fixture mit `overdue = true` und „zukünftigem" `dueAt` → „Überfällig"; `overdue = false`/`dueToday = false` mit vergangenem `dueAt` → „Demnächst"; Ergebnis unverändert bei verstellter Browser-Uhr | U, C |
-| AC-05 | `?sicht=team` → `scope = team`; fehlend → `mine`; `?sicht=xyz` und doppeltes `sicht` → `mine` mit Normalisierung per replace; Sichtwechsel per replace (History-Länge unverändert); Reload und „Zurück" aus einer Akte stellen die Sicht wieder her; kein Cursor/Akteur/Zustand in der URL; nichts davon in Browser-Storage | C, E |
+| AC-05 | `?sicht=team` → `scope = team`; fehlend → `mine`; `?sicht=xyz` und doppeltes `sicht` → `mine` mit Normalisierung per replace; Tab-Wechsel und „Team ansehen" per replace (History-Länge unverändert), „Team ansehen" ist ein `button` und fokussiert danach den Tab „Team"; Reload und „Zurück" aus einer Akte stellen die Sicht wieder her; kein Cursor/Akteur/Zustand in der URL; nichts davon in Browser-Storage | C, E |
 | AC-06 | Es existiert keine Bedienung für erledigt/alle; jede Anfrage trägt `stateScope = "open"` | S, I |
-| AC-07 | Der Cursor wird unverändert durchgereicht (Identitätsvergleich der Cursor-Instanz/Zeichenkette), Seite 1 mit `null`, Ende genau bei `nextCursor === null`, kein Offset; Doppelklick auf „Weitere laden" löst genau eine Anfrage aus | I |
+| AC-07 | Der Cursor wird unverändert durchgereicht (Identitätsvergleich der Zeichenkette), Seite 1 mit `null`, Ende genau bei `nextCursor === null`, kein Offset; Doppelklick auf „Weitere laden" löst genau eine Anfrage aus; während einer laufenden Revalidierung ist „Weitere laden" `aria-disabled` und löst keine Anfrage aus | I |
 | AC-08 | Eine `incomplete`-Zeile erscheint mit „Ohne Bezeichnung" + „Unvollständig" an ihrer Server-Position, mit funktionierenden Kontext-Links; das DTO behält `title === null` | C |
-| AC-09 | Für **jeden** `WorkQueryError.reason` erscheint der zugehörige Fehler-/Info-Zustand aus Abschnitt 11 und **nie** der Leerzustand; Demo-Modus zeigt den Demo-Zustand | C, I |
-| AC-10 | Scheitert die Namensanreicherung, bleiben alle Work-Zeilen, Ordnung und Links unverändert; es erscheinen die Fallback-Texte und ein Hinweis; die Work-Query ist im Erfolgszustand. Kein Lookup für `null`-IDs; ID `0` wird gelesen; die Zahl der Lookup-Anfragen hängt nicht von der Zeilenzahl ab; `meta.columns` sind exakt wie in Abschnitt 7 | C, I |
-| AC-11 | Dieselben `dueAt`-Werte ergeben in Browser-Kontexten mit den Zeitzonen `Europe/Berlin`, `UTC`, `America/New_York` und `Pacific/Kiritimati` **identische** Ausgaben — inkl. 02:00-Berlin-Werten, UTC-Datum ≠ Berlin-Datum, Mikrosekunden, beiden Sommerzeitwechseln und dem Jahreswechsel. **Jeder dieser Tests weist zuerst nach, dass die Zeitzone tatsächlich wirkt** (`Intl.DateTimeFormat().resolvedOptions().timeZone` = Sollzone), sonst schlägt er fehl. Methode: Playwright-Kontexte mit `timezoneId` (nicht `commands.setTimezone`, das lokal nachweislich wirkungslos war). Ungültige Werte ergeben „Datum unlesbar" ohne Ausnahme | U, E |
-| AC-12 | Keine Zeile zeigt eine Uhrzeit (Prüfung des gerenderten Textes auf `\d{1,2}:\d{2}` außerhalb der Statuszeile) | C, E |
-| AC-13 | Desktop: Kundenlink `href` endet auf `#/kunden/<id>/show/tasks`, Kontaktlink auf `#/kontakte/<id>/show`; nur für `!= null` (inkl. `0`); die Zeile hat keinen Klick-Handler; Klick auf den Kundenlink zeigt den Aufgaben-Reiter | C, E |
-| AC-14 | Mobil: Tippen öffnet das Blatt; „Kontakt öffnen" führt zu `#/kontakte/<id>/show`, „Kundenakte öffnen" zu `#/kunden/<id>/show`; ohne Kontakt erscheint der Hinweis aus Abschnitt 9; keine Beschriftung enthält „Aufgabe öffnen", „Aufgabe bearbeiten" oder „Weiter zur Aufgabe"; das Blatt löst keine Netzwerkanfrage für Work aus | C, E |
-| AC-15 | Nach Navigation in eine Akte stellt Browser-„Zurück" `#/arbeitskorb?sicht=…` und die Scrollposition wieder her (Desktop- und Mobil-Projekt) | E |
+| AC-09 | Für **jeden** `WorkQueryError.reason` erscheint beim Erstladen der zugehörige Zustand aus Abschnitt 11 und **nie** der Leerzustand; Demo-Modus zeigt den Demo-Zustand; eine nicht auflösbare Identität zeigt den allgemeinen Ladefehler; bei einer Revalidierung mit `permission_denied` verschwindet der Schnappschuss zugunsten von „Zugriff verweigert", bei jedem anderen `reason` bleibt er mit Veraltet-Status | C, I |
+| AC-10 | Scheitert die Namensanreicherung, bleiben alle Work-Zeilen, Ordnung und Links unverändert; es erscheinen die Fallback-Texte und ein Hinweis; die Work-Query ist im Erfolgszustand. Kein Lookup für `null`-IDs; ID `0` wird gelesen; die Zahl der Lookup-Anfragen hängt nicht von der Zeilenzahl ab; `meta.columns` sind exakt wie in Abschnitt 7; ausstehend, Fehler und fehlender Datensatz ergeben die drei verschiedenen Texte aus Abschnitt 7. **E:** unter der echten Mitarbeiter-Sitzung der isolierten Umgebung erscheinen die Kunden- und Kontaktnamen der gesäten Aufgaben | C, I, E |
+| AC-11 | **U:** Grammatik (Abschnitt 3.1), `unreadable` für `infinity`, `-infinity`, fünfstellige Jahre, `BC`, Leerzeichen-Form, leeren String, Unsinn — ohne Ausnahme; keine Uhrzeit in der Ausgabe. **E:** dieselben `dueAt`-Werte ergeben in Playwright-Kontexten mit `timezoneId` `Europe/Berlin`, `UTC`, `America/New_York` und `Pacific/Kiritimati` **identische** Ausgaben — inkl. 02:00-Berlin-Werten, UTC-Datum ≠ Berlin-Datum, Mikrosekunden, beiden Sommerzeitwechseln und dem Jahreswechsel; jeder Kontext weist zuerst `Intl.DateTimeFormat().resolvedOptions().timeZone` = Sollzone nach, sonst schlägt der Test fehl (nicht `commands.setTimezone`, [`17`](17-known-issues-and-planned-waves.md) I.11) | U, E |
+| AC-12 | Keine Work-Zeile zeigt eine Uhrzeit: Fixtures mit Titeln **ohne** Uhrzeiten; geprüft werden Datums-, Meta- und Halterbereiche (nicht der Titel und nicht die Statuszeile) auf `\d{1,2}:\d{2}` | C, E |
+| AC-13 | Desktop: Kundenlink `href` endet auf `#/kunden/<id>/show/tasks`, Kontaktlink auf `#/kontakte/<id>/show`; nur für `!= null` (inkl. `0`); jeder Link hat `aria-describedby` auf den Zeilentitel; die Zeile hat keinen Klick-Handler; Klick auf den Kundenlink zeigt den Aufgaben-Reiter | C, E |
+| AC-14 | Mobil: Tippen öffnet das Blatt ohne eingebauten Schließen-Knopf, mit eigenem Knopf „Schließen"; „Kontakt öffnen" führt zu `#/kontakte/<id>/show`, „Kundenakte öffnen" zu `#/kunden/<id>/show`; ohne Kontakt erscheint der Hinweis aus Abschnitt 9; keine Beschriftung enthält „Aufgabe öffnen", „Aufgabe bearbeiten" oder „Weiter zur Aufgabe"; das Blatt löst keine Work-Anfrage aus; nach einer Revalidierung zeigt das offene Blatt die geänderten Flags der aktuellen Zeile bzw. bei entfallener Zeile den Hinweis aus Abschnitt 9 | C, E |
+| AC-15 | Nach Navigation in eine Akte und Rückkehr innerhalb von 5 Minuten stellt Browser-„Zurück" `#/arbeitskorb?sicht=…` und die Scrollposition wieder her (Desktop- und Mobil-Projekt) | E |
 | AC-16 | Installierte PWA: RG-1 ist für mindestens ein iOS- und ein Android-Gerät als bestanden protokolliert, **bevor** der Release-PR gemergt wird; bis dahin gilt der Release als nicht freigegeben | Release |
-| AC-17 | Query-Optionen sind exakt Abschnitt 5.3 (`staleTime` 30 000, `refetchOnMount: "always"`, Fokus/Reconnect `true`, `networkMode: "online"`, `retry: false`, `gcTime` 300 000, kein `refetchInterval`); Rückkehr auf die Seite löst eine Revalidierung aus; eine Revalidierung mit mehreren geladenen Seiten beginnt bei Seite 1 mit Cursor `null` und nutzt nur frische Cursor; schlägt sie fehl, bleibt der alte Schnappschuss mit Veraltet-Status sichtbar; der Berliner Tageswechsel (gefälschte Uhr) invalidiert genau einmal, ohne eine Zeile zu bewerten | U, I |
-| AC-18 | Nach Abmeldung und Anmeldung als anderer Mitarbeiter erscheint vor der neuen Antwort **keine** Zeile des Vorgängers (Desktop und Mobil); der Query-Schlüssel enthält die Identitäts-Partition | I, E |
-| AC-19 | Nur Tastatur: alle Links erreichbar, Sichtwechsel per Pfeiltasten, „Weitere laden" und Aktualisieren bedienbar; mobiles Blatt per Tastatur öffnen/schließen (Escape) | C, E |
-| AC-20 | Fokusregeln aus Abschnitt 13.4: Fokus nach Revalidierung bei Wegfall der fokussierten Zeile auf dem definierten Nachbarn; nach „Weitere laden" auf der ersten neuen Zeile; nach Schließen des Blatts auf dem Auslöser | C |
-| AC-21 | Ein `main`, darin ein `h1` „Arbeitskorb", `h2` je Gruppe, `<ol>` je Gruppe, `tablist`/`tab`/`tabpanel`, Live-Region-Texte aus Abschnitt 13.5, Fehler mit `role="alert"`; axe ohne Verstöße (hell und dunkel) | C, E |
-| AC-22 | Mit `prefers-reduced-motion: reduce` hat kein Element der Fläche eine laufende Animation oder Transition (berechneter Stil bzw. `getAnimations()` leer, inkl. Skelett); die Ansagen erscheinen trotzdem | C, E |
-| AC-23 | Tap-Ziele (Zeilen-Knopf, Sichtwahl, Aktualisieren, „Weitere laden", Startseiten-Einstieg) ≥ 44 px, Blatt-Aktionen ≥ 48 px, gemessen bei 375 px Breite | E |
+| AC-17 | Query-Optionen sind exakt Abschnitt 5.3 (`staleTime` 30 000, `refetchOnMount: "always"`, Fokus/Reconnect `true`, `networkMode: "online"`, `retry: false`, `gcTime` 300 000, kein `refetchInterval`); Rückkehr auf die Seite löst eine Revalidierung aus; eine Revalidierung mit mehreren geladenen Seiten beginnt bei Seite 1 mit Cursor `null` und nutzt nur frische Cursor; schlägt sie fehl, bleibt der alte Schnappschuss mit Veraltet-Status sichtbar; mit gefälschter Uhr invalidiert der Berliner Tageswechsel genau einmal (Timer 2 Minuten nach Mitternacht oder Fokus), ohne eine Zeile zu bewerten, und die Statuszeile trägt das Datum, solange der Schnappschuss von einem anderen Berliner Tag stammt | U, I |
+| AC-18 | Nach Abmeldung und erneuter Anmeldung mit einer anderen Identität (gestubbter Auth-Provider im echten Admin-Kontext, Desktop- und Mobil-Admin) erscheint vor der neuen Antwort **keine** Zeile der vorherigen Identität; der Query-Schlüssel enthält die Identitäts-Partition. (E2E ohne zweiten Mitarbeiter, weil das Identitäts-Gate der E2E-Umgebung genau einen Mitarbeiter verlangt, [`21`](21-agent-runbooks.md) Sektion 16; die Prüfung mit zwei echten Konten ist RG-7) | I |
+| AC-19 | Nur Tastatur: Tab-Reihenfolge exakt wie Abschnitt 13.4; alle Links erreichbar; Sichtwechsel per Pfeiltasten; „Weitere laden" und Aktualisieren bedienbar; mobiles Blatt per Tastatur öffnen/schließen (Escape und „Schließen") | C, E |
+| AC-20 | Fokusregeln aus Abschnitt 13.4: Wegfall der fokussierten Zeile → definierter Nachbar bzw. `tabpanel`; nach „Weitere laden" erste neue Zeile, bei Fehlschlag bleibt der Fokus auf dem Knopf; nach erfolgreichem Wiederholen und verschwundenem Hinweis-Knopf → `tabpanel`; „Team ansehen" → Tab „Team"; Schließen des Blatts → Zeilen-Knopf bzw. Nachbar | C |
+| AC-21 | Struktur: ein `main`; genau ein `h1` „Arbeitskorb" (Desktop innerhalb `main`, Mobil im `MobileHeader`); `h2` je Gruppe; `<ol>` je Gruppe; `tablist`/`tab`/`tabpanel` mit korrekten `aria-controls`/`aria-selected`; keine verschachtelten interaktiven Elemente; Icons `aria-hidden`; Zeilentext enthält Gruppenbezeichnung + Langdatum | C, E |
+| AC-22 | Mit `prefers-reduced-motion: reduce` (Wirkung zuerst per `matchMedia` nachgewiesen) hat kein Element der Fläche — einschließlich Skelett, Blatt und Overlay — eine laufende Animation (`document.getAnimations()` leer nach Öffnen/Schließen des Blatts, Laden und Sichtwechsel) und keine Transition mit Dauer > 0; die Ansagen erscheinen trotzdem | E |
+| AC-23 | Gemessen bei 375 px Breite: Zeilen-Knopf, Tabs, Aktualisieren, „Weitere laden", „Team ansehen" und der Startseiten-Einstieg ≥ 44 px; Blatt-Aktionen und „Schließen" ≥ 48 px | E |
 | AC-24 | Kein horizontales Überlaufen bei 320, 375 und 390 px (`documentElement.scrollWidth <= clientWidth`); Desktop-Hauptnavigation mit vier Einträgen ohne Abschneiden/Umbruch bei 768, 1024, 1280 px | E |
-| AC-25 | Textkontrast ≥ 4,5:1 (inkl. Metatext und Überfällig-Datum), Indikatoren ≥ 3:1, in hell und dunkel (axe-Kontrastregel plus Stichprobe der Überfällig-Töne) | C, E |
-| AC-26 | `package.json`/`package-lock.json` unverändert; keine neue Motion-/UI-Bibliothek | S |
-| AC-27 | Kein Diff unter `supabase/**`, `src/**/application/queries/**`, `src/**/providers/**`; keine Migration, Policy, Grant | S |
-| AC-28 | Hotboard, mobile „Aufgaben"-Fläche, `MobileBackButton`, Kunden-/Kontaktakten und die sechs mobilen Navigationseinträge sind unverändert; ihre bestehenden Tests laufen unverändert grün | S, C, E |
+| AC-25 | Kontrast aus berechneten Farben (`getComputedStyle`, eigene WCAG-Formel im Test, keine Abhängigkeit) gegen den tatsächlichen Hintergrund, hell und dunkel, auch im Hover: Überfällig-Datum, Metatext, Halter, Statuszeile ≥ 4,5:1; Überfällig-Linie und -Icon ≥ 3:1; Töne entsprechen der Tabelle in Abschnitt 8 | E |
+| AC-26 | `package.json`/`package-lock.json` unverändert; keine neue Bibliothek (auch keine Test-Bibliothek) | S |
+| AC-27 | Kein Diff unter `supabase/**`, `src/**/application/queries/**` und `src/**/providers/**` — **ausgenommen** additive Schlüssel in den Übersetzungskatalogen `providers/commons/*CrmMessages.ts` ([`04`](04-routing-i18n.md) „i18n-Regeln"); keine Migration, Policy, Grant | S |
+| AC-28 | Hotboard, mobile „Aufgaben"-Fläche, `MobileBackButton`, `MobileHeader`, `MobileContent`, `ui/sheet.tsx`, Kunden-/Kontaktakten und die sechs mobilen Navigationseinträge sind unverändert; ihre bestehenden Tests laufen unverändert grün | S, C, E |
 | AC-29 | Die Arbeitskorb-Seiten werden **routenweise lazy geladen**; der Entry-Chunk wächst gegenüber dem Basis-`main`-Build um höchstens **5 kB** (beide mit `scripts/check-bundle-budget.mjs` gemessen, Werte im PR festgehalten), und beide Budgets (Entry 1 050 kB, gesamt 2 600 kB) bestehen | CI |
 | AC-30 | `npm run typecheck`, `npm run build`, die betroffenen Vitest-Suiten, ESLint/Prettier und `e2e/arbeitskorb.spec.ts` (Desktop- und Mobil-Projekt) laufen grün in der Gesamt-CI | CI |
+| AC-31 | Halter mit **widersprüchlichen** Fixtures: `isMine = false` bei `holder.salesId` = eigene Identität → kein „Ich"; `isMine = true` bei fremder `salesId` → „Ich"; `isUnassigned = true` mit gesetztem Halter → „Nicht zugewiesen"; `holder = null` ohne Flag → „Zuständigkeit unbekannt"; `displayName = null` → „Mitarbeiter ohne Namen"; in „Meine Arbeit" kein Halter | C |
+| AC-32 | Zahlen aus Flags: Fixtures, in denen Flags und `dueAt` (bei gefälschter Uhr) widersprechen, ergeben Zusammenfassung und Ansage nach den Flags; unvollständige Menge → „… geladen · weitere vorhanden" ohne Gesamtzahl; `n = 1` und Teile mit 0 nach Abschnitt 6.6/13.5; 0 Zeilen → weder Zusammenfassung noch Listenende | C |
+| AC-33 | `overdue = true` und `dueToday = true` → Zeile unter „Überfällig" mit dem Text „heute fällig" | C |
+| AC-34 | Zustände ohne eigene Prüfung oben: Offline ohne und mit Daten (`onlineManager.setOnline(false)` bzw. Playwright `setOffline`), „Wird aktualisiert …", „Weitere laden" fehlgeschlagen (Zeilen bleiben, Inline-Text, Knopf wiederholt), beide Leerzustandstexte, „Erneut fehlgeschlagen · …" — jeweils mit den Texten aus Abschnitt 11 | C, I |
+| AC-35 | Ansagen: jeder Übergang aus Abschnitt 13.5 erzeugt genau den festgelegten Text im festgelegten Kanal (`status` bzw. `alert`); ein erneutes Scheitern wird erneut angesagt; eine automatische Revalidierung ohne Änderung erzeugt keine Ansage; eine Revalidierung, die nur Gruppenschlüssel ändert (Tageswechsel), erzeugt „Arbeitskorb aktualisiert." | C |
 
 ---
 
@@ -486,12 +527,12 @@ Diese Punkte sind beim Contract-Freeze **nicht** verifiziert und werden nicht al
 | # | Gate | Nachweis |
 |---|---|---|
 | RG-1 | **Installierte PWA, echte Geräte (iOS und Android):** Arbeitskorb → Kontakt/Kunde → zurück in den Arbeitskorb mit erhaltener Sicht | Protokoll je Gerät. Fehlt ein verlässlicher Rückweg: Release **anhalten**, begrenzter Navigationspunkt mit PO-Entscheidung — kein stiller `MobileBackButton`-Umbau |
-| RG-2 | implementiertes Accessibility-Verhalten (Screenreader-Stichprobe VoiceOver/TalkBack, Tastatur, Zoom 125 %/150 %) | Protokoll |
+| RG-2 | implementiertes Accessibility-Verhalten: Screenreader-Stichprobe VoiceOver/TalkBack (Ansagen aus 13.5, Blatt), Tastatur, Zoom 125 %/150 %, Kontrast-Stichprobe mit den Browser-Entwicklerwerkzeugen in hell und dunkel (kein neues Paket) | Protokoll |
 | RG-3 | implementierte reduzierte Bewegung auf echtem Gerät | Protokoll |
 | RG-4 | reales responsives Layout inkl. Abstand über der unteren Navigation (iOS-Standalone, Android-Gestenbereich) | Screenshots |
 | RG-5 | tatsächliche Bundle-Größe | CI-Ausgabe `check-bundle-budget` (AC-29) |
 | RG-6 | finale E2E-Flüsse grün | CI-Lauf (AC-30) |
-| RG-7 | implementierte Sitzungs-/Cache-Isolation | AC-18 grün + manuelle Stichprobe mit zwei Konten |
+| RG-7 | implementierte Sitzungs-/Cache-Isolation mit zwei **echten** Mitarbeiterkonten (in E2E nicht möglich, AC-18) | AC-18 grün + manuelle Prüfung: Abmelden, mit zweitem Konto anmelden, keine fremde Zeile sichtbar — Desktop und Mobil |
 | RG-8 | **Production-Smoke nach dem Release** mit echter Mitarbeiter-Sitzung: beide Sichten, ein Kontext-Link je Oberfläche, Rückweg; Build-Identität nach [`21`](21-agent-runbooks.md) Sektion 14 | Release-Evidenz in `releases/` |
 
 ---
@@ -501,12 +542,12 @@ Diese Punkte sind beim Contract-Freeze **nicht** verifiziert und werden nicht al
 | Schnitt | Inhalt | erwartete Dateigrenzen |
 |---|---|---|
 | **D1 — Query Seam** | `useWorkItems` (Abschnitt 5), Query-Schlüssel, Freshness- und Tageswechsel-Mechanik, Sicht-Parsing aus der URL | neu unter `src/components/atomic-crm/work/` (Hook, Schlüssel, Sicht-Parser, Tests) |
-| **D2 — Presentation** | `formatWorkDueDate`, `toWorkRowView`, Gruppierung mit Invariante, Kontext-Anreicherung, Zeilen-, Listen-, Zustands- und Blatt-Komponenten | neu unter `work/`; wiederverwendet `ui/sheet.tsx`, `ui/tabs.tsx`, `ui/button.tsx`, Nora-Utilities; ggf. eng begrenzte Ergänzung in `src/index.css` (nur bestehende Tokens) |
-| **D3 — Desktop/Mobil-Integration** | Pfadkonstante, Desktop- und Mobil-Seitenhülle (lazy), Registrierung in beiden `CustomRoutes`, Desktop-Navigationseintrag, mobiler Start-Einstieg | `work/*Page*.tsx`, `root/CRM.tsx`, `layout/Header.tsx`, `dashboard/MobileDashboard.tsx`; ggf. Übersetzungskataloge nach bestehendem Muster |
-| **D4 — E2E / Hardening** | `e2e/arbeitskorb.spec.ts` (Desktop + Mobil), Zeitzonen-Kontexte, isolierte Fixtures für unvollständige/undatierte/gleichfällige Zeilen, Abmelde-/Identitätswechsel, Überlauf- und Touch-Messungen | `e2e/**`, isolierte Testdaten |
+| **D2 — Presentation** | `formatWorkDueDate`, `toWorkRowView`, Gruppierung mit Invariante, Kontext-Anreicherung, Zeilen-, Listen-, Zustands- und Blatt-Komponenten | neu unter `work/`; nutzt `ui/sheet.tsx` (mit `showClose={false}`), `ui/tabs.tsx`, `ui/button.tsx`, Nora-Utilities unverändert; eng begrenzte Ergänzung in `src/index.css` (nur bestehende Tokens; Reduced-Motion-Regeln aus Abschnitt 12) |
+| **D3 — Desktop/Mobil-Integration** | Pfadkonstante, Desktop- und Mobil-Seitenhülle (lazy), Registrierung in beiden `CustomRoutes`, Desktop-Navigationseintrag, mobiler Start-Einstieg | `work/*Page*.tsx`, `root/CRM.tsx`, `layout/Header.tsx`, `dashboard/MobileDashboard.tsx`; additive Schlüssel in `providers/commons/germanCrmMessages.ts` (und, soweit die Typen es verlangen, `englishCrmMessages.ts` / `frenchCrmMessages.ts`) nach [`04`](04-routing-i18n.md) „i18n-Regeln" |
+| **D4 — E2E / Hardening** | `e2e/arbeitskorb.spec.ts` (Desktop + Mobil), Zeitzonen-Kontexte, isolierte Fixtures für unvollständige/undatierte/gleichfällige Zeilen (über die vorhandenen E2E-Helfer, **ohne** zusätzlichen Mitarbeiter — das Identitäts-Gate verlangt genau einen, [`21`](21-agent-runbooks.md) Sektion 16), Überlauf-, Touch-, Kontrast- und Reduced-Motion-Messungen | `e2e/**`, isolierte Testdaten |
 | **D5 — Release** | Gesamt-CI, Bundle-Messung, unabhängige Review, PO-Abnahme, Merge, Production-Smoke, Doku-Nachzug (`16`, `20`, `02`/`04`-Ist-Zustand, `17` G.7, Archiv) | `docs/nora/**` |
 
-**Bleibt unverändert:** `application/queries/**`, `providers/**`, `supabase/**`, Paketmanifeste, `MobileBackButton`, Hotboard, `MobileTasksList`, `tasksPredicate.ts`, Kunden-/Kontaktakten. Keine dieser Dateien ist eine verdeckte Voraussetzung.
+**Bleibt unverändert:** `application/queries/**`, `providers/**` (außer den additiven Katalogschlüsseln), `supabase/**`, Paketmanifeste, `vitest.config.ts`, `MobileBackButton`, `MobileHeader`, `MobileContent`, `ui/sheet.tsx`, Hotboard, `MobileTasksList`, `tasksPredicate.ts`, Kunden-/Kontaktakten, das E2E-Identitäts-Gate. Keine dieser Dateien ist eine verdeckte Voraussetzung.
 
 ---
 
@@ -550,3 +591,8 @@ Wo die Arbeitsfassungen einander oder der verifizierten Evidenz widersprachen, g
 | Titelkürzung Desktop / „Warum?" | UX: Kürzung + „Mehr", Erklärungs-Aufklappung | Desktop ungekürzt, mobil 3 Zeilen + Blatt; keine Aufklappungen | weniger interaktive Elemente pro Zeile |
 | Einstieg | Synthese: Start-Einstieg auf beiden Oberflächen | Desktop: Kopfnavigation; Mobil: Start-Einstieg (14) | T-6 |
 | Leerer Name | Synthese: „Kunde öffnen" | „Kunde" / „(Name nicht geladen)" / „(Name nicht verfügbar)" (7) | unterscheidet ausstehend, Fehler und fehlenden Datensatz |
+| „Team ansehen" | UX: Link | Knopf mit replace und Fokus auf den Tab (10) | Sichtwechsel einheitlich per replace |
+| Fokus nach „Zurück" | UX: zurück auf den zuletzt benutzten Link | nicht in Alpha; Scrollposition ja (10) | die Seite wird beim Zurückkehren neu montiert und revalidiert; eine verlässliche Wiederherstellung wäre eigene Mechanik |
+| Mobile Sichtwahl | UX: klebend unter dem Header | scrollt mit (9) | `MobileContent` ist ein eigener Scroll-Container; `position: sticky` greift dort nicht, und die gemeinsame Hülle wird nicht umgebaut |
+| Accessibility-Prüfung | UX: „axe: keine Verstöße" | explizite Rollen-/Struktur-/Kontrastzusicherungen + manuelles Audit (17, RG-2) | keine neue Abhängigkeit |
+| Mobiles `h1` | UX: im Kopf | im `MobileHeader`, außerhalb von `main` (13.1) | Nora-Hausmuster für mobile Seiten |
