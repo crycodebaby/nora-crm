@@ -106,7 +106,7 @@ Nur im Archiv (reine Release-Historie, keine eigene durable Regel): siehe Tabell
 
 ## 2026-09-29 – Alpha Work 2: Work wird über eine Application-Query gelesen, nie über ihren Transport
 
-**Status:** Application- und Infrastructure-Schicht im Repository (Alpha Work 2). **Keine Migration, keine Schemaänderung, keine neue Berechtigung, keine Oberfläche, kein MCP** — die Schnittstelle hat heute keinen Aufrufer. Umsetzungsstand: [`25`](25-universal-work-model.md) Abschnitt 21.6; offene Punkte: [`17`](17-known-issues-and-planned-waves.md) G.7.
+**Status:** Application- und Infrastructure-Schicht, **gemergt und in Production ausgeliefert am 2026-10-13** (PR #6, Merge-Commit `95099841f6190d39e06c1ab863e756fb4fa6234d`, `MERGED / PRODUCTION DEPLOYED / CERTIFIED`; Evidenz [`releases/2026-10.md`](releases/2026-10.md)). Das Datum dieses Eintrags ist das Entscheidungsdatum, nicht das Merge-Datum. **Keine Migration, keine Schemaänderung, keine neue Berechtigung, keine Oberfläche, kein MCP** — die Schnittstelle hat heute keinen Aufrufer. Umsetzungsstand: [`25`](25-universal-work-model.md) Abschnitt 21.6; offene Punkte: [`17`](17-known-issues-and-planned-waves.md) G.7.
 
 **Kontext.** W-A liefert seit 2026-09-22 den serverseitigen Work-Query-Contract (`public.get_work_items`), aber `src/**` hatte keinen Konsumenten. Eine künftige Arbeitskorb-Oberfläche und künftige MCP-Werkzeuge (Gate G-11) sollen dieselbe Semantik lesen, ohne RPC-Namen, PostgREST-Eigenheiten oder Cursor-Interna zu kennen — und ohne selbst Work-Regeln zu berechnen.
 
