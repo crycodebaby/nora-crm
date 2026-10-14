@@ -889,7 +889,7 @@ Bewusst offene Punkte. Jedes Gate braucht eigenen Entwurf, eigene Review und eig
 
 > **Stand nach W-A (2026-09-22).** **Keines** der elf Gates ist begonnen. Der W-A-PASS erfüllt lediglich die Voraussetzung „Nach W-A-PASS" von **G-1**; damit ist G-1 der nächste **Planungskandidat** — nicht mehr. Eine eigene G-1-Architektur-/Planungsreview hat **nicht** stattgefunden, es gibt keinen G-1-Entwurf und keine G-1-Migration. Bis eine solche Review vorliegt, gilt für G-1 ausschließlich `PLANNING CANDIDATE`, nie `IMPLEMENTATION READY`.
 >
-> **Stand 2026-10-14.** Der Product Owner hat **G-4a** (`work.complete` / `work.reopen`) vor G-1/G-3 gezogen. Für G-4a liegt ein Command-Contract vor ([`27`](27-work-lifecycle-commands.md), `CONTRACT CANDIDATE`, unabhängige Review ausstehend) — **keine** Migration, **kein** RPC, **kein** Code. Alle übrigen Gates einschließlich G-1 bleiben unbegonnen; die Aussage zu G-1 oben gilt unverändert.
+> **Stand 2026-10-14.** Der Product Owner hat **G-4a** (`work.complete` / `work.reopen`) vor G-1/G-3 gezogen. Für G-4a liegt ein Command-Contract vor ([`27`](27-work-lifecycle-commands.md), `CONTRACT CANDIDATE`; *Nachtrag 2026-10-15:* unabhängige Review bestanden, freeze-ready, eingefroren erst mit dem Merge) — **keine** Migration, **kein** RPC, **kein** Code. Alle übrigen Gates einschließlich G-1 bleiben unbegonnen; die Aussage zu G-1 oben gilt unverändert.
 
 | Gate | Gegenstand | Voraussetzung |
 |---|---|---|
