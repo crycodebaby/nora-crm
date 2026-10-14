@@ -545,6 +545,8 @@ Stand seit W-A (`PRODUCTION VERIFIED` 2026-09-22, Migration `20260922120000_nora
 
 **Vorbestehende Abhängigkeit, von W-A nicht verändert.** Die Work-Identität entsteht über `public.nora_entity_uuid(text, bigint)`. Diese Function hält in Production weiterhin ihre breitere Privilegienlage inklusive `PUBLIC`- und `anon`-`EXECUTE`. Das ist ein **vorbestehender** Punkt der offenen Security-Welle ([`17`](17-known-issues-and-planned-waves.md) A.8/A.10) — W-A hat ihn weder eingeführt noch vergrößert und **schließt ihn nicht**. Die Function ist `IMMUTABLE` und deterministisch; eine daraus berechnete `work_id` ist bekanntlich **kein Autorisierungstoken**.
 
+> **Work-Schreibseite: Zielvertrag Work 3, nicht umgesetzt (Stand 2026-10-14).** Heute gibt es **keinen** Work-Schreibpfad; `authenticated` hält auf `public.tasks` `UPDATE` auf **Tabellenebene** und kann damit auch `done_date` roh schreiben (Erledigen/Wiederöffnen aus dem Browser, F-4/F-7 in [`27`](27-work-lifecycle-commands.md)). Der Command-Contract [`27`](27-work-lifecycle-commands.md) legt die künftige Durchsetzung fest: zwei `SECURITY DEFINER`-RPCs (`complete_work_item`, `reopen_work_item`, Owner `postgres`, `search_path = ''`, `EXECUTE` nur `authenticated`, Autorisierung im Körper über `current_sales_id()` + `can_write()`, kein Holder-Prädikat) und ein **spaltenbezogenes** `UPDATE`-Recht für `authenticated` ohne `done_date` (Abschnitte 15 und 16 dort). Bis zur Auslieferung beschreibt **dieser** Abschnitt die geltende Rechtelage; danach wird die Durchsetzungsseite hier nachgezogen.
+
 Operative Schritte: [`21`](21-agent-runbooks.md) Sektion 4 und 5.
 
 ### 6.14 Privater Anhang-Bucket und abgeleiteter Zugriff (W8-E)
