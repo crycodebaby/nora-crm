@@ -88,6 +88,7 @@ Stand seit **W-A** (`PRODUCTION VERIFIED` 2026-09-22). Der eingefrorene Domain-C
 - **RC3 hat keine neue Work-Autorität eingeführt und keinen Posteingang gebaut.** Das im Redesign zunächst mitgedachte Inbox-/Posteingang-Konzept wurde nach Review **absichtlich aus dem Release entfernt**. Kanonisch gilt: das bestehende Hotboard-/Work-Verhalten bleibt autoritativ, es gibt **kein** Inbox-/Posteingang-Persistenzmodell, und das Universal Work Model bleibt eingefroren ([`25`](25-universal-work-model.md)). **Das ist kein unfertiges RC3-Feature** — es war ein bewusster Ausschluss. Ein künftiges Inbox-/Kommunikationskonzept braucht eine eigene Produktdiskovery und einen eigenen `06`-Eintrag; wer es aus dem RC3-Verlauf als „angefangen" liest, liest falsch.
 - **Vier Vertragsfälle sind in Production nicht beobachtbar** — freie (`is_unassigned`) Arbeit, der `NULLS LAST`-Schwanz bei fehlender Fälligkeit, die Tie-Break-Ordnung bei gleicher Fälligkeit und die unvollständige Zeile. Der Bestand enthält sie schlicht nicht; sie sind durch die lokale Contract-Suite belegt, nicht durch Produktionsdaten ([`25`](25-universal-work-model.md) Abschnitt 22.2). **„Alle Work-Semantik in Production bewiesen" wäre falsch.**
 - **Nächster Planungskandidat ist G-1 (Lifecycle Persistence)** — unbegonnen, ohne eigene Architekturreview.
+- **Erledigen/Wiederöffnen läuft heute weiterhin über rohes CRUD** (`Task.tsx` schreibt `tasks.done_date` mit Browser-Zeitstempel). Für die autoritativen Commands `work.complete` / `work.reopen` (Gate **G-4a**, vom Product Owner am 2026-10-14 vor G-1/G-3 gezogen) liegt ein Contract-Kandidat vor ([`27`](27-work-lifecycle-commands.md)) — **nichts davon ist implementiert oder live**.
 
 ## Was ist live?
 
@@ -182,7 +183,7 @@ Global zustandsprägende offene Punkte:
 - Wave 7 Folgepunkte → [`17`](17-known-issues-and-planned-waves.md) Abschnitt G
 - Anhänge: verwaiste Objekte (S2B). Erledigt sind Backfill (W8-C S4), relationales Lese-Gate (W8-C S5), Ordnungsgrundlage (W8-C S6-A) und der private Bucket (W8-E, 2026-10-07). Getrennt offen bleiben der Wechsel der relationalen Leseautorität (S6-B1), der sichere Wechsel der Schreib-/Ordnungsautorität (S6-B2), die physische Storage-Bereinigung samt vier überholten Branding-Quellobjekten (S2B) und die Produkt-/UX-Welle für die Anhang-Darstellung → [`17`](17-known-issues-and-planned-waves.md) Abschnitt H
 - Kalender nicht produktiv nutzbar → [`11`](11-google-calendar-rbac.md) / [`14`](14-google-calendar-readonly-implementation.md)
-- Work: Query-Contract, Application-Leseschnittstelle und der read-only Arbeitskorb sind live; Lifecycle-Persistenz (G-1), Claiming (G-3), Work Commands (G-4) und die Ablösung von Hotboard/Arbeitsboard (G-10) sind **unbegonnen** → [`17`](17-known-issues-and-planned-waves.md) Abschnitt G, Gates in [`25`](25-universal-work-model.md) Abschnitt 23
+- Work: Query-Contract, Application-Leseschnittstelle und der read-only Arbeitskorb sind live; Lifecycle-Persistenz (G-1), Claiming (G-3), Work Commands (G-4) und die Ablösung von Hotboard/Arbeitsboard (G-10) sind **unbegonnen** (für G-4a `work.complete`/`work.reopen` existiert nur der Contract-Kandidat [`27`](27-work-lifecycle-commands.md)) → [`17`](17-known-issues-and-planned-waves.md) Abschnitt G, Gates in [`25`](25-universal-work-model.md) Abschnitt 23
 
 ## Welche Dokumente muss ich für welches Thema lesen?
 
