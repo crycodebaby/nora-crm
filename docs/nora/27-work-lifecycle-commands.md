@@ -1,6 +1,6 @@
 # 27 – Work 3 – Lifecycle-Commands `work.complete` / `work.reopen` (Command-Contract)
 
-Stand: 2026-10-14 · Status: **CONTRACT CANDIDATE — bereit für unabhängige Review** (noch nicht eingefroren) · Umsetzungsstand: **nicht implementiert** — keine Migration, kein RPC, kein Code · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
+Stand: 2026-10-14 · Status: **CONTRACT CANDIDATE — Review-Befunde F-1, M-1 … M-6 eingearbeitet, bereit für erneute unabhängige Review** (noch nicht eingefroren; Änderungsnotiz Abschnitt 27) · Umsetzungsstand: **nicht implementiert** — keine Migration, kein RPC, kein Code · Load-Klasse: **CONDITIONAL CURRENT CONTRACT**
 
 Dieses Dokument ist der **Implementierungs-Contract für die erste autoritative Work-Mutation**: genau zwei Application Commands, `completeWorkItem` (`work.complete`, `open → done`) und `reopenWorkItem` (`work.reopen`, `done → open`), über dem einzigen Work Carrier `public.tasks`. Es legt fest, was ein späterer Implementierungs-Agent bauen **muss**, was er wählen **darf** und was **nicht** Teil der Welle ist — und woran die Umsetzung objektiv gemessen wird.
 
@@ -67,7 +67,7 @@ Work Read Model zeigt die neue Wahrheit (Konsument liest neu, rekonstruiert nich
 | F-1 | `public.tasks` hat acht Spalten; Lifecycle allein über `done_date` (`NULL` = offen). Kein `status`, `updated_at`, `version`, `completed_by`, Cancel-/Archivzustand | [`25`](25-universal-work-model.md) §4.2; `supabase/schemas/01_tables.sql` |
 | F-2 | `get_work_items` liest `state = open ⟺ done_date IS NULL`; `p_state_scope` `open` (Default) \| `done` \| `all` | [`25`](25-universal-work-model.md) §21.1, §21.3 |
 | F-3 | Die Work-Identität ist `public.nora_entity_uuid('task', id)` = UUIDv5 über `'task:<id>'` (Namespace `6ba7b811-…`), `IMMUTABLE`, nicht umkehrbar; das Work-DTO (`WorkItem`) enthält **keine** Träger-ID | `20260628150000_checklists_snippets_audit.sql`; `application/queries/getWorkItems.ts` |
-| F-4 | `Task.tsx` schaltet Erledigt **und** Wieder-öffnen über **eine** Funktion `handleCheck`: `update("tasks", { data: { done_date: task.done_date ? null : new Date().toISOString() } })` — der Browser entscheidet die Richtung und erzeugt den Zeitstempel. Zwei Auslöser: die Checkbox und (mobil) ein Tippen auf den Zeilenkörper. Nach einem Erfolg wird die `tasks`-Liste **absichtlich nicht** invalidiert | `tasks/Task.tsx` Z. 76–97, 119–129 |
+| F-4 | `Task.tsx` schaltet Erledigt **und** Wieder-öffnen über **eine** Funktion `handleCheck`: `update("tasks", { data: { done_date: task.done_date ? null : new Date().toISOString() } })` — der Browser entscheidet die Richtung und erzeugt den Zeitstempel. **Drei** Auslöser: (a) die Checkbox (`onCheckedChange`), (b) das Text-Label `<label htmlFor={labelId}>` — ein Klick darauf aktiviert die Checkbox und löst damit (a) aus, auf jedem Gerät —, (c) mobil ein `onClick` auf dem Zeilenkörper `nora-task-body`, **der das Label enthält**. Ein mobiles Tippen auf den Text löst daher (c) über das Bubbling **und** (a) über die Label-Aktivierung aus — zwei Handler-Aufrufe im selben Event-Tick, beide mit demselben (noch alten) `task`. Die einzige Sperre ist `disabled={isUpdatePending}` an der Checkbox — ein React-Zustand, der erst nach dem nächsten Render greift und den Zeilenkörper gar nicht sperrt. Nach einem Erfolg wird die `tasks`-Liste **absichtlich nicht** invalidiert | `tasks/Task.tsx` Z. 76–97, 119–144 |
 | F-5 | Der generische Update-Pfad (`ra-supabase-core` → `@raphiniert/ra-data-postgrest` 2.5.1, Lockfile) sendet nur **geänderte** Felder (`getChanges(data, previousData)`) und entfernt den Primärschlüssel; ohne Änderung findet kein Request statt | `package-lock.json`; `ra-data-postgrest/esm/index.js` `update`, `getChanges` |
 | F-6 | Weitere legitime Task-Schreibpfade über generisches CRUD: Bearbeiten-Dialog (`TaskEdit`, `EditBase`), „Morgen"/„Nächste Woche" (`due_date`), Kontakt-Zusammenführung (`contact_id`), Anlage (`AddTask`, `TaskCreateSheet`), JSON-Import (`create` **inkl.** `done_date`) | `tasks/Task.tsx` Z. 233–261; `providers/commons/mergeContacts.ts`; `misc/useImportFromJson.ts` Z. 559–567 |
 | F-7 | Grants: `authenticated` hält `SELECT, INSERT, UPDATE, DELETE` auf `public.tasks` (Tabellenebene), `service_role` `SELECT, INSERT, UPDATE`, `anon` nichts | `supabase/schemas/06_grants.sql` Z. 141–143 |
@@ -84,6 +84,11 @@ Work Read Model zeigt die neue Wahrheit (Konsument liest neu, rekonstruiert nich
 | F-18 | FakeRest simuliert bestehende Commands (z. B. `createQuickCaptureTask`, `setPrimaryContact`) über den Operation-Katalog; die Work-**Lese**schnittstelle antwortet dort `unavailable` | `providers/fakerest/dataProvider.ts`; [`06`](06-decision-log.md) „Alpha Work 2" Punkt 7 |
 | F-19 | CI (`.github/workflows/check.yml`) führt ESLint, Prettier, Secret-Scan, Typecheck, Vitest (App + Functions), Build/Bundle-Budget und Playwright-E2E gegen eine lokale Supabase (`make test-e2e-ci`) aus — **keine** SQL-, Session- oder Concurrency-Suite aus `supabase/tests/` | `.github/workflows/check.yml`; `Makefile` |
 | F-20 | `supabase/tests/public_privilege_hardening_verification.sql` prüft für `authenticated` auf `public.tasks` exakt `SELECT,INSERT,UPDATE,DELETE` (Tabellenebene) | Z. 98–112 |
+| F-21 | **Fehlerverhalten des Legacy-Erledigt-Pfads:** `handleCheck` ruft `useUpdate()` ohne `onError` und ohne Benachrichtigung auf; ra-core `useUpdate` ist standardmäßig pessimistisch und benachrichtigt nicht von selbst; der `QueryClient` hat keinen globalen Mutations-`onError`; `update("tasks", …)` läuft im Supabase-Provider direkt zum Basis-Provider — **nicht** über den Operation Manager, also ohne `operation_id`-Datensatz und ohne Eintrag in `public.operation_errors`. Ein abgewiesener `PATCH` bleibt für den Benutzer damit ohne Erklärung; die Checkbox (kontrolliert über `checked={!!task.done_date}`) behält ihren alten Zustand | `tasks/Task.tsx` Z. 59–84; `root/CRM.tsx` Z. 341–354; `providers/supabase/dataProvider.ts` `update` (Sonderpfade nur `contacts`, `deals`) |
+| F-22 | Nora ist eine PWA im **Prompt-Modus**: ein offener Tab bleibt auf dem alten Build, bis der Update-Hinweis bestätigt oder alle Nora-Fenster geschlossen wurden; es gibt **keinen** flottenweiten Nachweis, welcher Build auf welchem Gerät läuft | [`24`](24-pwa-and-update-lifecycle.md) §2, §8; [`21`](21-agent-runbooks.md) Sektion 17 „Stage B.5" |
+| F-23 | Legacy-Aufgabenflächen filtern `done_date` **clientseitig**: Hotboard (`task.done_date == null`), Vorgangsaufgaben (offen/erledigt-Aufteilung und Zähler), `TasksIterator` und `TasksListByDueDate` (`!isDone \|\| isRecentlyDone`) | `dashboard/HotboardOpenTasks.tsx` Z. 38; `deals/DealTasksSection.tsx` Z. 39–49; `tasks/TasksIterator.tsx` Z. 17; `tasks/TasksListByDueDate.tsx` Z. 60 |
+| F-24 | `tasks.id` ist `bigint generated by default as identity` — eine explizite `id` ist beim `INSERT` zulässig, solange sie frei ist. `INSERT` erlaubt RLS jedem Schreibenden (`Tasks insert writers`, `can_write()`); eine **belegte** `id` frei machen kann nur `DELETE`, und das nur `is_admin()` | `supabase/schemas/01_tables.sql` Z. 146–156; `05_policies.sql` Z. 54–57 |
+| F-25 | Konvention für `operationId`: `createOperationContext` übernimmt eine gültige UUID kleingeschrieben und **mintet** für eine fehlende oder ungültige eine neue — „soft; never throws"; jeder Operation-Wrapper durchläuft diesen Pfad über `manager.execute` | `operations/operationContext.ts` Z. 87–134; `operationManager.ts` Z. 250–260; `operationContext.test.ts` „F: invalid operationId is soft" |
 
 ---
 
@@ -135,6 +140,7 @@ Eingaberegeln (vor jedem Netzwerkaufruf geprüft; Verstoß ⇒ `invalid_request`
 
 - `target` hat **genau** eine der beiden Formen. `workId` ist eine UUID-Zeichenkette; `carrierId` ist eine sichere ganze Zahl ≥ 0 (`0` ist gültig — [`03`](03-data-model-guardrails.md) §2.1, nullish statt truthy); `carrier` ist exakt `"task"`.
 - `idempotencyKey` ist eine UUID-Zeichenkette und **Pflicht** (Begründung: Abschnitt 11.1).
+- `operationId` folgt **unverändert** der bestehenden Korrelationskonvention (F-25) und ist deshalb **kein** Abweisungsgrund: eine gültige UUID wird kleingeschrieben für diesen Versuch verwendet; fehlt sie oder ist sie ungültig (keine Zeichenkette, keine UUID), **mintet** der Operation Manager eine neue — **kein** `invalid_request`, kein Abbruch, kein zweiter Mint im Adapter oder Transport. Der Header `x-nora-operation-id` trägt immer die so bestimmte `operation_id`. Das verletzt keine Work-3-Invariante, weil `operationId` weder Identität noch Idempotenz noch Autorisierung trägt ([`23`](23-operations-errors-feedback.md) §2): ein ungültiger Wert verändert weder Ziel, Schlüssel, Fingerprint noch Ergebnis — er kostet nur die vom Aufrufer gewünschte Korrelation. Der `idempotencyKey` wird **nie** aus der `operationId` abgeleitet oder durch sie ersetzt (und umgekehrt).
 - **Jedes andere Feld wird abgewiesen, nie ignoriert** — ausdrücklich u. a. `actorId`, `salesId`, `userId`, `completedBy`, `doneDate`, `done_date`, `doneAt`, `isDone`, `nextState`, `state`. Begründung wie bei `getWorkItems` ([`06`](06-decision-log.md) „Alpha Work 2" Punkt 2): ein still ignoriertes Feld ließe den Aufrufer glauben, er habe Actor, Zeitpunkt oder Richtung bestimmt.
 
 ### 4.3 Ergebnis (CONTRACT)
@@ -142,14 +148,14 @@ Eingaberegeln (vor jedem Netzwerkaufruf geprüft; Verstoß ⇒ `invalid_request`
 ```ts
 type WorkLifecycleCommandResult = {
   workId: WorkId;                       // kanonische Work-Identität des Ziels (immer gesetzt, auch bei carrierId-Eingabe)
-  state: "done" | "open";               // complete ⇒ immer "done"; reopen ⇒ immer "open"
+  state: "done" | "open";               // complete ⇒ immer "done"; reopen ⇒ immer "open" — Zustand NACH der (ursprünglichen) Ausführung
   doneAt: string | null;                // Server-timestamptz wörtlich (nie über JS-Date interpretiert); "done" ⇒ gesetzt, "open" ⇒ null
-  transition: "applied" | "unchanged";  // hat dieser Command den Zustand tatsächlich geändert?
+  transition: "applied" | "unchanged";  // hat die (ursprüngliche) Ausführung dieses Commands den Zustand geändert?
   disposition: "executed" | "replayed"; // Ausführungsdisposition nach [`23`] §3 — wurde in diesem Request ausgeführt?
 };
 ```
 
-Bedeutung und Abgrenzung: Abschnitt 13. Das Ergebnis ist **bewusst minimal** — kein Task-Objekt, kein Work-Item; die Lesewahrheit bleibt das Work Read Model (Abschnitt 18).
+Bedeutung und Abgrenzung: Abschnitt 13. **Bei `disposition = "replayed"` beschreiben `state`, `doneAt` und `transition` die ursprüngliche Ausführung** — ein historisches Command-Ergebnis, **nicht** notwendig den heutigen Work-Zustand (Abschnitt 11.4, 13). Das Ergebnis ist **bewusst minimal** — kein Task-Objekt, kein Work-Item; die Lesewahrheit bleibt das Work Read Model (Abschnitt 18).
 
 ### 4.4 Fehler (CONTRACT)
 
@@ -315,7 +321,7 @@ Daraus folgt (**CONTRACT**):
 | derselbe Schlüssel für `complete` und `reopen` | derselbe | zwei unabhängige Scopes (Präzedenz Quick Capture); fachlich bedeutungslos, aber kein Fehler — Konsumenten minten je Absicht einen neuen Schlüssel |
 | Versuch scheiterte vor dem Commit | derselbe | Scope ist nicht committet ⇒ frei wiederholbar, führt normal aus |
 
-**Wer mintet den Schlüssel (CONTRACT):** die Schicht, die die **Benutzerabsicht** besitzt — für die Task-Checkbox der Klick-Handler, **einmal pro Klick**; eine ausdrückliche „Erneut versuchen"-Aktion für **dieselbe** fehlgeschlagene Operation verwendet denselben Schlüssel. Der Adapter, der Transport und der Operation Manager minten **nie** einen Idempotenzschlüssel.
+**Wer mintet den Schlüssel (CONTRACT):** die Schicht, die die **Benutzerabsicht** besitzt — für die Task-Checkbox der Klick-Handler, **einmal pro Klick bzw. Tippen** — auch wenn diese eine Geste mehrere Handler auslöst (Abschnitt 17 Punkt 5); eine ausdrückliche „Erneut versuchen"-Aktion für **dieselbe** fehlgeschlagene Operation verwendet denselben Schlüssel. Der Adapter, der Transport und der Operation Manager minten **nie** einen Idempotenzschlüssel.
 
 ### 11.4 Kernfall: Retry nach zwischenzeitlicher Gegentransition (TRAP 4)
 
@@ -367,6 +373,8 @@ t3  A liest neu (Abschnitt 18) → Work Read Model zeigt die Aufgabe offen
 | `executed` + `applied` | in diesem Request ausgeführt, Zustand geändert, ein Audit-Ereignis |
 | `executed` + `unchanged` | in diesem Request ausgeführt, Ziel war schon im Zielzustand (D3) |
 | `replayed` + `applied` / `unchanged` | früheres Ergebnis derselben Absicht; **nichts** wurde jetzt ausgeführt; Werte beschreiben die ursprüngliche Ausführung |
+
+- **`transition` bei `replayed` (CONTRACT):** `transition` (ebenso `state` und `doneAt`) beschreibt bei `disposition = replayed` die **ursprüngliche** Ausführung des Commands — `replayed` + `applied` heißt „die erste Ausführung dieser Absicht hat den Zustand geändert", **nicht** „der Zustand ist jetzt so". Es ist ein **historisches Command-Ergebnis**, keine Aussage über den aktuellen Work-Zustand; zwischen ursprünglicher Ausführung und Replay kann eine Gegentransition liegen (Abschnitt 11.4). **Der aktuelle Work-Zustand kommt ausschließlich aus dem autoritativen Lesepfad** (Abschnitt 18). Auch ein `executed`-Ergebnis gilt nur für den Commit dieses Requests (danach kann ein anderer Command folgen); angezeigt wird deshalb in jedem Fall der neu gelesene Zustand, nie das Ergebnis.
 
 - **RPC-Umschlag (CONTRACT):** `{ "work_id": uuid, "state": "done"|"open", "done_at": timestamptz|null, "transition": "applied"|"unchanged", "_meta": { "disposition": "executed"|"replayed" } }`. `_meta` ist Transportmetadatum ([`23`](23-operations-errors-feedback.md) §3.3); persistiert wird `executed`, `replayed` wird requestbezogen angefügt (Präzedenz F-14).
 - **Validierung im Adapter (CONTRACT):** fehlt ein Feld, liegt ein Wert außerhalb seines geschlossenen Vokabulars, widerspricht `state` dem Command (complete ⇒ `done`, reopen ⇒ `open`), widerspricht `done_at` dem Zustand (`done` ⇒ nichtleere Zeichenkette, `open` ⇒ `null`), fehlt die Disposition, oder weicht `work_id` bei `workId`-Eingabe vom angefragten Ziel ab ⇒ `malformed_response`. Zusätzliche, unbekannte Felder werden ignoriert und nie weitergereicht (Toleranzregel aus Alpha Work 2).
@@ -456,13 +464,47 @@ grant update (text, type, due_date, sales_id, company_id, contact_id) on table p
 
 ### 16.3 Auslieferungsreihenfolge (CONTRACT)
 
-Die Schließung bricht jeden noch laufenden Client, der `done_date` roh schreibt. Deshalb **drei** Schritte, nicht einer:
+Die Schließung bricht jeden noch laufenden Client, der `done_date` roh schreibt — und zwar **still** (16.3.1). Deshalb **drei** Schritte, nicht einer, und vor dem dritten ein Gate:
 
 1. **R1 — additive Migration:** beide RPCs samt Grants. Nichts wird entzogen; alte Clients funktionieren weiter.
 2. **R2 — Frontend-Release:** die Checkbox nutzt die Commands (Abschnitt 17); Production-Smoke mit echter Mitarbeiter-Sitzung (complete **und** reopen, Audit-Zeilen geprüft).
-3. **R3 — Schließungsmigration:** Spaltenrecht gemäß 16.2. Danach Production-Beweis: `has_column_privilege('authenticated', 'public.tasks', 'done_date', 'UPDATE') = false`, `… 'text', 'UPDATE') = true` (ebenso `type`, `due_date`, `sales_id`, `company_id`, `contact_id`), `has_table_privilege('authenticated', 'public.tasks', 'UPDATE') = false`.
+3. **R3 — Schließungsmigration:** Spaltenrecht gemäß 16.2 — **erst nach erfüllter R3-Vorbedingung (16.3.2)**. Danach Production-Beweis: `has_column_privilege('authenticated', 'public.tasks', 'done_date', 'UPDATE') = false`, `… 'text', 'UPDATE') = true` (ebenso `type`, `due_date`, `sales_id`, `company_id`, `contact_id`), `has_table_privilege('authenticated', 'public.tasks', 'UPDATE') = false`.
 
-**Work 3 ist erst mit R3 abgeschlossen.** Zwischen R1 und R3 besteht die Legacy-Autorität bewusst weiter (KNOWN LEGACY). Ein nach R3 noch laufender veralteter Client (alter Service-Worker-Stand, offener Tab) erhält beim Abhaken einen **sichtbaren** Berechtigungsfehler und ändert nichts — fail-closed, keine Datenverfälschung; der PWA-Update-Lifecycle ([`24`](24-pwa-and-update-lifecycle.md)) löst das. Rückweg von R3 ist ein erneutes Tabellen-`UPDATE`-Grant — das öffnet den Bypass wieder und ist nur als Notfall-Rollback zulässig.
+**Work 3 ist erst mit R3 abgeschlossen.** Zwischen R1 und R3 besteht die Legacy-Autorität bewusst weiter (KNOWN LEGACY).
+
+#### 16.3.1 Kompatibilitätsfenster (FACT/CONTRACT)
+
+„Alter Client" = ein Frontend-Build **vor** R2 (Checkbox patcht `done_date` roh, F-4); „neuer Client" = R2-Build oder jünger.
+
+| Datenbank \ Client | alter Client (vor R2) | neuer Client (ab R2) |
+|---|---|---|
+| vor R1 | heutiger Zustand | **nicht unterstützt** — die RPCs fehlen, jeder Command scheitert (`failed`, sichtbar nach Abschnitt 17, Zustand unverändert). Deshalb R1 vor R2 und kein Rückbau von R1, solange ein R2-Build live ist |
+| R1 (additiv) | funktioniert unverändert (Legacy-Autorität) | funktioniert über die Commands |
+| R1 + R3 (geschlossen) | **scheitert still** — siehe unten | funktioniert über die Commands (der einzige Weg) |
+
+**Tatsächliches Verhalten eines alten Clients nach R3 (FACT, F-21, F-22):**
+
+- Der Benutzer hakt ab oder öffnet wieder; der alte Client sendet `PATCH /tasks?id=eq.…` mit `done_date`.
+- PostgreSQL/PostgREST weist ihn mit `42501` (fehlendes Spaltenrecht) ab, vor jedem Trigger. Die Aufgabe bleibt **unverändert**; es entsteht kein Audit-Ereignis — **keine Datenverfälschung** (fail-closed).
+- Der alte Client zeigt dafür **möglicherweise keine sichtbare Erklärung**: `useUpdate` ohne `onError`, keine Standardbenachrichtigung, kein globaler Mutations-Handler. Die Checkbox fällt auf ihren alten Zustand zurück bzw. bleibt dort; für den Benutzer sieht es aus, als habe der Klick nichts bewirkt. Die Absicht geht **still verloren**.
+- Es entsteht **kein** Work-Operation-Fehler und **keine** Zeile in `public.operation_errors`, weil der Legacy-Pfad den Operation Manager nicht durchläuft. Das in [`21`](21-agent-runbooks.md) Sektion 17 (B.5) genannte ergänzende Signal „`operation_errors` mit alter `frontend_version`" ist für **genau diesen** Fehler blind.
+- Der PWA-Update-Lifecycle ([`24`](24-pwa-and-update-lifecycle.md)) behebt das erst, wenn der Benutzer aktualisiert oder alle Nora-Fenster schließt (Prompt-Modus) — **wann** das geschieht, ist nicht garantiert und wird hier **nicht** unterstellt.
+
+#### 16.3.2 R3-Vorbedingung (CONTRACT)
+
+**R3 DARF NICHT angewendet werden**, bevor **eine** der beiden Bedingungen erfüllt und im Release-Protokoll festgehalten ist:
+
+- **A — Client-Konvergenz verifiziert.** Ein ausdrückliches, protokolliertes Release-Gate zeigt, dass die relevanten aktiven Clients das R2-Frontend erhalten haben. Verfahren nach der Präzedenz W8-E Stage B.5 ([`21`](21-agent-runbooks.md) Sektion 17, [`06`](06-decision-log.md) „2026-09-29 – W8-E Production-Readiness-Härtung" Punkt 4), angewendet auf R2: das Production-Deployment ist nachweislich die R2-SHA oder ein jüngerer Build, der R2 enthält; eine Liste der Arbeitsplätze und Geräte, auf denen Nora genutzt wird (Büro-PCs, Tablets, Handys, installierte PWA); auf **jedem** angemeldet „Jetzt aktualisieren" abgeschlossen **oder** alle Nora-Fenster geschlossen und neu geöffnet, bis kein Update-Hinweis mehr erscheint; auf mindestens einem Gerät die eingebettete Build-SHA geprüft; Bestätigung mit Uhrzeit, Geräteliste und geprüfter SHA. Das ist ein **menschliches** Gate, keine Telemetrie und keine Garantie; Gerätelisten und Namen gehören ins Release-Protokoll, nie in durable Dokumentation.
+- **B — Product-Owner-Risikoannahme.** Der Product Owner nimmt ausdrücklich und protokolliert das Restrisiko an, dass ein nicht konvergierter alter Client nach R3 Erledigen/Wiederöffnen **still ohne Wirkung und ohne Rückmeldung** ausführt (16.3.1), bis er aktualisiert ist. Die Annahme benennt dieses Verhalten wörtlich — nicht als „sichtbarer Fehler".
+
+A und B dürfen kombiniert werden (Präzedenz W8-E: zwei verifizierte Geräte **plus** angenommenes Restrisiko für die übrigen, [`06`](06-decision-log.md) „2026-10-07 – W8-E Release"). **Nicht** zulässig: R3 mit der Begründung „die PWA aktualisiert sich ohnehin", ohne A oder B. Unabhängig davon gilt: Mitarbeitende werden vor R3 informiert, R3 möglichst außerhalb der Arbeitszeit.
+
+#### 16.3.3 Rollback-Invariante (CONTRACT)
+
+- **Solange die `done_date`-Schließung (R3) aktiv ist, DARF das Frontend NICHT auf einen Build vor R2 zurückgerollt werden.** Ein solcher Build schreibt `done_date` roh und schiene nach R3 für **alle** Benutzer still zu funktionieren, ohne zu wirken (16.3.1) — ein selbst herbeigeführter, flottenweiter Zustand des alten Clients.
+- Ist ein Rollback unter R2 nötig, wird R3 **zuerst oder gleichzeitig** zurückgerollt: das vorherige Tabellen-`UPDATE`-Recht von `authenticated` auf `public.tasks` wird wiederhergestellt (R3-Rollback = Umkehrung der Rechtelage aus 16.2: `grant update on table public.tasks to authenticated`; die Spaltenrechte werden damit wirkungslos) und gegen die Datenbank bewiesen (`has_table_privilege('authenticated', 'public.tasks', 'UPDATE') = true`), **bevor** der ältere Build ausgeliefert wird bzw. im selben Wartungsfenster unmittelbar davor. Das öffnet den Bypass wieder und ist nur als Notfall-Rollback zulässig; ein erneutes R3 durchläuft danach wieder 16.3.2.
+- Ein Rollback des Frontends auf einen Build **ab** R2 ist bei aktivem R3 zulässig. R1 (die RPCs) wird nicht zurückgebaut, solange ein Build ab R2 live ist (16.3.1).
+- Rückweg von R3 ohne Frontend-Rollback (etwa wegen eines Grant-Fehlers für Legacy-Spalten) ist ebenfalls das Tabellen-`UPDATE`-Recht — gleiche Bewertung als Notfall-Rollback.
 
 ---
 
@@ -470,14 +512,14 @@ Die Schließung bricht jeden noch laufenden Client, der `done_date` roh schreibt
 
 **CONTRACT** (keine React-Änderung in diesem Dokument; hier steht nur die Grenze):
 
-1. Checkbox und mobiler Zeilen-Tipp bleiben **sichtbar und funktional** wie heute (Darstellung unverändert, sofern nicht separat entschieden).
+1. **Alle drei** heutigen Auslöser (F-4) bleiben **sichtbar und funktional** wie heute und laufen über **denselben** Command-Pfad: (a) Checkbox, (b) Klick/Tippen auf das Text-Label (`htmlFor`), (c) mobil Tippen auf den Zeilenkörper. Darstellung und Trefferflächen bleiben unverändert, sofern nicht separat entschieden — Work 3 gestaltet die Zeile **nicht** um.
 2. Ein Wechsel **zu** „erledigt" ruft `completeWorkItem` mit `{ carrier: "task", carrierId: task.id }` auf, ein Wechsel **zu** „offen" `reopenWorkItem`. Welche Absicht gemeint ist, leitet der Handler aus dem **angezeigten** Zustand ab — das ist eine Benutzerabsicht, keine Geschäftsregel; ist die Anzeige veraltet, antwortet der Server mit `unchanged` (Abschnitt 10, C-6).
 3. **Kein** browsergenerierter Zeitstempel, **kein** `update("tasks", { done_date })`, **kein** `useUpdate` für den Lifecycle. Die übrigen Aktionen (Bearbeiten, „Morgen", „Nächste Woche", Löschen) bleiben auf generischem CRUD.
-4. Je Klick ein **neuer** Idempotenzschlüssel (Abschnitt 11.3).
-5. **Pending-Zustand:** solange ein Command für diese Aufgabe läuft, sind Checkbox **und** Zeilen-Tipp dieser Aufgabe gesperrt — keine zweite Absicht, bevor die erste beantwortet ist.
+4. Je **Benutzerabsicht** ein **neuer** Idempotenzschlüssel (Abschnitt 11.3). Eine physische Geste, die mehrere Handler auslöst (5), ist **eine** Absicht.
+5. **Synchrone Doppelabsicht-Sperre:** ein mobiles Tippen auf den Text ruft den Handler über (c) **und** (b)/(a) **zweimal im selben Event-Tick** auf (F-4). Der Handler MUSS deshalb **synchron beim Eintritt** prüfen und setzen, ob für diese Aufgabe bereits eine Absicht läuft (z. B. ein `useRef`-Flag je Aufgabe, gesetzt vor dem ersten `await` und vor dem Minten des Schlüssels) und jeden weiteren Aufruf bis zum Ausgang verwerfen — **ohne** zweiten Command, **ohne** zweiten Schlüssel. Eine Sperre, die sich **nur** auf einen späteren React-Zustand (`isPending`, `disabled`) stützt, genügt **nicht**, weil dieser im selben Tick noch nicht gerendert ist. Zusätzlich gilt der **sichtbare Pending-Zustand:** solange ein Command für diese Aufgabe läuft, sind Checkbox, Label und Zeilenkörper dieser Aufgabe gesperrt — keine zweite Absicht, bevor die erste beantwortet ist. Die Sperre wird nach **jedem** Ausgang (Erfolg, `unchanged`, `replayed`, Fehler) wieder freigegeben. Ob die Absicht stattdessen durch Entkoppeln der Auslöser (etwa `stopPropagation`) auf einen Aufruf reduziert wird, ist IMPLEMENTATION CHOICE — die synchrone Sperre ist in jedem Fall Pflicht.
 6. **Fehler sind sichtbar:** jeder `WorkCommandError` erzeugt eine Benutzerrückmeldung über den bestehenden Notification-Pfad ([`23`](23-operations-errors-feedback.md) §5; Darstellung [`02`](02-design-system.md)); die Checkbox zeigt danach den **neu gelesenen** Serverzustand, nie den erhofften. Text je `reason`/`code` über i18n-Schlüssel, nie Rohtext.
 7. **Erfolg** braucht keine Erfolgsmeldung (wie heute). `unchanged` ist kein Fehler; ein neutraler Hinweis ist erlaubt, aber nicht verlangt.
-8. **Nach jedem Ausgang** — Erfolg, `unchanged`, `replayed` oder Fehler — wird autoritativ neu gelesen (Abschnitt 18). Die heutige Ausnahme „bei Erledigt-Umschaltung **nicht** invalidieren" (F-4) entfällt.
+8. **Nach jedem Ausgang** — Erfolg, `unchanged`, `replayed` oder Fehler — wird autoritativ neu gelesen (Abschnitt 18). Die heutige Ausnahme „bei Erledigt-Umschaltung **nicht** invalidieren" (F-4) entfällt. Ein `replayed`-Ergebnis wird **nie** als aktueller Zustand angezeigt (Abschnitt 13): die Checkbox zeigt nach dem Neulesen den Server-Zustand, auch wenn er dem `state` des Replays widerspricht.
 9. **Kein optimistisches Update** des Erledigt-Zustands und kein lokales Setzen von `done_date`.
 
 **IMPLEMENTATION CHOICE:** Hook-Form (`useMutation` o. ä.), Platzierung des Pending-Zustands, Wortlaut der Rückmeldungen, ob `unchanged` einen Hinweis zeigt.
@@ -490,19 +532,22 @@ Die Schließung bricht jeden noch laufenden Client, der `done_date` roh schreibt
 
 - Der Command liefert nur das minimale Ergebnis (Abschnitt 13). **Die Lesewahrheit danach liefert ausschließlich ein erneutes Lesen**: das Work Read Model (`getWorkItems`) für Work-Konsumenten, die bestehenden `tasks`-Lesevorgänge für Legacy-Flächen.
 - Nach jedem Command-Ausgang invalidiert der Konsument mindestens: alle `tasks`-Ressourcenabfragen (Listen, Einzel- und Mehrfachabrufe der Ressource `tasks`, damit Hotboard, Aktenlisten und Vorgangsaufgaben neu lesen) **und** den Work-Cache der aktuellen Identität (Präfix `["work", "items", <identity>]`, [`26`](26-arbeitskorb-ui-contract.md) §5).
-- **Kein** Konsument entfernt eine Zeile lokal, weil er annimmt, was „offen" bedeutet; kein Konsument filtert `done_date` selbst, um eine erledigte Aufgabe auszublenden ([`25`](25-universal-work-model.md) §16.2, W-A-Kriterium 17). Ob eine Zeile nach dem Neulesen verschwindet, entscheidet die jeweilige Query.
+- **Keine Rekonstruktion aus dem Command-Ergebnis (CONTRACT):** Die Work-Command-/Lese-Architektur — der Command-Pfad selbst und jeder Work-Konsument (Arbeitskorb, MCP, künftige Work-Flächen) — leitet die Lifecycle-Wahrheit **nie** aus einem Command-Ergebnis ab: kein lokales Entfernen oder Umsortieren einer Zeile, kein lokales Setzen von `done_date`/`state`, kein Patchen eines Caches mit `state`/`doneAt` des Ergebnisses ([`25`](25-universal-work-model.md) §16.2, W-A-Kriterium 17). Ob eine Zeile nach dem Neulesen verschwindet, entscheidet die jeweilige Query.
+- **KNOWN LEGACY — clientseitige Filter der Legacy-Aufgabenflächen (F-23):** Hotboard, Vorgangsaufgaben, `TasksIterator` und `TasksListByDueDate` filtern bzw. teilen die **neu gelesenen** `tasks`-Zeilen heute clientseitig nach `done_date` (inkl. `isRecentlyDone`). Das ist Präsentation über dem Server-`done_date`, **keine** Rekonstruktion aus einem Command-Ergebnis, und bleibt in Work 3 **unverändert**. Work 3 verlangt von diesen Flächen nur das Neulesen nach jedem Command-Ausgang; ihre Ablösung bzw. eine serverseitige Filterung ist **nicht** Teil von Work 3 (G-10, Abschnitt 24). Neue Work-Flächen übernehmen dieses Muster nicht.
 - Erwartete Lesewirkung (Test Pflicht): nach `complete` (`applied`) enthält `getWorkItems(stateScope = open)` die Zeile **nicht** mehr und `done`/`all` enthalten sie mit `state = done`; nach `reopen` (`applied`) enthält `open` sie wieder.
-- **KNOWN LEGACY:** Legacy-Listen zeigen kürzlich Erledigtes noch kurz an (`isRecentlyDone`, F-4/§8) — das bleibt Präsentation über dem neu gelesenen Server-`done_date`.
+- **KNOWN LEGACY:** Legacy-Listen zeigen kürzlich Erledigtes noch kurz an (`isRecentlyDone`, F-23/§8) — das bleibt Präsentation über dem neu gelesenen Server-`done_date`.
+- **Replay (CONTRACT):** Nach einem `replayed`-Ergebnis gilt dasselbe — der Konsument liest neu und zeigt den gelesenen Zustand. Beispiel (Pflichttest U-7): `complete(K1)` → `reopen(K2)` → Retry `complete(K1)` liefert `replayed` mit `state = done`; das Neulesen zeigt die Aufgabe **offen**, und genau das zeigt die Oberfläche.
 
 ---
 
-## 19. Anlage bereits erledigter Aufgaben (Import)
+## 19. Anlage bereits erledigter Aufgaben (Import, privilegierte Anlage)
 
-**FACT.** `useImportFromJson.ts` legt Aufgaben über `dataProvider.create("tasks", …)` an und übernimmt dabei `done_date` aus der Importdatei (F-6); das ist ein `INSERT`, keine Transition, und erzeugt `task.created`, nicht `task.completed`.
+**FACT.** `useImportFromJson.ts` legt Aufgaben über `dataProvider.create("tasks", …)` an und übernimmt dabei `done_date` aus der Importdatei (F-6); das ist ein `INSERT`, keine Transition, und erzeugt `task.created`, nicht `task.completed`. Technisch kann **jeder** `INSERT` eines Schreibenden (`office`/`admin`, RLS `Tasks insert writers`) eine Aufgabe mit gesetztem `done_date` anlegen — über den Import, über PostgREST direkt oder über `postgres`/`service_role` —, und zwar auch mit einer **ausdrücklichen `id`**, soweit PostgreSQL sie zulässt (`generated by default as identity`, `id` frei; F-24). Eine belegte `id` wird nur durch ein `DELETE` frei, das allein `admin` darf; danach kann ein Schreibender eine **neue** Zeile mit derselben `id` — und damit derselben `work_id = nora_entity_uuid('task', id)` — im Zustand `done` anlegen.
 
-**CONTRACT — Klassifikation: erlaubtes Legacy-Anlageverhalten außerhalb der Transitionsautorität.**
+**CONTRACT — Klassifikation: akzeptierter Legacy-/Admin-Anlagepfad außerhalb der Transitionsautorität.**
 
-- Ein `INSERT` mit gesetztem `done_date` ändert den Lifecycle **keines bestehenden** Arbeitsgegenstands; er kann keine offene Arbeit erledigen und keine erledigte wieder öffnen. Die exklusive Autorität aus Abschnitt 16.1 („bestehende Zeile") bleibt damit vollständig gewahrt.
+- Ein `INSERT` mit gesetztem `done_date` ist **Anlage**, kein Übergang `open → done`: er ändert den Lifecycle **keines bestehenden** Arbeitsgegenstands, er kann keine offene Arbeit erledigen und keine erledigte wieder öffnen, und er erzeugt `task.created`, **nicht** `task.completed`. Die exklusive Autorität aus Abschnitt 16.1 gilt für Transitionen bestehender Zeilen und bleibt damit gewahrt; der Contract behauptet **nicht**, ein `INSERT` könne keinen erledigten Anfangszustand darstellen — er kann es.
+- Das gilt auch für die Wiederanlage unter einer gelöschten `id`: die alte Zeile ist durch das `DELETE` beendet (`task.deleted`), die neue ist eine neue Anlage mit zufällig gleicher abgeleiteter `work_id`. Ein Lifecycle-Übergang der alten Zeile findet nicht statt. Work 3 führt dafür **keine** Sperre, keine Identitätshistorie und keine Einschränkung expliziter `id`s ein; der Pfad verlangt eine vorherige Admin-Löschung und ist für normale Benutzeroberflächen nicht vorgesehen.
 - Work 3 schränkt `INSERT` deshalb **nicht** ein (keine Spaltenrechte auf `INSERT`, keine Importänderung). Den Import zu beschränken hieße, Work 3 auf Datenübernahme auszudehnen, ohne dass die Exklusivität es verlangt.
 - **KNOWN LEGACY**, in [`17`](17-known-issues-and-planned-waves.md) G.7 geführt: der importierte Abschlusszeitpunkt ist eine vom Import gelieferte, nicht serverautoritative Angabe. Ob historische Abschlüsse beim Import künftig verworfen, serverseitig gestempelt oder über einen eigenen Import-Command laufen sollen, ist eine eigene spätere Entscheidung.
 
@@ -542,6 +587,7 @@ Begründung und Abgrenzung zur Lese-Entscheidung „Alpha Work 2 Punkt 7" (`unav
 | A-6 | Disposition `executed`/`replayed` und Transition `applied`/`unchanged` werden unverändert gemeldet |
 | A-7 | Adapter: RPC-Name, Parameter, Header `x-nora-operation-id` aus dem Operation-Kontext; Katalogeinträge `work.complete` / `work.reopen` |
 | A-8 | FakeRest-Simulation: `applied`/`unchanged` symmetrisch, Zeitstempel nicht vom Aufrufer, Replay je Schlüssel, Fehler mit `details`-Code |
+| A-9 | `operationId` (Abschnitt 4.2): gültige UUID ⇒ kleingeschrieben als Header gesendet; fehlend, keine Zeichenkette oder keine UUID ⇒ **kein** `invalid_request`, Port-Aufruf findet statt, Header trägt eine neu gemintete gültige UUID; Ziel, `idempotencyKey` und Ergebnis sind in allen Fällen identisch |
 
 ### 22.2 Datenbank (SQL-Suite, lokal)
 
@@ -609,11 +655,16 @@ Begründung und Abgrenzung zur Lese-Entscheidung „Alpha Work 2 Punkt 7" (`unav
 
 | ID | Test |
 |---|---|
-| U-1 | Checkbox an ⇒ `completeWorkItem`, aus ⇒ `reopenWorkItem`, je mit `{ carrier: "task", carrierId }` und frischem Schlüssel; mobiler Zeilen-Tipp ebenso |
+| U-1 | **Checkbox-Klick:** an ⇒ genau ein `completeWorkItem`, aus ⇒ genau ein `reopenWorkItem`, je mit `{ carrier: "task", carrierId }` und frischem Schlüssel |
+| U-1a | **Label-/Text-Klick** (`htmlFor`), Desktop-Layout: genau **ein** Command der richtigen Richtung, frischer Schlüssel |
+| U-1b | **Mobile Zeileninteraktion:** Tippen auf den Zeilenkörper **außerhalb** des Labels ⇒ genau ein Command; Tippen **auf** das Label/den Text (Zeilenkörper-`onClick` + Label-Aktivierung) ⇒ ebenfalls genau **ein** Command mit **einem** Schlüssel |
 | U-2 | **kein** `update("tasks", { done_date })` und kein clientseitiger Zeitstempel im Lifecycle-Pfad; „Morgen"/„Nächste Woche"/Bearbeiten senden nie `done_date` |
-| U-3 | Pending sperrt Checkbox und Zeilen-Tipp; ein zweiter Klick löst keinen zweiten Command aus |
+| U-3 | Pending sperrt Checkbox, Label und Zeilenkörper; ein zweiter Klick nach dem Rendern löst keinen zweiten Command aus; nach jedem Ausgang ist die Zeile wieder bedienbar |
+| U-3a | **Doppelaufruf im selben Tick:** zwei synchrone Handler-Aufrufe für dieselbe Aufgabe **ohne** dazwischenliegendes Rendern (z. B. beide Aufrufe im selben `act()`-Block, bzw. ein einziges Tippen, das Zeilenkörper und Label auslöst) ⇒ genau **ein** Port-Aufruf, **ein** Schlüssel; der Test schlägt fehl, wenn die Sperre nur über `isPending`/`disabled` wirkt |
 | U-4 | Fehler je `reason` ⇒ sichtbare Rückmeldung; danach Neulesen |
 | U-5 | Erfolg und `unchanged` ⇒ Invalidierung der `tasks`-Abfragen und des Work-Caches; kein lokales Entfernen |
+| U-6 | `replayed` ⇒ Invalidierung und Neulesen wie bei U-5; `state`/`doneAt` des Ergebnisses werden **nicht** in Anzeige oder Cache geschrieben |
+| U-7 | **Replay ist keine Lesewahrheit:** Sequenz `complete(K1)` → `reopen(K2)` → Retry `complete(K1)`; der Port liefert für den Retry `replayed` + `applied` + `state = done`, das autoritative Neulesen liefert die Aufgabe **offen** ⇒ die Checkbox zeigt **offen** (nicht erledigt), kein lokaler Zustand „erledigt" bleibt stehen, kein weiterer Command wird ausgelöst |
 | E-1 | **Playwright (CI):** gegen die lokale Supabase eine Aufgabe über die Checkbox erledigen und wieder öffnen; der Zustand übersteht ein Neuladen |
 
 Nicht verlangt: eine Mutationsoberfläche im Arbeitskorb (OUT OF SCOPE, Abschnitt 24).
@@ -628,9 +679,9 @@ Nicht verlangt: eine Mutationsoberfläche im Arbeitskorb (OUT OF SCOPE, Abschnit
 
 | Klasse | Inhalt |
 |---|---|
-| **AUTOMATISIERT (CI)** | A-1 … A-8, U-1 … U-5 (Vitest); E-1 (Playwright gegen lokale Supabase mit allen Migrationen — der einzige CI-Beweis, dass RPC, Grants und Checkbox zusammen funktionieren); Typecheck, Lint, Build, Bundle-Budget |
+| **AUTOMATISIERT (CI)** | A-1 … A-9, U-1 … U-7 inkl. U-1a, U-1b, U-3a (Vitest); E-1 (Playwright gegen lokale Supabase mit allen Migrationen — der einzige CI-Beweis, dass RPC, Grants und Checkbox zusammen funktionieren); Typecheck, Lint, Build, Bundle-Budget |
 | **PFLICHT, LOKAL/MANUELL** | S-1 … S-20, SE-1 … SE-4, K-1 … K-5, I-1 … I-6, R-1/R-2, die angepasste `public_privilege_hardening_verification.sql` und die bestehenden Task-/Audit-Suiten (`crm_audit_verification.sql`, `task_customer_context_verification.sql`, `work_read_model_verification.sql`) — lokal gegen eine frisch zurückgesetzte Datenbank, mit Ausgabe in der Release-Evidenz ([`21`](21-agent-runbooks.md) Sektion 5; Reset-Pflicht nach der Zwei-Sessions-Suite) |
-| **PFLICHT, PRODUCTION** | nach R1: RPC-Existenz und Grants read-only geprüft; nach R2: Mitarbeiter-Smoke complete + reopen inkl. Audit-Zeilen und `request_id`; nach R3: Rechtelage aus 16.3 read-only gegen Production |
+| **PFLICHT, PRODUCTION** | nach R1: RPC-Existenz und Grants read-only geprüft; nach R2: Mitarbeiter-Smoke complete + reopen inkl. Audit-Zeilen und `request_id`; **vor R3: R3-Vorbedingung aus 16.3.2 protokolliert** (Konvergenz-Gate A und/oder PO-Risikoannahme B — ohne diesen Eintrag kein R3); nach R3: Rechtelage aus 16.3 read-only gegen Production |
 
 Niemand darf eine Suite aus der zweiten Zeile als „CI-gesichert" bezeichnen. Die Aufnahme der SQL-Suiten in CI bleibt der bestehende offene Punkt ([`17`](17-known-issues-and-planned-waves.md) B „W9", G.7) und ist **nicht** Teil von Work 3 — sie verlangt eine eigene Runner-Infrastruktur. **Klein und Teil von Work 3** ist allein E-1.
 
@@ -655,7 +706,7 @@ Innerhalb der Contract-Grenzen frei:
 - Form des Pending-Zustands und der Invalidierung (solange Abschnitt 17/18 erfüllt sind).
 - Aufbau der Concurrency-Runner (Präzedenz PowerShell + zwei `psql`-Worker).
 
-**Nicht** frei: alles mit **CONTRACT** Markierte, insbesondere `SECURITY DEFINER`, Signatur, Pflichtschlüssel, Spaltenrecht als Schließungsmechanismus, die drei Auslieferungsschritte, die Ergebnis- und Fehlervokabulare.
+**Nicht** frei: alles mit **CONTRACT** Markierte, insbesondere `SECURITY DEFINER`, Signatur, Pflichtschlüssel, Spaltenrecht als Schließungsmechanismus, die drei Auslieferungsschritte samt R3-Vorbedingung und Rollback-Invariante (16.3.2, 16.3.3), die synchrone Doppelabsicht-Sperre (17 Punkt 5), die Ergebnis- und Fehlervokabulare.
 
 ---
 
@@ -678,11 +729,15 @@ Innerhalb der Contract-Grenzen frei:
 | T-13 neue Versionsspalte/Tabelle/Framework | geschlossen | keine neue Persistenz außer zwei RPCs und einem Grant-Wechsel (5, 10, 24) |
 | T-14 Tests als CI-gesichert behauptet, obwohl manuell | geschlossen | Evidenzklassen (23) |
 | T-15 cancel/claim/assign/defer still verändert | geschlossen | 7, 24 |
+| T-16 alter Client nach R3 verliert die Absicht still (keine Rückmeldung, kein `operation_errors`-Eintrag) | **nicht technisch geschlossen — gegated** | ehrlich als FACT beschrieben (16.3.1, F-21); R3 nur nach Konvergenz-Gate oder PO-Risikoannahme (16.3.2); kein Frontend-Rollback unter R2 bei aktivem R3 (16.3.3). Keine Datenverfälschung: die Abweisung ist fail-closed |
+| T-17 eine Geste löst zwei Commands aus (mobiles Tippen auf den Text) | geschlossen | synchrone Doppelabsicht-Sperre (17 Punkt 5); U-1b, U-3a |
+| T-18 `replayed`-Ergebnis wird als aktueller Zustand angezeigt | geschlossen | 13, 17 Punkt 8, 18; U-6, U-7 |
 
 ---
 
 ## 27. Pflege dieses Dokuments
 
 - **Status-Übergänge:** `CONTRACT CANDIDATE` → nach bestandener unabhängiger Review `CONTRACT FROZEN` → nach Auslieferung von R1–R3 Umsetzungsstand im Kopf (wie [`26`](26-arbeitskorb-ui-contract.md)). Der Freeze ist eine eigene, protokollierte Entscheidung ([`06`](06-decision-log.md)).
+- **Änderungsnotiz 2026-10-14 — Review-Korrektur (Agent C, Befunde F-1, M-1 … M-6), docs-only, Basis `5196ed1f`:** F-1 — falsche Aussage „alter Client erhält nach R3 einen sichtbaren Fehler" ersetzt durch das belegte stille Scheitern, Kompatibilitätsfenster, R3-Vorbedingung (Konvergenz-Gate oder PO-Risikoannahme) und Rollback-Invariante (16.3.1–16.3.3, F-21, F-22, T-16); M-1 — dritter Auslöser (Label) und Doppelaufruf im selben Tick, synchrone Sperre (F-4, 17, U-1a/U-1b/U-3a, T-17); M-2 — Regel auf „keine Rekonstruktion aus Command-Ergebnissen" verengt, Legacy-Filter als KNOWN LEGACY benannt (18, F-23); M-3 — Anlage mit `done_date` inkl. ausdrücklicher `id` als akzeptierter Legacy-/Admin-Pfad (19, F-24); M-4 — `operationId` folgt der bestehenden Soft-Konvention (4.2, F-25, A-9); M-5 — Replay-UI-Tests (U-6, U-7); M-6 — `transition`/`state`/`doneAt` bei `replayed` als historisches Ergebnis (4.3, 13). D1–D6 und alle übrigen Contract-Festlegungen unverändert.
 - **Abweichungen während der Implementierung** werden nicht still umgesetzt: sie werden hier als Änderung mit Datum und Begründung eingetragen und in [`06`](06-decision-log.md) begründet.
 - **Dokumentationsschließung der Implementierung:** [`16`](16-current-state.md) (Ist-Zustand nach R3), [`22`](22-security-and-access.md) §6.13 bzw. ein neuer Abschnitt für die Durchsetzungsseite (RPCs, Spaltenrecht), [`25`](25-universal-work-model.md) §23 (G-4a umgesetzt), [`13`](13-crm-audit-retention.md) (Work-Commands als Auslöser von `task.completed`/`task.reopened`), [`21`](21-agent-runbooks.md) Sektion 5/15 (Testsequenz Work 3), [`03`](03-data-model-guardrails.md) (Migrationsregel „neue `tasks`-Spalte braucht ein ausdrückliches Spaltenrecht"), [`17`](17-known-issues-and-planned-waves.md) G.7, [`20`](20-product-changelog.md) nur, falls Benutzer etwas merken, `releases/2026-10.md` bzw. Folgemonat.
